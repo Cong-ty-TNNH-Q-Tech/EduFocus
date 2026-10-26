@@ -312,6 +312,8 @@ EduFocus.Monitor (user session, hidden)
 
 ## 6. Protection Engine
 
+The application has a `ProtectionCoordinator` and an `IProtectionEnginePort` contract for state, session, audit and restart reconciliation. Until the hosts, block-page and process-watcher adapters are integrated, runtime DI uses `UnavailableProtectionEngine`: a request to turn Protection ON fails without changing SQLite state. The real adapters and engine orchestration are implemented in the later blocking issues; a test fake exercises the coordinator contract.
+
 ### 6.1. Rule matching
 
 ```text
@@ -599,7 +601,7 @@ EduFocus/
 └── .github/workflows/
 ```
 
-Các project trong solution chứa domain 2.0, persistence SQLite/migration, mô hình attention và dịch vụ nền dùng chung, cùng cửa sổ EduFocus 2.0 tối giản. Các spike trong `tools/` chạy độc lập, không được đăng ký hoặc khởi chạy bởi ứng dụng. Persistence đã sẵn sàng nhưng chưa được gọi từ WPF startup; việc khởi tạo UI/data flow thuộc các issue tiếp theo.
+Các project trong solution chứa domain 2.0, persistence SQLite/migration, mô hình attention và dịch vụ nền dùng chung, cùng cửa sổ EduFocus 2.0. WPF khởi tạo SQLite, onboarding, Parent Mode và ProtectionCoordinator; các spike cũ trong `tools/` không được đăng ký hoặc khởi chạy. Protection chưa thể bật cho tới khi adapters blocking được tích hợp.
 
 ## 15. Dọn codebase 1.x
 

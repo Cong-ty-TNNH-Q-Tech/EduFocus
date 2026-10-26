@@ -3,6 +3,7 @@ using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Threading;
 using EduFocus.Domain.Entities;
+using EduFocus.Domain.Enums;
 using EduFocus.Infrastructure.Persistence;
 using EduFocus.Ports.Outbound.Services;
 
@@ -13,6 +14,7 @@ public partial class MainWindow : Window
     private enum Page { Student, Login, Recovery, NewRecovery, Parent, ChangePin }
 
     private readonly ParentCredentialService _credentials;
+    private readonly ProtectionCoordinator _protection;
     private readonly IAppLogger _logger;
     private readonly ParentModeSession _parentSession = new();
     private readonly DispatcherTimer _timer;
@@ -21,10 +23,11 @@ public partial class MainWindow : Window
     private bool _authenticationUnavailable;
     private Page _page = Page.Student;
 
-    public MainWindow(ParentCredentialService credentials, IAppLogger logger, bool credentialsConfigured)
+    public MainWindow(ParentCredentialService credentials, ProtectionCoordinator protection, IAppLogger logger, bool credentialsConfigured)
     {
         InitializeComponent();
         _credentials = credentials ?? throw new ArgumentNullException(nameof(credentials));
+        _protection = protection ?? throw new ArgumentNullException(nameof(protection));
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
         _credentialsConfigured = credentialsConfigured;
         if (!credentialsConfigured)
@@ -72,6 +75,7 @@ public partial class MainWindow : Window
                     _parentSession.Unlock(DateTimeOffset.UtcNow);
                     SetPage(Page.Parent);
                     UpdateSessionCountdown();
+                    await RefreshProtectionStatus();
                     return;
                 }
                 await RefreshLockoutStatus("The PIN was not accepted.");
@@ -178,7 +182,62 @@ public partial class MainWindow : Window
 
     private void ShowParent(object sender, RoutedEventArgs e)
     {
-        if (EnsureParentSession()) SetPage(Page.Parent);
+        if (EnsureParentSession())
+        {
+            SetPage(Page.Parent);
+            _ = RefreshProtectionStatus();
+        }
+    }
+
+    private async void ToggleProtection(object sender, RoutedEventArgs e)
+    {
+        if (!EnsureParentSession()) return;
+        ToggleProtectionButton.IsEnabled = false;
+        try
+        {
+            var current = await _protection.GetStatusAsync();
+            if (!current.EngineAvailable)
+            {
+                ProtectionStatusText.Text = current.State == ProtectionState.On
+                    ? "Protection is saved as ON, but the engine is unavailable; its resources cannot be changed safely."
+                    : "The protection engine is not installed. Protection remains OFF.";
+                return;
+            }
+            await _protection.SetProtectionAsync(current.State != ProtectionState.On, _parentSession, DateTimeOffset.UtcNow);
+            await RefreshProtectionStatus();
+        }
+        catch (Exception ex)
+        {
+            _logger.Error("Protection state could not be changed.", ex);
+            ProtectionStatusText.Text = "Protection could not be changed. The saved state and resources were retained.";
+            await RefreshProtectionStatus();
+        }
+        finally { ToggleProtectionButton.IsEnabled = _protectionEngineAvailable; }
+    }
+
+    private bool _protectionEngineAvailable;
+
+    private async Task RefreshProtectionStatus()
+    {
+        try
+        {
+            var status = await _protection.GetStatusAsync();
+            _protectionEngineAvailable = status.EngineAvailable;
+            ProtectionStatusText.Text = !status.EngineAvailable
+                ? status.State == ProtectionState.On
+                    ? "Protection is saved as ON, but the engine is unavailable; its resources cannot be changed safely."
+                    : "The protection engine is not installed. Protection remains OFF."
+                : status.State == ProtectionState.On ? "Protection is ON." : "Protection is OFF.";
+            ToggleProtectionButton.Content = status.State == ProtectionState.On ? "Turn Protection off" : "Turn Protection on";
+            ToggleProtectionButton.IsEnabled = status.EngineAvailable;
+        }
+        catch (Exception ex)
+        {
+            _protectionEngineAvailable = false;
+            _logger.Error("Protection state could not be read.", ex);
+            ProtectionStatusText.Text = "Protection state could not be read. Controls remain locked.";
+            ToggleProtectionButton.IsEnabled = false;
+        }
     }
 
     private void LockNow(object sender, RoutedEventArgs e)

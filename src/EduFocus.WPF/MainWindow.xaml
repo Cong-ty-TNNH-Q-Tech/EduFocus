@@ -44,6 +44,8 @@
             <TextBlock Text="Parent Mode" FontSize="30" FontWeight="SemiBold" Foreground="#17324D" HorizontalAlignment="Center" />
             <TextBlock Text="Parent controls are unlocked." Margin="0,12,0,4" Foreground="#34536F" HorizontalAlignment="Center" />
             <TextBlock x:Name="SessionCountdown" Margin="0,0,0,20" Foreground="#52677A" HorizontalAlignment="Center" />
+            <TextBlock x:Name="ProtectionStatusText" Margin="0,0,0,10" Foreground="#34536F" TextWrapping="Wrap" HorizontalAlignment="Center" />
+            <Button x:Name="ToggleProtectionButton" Content="Protection unavailable" Height="40" IsEnabled="False" Click="ToggleProtection" />
             <Button Content="Change PIN" Height="40" Click="OpenChangePin" />
             <Button Content="Lock Parent Mode" Margin="0,10,0,0" Height="40" Click="LockNow" />
         </StackPanel>

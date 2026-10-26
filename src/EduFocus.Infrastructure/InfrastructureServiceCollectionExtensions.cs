@@ -11,6 +11,7 @@ public static class InfrastructureServiceCollectionExtensions
     {
         services.AddSingleton<IAppLogger, FileLogger>();
         services.AddSingleton<IMonotonicClockPort, MonotonicClockAdapter>();
+        services.AddSingleton<IProtectionEnginePort, UnavailableProtectionEngine>();
         return services;
     }
 }

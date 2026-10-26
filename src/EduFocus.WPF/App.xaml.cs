@@ -74,21 +74,24 @@ public partial class App : Application
                     return;
                 }
             }
+            await _windowScope.ServiceProvider.GetRequiredService<ProtectionCoordinator>()
+                .ReconcileAfterRestartAsync(DateTimeOffset.UtcNow);
             configured = await db.ParentCredentials.AnyAsync();
         }
         catch (Exception ex)
         {
-            _services.GetRequiredService<IAppLogger>().Error("EduFocus could not read parent authentication state.", ex);
+            _services.GetRequiredService<IAppLogger>().Error("EduFocus could not safely restore its startup state.", ex);
             _windowScope?.Dispose();
             _windowScope = null;
             _services.Dispose();
             _services = null;
-            MessageBox.Show("EduFocus could not read its authentication state. No protected settings were opened.", "EduFocus authentication error", MessageBoxButton.OK, MessageBoxImage.Error);
+            MessageBox.Show("EduFocus could not safely restore its startup state. No protected controls were opened; no data was deleted.", "EduFocus startup error", MessageBoxButton.OK, MessageBoxImage.Error);
             Shutdown(-1);
             return;
         }
         MainWindow = new MainWindow(
             _windowScope.ServiceProvider.GetRequiredService<ParentCredentialService>(),
+            _windowScope.ServiceProvider.GetRequiredService<ProtectionCoordinator>(),
             _services.GetRequiredService<IAppLogger>(),
             configured);
         MainWindow.Closed += (_, _) => _windowScope?.Dispose();
