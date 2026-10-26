@@ -13,6 +13,8 @@ public partial class App : Application
 {
     private ServiceProvider? _services;
     private IServiceScope? _windowScope;
+    private CancellationTokenSource? _heartbeatStop;
+    private Task? _heartbeatTask;
 
     protected override async void OnStartup(StartupEventArgs e)
     {
@@ -93,6 +95,8 @@ public partial class App : Application
             Shutdown(-1);
             return;
         }
+        _heartbeatStop = new CancellationTokenSource();
+        _heartbeatTask = RunSessionHeartbeatAsync(_services, _heartbeatStop.Token);
         MainWindow = new MainWindow(
             _windowScope.ServiceProvider.GetRequiredService<ParentCredentialService>(),
             _windowScope.ServiceProvider.GetRequiredService<ProtectionCoordinator>(),
@@ -124,8 +128,31 @@ public partial class App : Application
 
     protected override void OnExit(ExitEventArgs e)
     {
+        _heartbeatStop?.Cancel();
+        try { _heartbeatTask?.GetAwaiter().GetResult(); }
+        catch (OperationCanceledException) { }
+        _heartbeatStop?.Dispose();
         _windowScope?.Dispose();
         _services?.Dispose();
         base.OnExit(e);
+    }
+
+    private static async Task RunSessionHeartbeatAsync(IServiceProvider services, CancellationToken cancellationToken)
+    {
+        using var timer = new PeriodicTimer(TimeSpan.FromSeconds(10));
+        while (await timer.WaitForNextTickAsync(cancellationToken))
+        {
+            try
+            {
+                using var scope = services.CreateScope();
+                await scope.ServiceProvider.GetRequiredService<ProtectionCoordinator>()
+                    .HeartbeatAsync(DateTimeOffset.UtcNow, cancellationToken);
+            }
+            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested) { throw; }
+            catch (Exception ex)
+            {
+                services.GetRequiredService<IAppLogger>().Error("Study session heartbeat could not be saved.", ex);
+            }
+        }
     }
 }

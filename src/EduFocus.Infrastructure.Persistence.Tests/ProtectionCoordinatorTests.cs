@@ -103,6 +103,58 @@ public sealed class ProtectionCoordinatorTests
     }
 
     [Fact]
+    public async Task Heartbeat_counts_at_most_ten_seconds_and_ignores_clock_rollback_or_missing_session()
+    {
+        await using var fixture = await Fixture.Create();
+        var active = StudySession.Start(null, StudySessionTrigger.Manual, true, new DateOnly(2026, 10, 26), Now);
+        fixture.Db.StudySessions.Add(active);
+        await fixture.Db.SaveChangesAsync();
+        var coordinator = new ProtectionCoordinator(fixture.Db, new FakeProtectionEngine());
+
+        await coordinator.HeartbeatAsync(Now.AddSeconds(8));
+        Assert.Equal(8, (await fixture.Db.StudySessions.SingleAsync()).ActiveSeconds);
+        await coordinator.HeartbeatAsync(Now.AddSeconds(30));
+        Assert.Equal(18, (await fixture.Db.StudySessions.SingleAsync()).ActiveSeconds);
+        await coordinator.HeartbeatAsync(Now.AddSeconds(20));
+        Assert.Equal(18, (await fixture.Db.StudySessions.SingleAsync()).ActiveSeconds);
+
+        var ended = await fixture.Db.StudySessions.SingleAsync();
+        ended.Complete(Now.AddSeconds(31));
+        await fixture.Db.SaveChangesAsync();
+        await coordinator.HeartbeatAsync(Now.AddSeconds(40));
+        Assert.Equal(18, (await fixture.Db.StudySessions.SingleAsync()).ActiveSeconds);
+    }
+
+    [Fact]
+    public async Task Concurrent_enable_requests_create_only_one_active_session()
+    {
+        await using var fixture = await Fixture.Create();
+        var coordinator = new ProtectionCoordinator(fixture.Db, new FakeProtectionEngine());
+        var parent = AuthenticatedSession();
+
+        await Task.WhenAll(
+            coordinator.SetProtectionAsync(true, parent, Now.AddSeconds(1)),
+            coordinator.SetProtectionAsync(true, parent, Now.AddSeconds(1)));
+
+        Assert.Equal(1, await fixture.Db.StudySessions.CountAsync(x => x.Status == StudySessionStatus.Active));
+    }
+
+    [Fact]
+    public async Task Failed_heartbeat_write_does_not_commit_in_memory_time_increment()
+    {
+        await using var fixture = await Fixture.Create();
+        fixture.Db.StudySessions.Add(StudySession.Start(null, StudySessionTrigger.Manual, true, new DateOnly(2026, 10, 26), Now));
+        await fixture.Db.SaveChangesAsync();
+        await fixture.Db.Database.ExecuteSqlRawAsync("CREATE TRIGGER RejectSessionHeartbeat BEFORE UPDATE ON StudySessions BEGIN SELECT RAISE(ABORT, 'simulated database write failure'); END;");
+        var coordinator = new ProtectionCoordinator(fixture.Db, new FakeProtectionEngine());
+
+        await Assert.ThrowsAsync<DbUpdateException>(() => coordinator.HeartbeatAsync(Now.AddSeconds(10)));
+
+        fixture.Db.ChangeTracker.Clear();
+        Assert.Equal(0, (await fixture.Db.StudySessions.SingleAsync()).ActiveSeconds);
+    }
+
+    [Fact]
     public async Task No_engine_never_changes_persisted_protection_state()
     {
         await using var fixture = await Fixture.Create();

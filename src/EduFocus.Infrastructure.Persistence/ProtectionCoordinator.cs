@@ -20,6 +20,22 @@ public sealed class ProtectionCoordinator(AppDbContext db, IProtectionEnginePort
         return new(settings?.Protection ?? ProtectionState.Off, active?.Id, engine.IsAvailable, active?.Trigger);
     }
 
+    /// <summary>Persists a bounded heartbeat so sleep, stalls, and clock rollback cannot inflate active time.</summary>
+    public async Task HeartbeatAsync(DateTimeOffset now, CancellationToken cancellationToken = default)
+    {
+        now = RequireUtc(now);
+        await ProcessGate.WaitAsync(cancellationToken);
+        try
+        {
+            var active = await db.StudySessions.SingleOrDefaultAsync(x => x.Status == StudySessionStatus.Active, cancellationToken);
+            if (active is null || now < active.LastHeartbeatAtUtc) return;
+            var elapsedSeconds = (long)Math.Min(10, Math.Floor((now - active.LastHeartbeatAtUtc).TotalSeconds));
+            active.AddActiveSeconds(elapsedSeconds, now);
+            await db.SaveChangesAsync(cancellationToken);
+        }
+        finally { ProcessGate.Release(); }
+    }
+
     public async Task<ProtectionStatus> SetProtectionAsync(bool enabled, ParentModeSession parentSession, DateTimeOffset now, CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(parentSession);
