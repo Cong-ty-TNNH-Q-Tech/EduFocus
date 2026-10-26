@@ -11,9 +11,9 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\..\src\DontBeLazy.Domain\DontBeLazy.Domain.csproj" />
-    <ProjectReference Include="..\..\src\DontBeLazy.Ports\DontBeLazy.Ports.csproj" />
-    <ProjectReference Include="..\..\src\DontBeLazy.Infrastructure.Attention\DontBeLazy.Infrastructure.Attention.csproj" />
+    <ProjectReference Include="..\..\src\EduFocus.Domain\EduFocus.Domain.csproj" />
+    <ProjectReference Include="..\..\src\EduFocus.Ports\EduFocus.Ports.csproj" />
+    <ProjectReference Include="..\..\src\EduFocus.Infrastructure.Attention\EduFocus.Infrastructure.Attention.csproj" />
   </ItemGroup>
 
   <ItemGroup>

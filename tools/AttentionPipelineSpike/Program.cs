@@ -1,8 +1,8 @@
 using System.Diagnostics;
 using AttentionPipelineSpike;
 using AttentionPipelineSpike.Metrics;
-using DontBeLazy.Infrastructure.Attention;
-using DontBeLazy.Infrastructure.Attention.Detection;
+using EduFocus.Infrastructure.Attention;
+using EduFocus.Infrastructure.Attention.Detection;
 using OpenCvSharp;
 
 try

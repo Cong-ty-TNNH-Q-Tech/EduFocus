@@ -1,6 +1,6 @@
 using System.Diagnostics;
-using DontBeLazy.Domain.Attention;
-using DontBeLazy.Ports.Outbound.Services;
+using EduFocus.Domain.Attention;
+using EduFocus.Ports.Outbound.Services;
 
 namespace AttentionPipelineSpike.Metrics;
 

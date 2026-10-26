@@ -3,7 +3,7 @@
 > **Trạng thái:** Thiết kế đích / đang chuyển đổi từ **Don't Be Lazy**.
 > **Phiên bản:** 2.0 — 2026-10-26
 >
-> Mã nguồn hiện tại vẫn mang tên project `DontBeLazy.*`. Việc đổi tên sang `EduFocus.*` được thực hiện ở Phase 1 của lộ trình chuyển đổi. Tài liệu này mô tả kiến trúc **đích** của EduFocus.
+> Project, namespace và assembly trong mã nguồn đã được đổi sang `EduFocus.*`. Tài liệu này mô tả kiến trúc **đích** của EduFocus.
 
 ---
 
@@ -172,7 +172,7 @@ Triển khai outbound ports, tương tác Windows.
 - `AppDbContext` mới với các DbSet mới.
 - Repository implementations.
 - Fluent API cấu hình index, unique constraint, converter.
-- Migration schema mới; **không migrate** dữ liệu từ `DontBeLazy` 1.x.
+- Migration schema mới; **không migrate** dữ liệu từ `EduFocus` 1.x.
 - DB path: `%ProgramData%\EduFocus\edufocus.db`.
 - Backup trước mỗi migration schema; giữ 3 bản gần nhất.
 
@@ -427,7 +427,7 @@ Camera (640×480, 1–2 FPS)
   → AttentionEvent + aggregate
 ```
 
-> Phase 0 (ADR-17): dùng OpenCV MSMF + YuNet ONNX để phát hiện mặt và suy ra yaw/pitch proxy; EAR/iris/gaze và `Drowsy` để Phase 5. Adapter nằm ở `DontBeLazy.Infrastructure.Attention`; Domain/Ports không phụ thuộc OpenCV/ONNX.
+> Phase 0 (ADR-17): dùng OpenCV MSMF + YuNet ONNX để phát hiện mặt và suy ra yaw/pitch proxy; EAR/iris/gaze và `Drowsy` để Phase 5. Adapter nằm ở `EduFocus.Infrastructure.Attention`; Domain/Ports không phụ thuộc OpenCV/ONNX.
 
 ### 8.2. State machine
 
@@ -626,7 +626,7 @@ EduFocus/
 └── .github/workflows/
 ```
 
-> Trong giai đoạn chuyển đổi, các project tạm giữ tên `DontBeLazy.*`; Phase 1 sẽ đổi đồng bộ tên file, namespace, solution, CI và installer.
+> Project, namespace, assembly và solution đã được đổi đồng bộ sang tên `EduFocus.*`; cấu hình CI và installer còn được xử lý ở các issue riêng.
 
 ---
 

@@ -40,13 +40,13 @@ jobs:
 
       # ── 4. Restore ─────────────────────────────────────────────
       - name: Restore
-        run: dotnet restore DontBeLazy.slnx
+        run: dotnet restore EduFocus.slnx
 
       # ── 5. Publish — win-x64 self-contained single file ────────
       - name: Publish
         shell: pwsh
         run: |
-          dotnet publish src/DontBeLazy.WPF/DontBeLazy.WPF.csproj `
+          dotnet publish src/EduFocus.WPF/EduFocus.WPF.csproj `
             --configuration Release `
             --runtime win-x64 `
             --self-contained true `
@@ -76,7 +76,7 @@ jobs:
             -ext WixToolset.UI.wixext `
             -d Version="$semver" `
             -d PublishDir="publish/" `
-            -o "DontBeLazy-$ver-win-x64.msi" `
+            -o "EduFocus-$ver-win-x64.msi" `
             -arch x64
 
 
@@ -87,7 +87,7 @@ jobs:
           $ver = "${{ steps.ver.outputs.version }}"
           Compress-Archive `
             -Path publish/* `
-            -DestinationPath "DontBeLazy-$ver-win-x64-portable.zip" `
+            -DestinationPath "EduFocus-$ver-win-x64-portable.zip" `
             -Force
 
       # ── 10. Generate release notes ─────────────────────────────
@@ -114,5 +114,5 @@ jobs:
           draft: false
           prerelease: ${{ contains(steps.ver.outputs.tag, '-') }}
           files: |
-            DontBeLazy-${{ steps.ver.outputs.version }}-win-x64.msi
-            DontBeLazy-${{ steps.ver.outputs.version }}-win-x64-portable.zip
+            EduFocus-${{ steps.ver.outputs.version }}-win-x64.msi
+            EduFocus-${{ steps.ver.outputs.version }}-win-x64-portable.zip

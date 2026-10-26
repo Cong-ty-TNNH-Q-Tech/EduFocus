@@ -132,19 +132,18 @@ Once released, download from [Releases](https://github.com/Cong-ty-TNNH-Q-Tech/E
 git clone https://github.com/Cong-ty-TNNH-Q-Tech/EduFocus.git
 cd EduFocus
 
-dotnet restore DontBeLazy.slnx
-dotnet run --project src/DontBeLazy.WPF/DontBeLazy.WPF.csproj
+dotnet restore EduFocus.slnx
+dotnet run --project src/EduFocus.WPF/EduFocus.WPF.csproj
 ```
 
-> **Note:** The codebase still uses the `DontBeLazy.*` project names. Renaming to `EduFocus.*` happens in Phase 1, and these commands will be updated accordingly.
 
 Run tests:
 
 ```bash
-dotnet test src/DontBeLazy.Domain.Tests/DontBeLazy.Domain.Tests.csproj
+dotnet test src/EduFocus.Domain.Tests/EduFocus.Domain.Tests.csproj
 ```
 
-> The WPF app still targets `net9.0` (support ends November 10, 2026) while tests target `net10.0`; Phase 1 will move the entire solution to .NET 10 LTS and EF Core 10 before release.
+> The WPF app and EF Core have not been upgraded as part of this rename; .NET 10/EF Core 10 work remains tracked in Phase 1.
 
 ---
 
@@ -165,7 +164,8 @@ dotnet test src/DontBeLazy.Domain.Tests/DontBeLazy.Domain.Tests.csproj
 - [x] Re-define product and scope
 - [x] Rewrite BA, Use Cases, Architecture, Database Schema
 - [ ] Phase 0: Camera + blocking + tamper-resistance spikes
-- [ ] Phase 1: Clean up legacy code, rename to EduFocus, new schema
+- [x] Rename solution, projects, namespaces, and assemblies to EduFocus.* (Issue #5)
+- [ ] Phase 1: New schema, CI/installer, and release foundation
 - [ ] Phase 2: PIN, Parent Mode, protection toggle
 - [ ] Phase 3: Chatbot blocking engine + block page
 - [ ] Phase 4: Study sessions + activity tracking
