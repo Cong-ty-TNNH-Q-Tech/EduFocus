@@ -24,7 +24,7 @@ public class FocusTask
     public DateTime CreatedAt { get; private set; }
     public DateTime? UpdatedAt { get; private set; }
 
-    public FocusTask(string name, int expectedMinutes)
+    public FocusTask(string? name, int expectedMinutes)
     {
         Id = TaskId.New();
         if (string.IsNullOrWhiteSpace(name) || name.Length > 200)
@@ -53,7 +53,7 @@ public class FocusTask
         UpdatedAt = DateTime.Now;
     }
 
-    public void SetRecurring(EduFocus.Domain.Enums.RecurringType type, string config)
+    public void SetRecurring(EduFocus.Domain.Enums.RecurringType type, string? config)
     {
         if (type == EduFocus.Domain.Enums.RecurringType.Weekly && string.IsNullOrWhiteSpace(config))
             throw new ArgumentException("Weekly recurring task must have a day config (e.g., '1,3,5').");

@@ -104,9 +104,9 @@ Protection turns off with PIN or when the schedule window ends
 
 | Layer | Technology |
 |---|---|
-| **UI** | WPF .NET 10 LTS (target; code still targets `net9.0` and must be upgraded), MaterialDesignInXAML, CommunityToolkit.Mvvm |
+| **UI** | WPF .NET 10 LTS, MaterialDesignInXAML, CommunityToolkit.Mvvm |
 | **Architecture** | Clean Architecture + Ports & Adapters |
-| **Database** | SQLite + EF Core 10 (target; currently EF Core 9) |
+| **Database** | SQLite + EF Core 10 |
 | **Blocking** | Windows hosts file (exact domains) + local HTTP block page |
 | **Activity** | Win32 foreground window, WMI, UI Automation |
 | **Attention** | OpenCvSharp4 + ONNX Runtime (MediaPipe Face/Iris) |
@@ -126,12 +126,13 @@ Once released, download from [Releases](https://github.com/Cong-ty-TNNH-Q-Tech/E
 
 ### Run from source
 
-**Current requirements:** .NET 10 SDK (tests target `net10.0`; the WPF app is upgraded in Phase 1), Windows 11 23H2+ 64-bit (Windows 10 22H2 best-effort).
+**Current requirements:** .NET 10 SDK (all projects target .NET 10), Windows 11 23H2+ 64-bit (Windows 10 22H2 best-effort).
 
 ```bash
 git clone https://github.com/Cong-ty-TNNH-Q-Tech/EduFocus.git
 cd EduFocus
 
+dotnet tool restore
 dotnet restore EduFocus.slnx
 dotnet run --project src/EduFocus.WPF/EduFocus.WPF.csproj
 ```
@@ -143,7 +144,7 @@ Run tests:
 dotnet test src/EduFocus.Domain.Tests/EduFocus.Domain.Tests.csproj
 ```
 
-> The WPF app and EF Core have not been upgraded as part of this rename; .NET 10/EF Core 10 work remains tracked in Phase 1.
+> The WPF app and EF Core now target .NET 10; see the upgrade notes for compatibility details.
 
 ---
 

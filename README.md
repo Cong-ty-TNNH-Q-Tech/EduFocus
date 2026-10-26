@@ -104,9 +104,9 @@ Tắt Protection bằng PIN hoặc hết khung giờ
 
 | Layer | Công nghệ |
 |---|---|
-| **UI** | WPF .NET 10 LTS (mục tiêu; code hiện tại vẫn `net9.0` và cần nâng cấp), MaterialDesignInXAML, CommunityToolkit.Mvvm |
+| **UI** | WPF .NET 10 LTS, MaterialDesignInXAML, CommunityToolkit.Mvvm |
 | **Architecture** | Clean Architecture + Ports & Adapters |
-| **Database** | SQLite + EF Core 10 (mục tiêu; code hiện tại EF Core 9) |
+| **Database** | SQLite + EF Core 10 |
 | **Blocking** | Windows hosts file (domain exact) + local HTTP block page |
 | **Activity** | Win32 foreground window, WMI, UI Automation |
 | **Attention** | OpenCvSharp4 + ONNX Runtime (MediaPipe Face/Iris) |
@@ -126,12 +126,13 @@ Khi có bản phát hành, tải tại [Releases](https://github.com/Cong-ty-TNN
 
 ### Chạy từ source
 
-**Yêu cầu hiện tại:** .NET 10 SDK (tests target `net10.0`; WPF sẽ được nâng ở Phase 1), Windows 11 23H2+ 64-bit (Windows 10 22H2 best-effort).
+**Yêu cầu hiện tại:** .NET 10 SDK (all projects target .NET 10), Windows 11 23H2+ 64-bit (Windows 10 22H2 best-effort).
 
 ```bash
 git clone https://github.com/Cong-ty-TNNH-Q-Tech/EduFocus.git
 cd EduFocus
 
+dotnet tool restore
 dotnet restore EduFocus.slnx
 dotnet run --project src/EduFocus.WPF/EduFocus.WPF.csproj
 ```
@@ -143,7 +144,7 @@ Chạy test:
 dotnet test src/EduFocus.Domain.Tests/EduFocus.Domain.Tests.csproj
 ```
 
-> WPF và EF Core chưa được nâng cấp trong issue đổi tên; theo dõi .NET 10/EF Core 10 trong Phase 1.
+> WPF and EF Core target .NET 10; see the .NET 10 upgrade notes for compatibility details.
 
 ---
 

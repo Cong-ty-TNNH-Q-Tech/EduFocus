@@ -16,7 +16,7 @@ public class Profile
     private List<ProfileEntry> _entries = new();
     public IReadOnlyCollection<ProfileEntry> Entries => _entries.AsReadOnly();
 
-    public Profile(string name, bool isDefault)
+    public Profile(string? name, bool isDefault)
     {
         Id = ProfileId.New();
         if (string.IsNullOrWhiteSpace(name))

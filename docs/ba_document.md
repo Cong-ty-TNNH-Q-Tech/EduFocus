@@ -418,9 +418,9 @@ EduFocus cung cấp một lớp bảo vệ và quan sát **tối thiểu, minh b
 
 | Thành phần | Công nghệ |
 |---|---|
-| UI | WPF .NET 10 LTS (mục tiêu; code hiện tại vẫn `net9.0`, hết hỗ trợ 10/11/2026, cần nâng cấp), MaterialDesignInXAML, CommunityToolkit.Mvvm |
+| UI | WPF .NET 10 LTS, MaterialDesignInXAML, CommunityToolkit.Mvvm |
 | Architecture | Clean Architecture + Ports & Adapters |
-| Database | SQLite + EF Core 10 (mục tiêu; code hiện tại EF Core 9) |
+| Database | SQLite + EF Core 10 |
 | Chặn web | Windows hosts file + local HTTP block page (MVP, domain-level) |
 | Chặn URL/path | Browser extension (Post-MVP) |
 | Process / foreground window | Win32 API (`GetForegroundWindow`, WMI, `Process`) |

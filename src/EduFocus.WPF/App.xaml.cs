@@ -122,14 +122,8 @@ public partial class App : Application
         var localAppData = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
         var appFolder = Path.Combine(localAppData, "EduFocus");
         Directory.CreateDirectory(appFolder);
-        var dbPath = Path.Combine(appFolder, "dontbelazy.db");
+        var dbPath = Path.Combine(appFolder, "edufocus.db");
 
-        // Smooth upgrade path for portable beta users who had db in exe folder
-        var oldDbPath = Path.Combine(AppContext.BaseDirectory, "dontbelazy.db");
-        if (File.Exists(oldDbPath) && !File.Exists(dbPath))
-        {
-            try { File.Copy(oldDbPath, dbPath); } catch { }
-        }
 
         services.AddSqliteDataAccess($"Data Source={dbPath}");
         services.AddUseCases();
@@ -200,7 +194,7 @@ public partial class App : Application
             if (key != null)
             {
                 if (enable)
-                    key.SetValue("EduFocus", System.Environment.ProcessPath ?? System.Reflection.Assembly.GetExecutingAssembly().Location);
+                    key.SetValue("EduFocus", Environment.ProcessPath ?? Path.Combine(AppContext.BaseDirectory, "EduFocus.exe"));
                 else
                     key.DeleteValue("EduFocus", false);
             }

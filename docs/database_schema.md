@@ -2,7 +2,7 @@
 
 > **Trạng thái:** Thiết kế đích / schema mới cho EduFocus.
 > **Phiên bản:** 2.0 — 2026-10-26
-> **DB engine:** SQLite + EF Core 10 (mục tiêu; code hiện tại EF Core 9)
+> **DB engine:** SQLite + EF Core 10
 > **Tên file:** `%ProgramData%\EduFocus\edufocus.db`
 
 ---

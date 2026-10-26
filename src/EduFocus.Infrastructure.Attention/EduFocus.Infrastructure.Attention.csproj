@@ -14,7 +14,7 @@
   <PropertyGroup>
     <AssemblyName>EduFocus.Infrastructure.Attention</AssemblyName>
     <RootNamespace>EduFocus.Infrastructure.Attention</RootNamespace>
-    <TargetFramework>net9.0-windows</TargetFramework>
+    <TargetFramework>net10.0-windows</TargetFramework>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
   </PropertyGroup>

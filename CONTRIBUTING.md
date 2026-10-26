@@ -38,11 +38,12 @@ git checkout -b fix/mo-ta-loi
 **Yêu cầu**
 
 - Windows 11 23H2+ (64-bit) — chính; Windows 10 22H2 chỉ best-effort
-- .NET 10 SDK (solution hiện có test target `net10.0`; WPF upgrade đang được xác minh ở Phase 1)
+- .NET 10 SDK (all solution projects target .NET 10)
 - Visual Studio 2022 (hoặc Rider) với workload **.NET desktop development**
 - SQLite tooling (tùy chọn, để xem DB)
 
 ```bash
+dotnet tool restore
 dotnet restore EduFocus.slnx
 dotnet build EduFocus.slnx
 ```
@@ -61,7 +62,7 @@ Chạy test:
 dotnet test src/EduFocus.Domain.Tests/EduFocus.Domain.Tests.csproj
 ```
 
-> WPF và EF Core sẽ được nâng theo kế hoạch Phase 1; hiện trạng và lệnh build/test được ghi trong README.
+> Solution target is .NET 10 and uses EF Core 10; see README for build/test commands.
 
 ### 4. Commit
 
