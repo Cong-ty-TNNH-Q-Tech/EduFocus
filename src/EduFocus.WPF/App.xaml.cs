@@ -35,8 +35,12 @@ public partial class App : Application
 
         try
         {
-            _services.GetRequiredService<IAppLogger>().Info("EduFocus foundation started.");
-            await _services.GetRequiredService<DatabaseInitializer>().InitializeAsync(databasePath);
+            var logger = _services.GetRequiredService<IAppLogger>();
+            using (logger.BeginCorrelationScope())
+            {
+                logger.Log("Information", "EduFocus.WPF.App", "EduFocus foundation started.");
+                await _services.GetRequiredService<DatabaseInitializer>().InitializeAsync(databasePath);
+            }
         }
         catch (Exception)
         {

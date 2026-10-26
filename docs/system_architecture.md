@@ -512,6 +512,9 @@ Trạng thái lưu trong `AppSettings.ProtectionEnabled`; session active lưu tr
 
 - DB: `%ProgramData%\EduFocus\edufocus.db`.
 - Logs: `%ProgramData%\EduFocus\logs`.
+- Technical logs are UTF-8 JSON Lines (`app-yyyyMMdd-NNN.jsonl`) with UTC timestamp, level, category and correlation ID. A correlation scope flows through async work; begin one at each top-level operation and pass its ID into any corresponding `AuditLog` record. The current foundation has only the startup scope; protection/session/block-page flows do not exist yet.
+- Each file is limited to 5 MiB; files older than 14 days are removed and the directory is capped at 112 files. Credential-like assignments, bearer tokens and full URLs in text are redacted. Structured fields for URLs, window/page titles or content, and camera/media data are omitted. Do not put sensitive data in event messages. The database `AuditLogs` table is a separate business audit trail; the present foundation defines its schema but has no audit writer/use cases.
+- To collect diagnostics, have an administrator copy the newest relevant `.jsonl` files from `%ProgramData%\EduFocus\logs` to a support location after checking that they contain no unexpected sensitive data. Include the incident time and correlation ID where available. Never send camera frames, page contents, full URLs, PINs, recovery codes or tokens.
 - ACL không kế thừa: chỉ Administrators/SYSTEM Full Control trên thư mục dữ liệu, DB, backup và log; app yêu cầu elevated startup. Standard-user validation script: `tools/verify-data-directory-acl.ps1`.
 - Nếu dùng chung tài khoản Windows, ACL không tách được phụ huynh và học sinh; dùng tài khoản riêng, học sinh dùng standard user.
 - Timestamp lưu **UTC**; hiển thị local. Query theo ngày dùng local boundary chuyển sang UTC.

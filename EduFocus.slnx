@@ -3,6 +3,7 @@
     <Project Path="src/EduFocus.Domain.Tests/EduFocus.Domain.Tests.csproj" />
     <Project Path="src/EduFocus.Domain/EduFocus.Domain.csproj" />
     <Project Path="src/EduFocus.Infrastructure/EduFocus.Infrastructure.csproj" />
+    <Project Path="src/EduFocus.Infrastructure.Tests/EduFocus.Infrastructure.Tests.csproj" />
     <Project Path="src/EduFocus.Infrastructure.Persistence/EduFocus.Infrastructure.Persistence.csproj" />
     <Project Path="src/EduFocus.Infrastructure.Persistence.Tests/EduFocus.Infrastructure.Persistence.Tests.csproj" />
     <Project Path="src/EduFocus.Infrastructure.Attention/EduFocus.Infrastructure.Attention.csproj" />
