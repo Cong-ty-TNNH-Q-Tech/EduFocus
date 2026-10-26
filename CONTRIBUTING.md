@@ -54,7 +54,7 @@ Chạy app:
 dotnet run --project src/EduFocus.WPF/EduFocus.WPF.csproj
 ```
 
-> Một số tính năng (ghi hosts, kill process) cần chạy **as Administrator**. Khi debug, hãy chạy Visual Studio với quyền admin nếu cần kiểm thử blocking.
+> Ứng dụng hiện là shell nền tảng, chạy với quyền hiện tại và chưa có tính năng blocking/camera. Các yêu cầu quyền sẽ được cập nhật cùng issue triển khai từng tính năng.
 
 Chạy test:
 

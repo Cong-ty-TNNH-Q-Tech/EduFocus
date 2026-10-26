@@ -182,7 +182,7 @@ dotnet test src/EduFocus.Domain.Tests/EduFocus.Domain.Tests.csproj
 - Hosts file có thể bị bypass bởi DoH/DoT, VPN hoặc proxy.
 - Hosts không tạo log truy cập HTTPS; số blocked attempts chỉ là best-effort.
 - Trang chặn chỉ hiển thị với HTTP; HTTPS thường báo lỗi kết nối/SSL.
-- Chặn app có thể đóng/kill process và làm mất dữ liệu chưa lưu; EduFocus ưu tiên `WM_CLOSE` trước khi kill.
+- Chặn app và quản lý session chưa được triển khai trong shell hiện tại.
 - URL/path, wildcard subdomain và chặn AI sidebar chưa thuộc MVP; cần browser extension.
 - Báo cáo chi tiết chỉ có trong 30 ngày; dữ liệu dài hạn dùng session summary (365 ngày).
 - Webcam-based attention chỉ là ước lượng; không dùng để kết luận chắc chắn.

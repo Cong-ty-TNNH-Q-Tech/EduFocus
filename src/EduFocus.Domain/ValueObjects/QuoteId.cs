@@ -1,9 +1,0 @@
-using System;
-
-namespace EduFocus.Domain.ValueObjects;
-
-public readonly record struct QuoteId(Guid Value)
-{
-    public static QuoteId New() => new(Guid.NewGuid());
-    public static readonly QuoteId Empty = new(Guid.Empty);
-}

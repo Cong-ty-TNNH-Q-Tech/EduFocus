@@ -574,84 +574,49 @@ AddViews()
 
 ---
 
-## 14. Cấu trúc thư mục đích
+## 14. Cấu trúc hiện có trong repository
 
 ```text
 EduFocus/
 ├── EduFocus.slnx
 ├── src/
-│   ├── EduFocus.Domain/
-│   │   ├── Entities/
-│   │   ├── Enums/
-│   │   ├── ValueObjects/
-│   │   └── EduFocus.Domain.csproj
-│   ├── EduFocus.Ports/
-│   │   ├── Inbound/
-│   │   ├── Outbound/
-│   │   ├── DTOs/
-│   │   └── EduFocus.Ports.csproj
-│   ├── EduFocus.UseCases/
-│   │   ├── Auth/
-│   │   ├── Protection/
-│   │   ├── Sessions/
-│   │   ├── Attention/
-│   │   ├── Reports/
-│   │   └── EduFocus.UseCases.csproj
-│   ├── EduFocus.Infrastructure/
-│   │   ├── Protection/
-│   │   ├── Activity/
-│   │   ├── Attention/
-│   │   ├── Auth/
-│   │   ├── Watchdog/
-│   │   └── EduFocus.Infrastructure.csproj
-│   ├── EduFocus.SqliteDataAccess/
-│   │   ├── AppDbContext.cs
-│   │   ├── Repositories/
-│   │   ├── Migrations/
-│   │   └── EduFocus.SqliteDataAccess.csproj
-│   ├── EduFocus.WPF/
-│   │   ├── Views/
-│   │   ├── ViewModels/
-│   │   ├── Services/
-│   │   ├── App.xaml
-│   │   └── EduFocus.WPF.csproj
-│   └── EduFocus.Domain.Tests/
-├── installer/
-│   └── Product.wxs
-├── docs/
-│   ├── ba_document.md
-│   ├── use_cases.md
-│   ├── system_architecture.md
-│   └── database_schema.md
+│   ├── EduFocus.Domain/Attention/
+│   ├── EduFocus.Domain.Tests/Attention/
+│   ├── EduFocus.Ports/DTOs/AttentionDtos.cs
+│   ├── EduFocus.Ports/Outbound/Services/
+│   ├── EduFocus.Infrastructure/Logging/
+│   ├── EduFocus.Infrastructure/Services/MonotonicClockAdapter.cs
+│   ├── EduFocus.Infrastructure.Attention/
+│   └── EduFocus.WPF/ (App.xaml, MainWindow.xaml, manifests)
+├── tools/
+│   ├── AttentionPipelineSpike/
+│   ├── BlockingPipelineSpike/
+│   └── WatchdogSpike/
+├── installer/Product.wxs
 └── .github/workflows/
 ```
 
-> Project, namespace, assembly và solution đã được đổi đồng bộ sang tên `EduFocus.*`; cấu hình CI và installer còn được xử lý ở các issue riêng.
+Các project trong solution hiện chỉ chứa mô hình attention và dịch vụ nền dùng chung, cùng cửa sổ EduFocus 2.0 tối giản. Các spike trong `tools/` chạy độc lập, không được đăng ký hoặc khởi chạy bởi ứng dụng. Use cases và SQLite schema của 2.0 sẽ được thêm trong các issue kế tiếp; `docs/database_schema.md` hiện là thiết kế, chưa phải schema đang chạy.
 
----
+## 15. Dọn codebase 1.x
 
-## 15. Migration từ codebase hiện tại
-
-| Hiện tại | Đích |
+| Thành phần cũ | Trạng thái sau cleanup |
 |---|---|
-| `WindowsStrictEngine.cs` | `ProtectionEngine.cs` — rule động, không hard-code whitelist |
-| `LocalRedirectServer.cs` | `BlockPageServer.cs` — trang chặn mới, không guilt-trip |
-| `_distractingDomains` | `ChatbotBlocklist.cs` + `BlockRules` trong DB |
-| `SystemSettings.cs` | `AppSettings.cs` + `ParentCredential.cs` |
-| `FocusSessionUseCase.cs` | `StudySessionUseCase.cs` + `ProtectionUseCase.cs` |
-| `FocusTaskUseCase.cs`, `ProfileUseCase.cs` | Xóa |
-| `QuoteUseCase.cs`, `GeminiAiServices.cs` | Xóa |
-| `ActiveSessionState.cs` | `ProtectionSessionState.cs` |
-| `DashboardView`, `ProfilesView`, `FocusSessionView`, `AnalyticsView` | Thay bằng view mới |
-| `AppDbContext` + migrations | Schema mới, DB mới `edufocus.db` |
-| `installer/Product.wxs` | Đổi tên/sản phẩm, thêm scheduled task/service |
-| CI release | Đổi artifact, app name, product name |
+| Task, profile, Pomodoro/session, analytics, settings và quote entities/use cases | Đã xóa khỏi solution; thay thế theo các phase tính năng 2.0, chưa được kích hoạt. |
+| Gemini AI, guilt-trip, friction gate và quote asset | Đã xóa khỏi product code và output. |
+| WindowsStrictEngine, LocalRedirectServer, tray, updater và auto-start cũ | Đã xóa khỏi WPF/runtime registrations; blocking/watchdog hiện chỉ có spike thủ công trong `tools/`. |
+| DbContext, EF migrations và repositories dựa trên model 1.x | Đã xóa; chưa tạo database hoặc schema 2.0. DB và dữ liệu người dùng cũ không bị xóa hay import. |
+| Icon, UI và tên Don't Be Lazy | Asset icon và các màn hình cũ đã xóa; app/MSI dùng tên EduFocus. Lịch sử Git và tài liệu ghi nhận 1.x được giữ lại. |
+| Attention classifier/camera spike | Giữ lại riêng như nền tảng spike; WPF hiện không khởi tạo camera hoặc thu thập dữ liệu. |
 
-**Không migrate dữ liệu 1.x** vì schema và mục đích sản phẩm khác. Nếu cần giữ blocklist tùy chỉnh, cung cấp tool import riêng (post-MVP).
+Không migrate dữ liệu 1.x vì mục đích và schema sản phẩm khác. Blocklist tùy chỉnh chỉ được nhập nếu có công cụ riêng được thiết kế và kiểm thử sau này.
 
 ---
 
 ## 16. Testing Strategy
+
+> Đây là chiến lược kiểm thử mục tiêu. Hiện solution chỉ có unit tests cho attention classifier/state machine; các test khác sẽ được bổ sung cùng feature.
+
 
 ### Unit tests
 - Domain: PIN validation, rule matching, attention score, session totals, schedule.
