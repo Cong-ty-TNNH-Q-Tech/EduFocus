@@ -14,6 +14,8 @@ public static class InfrastructureServiceCollectionExtensions
         services.AddSingleton<IProtectionEnginePort, UnavailableProtectionEngine>();
         services.AddSingleton<IHostsFileStorage, PhysicalHostsFileStorage>();
         services.AddSingleton<IDnsCacheFlusher, WindowsDnsCacheFlusher>();
+        services.AddSingleton<IBlockPagePort>(provider =>
+            new LoopbackBlockPagePort(provider.GetRequiredService<IAppLogger>()));
         services.AddSingleton<IHostsFilePort>(provider =>
         {
             var windows = Environment.GetFolderPath(Environment.SpecialFolder.Windows);

@@ -321,6 +321,8 @@ The application has a `ProtectionCoordinator` and an `IProtectionEnginePort` con
 
 `IHostsFilePort` owns only an atomically replaced `EduFocus` marker region. It writes active, enabled, unexpired exact Domain Block rules; an exact Allow for the same host wins. The original hosts bytes are backed up before the first write, DNS flush failure rolls the write back, and restore removes only the managed region while retaining other lines. The backup lives under the ACL-protected `%ProgramData%\EduFocus` directory. File/permission/DNS errors are surfaced so Protection cannot be persisted ON after failed enforcement.
 
+`IBlockPagePort` binds a TCP listener only to `127.0.0.1:80`. It serves a small static UTF-8 page, escapes the Host value, excludes paths and query strings, and sets a restrictive CSP with no remote assets. If port 80 cannot bind, the listener reports unavailable while block enforcement may continue through hosts; it does not change Protection state.
+
 ### 6.1. Rule matching
 
 ```text
