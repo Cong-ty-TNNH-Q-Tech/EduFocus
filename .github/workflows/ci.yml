@@ -6,6 +6,13 @@ on:
   push:
     branches: [ master ]
 
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   build:
     name: Build & Test
@@ -20,6 +27,14 @@ jobs:
         with:
           dotnet-version: "10.0.x"
 
+      - name: Cache NuGet packages
+        uses: actions/cache@v4
+        with:
+          path: ~/.nuget/packages
+          key: ${{ runner.os }}-nuget-${{ hashFiles('**/*.csproj') }}
+          restore-keys: |
+            ${{ runner.os }}-nuget-
+
       - name: Restore
         run: dotnet restore EduFocus.slnx
 
@@ -28,3 +43,25 @@ jobs:
 
       - name: Test
         run: dotnet test EduFocus.slnx --no-build --configuration Release --verbosity minimal
+
+      - name: Publish EduFocus
+        run: dotnet publish src/EduFocus.WPF/EduFocus.WPF.csproj --no-restore --configuration Release --output "${{ runner.temp }}\EduFocus-CI"
+
+      - name: Check publish output for local data
+        shell: pwsh
+        run: |
+          $publishDirectory = Join-Path $env:RUNNER_TEMP "EduFocus-CI"
+          $forbiddenFiles = Get-ChildItem -LiteralPath $publishDirectory -Recurse -File |
+            Where-Object { $_.Extension -in @('.db', '.log') -or $_.Name -like '*.db-*' }
+          if ($forbiddenFiles) {
+            $forbiddenFiles | ForEach-Object { Write-Error "Unexpected local data in publish output: $($_.Name)" }
+            exit 1
+          }
+
+      - name: Upload EduFocus build artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: EduFocus-CI-${{ github.run_number }}
+          path: ${{ runner.temp }}\EduFocus-CI\
+          if-no-files-found: error
+          retention-days: 7

@@ -134,14 +134,14 @@ cd EduFocus
 
 dotnet tool restore
 dotnet restore EduFocus.slnx
-dotnet run --project src/EduFocus.WPF/EduFocus.WPF.csproj
+dotnet build EduFocus.slnx --configuration Release
+dotnet test EduFocus.slnx --configuration Release
 ```
 
-
-Chạy test:
+GitHub Actions runs the same restore/build/test flow on Windows, publishes the WPF app as a short-lived CI artifact, and caches only NuGet packages. Launching the app requires Administrator approval because its data directory is protected under `%ProgramData%`:
 
 ```bash
-dotnet test src/EduFocus.Domain.Tests/EduFocus.Domain.Tests.csproj
+dotnet run --project src/EduFocus.WPF/EduFocus.WPF.csproj --configuration Release
 ```
 
 > WPF and EF Core target .NET 10; see the .NET 10 upgrade notes for compatibility details.

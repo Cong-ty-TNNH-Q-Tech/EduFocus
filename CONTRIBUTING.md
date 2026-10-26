@@ -45,7 +45,8 @@ git checkout -b fix/mo-ta-loi
 ```bash
 dotnet tool restore
 dotnet restore EduFocus.slnx
-dotnet build EduFocus.slnx
+dotnet build EduFocus.slnx --configuration Release
+dotnet test EduFocus.slnx --configuration Release
 ```
 
 Chạy app:
@@ -54,15 +55,11 @@ Chạy app:
 dotnet run --project src/EduFocus.WPF/EduFocus.WPF.csproj
 ```
 
-> Ứng dụng hiện là shell nền tảng, chạy với quyền hiện tại và chưa có tính năng blocking/camera. Các yêu cầu quyền sẽ được cập nhật cùng issue triển khai từng tính năng.
+> App yêu cầu Administrator approval để thiết lập ACL cho database, backup và log trong `%ProgramData%\EduFocus`.
 
-Chạy test:
+CI GitHub Actions dùng Windows runner và cùng chuỗi lệnh Release ở trên. Nó tạo artifact WPF `EduFocus-CI-*` lưu 7 ngày; cache chỉ chứa NuGet packages, không chứa database/log.
 
-```bash
-dotnet test src/EduFocus.Domain.Tests/EduFocus.Domain.Tests.csproj
-```
-
-> Solution target is .NET 10 and uses EF Core 10; see README for build/test commands.
+Khi thay đổi CI, giữ runner Windows, SDK .NET 10 và test toàn solution (`EduFocus.slnx`) để integration tests SQLite cũng chạy.
 
 ### 4. Commit
 
@@ -122,7 +119,7 @@ WPF → UseCases → Ports ← Infrastructure
 1. Xác định entity/value object trong `Domain`.
 2. Định nghĩa Port (nếu cần).
 3. Viết UseCase + unit test.
-4. Triển khai adapter ở `Infrastructure`/`SqliteDataAccess`.
+4. Triển khai adapter ở `Infrastructure` hoặc `Infrastructure.Persistence`.
 5. Đăng ký DI và làm UI.
 6. Cập nhật docs/CHANGELOG nếu hành vi thay đổi.
 
