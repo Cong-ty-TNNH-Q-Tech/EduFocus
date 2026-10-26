@@ -124,6 +124,68 @@ public sealed class ProtectionCoordinatorTests
         Assert.Empty(await fixture.Db.StudySessions.ToArrayAsync());
     }
 
+    [Fact]
+    public async Task Authorized_clean_exit_stops_engine_completes_session_and_records_clean_shutdown()
+    {
+        await using var fixture = await Fixture.Create();
+        var engine = new FakeProtectionEngine();
+        var coordinator = new ProtectionCoordinator(fixture.Db, engine);
+        await coordinator.SetProtectionAsync(true, AuthenticatedSession(), Now.AddSeconds(1));
+
+        await coordinator.CleanExitAsync(Now.AddMinutes(1));
+
+        var settings = await fixture.Db.AppSettings.SingleAsync();
+        Assert.Equal(ProtectionState.Off, settings.Protection);
+        Assert.Equal(Now.AddMinutes(1), settings.LastCleanShutdownAtUtc);
+        Assert.False(engine.Active);
+        Assert.Equal(StudySessionStatus.Completed, (await fixture.Db.StudySessions.SingleAsync()).Status);
+        Assert.Contains(await fixture.Db.AuditLogs.Select(x => x.EventType).ToArrayAsync(), x => x == "ProtectionOff");
+        Assert.Contains(await fixture.Db.AuditLogs.Select(x => x.EventType).ToArrayAsync(), x => x == "CleanExit");
+    }
+
+    [Fact]
+    public async Task System_shutdown_interrupts_session_but_preserves_protection_for_restart()
+    {
+        await using var fixture = await Fixture.Create();
+        var engine = new FakeProtectionEngine();
+        var coordinator = new ProtectionCoordinator(fixture.Db, engine);
+        await coordinator.SetProtectionAsync(true, AuthenticatedSession(), Now.AddSeconds(1));
+        var heartbeat = Now.AddSeconds(30);
+        (await fixture.Db.StudySessions.SingleAsync()).Heartbeat(heartbeat);
+        await fixture.Db.SaveChangesAsync();
+
+        await coordinator.HandleSystemShutdownAsync(Now.AddMinutes(1));
+
+        var settings = await fixture.Db.AppSettings.SingleAsync();
+        Assert.Equal(ProtectionState.On, settings.Protection);
+        Assert.Null(settings.LastCleanShutdownAtUtc);
+        Assert.Equal(StudySessionStatus.Interrupted, (await fixture.Db.StudySessions.SingleAsync()).Status);
+        Assert.Equal(heartbeat, (await fixture.Db.StudySessions.SingleAsync()).EndedAtUtc);
+        Assert.True(engine.Active);
+        Assert.Contains(await fixture.Db.AuditLogs.Select(x => x.EventType).ToArrayAsync(), x => x == "SystemShutdown");
+        Assert.Contains(await fixture.Db.AuditLogs.Select(x => x.EventType).ToArrayAsync(), x => x == "SessionInterrupted");
+    }
+
+    [Fact]
+    public async Task Failed_clean_exit_restores_protection_and_never_records_clean_shutdown()
+    {
+        await using var fixture = await Fixture.Create();
+        var engine = new FakeProtectionEngine();
+        var coordinator = new ProtectionCoordinator(fixture.Db, engine);
+        await coordinator.SetProtectionAsync(true, AuthenticatedSession(), Now.AddSeconds(1));
+        engine.FailStop = true;
+
+        await Assert.ThrowsAsync<InvalidOperationException>(() => coordinator.CleanExitAsync(Now.AddMinutes(1)));
+
+        var settings = await fixture.Db.AppSettings.SingleAsync();
+        Assert.Equal(ProtectionState.On, settings.Protection);
+        Assert.Null(settings.LastCleanShutdownAtUtc);
+        Assert.Equal(StudySessionStatus.Active, (await fixture.Db.StudySessions.SingleAsync()).Status);
+        Assert.True(engine.Active);
+        Assert.Equal(1, engine.ReconcileCalls);
+        Assert.DoesNotContain(await fixture.Db.AuditLogs.Select(x => x.EventType).ToArrayAsync(), x => x == "CleanExit");
+    }
+
     private static ParentModeSession AuthenticatedSession()
     {
         var session = new ParentModeSession();

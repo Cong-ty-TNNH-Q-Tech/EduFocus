@@ -143,6 +143,70 @@ public sealed class ProtectionCoordinator(AppDbContext db, IProtectionEnginePort
         finally { ProcessGate.Release(); }
     }
 
+    /// <summary>Clean, parent-authorized application exit: remove engine resources before recording OFF.</summary>
+    public async Task CleanExitAsync(DateTimeOffset now, CancellationToken cancellationToken = default)
+    {
+        now = RequireUtc(now);
+        await ProcessGate.WaitAsync(cancellationToken);
+        try
+        {
+            var settings = await db.AppSettings.SingleOrDefaultAsync(cancellationToken)
+                ?? throw new InvalidOperationException("Application settings are not initialized.");
+            var wasOn = settings.Protection == ProtectionState.On;
+            var rules = wasOn
+                ? await db.BlockRules.AsNoTracking().Where(rule => rule.IsEnabled && rule.EnforcementStatus == RuleEnforcementStatus.Enforced && (rule.ExpiresAtUtc == null || rule.ExpiresAtUtc > now)).ToArrayAsync(cancellationToken)
+                : Array.Empty<BlockRule>();
+            if (wasOn)
+            {
+                if (!engine.IsAvailable) throw new InvalidOperationException("Protection is ON but the engine is unavailable; a clean exit cannot safely remove protection resources.");
+            }
+
+            try
+            {
+                if (engine.IsAvailable) await engine.StopAsync(cancellationToken);
+                await using var transaction = await db.Database.BeginTransactionAsync(cancellationToken);
+                var active = await db.StudySessions.SingleOrDefaultAsync(x => x.Status == StudySessionStatus.Active, cancellationToken);
+                active?.Complete(now);
+                settings.RecordCleanShutdown(now);
+                if (wasOn) db.AuditLogs.Add(AuditLog.Create(now, AuditActor.Parent, "ProtectionOff", "Protection was disabled during an authorized clean exit.", now));
+                db.AuditLogs.Add(AuditLog.Create(now, AuditActor.Parent, "CleanExit", "The parent authorized a clean application exit.", now));
+                await db.SaveChangesAsync(cancellationToken);
+                await transaction.CommitAsync(cancellationToken);
+            }
+            catch
+            {
+                if (engine.IsAvailable)
+                {
+                    try { await engine.ReconcileAsync(wasOn, rules, cancellationToken); }
+                    catch { /* Preserve the persistence exception; next startup will reconcile and fail closed. */ }
+                }
+                throw;
+            }
+        }
+        finally { ProcessGate.Release(); }
+    }
+
+    /// <summary>Records an OS shutdown without disabling persisted Protection or stopping engine resources early.</summary>
+    public async Task HandleSystemShutdownAsync(DateTimeOffset now, CancellationToken cancellationToken = default)
+    {
+        now = RequireUtc(now);
+        await ProcessGate.WaitAsync(cancellationToken);
+        try
+        {
+            await using var transaction = await db.Database.BeginTransactionAsync(cancellationToken);
+            var active = await db.StudySessions.SingleOrDefaultAsync(x => x.Status == StudySessionStatus.Active, cancellationToken);
+            if (active is not null)
+            {
+                active.InterruptAtLastHeartbeat();
+                db.AuditLogs.Add(AuditLog.Create(now, AuditActor.System, "SessionInterrupted", "The active session was interrupted by Windows shutdown or logoff.", now));
+            }
+            db.AuditLogs.Add(AuditLog.Create(now, AuditActor.System, "SystemShutdown", "Windows shutdown or logoff was received; Protection state was preserved.", now));
+            await db.SaveChangesAsync(cancellationToken);
+            await transaction.CommitAsync(cancellationToken);
+        }
+        finally { ProcessGate.Release(); }
+    }
+
     private async Task StartStateAsync(AppSettings settings, DateTimeOffset now, AuditActor actor, StudySessionTrigger trigger, bool clearOverride, CancellationToken cancellationToken)
     {
         var active = await db.StudySessions.SingleOrDefaultAsync(x => x.Status == StudySessionStatus.Active, cancellationToken);

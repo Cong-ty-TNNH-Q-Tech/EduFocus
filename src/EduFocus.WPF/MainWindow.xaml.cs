@@ -2,6 +2,7 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Threading;
+using System.ComponentModel;
 using EduFocus.Domain.Entities;
 using EduFocus.Domain.Enums;
 using EduFocus.Infrastructure.Persistence;
@@ -25,6 +26,9 @@ public partial class MainWindow : Window
     private bool _authenticationUnavailable;
     private Page _page = Page.Student;
     private DateTimeOffset _lastScheduleEvaluationUtc = DateTimeOffset.MinValue;
+    private bool _allowClose;
+    private bool _systemShutdown;
+    private bool _exitInProgress;
 
     public MainWindow(ParentCredentialService credentials, ProtectionCoordinator protection, ScheduleService schedule, IAppLogger logger, bool credentialsConfigured)
     {
@@ -43,6 +47,46 @@ public partial class MainWindow : Window
         _timer.Tick += OnTimerTick;
         _timer.Start();
     }
+
+    protected override async void OnClosing(CancelEventArgs e)
+    {
+        if (_allowClose || _systemShutdown)
+        {
+            base.OnClosing(e);
+            return;
+        }
+        e.Cancel = true;
+        base.OnClosing(e);
+        if (_exitInProgress || e.Cancel == false) return;
+
+        _exitInProgress = true;
+        try
+        {
+            var prompt = new ExitPinDialog(async pin =>
+            {
+                using (_logger.BeginCorrelationScope())
+                {
+                    var result = await _credentials.AuthenticatePinAsync(pin, DateTimeOffset.UtcNow);
+                    return result.Status == CredentialOperationStatus.Succeeded;
+                }
+            }) { Owner = this };
+            if (prompt.ShowDialog() != true) return;
+
+            await _protection.CleanExitAsync(DateTimeOffset.UtcNow);
+            _parentSession.Lock();
+            _allowClose = true;
+            Close();
+        }
+        catch (Exception ex)
+        {
+            _logger.Error("Authorized application exit could not be completed safely.", ex);
+            MessageBox.Show(this, "EduFocus could not safely save the exit state or remove protection resources. The app will remain open.",
+                "Exit unavailable", MessageBoxButton.OK, MessageBoxImage.Error);
+        }
+        finally { if (!_allowClose) _exitInProgress = false; }
+    }
+
+    public void AllowSystemShutdown() => _systemShutdown = true;
 
     private async void OnLoaded(object sender, RoutedEventArgs e)
     {

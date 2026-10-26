@@ -1,4 +1,5 @@
 using System.IO;
+using System.Threading.Tasks;
 using System.Windows;
 using EduFocus.Infrastructure;
 using EduFocus.Infrastructure.Persistence;
@@ -16,6 +17,7 @@ public partial class App : Application
     protected override async void OnStartup(StartupEventArgs e)
     {
         base.OnStartup(e);
+        SessionEnding += OnSystemSessionEnding;
         ShutdownMode = ShutdownMode.OnExplicitShutdown;
 
         var databasePath = DatabaseInitializer.GetDatabasePath();
@@ -98,6 +100,23 @@ public partial class App : Application
         MainWindow.Closed += (_, _) => _windowScope?.Dispose();
         MainWindow.Show();
         ShutdownMode = ShutdownMode.OnLastWindowClose;
+    }
+
+    private void OnSystemSessionEnding(object? sender, SessionEndingCancelEventArgs e)
+    {
+        if (_windowScope is null) return;
+        try
+        {
+            var scope = _windowScope;
+            Task.Run(() => scope.ServiceProvider.GetRequiredService<ProtectionCoordinator>()
+                .HandleSystemShutdownAsync(DateTimeOffset.UtcNow)).GetAwaiter().GetResult();
+        }
+        catch (Exception ex)
+        {
+            _services?.GetRequiredService<IAppLogger>().Error("System shutdown state could not be recorded; Windows shutdown will continue.", ex);
+        }
+        (MainWindow as MainWindow)?.AllowSystemShutdown();
+        // Do not cancel the OS shutdown or logoff request.
     }
 
     protected override void OnExit(ExitEventArgs e)

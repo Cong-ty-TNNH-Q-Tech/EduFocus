@@ -311,6 +311,10 @@ EduFocus.Monitor (user session, hidden)
 
 ---
 
+## Application exit and OS shutdown
+
+`WM_CLOSE` (including Alt+F4) opens a parent PIN prompt. A valid PIN stops engine resources, completes the active session, persists Protection OFF and `LastCleanShutdownAtUtc`, then permits close. If authentication, engine stop or persistence fails, the window stays open. Windows `SessionEnding` is never cancelled: the app interrupts the active session at its last heartbeat, records a system shutdown audit event, and preserves Protection ON for startup reconciliation.
+
 ## 6. Protection Engine
 
 The application has a `ProtectionCoordinator` and an `IProtectionEnginePort` contract for state, session, audit and restart reconciliation. Until the hosts, block-page and process-watcher adapters are integrated, runtime DI uses `UnavailableProtectionEngine`: a request to turn Protection ON fails without changing SQLite state. The real adapters and engine orchestration are implemented in the later blocking issues; a test fake exercises the coordinator contract.
