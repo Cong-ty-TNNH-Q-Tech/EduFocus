@@ -5,6 +5,7 @@ using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using DontBeLazy.Ports.DTOs;
 using DontBeLazy.Ports.Inbound;
+using DontBeLazy.Ports.Outbound.Services;
 
 namespace DontBeLazy.WPF.ViewModels;
 
@@ -15,6 +16,7 @@ public partial class FocusSessionViewModel : ObservableObject
     private readonly IProfileUseCase _profileUseCase;
     private readonly IQuoteUseCase _quoteUseCase;
     private readonly ISystemSettingsUseCase _settingsUseCase;
+    private readonly INotificationPort _notificationPort;
 
     private DispatcherTimer? _timer;
     private SessionHistoryDto? _currentSession;
@@ -80,13 +82,15 @@ public partial class FocusSessionViewModel : ObservableObject
         IFocusTaskUseCase taskUseCase,
         IProfileUseCase profileUseCase,
         IQuoteUseCase quoteUseCase,
-        ISystemSettingsUseCase settingsUseCase)
+        ISystemSettingsUseCase settingsUseCase,
+        INotificationPort notificationPort)
     {
         _sessionUseCase = sessionUseCase;
         _taskUseCase = taskUseCase;
         _profileUseCase = profileUseCase;
         _quoteUseCase = quoteUseCase;
         _settingsUseCase = settingsUseCase;
+        _notificationPort = notificationPort;
     }
 
     public void LoadRestoredSession(SessionHistoryDto restoredSession)
@@ -277,6 +281,12 @@ public partial class FocusSessionViewModel : ObservableObject
         _timer?.Stop();
         if (_currentSession != null)
             await _sessionUseCase.CompleteSessionAsync(_currentSession.Id, CompletionStatusDto.Completed);
+
+        var taskName = SelectedTask?.Name ?? "công việc của bạn";
+        _notificationPort.ShowNotification(
+            "Hoàn thành phiên tập trung!",
+            $"Bạn đã hoàn thành {_totalSeconds / 60} phút tập trung cho \"{taskName}\".");
+
         ResetSession();
     }
 

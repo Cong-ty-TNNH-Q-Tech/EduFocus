@@ -135,6 +135,11 @@ public partial class App : Application
         services.AddUseCases();
         services.AddInfrastructureServices();
 
+        // System tray notifications (session completion, etc.)
+        services.AddSingleton<TrayNotificationService>();
+        services.AddSingleton<DontBeLazy.Ports.Outbound.Services.INotificationPort>(
+            sp => sp.GetRequiredService<TrayNotificationService>());
+
         // Register ViewModels
         services.AddSingleton<MainViewModel>();
         services.AddSingleton<DashboardViewModel>();

@@ -17,6 +17,7 @@ public partial class MainWindow : Window
         DataContext = App.Services.GetRequiredService<MainViewModel>();
         
         SetupTrayIcon();
+        SetupNotifications();
 
         this.Closing += MainWindow_Closing;
         this.Loaded += async (s, e) => await ((MainViewModel)DataContext).InitializeAsync();
@@ -45,6 +46,21 @@ public partial class MainWindow : Window
         });
 
         _notifyIcon.ContextMenuStrip = contextMenu;
+    }
+
+    private void SetupNotifications()
+    {
+        var notifications = App.Services.GetRequiredService<DontBeLazy.WPF.Services.TrayNotificationService>();
+        notifications.NotificationRequested += (title, message) =>
+        {
+            if (!Dispatcher.CheckAccess())
+            {
+                Dispatcher.BeginInvoke(() => _notifyIcon.ShowBalloonTip(5000, title, message, System.Windows.Forms.ToolTipIcon.Info));
+                return;
+            }
+
+            _notifyIcon.ShowBalloonTip(5000, title, message, System.Windows.Forms.ToolTipIcon.Info);
+        };
     }
 
     private void ShowWindow()
