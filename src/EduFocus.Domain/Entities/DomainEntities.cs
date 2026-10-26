@@ -214,20 +214,20 @@ public sealed class StudySession
     { Id=Guid.NewGuid(); Trigger=trigger; MonitoringEnabled=monitoring; StartLocalDate=localDate; StartedAtUtc=LastHeartbeatAtUtc=CreatedAtUtc=UpdatedAtUtc=Utc.Require(now); }
     public static StudySession Start(IEnumerable<StudySession>? existing,StudySessionTrigger trigger,bool monitoring,DateOnly localDate,DateTimeOffset now)
     { EnumGuard.Defined(trigger); if(existing?.Any(s=>s.Status==StudySessionStatus.Active)==true) throw new InvalidOperationException("Only one study session may be active."); return new(trigger,monitoring,localDate,now); }
-    public void Heartbeat(DateTimeOffset now) { EnsureActive(); now=Utc.Require(now); if(now<LastHeartbeatAtUtc) throw new ArgumentOutOfRangeException(nameof(now)); LastHeartbeatAtUtc=UpdatedAtUtc=now; }
+    public void Heartbeat(DateTimeOffset now) { EnsureActive(); now=Utc.Require(now); if(now<LastHeartbeatAtUtc) throw new ArgumentOutOfRangeException(nameof(now)); LastHeartbeatAtUtc=now; if(now>UpdatedAtUtc)UpdatedAtUtc=now; }
     public void AddActiveSeconds(long seconds,DateTimeOffset now) { EnsureActive(); NonNegative(seconds,nameof(seconds)); ActiveSeconds=checked(ActiveSeconds+seconds); Heartbeat(now); }
-    public void AddMonitoringEligibleSeconds(long seconds,DateTimeOffset now) { EnsureActive(); NonNegative(seconds,nameof(seconds)); MonitoringEligibleSeconds=checked(MonitoringEligibleSeconds+seconds); RefreshSummary(); Heartbeat(now); }
+    public void AddMonitoringEligibleSeconds(long seconds,DateTimeOffset now) { EnsureActive(); NonNegative(seconds,nameof(seconds)); MonitoringEligibleSeconds=checked(MonitoringEligibleSeconds+seconds); RefreshSummary(); TouchActivity(now); }
     public void AddAttention(AttentionState state,long seconds,double? confidence,DateTimeOffset now)
     {
         EnsureActive(); NonNegative(seconds,nameof(seconds)); if(confidence is <0 or >1) throw new ArgumentOutOfRangeException(nameof(confidence));
         switch(state){case AttentionState.Focused: FocusedSeconds=checked(FocusedSeconds+seconds); break; case AttentionState.Distracted: DistractedSeconds=checked(DistractedSeconds+seconds); break; case AttentionState.Absent: AbsentSeconds=checked(AbsentSeconds+seconds); break; case AttentionState.Drowsy: DrowsySeconds=checked(DrowsySeconds+seconds); break; case AttentionState.CameraUnavailable: CameraUnavailableSeconds=checked(CameraUnavailableSeconds+seconds); break; default: throw new ArgumentOutOfRangeException(nameof(state));}
         if(state is not AttentionState.CameraUnavailable) MonitoredSeconds=checked(MonitoredSeconds+seconds);
-        if(confidence is { } c && seconds>0){ConfidenceWeight=checked(ConfidenceWeight+seconds);ConfidenceWeighted+=c*seconds;} RefreshSummary(); Heartbeat(now);
+        if(confidence is { } c && seconds>0){ConfidenceWeight=checked(ConfidenceWeight+seconds);ConfidenceWeighted+=c*seconds;} RefreshSummary(); TouchActivity(now);
     }
     public void AddActivity(ActivityCategory category,long seconds,bool onlineClass,DateTimeOffset now)
-    { EnsureActive(); NonNegative(seconds,nameof(seconds)); switch(category){case ActivityCategory.Study:StudySeconds=checked(StudySeconds+seconds);break;case ActivityCategory.Distraction:DistractionSeconds=checked(DistractionSeconds+seconds);break;case ActivityCategory.Neutral:case ActivityCategory.Unknown:NeutralSeconds=checked(NeutralSeconds+seconds);break;default:throw new ArgumentOutOfRangeException(nameof(category));} if(onlineClass)OnlineClassSeconds=checked(OnlineClassSeconds+seconds); Heartbeat(now); }
-    public void AddIdleSeconds(long seconds,DateTimeOffset now){EnsureActive();NonNegative(seconds,nameof(seconds));IdleSeconds=checked(IdleSeconds+seconds);Heartbeat(now);}
-    public void RecordBlockedAttempt(DateTimeOffset now){EnsureActive();BlockedAttemptCount=checked(BlockedAttemptCount+1);Heartbeat(now);}
+    { EnsureActive(); NonNegative(seconds,nameof(seconds)); if(onlineClass)OnlineClassSeconds=checked(OnlineClassSeconds+seconds); else switch(category){case ActivityCategory.Study:StudySeconds=checked(StudySeconds+seconds);break;case ActivityCategory.Distraction:DistractionSeconds=checked(DistractionSeconds+seconds);break;case ActivityCategory.Neutral:case ActivityCategory.Unknown:NeutralSeconds=checked(NeutralSeconds+seconds);break;default:throw new ArgumentOutOfRangeException(nameof(category));} TouchActivity(now); }
+    public void AddIdleSeconds(long seconds,DateTimeOffset now){EnsureActive();NonNegative(seconds,nameof(seconds));IdleSeconds=checked(IdleSeconds+seconds);TouchActivity(now);}
+    public void RecordBlockedAttempt(DateTimeOffset now){EnsureActive();BlockedAttemptCount=checked(BlockedAttemptCount+1);TouchActivity(now);}
     public void SetNote(string? note,DateTimeOffset now){Note=TextLimit.Optional(note,512);UpdatedAtUtc=Utc.Require(now);}
     public void Complete(DateTimeOffset now)=>End(StudySessionStatus.Completed,now,true);
     public void Abort(DateTimeOffset now)=>End(StudySessionStatus.Aborted,now,true);
@@ -235,6 +235,7 @@ public sealed class StudySession
     private void End(StudySessionStatus status,DateTimeOffset now,bool heartbeat)
     { EnsureActive(); now=Utc.Require(now); if(now<LastHeartbeatAtUtc) throw new ArgumentOutOfRangeException(nameof(now)); Status=status; EndedAtUtc=now; if(heartbeat)LastHeartbeatAtUtc=now; UpdatedAtUtc=now; }
     private void EnsureActive(){if(Status!=StudySessionStatus.Active)throw new InvalidOperationException("Session has already ended.");}
+    private void TouchActivity(DateTimeOffset now){now=Utc.Require(now);if(now>UpdatedAtUtc)UpdatedAtUtc=now;}
     private void RefreshSummary(){AttentionPercent=MonitoredSeconds==0?null:(double)FocusedSeconds/MonitoredSeconds*100;CoveragePercent=MonitoringEligibleSeconds==0?null:(double)MonitoredSeconds/MonitoringEligibleSeconds*100;ConfidenceAvg=ConfidenceWeight==0?null:ConfidenceWeighted/ConfidenceWeight;}
     private static void NonNegative(long value,string name){if(value<0)throw new ArgumentOutOfRangeException(name);}
 }

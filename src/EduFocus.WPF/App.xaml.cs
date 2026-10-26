@@ -161,7 +161,7 @@ public partial class App : Application
     private static async Task RunActivityTrackingAsync(IServiceProvider services, CancellationToken cancellationToken)
     {
         var tracker = services.GetRequiredService<ActivityTrackingService>();
-        using var timer = new PeriodicTimer(TimeSpan.FromSeconds(15));
+        using var timer = new PeriodicTimer(TimeSpan.FromSeconds(1));
         while (await timer.WaitForNextTickAsync(cancellationToken))
         {
             try { await tracker.ScanOnceAsync(DateTimeOffset.UtcNow, cancellationToken); }

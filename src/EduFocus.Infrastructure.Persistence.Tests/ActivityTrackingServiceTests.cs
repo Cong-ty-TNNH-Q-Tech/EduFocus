@@ -30,7 +30,7 @@ public sealed class ActivityTrackingServiceTests
         await tracker.ScanOnceAsync(Now.AddSeconds(2));
         await tracker.ScanOnceAsync(Now.AddSeconds(3));
         await tracker.ScanOnceAsync(Now.AddSeconds(4));
-        await tracker.ScanOnceAsync(Now.AddSeconds(17));
+        await tracker.ScanOnceAsync(Now.AddSeconds(19));
 
         fixture.Db.ChangeTracker.Clear();
         var samples = await fixture.Db.ActivitySamples.ToArrayAsync();
@@ -82,6 +82,42 @@ public sealed class ActivityTrackingServiceTests
         await tracker.ScanOnceAsync(Now);
 
         Assert.Empty(await fixture.Db.ActivitySamples.ToArrayAsync());
+    }
+
+    [Fact]
+    public void Online_class_detection_requires_platform_specific_meeting_evidence()
+    {
+        Assert.True(ActivityTrackingService.IsOnlineClass(Snapshot("chrome", "Google Meet - Math")));
+        Assert.True(ActivityTrackingService.IsOnlineClass(Snapshot("ms-teams", "Math meeting | Microsoft Teams")));
+        Assert.True(ActivityTrackingService.IsOnlineClass(Snapshot("Zoom", "Zoom Meeting")));
+        Assert.False(ActivityTrackingService.IsOnlineClass(Snapshot("ms-teams", "Microsoft Teams | Chat")));
+        Assert.False(ActivityTrackingService.IsOnlineClass(Snapshot("discord", "General chat")));
+    }
+
+    [Fact]
+    public async Task Online_class_time_is_an_overlay_and_monitoring_eligibility_respects_setting()
+    {
+        await using var fixture = await Fixture.Create();
+        var settings = await fixture.Db.AppSettings.SingleAsync();
+        settings.Configure(false, false, true, null, 20, 30, 15, 30, 90, 365, false,
+            ThemePreference.Dark, LanguagePreference.Vietnamese, false, Now);
+        fixture.Db.StudySessions.Add(StudySession.Start(null, StudySessionTrigger.Manual, true, new DateOnly(2026, 10, 26), Now));
+        await fixture.Db.SaveChangesAsync();
+        var foreground = new FakeForeground(Snapshot("ms-teams", "Math meeting | Microsoft Teams"));
+        using var provider = fixture.CreateServices(foreground);
+        var tracker = new ActivityTrackingService(provider.GetRequiredService<IServiceScopeFactory>(), foreground, new FakeLogger());
+
+        await tracker.ScanOnceAsync(Now);
+        await tracker.ScanOnceAsync(Now.AddSeconds(2));
+        await tracker.ScanOnceAsync(Now.AddSeconds(17));
+
+        fixture.Db.ChangeTracker.Clear();
+        var session = await fixture.Db.StudySessions.SingleAsync();
+        var samples = await fixture.Db.ActivitySamples.ToArrayAsync();
+        Assert.Equal(15, session.OnlineClassSeconds);
+        Assert.Equal(0, session.StudySeconds);
+        Assert.Equal(15, session.MonitoringEligibleSeconds);
+        Assert.All(samples, sample => Assert.True(sample.IsOnlineClass));
     }
 
     private static ForegroundActivitySnapshot Snapshot(string process, string title, long idle = 0) =>
