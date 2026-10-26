@@ -7,7 +7,47 @@ và dự án tuân theo [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ---
 
-## [Unreleased]
+## [Unreleased] — EduFocus 2.0.0 (2026-10-26)
+
+> **Trạng thái:** Định hướng sản phẩm và tài liệu đã hoàn tất. Mã nguồn sẽ được chuyển đổi theo lộ trình Phase 1–7.
+> Các mục dưới đây **chưa phải tính năng đã phát hành**.
+
+### Added (Docs & Product Definition)
+- **Pivot sản phẩm:** Don't Be Lazy → **EduFocus**, ứng dụng giám sát học tập có trách nhiệm dành cho phụ huynh.
+- Viết lại `docs/ba_document.md`: mục tiêu, actors, phạm vi, yêu cầu chức năng, business rules, NFR, privacy, acceptance.
+- Viết lại `docs/use_cases.md`: UC01–UC14, permission matrix, luồng buổi học mẫu, yêu cầu dữ liệu.
+- Viết lại `docs/system_architecture.md`: Clean Architecture, Ports & Adapters, ProtectionEngine, BlockPageServer, ActivityTracker, WebcamAttentionMonitor, Watchdog, ADR.
+- Viết lại `docs/database_schema.md`: schema SQLite mới, index, retention, báo cáo, bảo mật dữ liệu.
+- Viết lại `README.md` và `README.en.md` cho EduFocus.
+- **Parent PIN:** 6–8 chữ số, PBKDF2-SHA256 600.000 iterations, recovery code, khóa chung 5 lần sai / 15 phút.
+- **Protection ON/OFF + schedule:** bật/tắt thủ công hoặc theo khung giờ; phục hồi trạng thái sau crash; session crash `Interrupted`, phiên phục hồi `Trigger=Recovery`.
+- **Chatbot blocklist:** domain exact + app, allowlist/blocklist tùy chỉnh, có thời hạn. URL/path là post-MVP.
+- **Study session & activity tracking:** app/domain foreground (best-effort), nhận diện Google Meet/Teams/Zoom; `ActiveSeconds` và heartbeat.
+- **Blocked attempts:** chỉ ghi khi quan sát được; hosts không log HTTPS nên số liệu là best-effort.
+- **Attention estimate:** OpenCvSharp4 + ONNX Runtime; trạng thái Focused/Distracted/Absent/Drowsy/CameraUnavailable; coverage theo `MonitoringEligibleSeconds`; chỉ lưu event, không lưu frame/video.
+- **Local-first privacy:** SQLite tại `%ProgramData%\EduFocus`, không cloud, không telemetry.
+- **Retention:** 30 ngày activity sample, 90 ngày attention event/blocked attempt, 365 ngày session summary/audit.
+- **Legal:** ghi nhận Luật 91/2025/QH15 và Nghị định 356/2025/NĐ-CP; cần DPIA trước phát hành.
+
+### Changed
+- Đổi định vị từ công cụ "kỷ luật bản thân" sang công cụ **hỗ trợ phụ huynh**, không dùng cơ chế guilt-trip.
+- Trạng thái bảo vệ chuyển từ "phiên tập trung có đếm ngược" sang **Protection ON/OFF** do phụ huynh kiểm soát.
+- Dữ liệu chuyển từ `%AppData%` sang `%ProgramData%\EduFocus` với ACL cho Administrators/SYSTEM.
+- Database schema mới; không migrate dữ liệu từ 1.x.
+
+### Removed (khỏi phạm vi EduFocus)
+- Quản lý task, profile học tập, quote động lực và Gemini AI.
+- Cơ chế "friction" bắt gõ câu xác nhận bỏ cuộc.
+- Màn hình Dashboard/Profiles/FocusSession/Analytics của 1.x (sẽ thay bằng view mới).
+
+### Planned
+- Phase 0: Spike camera, blocking, tamper resistance.
+- Phase 1: Đổi tên codebase sang `EduFocus.*`, schema mới, CI/installer.
+- Phase 2–7: PIN & Parent Mode → blocking engine → session/activity → attention → reports → hardening/release MVP.
+
+---
+
+> **Legacy — Don't Be Lazy (1.x):** Các phiên bản dưới đây thuộc dự án tiền nhiệm. Lịch sử được giữ nguyên để tham khảo.
 
 ---
 

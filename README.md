@@ -1,16 +1,15 @@
 <div align="center">
 
-<img src="./assets/logo.png" alt="Don't Be Lazy Logo" width="180" />
+<img src="./assets/logo.png" alt="EduFocus Logo" width="180" />
 
-# 🧱 Don't Be Lazy
+# 🎓 EduFocus
 
-**Ép bản thân làm việc bằng cách chặn tất cả những thứ không liên quan.**
+**Giám sát học tập có trách nhiệm — bảo vệ sự tập trung của con trên máy tính.**
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](./LICENSE)
-[![GitHub release](https://img.shields.io/github/v/release/ThanhTrunggDEV/DontBeLazy?include_prereleases)](https://github.com/ThanhTrunggDEV/DontBeLazy/releases)
-[![CI/CD](https://github.com/ThanhTrunggDEV/DontBeLazy/actions/workflows/release.yml/badge.svg)](https://github.com/ThanhTrunggDEV/DontBeLazy/actions/workflows/release.yml)
+[![Status](https://img.shields.io/badge/status-in%20development-blue)]()
+[![Platform](https://img.shields.io/badge/platform-Windows%2011-0078D6)]()
 [![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](./CONTRIBUTING.md)
-[![Sponsor](https://img.shields.io/badge/Sponsor-PayPal-00457C?logo=paypal)](https://paypal.me/ntt68)
 
 🌏 **Tiếng Việt** | **[English](./README.en.md)**
 
@@ -20,66 +19,84 @@
 
 ## 🎯 Vấn đề
 
-Bạn ngồi vào bàn làm việc, mở máy tính lên và 2 tiếng sau nhận ra mình vừa lướt Facebook, xem YouTube và chẳng làm được gì? **Don't Be Lazy** sinh ra để giải quyết đúng vấn đề đó.
+Học sinh mở máy tính để học online nhưng rất dễ bị cuốn vào chatbot AI, mạng xã hội, game hoặc video giải trí. Phụ huynh thiếu một công cụ đơn giản để:
 
-Không giống các app chặn web thông thường dễ dàng bị tắt đi, **Don't Be Lazy** hoạt động theo cơ chế **Whitelist-first**: chặn toàn bộ mọi thứ, chỉ cho phép những gì bạn cần để làm việc.
+- Giới hạn môi trường học tập mà không phải cấu hình router/firewall.
+- Biết con đã học bao lâu và có thực sự tập trung không.
+- Bật/tắt bảo vệ nhanh bằng mật khẩu, không bị học sinh tự ý gỡ.
+
+**EduFocus** ra đời để giải quyết đúng bài toán đó.
 
 ---
 
 ## ✨ Tính năng chính
 
+> Đây là phạm vi **MVP dự kiến**, chưa phát hành. Một số giới hạn được ghi rõ bên dưới.
+
 | Tính năng | Mô tả |
 |---|---|
-| 📋 **Task Management** | Tạo task một lần hoặc lặp lại (Daily/Weekly/Custom), gắn Whitelist Profile, theo dõi trạng thái |
-| 🔒 **Whitelist per Task** | Mỗi task có bộ Whitelist Profile riêng — Task "Code" chỉ mở VS Code, Task "Học" chỉ mở từ điển |
-| 🛡️ **Focus Mode** | Kích hoạt chế độ chặn toàn bộ internet & app ngoài Whitelist trong khi làm việc |
-| ⚔️ **Strict Mode** | Không thể Stop, không thể sửa Whitelist, không thể kill app bằng Task Manager |
-| 🧠 **Psychological Tricks** | Friction, Guilt-tripping, Loss Aversion, Implementation Intention |
-| 🤖 **AI Assistant** | Gemini AI gợi ý ưu tiên task, phân tích bước thực hiện, tạo Whitelist Profile tự động |
-| 💬 **Motivation Quotes** | AI tự động sinh câu quote cản bỏ cuộc tại các thời điểm chiến lược |
-| 📊 **Analytics** | Streak, biểu đồ thời gian tập trung, thống kê số lần "cố gắng" phá luật |
-| 🔄 **Auto-Update** | Tự kiểm tra và cài bản mới từ GitHub Releases khi khởi động |
+| 🔐 **PIN phụ huynh** | Chỉ phụ huynh mới bật/tắt bảo vệ, sửa blocklist, xem báo cáo hoặc thoát app |
+| 🚫 **Chặn chatbot** | Chặn domain chatbot mục tiêu (ChatGPT, Claude, Gemini, Copilot, Perplexity, Character.AI, DeepSeek…) và app được cấu hình |
+| 📋 **Blocklist linh hoạt** | Thêm domain/app tùy chỉnh, allowlist tạm thời cho bài tập được phép. URL/path cần browser extension (post-MVP) |
+| 🕒 **Lịch bảo vệ** | Tự bật/tắt bảo vệ theo khung giờ học trong tuần |
+| 📊 **Theo dõi phiên học** | Ghi nhận thời gian học, ứng dụng/domain đang dùng (best-effort), số lần bị chặn quan sát được |
+| 👁️ **Ước lượng tập trung** | Dùng webcam để nhận biết có mặt, nhìn màn hình, rời màn hình hoặc buồn ngủ |
+| 🖥️ **Nhận diện lớp online** | Theo dõi riêng Google Meet, Microsoft Teams, Zoom |
+| 🔒 **Local-first** | Không cloud, không tài khoản, dữ liệu chỉ nằm trên máy |
+| 🛡️ **Chống tắt cơ bản** | Ẩn xuống tray, thoát cần PIN, tự khởi động lại (30–60 giây), tự phục hồi sau crash |
+| 📈 **Báo cáo phụ huynh** | Dashboard ngày/tuần, timeline, mất tập trung, blocked attempts, xuất CSV |
 
 ---
 
-## 🧠 Tâm lý học trong thiết kế
+## 🔒 Quyền riêng tư là ưu tiên
 
-> *Don't Be Lazy không chỉ chặn web — nó ép não bộ của bạn tuân thủ.*
+EduFocus được thiết kế để **không trở thành phần mềm do thám**:
 
-- **Implementation Intention:** Trước khi Start, bạn phải tự tay gõ cam kết mục tiêu.
-- **Friction:** Muốn bỏ cuộc? Hãy tự tay gõ: *"Tôi là kẻ lười biếng và tôi chấp nhận bỏ cuộc"*.
-- **Loss Aversion:** Streak hiển thị rõ ràng. Bỏ cuộc = Streak về 0.
-- **Guilt-tripping:** AI tạo câu quote cá nhân hoá trước khi cho phép bỏ cuộc.
+- **Không lưu ảnh, video hoặc âm thanh.** Frame webcam chỉ được xử lý trong bộ nhớ để suy ra trạng thái.
+- **Không lưu nội dung trang web, tin nhắn hay clipboard.**
+- **Không gửi dữ liệu học tập lên cloud.** Mọi dữ liệu nằm trong SQLite trên máy; nếu bật kiểm tra cập nhật, chỉ gửi version/OS và server vẫn có thể thấy IP.
+- **Không nhận diện danh tính**, không face embedding, không phân tích cảm xúc.
+- Báo cáo luôn hiển thị **độ phủ camera** và **độ tin cậy** để phụ huynh không hiểu sai kết quả.
+- Ứng dụng phải được thông báo công khai cho học sinh; không khuyến khích giám sát bí mật.
+
+> **Giới hạn:** Webcam thường không phải eye tracker hồng ngoại. "Tập trung" là ước lượng, không phải bằng chứng tuyệt đối. Khi Google Meet/Teams đang dùng camera, app có thể không quan sát được nếu máy chưa hỗ trợ Multi-App Camera.
+>
+> **Blocking:** Hosts chỉ chặn domain và không tạo log HTTPS. Trang chặn chỉ hiển thị với HTTP; HTTPS thường báo lỗi kết nối/SSL. Vì vậy số lần bị chặn là **best-effort**, không phải tổng tuyệt đối.
 
 ---
 
-## 🚀 Cài đặt
+## 🧭 Cách hoạt động
 
-### Tải bản mới nhất
-
-Vào [**Releases**](https://github.com/ThanhTrunggDEV/DontBeLazy/releases) và tải:
-
-| File | Mô tả |
-|---|---|
-| `DontBeLazy-x.y.z-win-x64.msi` | **Khuyên dùng** — Installer đầy đủ, tạo shortcut, hỗ trợ uninstall |
-| `DontBeLazy-x.y.z-win-x64-portable.zip` | Portable — Giải nén và chạy thẳng, không cần cài |
-
-> **Yêu cầu:** Windows 10/11 64-bit. .NET runtime đã nhúng sẵn, không cần cài thêm.
-
-### Chạy từ source
-
-```bash
-# Clone repo
-git clone https://github.com/ThanhTrunggDEV/DontBeLazy.git
-cd DontBeLazy
-
-# Cài .NET 9 SDK nếu chưa có: https://dotnet.microsoft.com/download
-
-# Chạy ứng dụng
-dotnet run --project src/DontBeLazy.WPF/DontBeLazy.WPF.csproj
+```text
+Phụ huynh tạo PIN
+        ↓
+Bật Protection ON (thủ công hoặc theo lịch)
+        ↓
+Chặn domain chatbot + app ngoài phạm vi cho phép
+        ↓
+Ghi nhận phiên học, app/domain (best-effort) và trạng thái tập trung
+        ↓
+Phụ huynh xem báo cáo; học sinh thấy trang chặn với HTTP, HTTPS báo lỗi
+        ↓
+Tắt Protection bằng PIN hoặc hết khung giờ
 ```
 
-> **AI Features:** Tạo file `.env` trong thư mục WPF hoặc đặt biến môi trường `GEMINI_API_KEY=your_key_here`
+### Hai chế độ
+
+| Mode | Dành cho | Quyền |
+|---|---|---|
+| **Parent Mode** | Phụ huynh | Toàn quyền cấu hình, báo cáo, bật/tắt bảo vệ |
+| **Student Mode** | Học sinh | Xem trạng thái, thời gian học, trang chặn; không sửa cấu hình |
+
+---
+
+## 🖥️ Nền tảng
+
+- ✅ **Windows 11 23H2+** (64-bit) — nền tảng chính
+- ⚠️ Windows 10 22H2: chạy được nhưng Windows 10 đã hết hỗ trợ chính thức
+- 🔜 macOS — chưa hỗ trợ
+- 🌐 Chrome, Edge, Firefox cho chặn domain qua hosts; block page chỉ với HTTP
+- 🎥 Webcam tích hợp hoặc webcam ngoài (tùy chọn, cho tính năng attention)
 
 ---
 
@@ -87,33 +104,105 @@ dotnet run --project src/DontBeLazy.WPF/DontBeLazy.WPF.csproj
 
 | Layer | Công nghệ |
 |---|---|
-| **UI** | WPF .NET 9, Material Design in XAML 5.3, MVVM (CommunityToolkit) |
-| **Architecture** | Clean Architecture — Domain / Ports / UseCases / Infrastructure / WPF |
-| **Database** | SQLite + EF Core 9 (migrations) |
-| **AI** | Google Gemini API (Flash model) |
+| **UI** | WPF .NET 10 LTS (mục tiêu; code hiện tại vẫn `net9.0` và cần nâng cấp), MaterialDesignInXAML, CommunityToolkit.Mvvm |
+| **Architecture** | Clean Architecture + Ports & Adapters |
+| **Database** | SQLite + EF Core 10 (mục tiêu; code hiện tại EF Core 9) |
+| **Blocking** | Windows hosts file (domain exact) + local HTTP block page |
+| **Activity** | Win32 foreground window, WMI, UI Automation |
+| **Attention** | OpenCvSharp4 + ONNX Runtime (MediaPipe Face/Iris) |
+| **Security** | PBKDF2-SHA256; không lưu secret khác |
 | **Installer** | WiX Toolset v4 (MSI) |
-| **CI/CD** | GitHub Actions — auto build + release trên tag |
+| **CI/CD** | GitHub Actions |
 
 ---
 
-## 🗂️ Tài liệu dự án
+## 🚀 Cài đặt & chạy
 
-- [📄 BA Document](./docs/ba_document.md) — Phân tích nghiệp vụ, tính năng, yêu cầu hệ thống
-- [📋 Use Cases](./docs/use_cases.md) — Các luồng nghiệp vụ chi tiết
-- [🏛️ Architecture](./docs/system_architecture.md) — Kiến trúc hệ thống
+### Bản phát hành
+
+> EduFocus đang trong quá trình chuyển đổi từ dự án tiền nhiệm **Don't Be Lazy**. Bản phát hành MVP dự kiến sau Phase 7; các tính năng trong README chưa phải bản đã phát hành.
+
+Khi có bản phát hành, tải tại [Releases](https://github.com/Cong-ty-TNNH-Q-Tech/EduFocus/releases).
+
+### Chạy từ source
+
+**Yêu cầu hiện tại:** .NET 10 SDK (tests target `net10.0`; WPF sẽ được nâng ở Phase 1), Windows 11 23H2+ 64-bit (Windows 10 22H2 best-effort).
+
+```bash
+git clone https://github.com/Cong-ty-TNNH-Q-Tech/EduFocus.git
+cd EduFocus
+
+dotnet restore DontBeLazy.slnx
+dotnet run --project src/DontBeLazy.WPF/DontBeLazy.WPF.csproj
+```
+
+> **Lưu ý:** Codebase hiện vẫn dùng tên project `DontBeLazy.*`. Việc đổi tên sang `EduFocus.*` sẽ được thực hiện ở Phase 1. Lệnh build sẽ được cập nhật tương ứng.
+
+Chạy test:
+
+```bash
+dotnet test src/DontBeLazy.Domain.Tests/DontBeLazy.Domain.Tests.csproj
+```
+
+> WPF hiện target `net9.0` (hết hỗ trợ 10/11/2026) trong khi tests target `net10.0`; Phase 1 sẽ nâng toàn bộ solution lên .NET 10 LTS và EF Core 10 trước release.
+
+---
+
+## 📚 Tài liệu
+
+- [📄 BA Document](./docs/ba_document.md) — Phân tích nghiệp vụ, tính năng, quy tắc, NFR
+- [📋 Use Cases](./docs/use_cases.md) — Luồng nghiệp vụ chi tiết UC01–UC14
+- [🏛️ System Architecture](./docs/system_architecture.md) — Kiến trúc, thành phần, quyết định thiết kế
+- [🗄️ Database Schema](./docs/database_schema.md) — Schema SQLite, index, retention
 - [📝 Changelog](./CHANGELOG.md) — Lịch sử thay đổi
 - [🤝 Contributing](./CONTRIBUTING.md) — Hướng dẫn đóng góp
-- [🔒 Security](./SECURITY.md) — Chính sách bảo mật
+- [🔒 Security](./SECURITY.md) — Chính sách bảo mật và báo cáo lỗ hổng
 
 ---
 
-## 🖥️ Nền tảng
+## 🗺️ Roadmap
 
-- ✅ **Windows 10/11** (64-bit) — Đang hỗ trợ
-- 🔜 macOS — Dự kiến
+- [x] Xác định lại sản phẩm và phạm vi
+- [x] Viết lại BA, Use Cases, Architecture, Database Schema
+- [ ] Phase 0: Spike camera + blocking + tamper resistance
+- [ ] Phase 1: Dọn code cũ, đổi tên EduFocus, schema mới
+- [ ] Phase 2: PIN, Parent Mode, Protection toggle
+- [ ] Phase 3: Chatbot blocking engine + block page
+- [ ] Phase 4: Study session + activity tracking
+- [ ] Phase 5: Attention monitoring
+- [ ] Phase 6: Dashboard, reports, settings
+- [ ] Phase 7: Hardening, installer, CI, release MVP
+
+---
+
+## ⚠️ Giới hạn đã biết
+
+- PIN không phải ranh giới bảo mật nếu học sinh dùng chung tài khoản Windows hoặc có quyền Administrator.
+- Hosts file có thể bị bypass bởi DoH/DoT, VPN hoặc proxy.
+- Hosts không tạo log truy cập HTTPS; số blocked attempts chỉ là best-effort.
+- Trang chặn chỉ hiển thị với HTTP; HTTPS thường báo lỗi kết nối/SSL.
+- Chặn app có thể đóng/kill process và làm mất dữ liệu chưa lưu; EduFocus ưu tiên `WM_CLOSE` trước khi kill.
+- URL/path, wildcard subdomain và chặn AI sidebar chưa thuộc MVP; cần browser extension.
+- Báo cáo chi tiết chỉ có trong 30 ngày; dữ liệu dài hạn dùng session summary (365 ngày).
+- Webcam-based attention chỉ là ước lượng; không dùng để kết luận chắc chắn.
+- Google Meet/Teams có thể chiếm webcam trên máy chưa hỗ trợ Multi-App Camera.
+- Không thể phát hiện mọi chatbot mới hoặc chatbot chạy trong ứng dụng khác.
+- Process watcher dựa trên tên/đường dẫn process; app đổi tên hoặc chạy portable có thể không bị phát hiện.
+- Ứng dụng không chống được người dùng có quyền SYSTEM/admin; Windows shutdown/logoff vẫn là đường bypass.
+- Watchdog dạng scheduled task có thể mất 30–60 giây để khởi động lại; uninstall PIN chỉ là best-effort.
+
+EduFocus hướng tới **hỗ trợ thói quen học tập**, không phải giám sát bí mật hay chống gian lận thi cử.
+
+---
+
+## 🤝 Đóng góp
+
+Mọi đóng góp đều được chào đón. Vui lòng đọc [CONTRIBUTING.md](./CONTRIBUTING.md) trước khi mở Pull Request.
 
 ---
 
 ## 📜 License
 
 Dự án được phân phối dưới giấy phép [MIT](./LICENSE).
+
+© 2026 ThanhTrunggDEV. Dự án kế thừa Don't Be Lazy theo giấy phép MIT.

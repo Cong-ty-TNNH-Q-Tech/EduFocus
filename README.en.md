@@ -1,15 +1,17 @@
 <div align="center">
 
-# 🧱 Don't Be Lazy
+<img src="./assets/logo.png" alt="EduFocus Logo" width="180" />
 
-**Force yourself to get things done by whitelisting only what you need to work.**
+# 🎓 EduFocus
+
+**Responsible study monitoring — protecting your child's focus on the computer.**
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](./LICENSE)
-[![Status](https://img.shields.io/badge/status-planning-blue)]()
+[![Status](https://img.shields.io/badge/status-in%20development-blue)]()
+[![Platform](https://img.shields.io/badge/platform-Windows%2011-0078D6)]()
 [![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](./CONTRIBUTING.md)
-[![Sponsor](https://img.shields.io/badge/Sponsor-PayPal-00457C?logo=paypal)](https://paypal.me/ntt68)
 
-🌏 **[Tiếng Việt](./README.md)** | **English**
+🇬🇧 **English** | **[Tiếng Việt](./README.md)**
 
 </div>
 
@@ -17,109 +19,190 @@
 
 ## 🎯 The Problem
 
-You sit down to work, open your laptop, and two hours later you realize you've been scrolling through social media and watching YouTube without getting anything done.
+Students open their computers for online classes but easily get pulled into AI chatbots, social media, games, or entertainment videos. Parents lack a simple tool to:
 
-**Don't Be Lazy** was built to solve exactly that.
+- Keep the study environment focused without configuring a router or firewall.
+- Know how long their child studied and whether they stayed focused.
+- Turn protection on/off with a password, without the child removing it.
 
-Unlike typical website blockers that are trivially easy to disable, **Don't Be Lazy** operates on a **Whitelist-first** principle: everything is blocked by default, and you explicitly allow only what you need to work.
+**EduFocus** is built for exactly that.
 
 ---
 
-## ✨ Core Features
+## ✨ Key Features
+
+> This is the **planned MVP** scope, not a released build. Known limitations are listed below.
 
 | Feature | Description |
 |---|---|
-| 📋 **Task Management** | Create a to-do list with Pomodoro-style time estimates |
-| 🔒 **Whitelist per Task** | Each task has its own Whitelist Profile — "Code" task allows VS Code, "Study" task allows dictionary app |
-| 🛡️ **Focus Mode** | Activates a system-level shield blocking all internet and apps outside the Whitelist |
-| ⚔️ **Strict Mode** | Cannot Stop, cannot edit Whitelist, cannot kill app via Task Manager |
-| 🧠 **Psychological Tricks** | Friction, Guilt-tripping, Loss Aversion, Implementation Intention |
-| 💬 **Motivation Quotes** | Auto-displays inspiring quotes at 4 strategic moments during your session |
-| 📊 **Analytics** | Daily Streak, focus time charts, and "blocked attempt" counters |
+| 🔐 **Parent PIN** | Only parents can enable/disable protection, edit the blocklist, view reports, or exit the app |
+| 🚫 **Chatbot blocking** | Blocks target chatbot domains (ChatGPT, Claude, Gemini, Copilot, Perplexity, Character.AI, DeepSeek…) and configured apps |
+| 📋 **Flexible blocklist** | Add custom domains/apps, temporary allowlists for permitted homework. URL/path rules require a browser extension (post-MVP) |
+| 🕒 **Protection schedule** | Automatically enable/disable protection by weekly study hours |
+| 📊 **Study session tracking** | Records study time, active apps/domains (best-effort), and observed blocked attempts |
+| 👁️ **Attention estimate** | Uses the webcam to detect presence, screen-facing gaze, absence, or drowsiness |
+| 🖥️ **Online class detection** | Separate tracking for Google Meet, Microsoft Teams, and Zoom |
+| 🔒 **Local-first** | No cloud, no account, data stays on the device |
+| 🛡️ **Basic tamper resistance** | Tray hiding, PIN-protected exit, auto-restart (30–60s), crash recovery |
+| 📈 **Parent reports** | Daily/weekly dashboard, timeline, distractions, blocked attempts, CSV export |
 
 ---
 
-## 🧠 Behavioral Psychology by Design
+## 🔒 Privacy First
 
-> *Don't Be Lazy doesn't just block websites — it trains your brain to stay committed.*
+EduFocus is designed **not to be spyware**:
 
-- **Implementation Intention:** Before starting, you must manually type your goal commitment (e.g. *"I will finish this feature in 25 minutes"*). Writing it down increases follow-through by ~40%.
-- **Friction:** Want to quit early? You have to manually type: *"I am lazy and I accept giving up"* before the Stop button works.
-- **Loss Aversion:** Your Streak counter is always visible. Quitting = Streak resets to 0. The brain hates loss more than it loves gain.
-- **Guilt-tripping:** A red warning screen guilt-trips you with *"You only have 10 minutes left — do you really want to throw away all that effort?"* before allowing exit.
+- **No photos, videos, or audio are stored.** Webcam frames are processed in memory only to derive a state.
+- **No page content, messages, or clipboard are captured.**
+- **No study data is sent to the cloud.** Everything lives in a local SQLite database; if update checks are enabled, only version/OS is sent and the server can still see the IP.
+- **No identity recognition**, no face embeddings, no emotion analysis.
+- Reports always show **camera coverage** and **confidence** so parents don't misread results.
+- The app should be disclosed openly to the student; covert monitoring is discouraged.
+
+> **Limitation:** A webcam is not an infrared eye tracker. "Focus" is an estimate, not absolute proof. When Google Meet/Teams is using the camera, the app may not be able to observe if the machine does not support Multi-App Camera.
+>
+> **Blocking:** Hosts blocks domains but does not log HTTPS. The block page only appears over HTTP; HTTPS usually shows a connection/SSL error. Blocked-attempt counts are therefore **best-effort**, not absolute totals.
+
+---
+
+## 🧭 How It Works
+
+```text
+Parent creates a PIN
+        ↓
+Protection ON (manual or scheduled)
+        ↓
+Blocks chatbot domains + disallowed apps
+        ↓
+Records study sessions, apps/domains (best-effort), and attention states
+        ↓
+Parent reviews reports; student sees a block page over HTTP, HTTPS shows an error
+        ↓
+Protection turns off with PIN or when the schedule window ends
+```
+
+### Two modes
+
+| Mode | For | Permissions |
+|---|---|---|
+| **Parent Mode** | Parents | Full configuration, reports, protection control |
+| **Student Mode** | Students | View status, study time, block page; no configuration changes |
 
 ---
 
 ## 🖥️ Platform
 
-- Windows (primary target)
-- macOS (planned)
+- ✅ **Windows 11 23H2+** (64-bit) — primary platform
+- ⚠️ Windows 10 22H2: may run, but Windows 10 is out of official support
+- 🔜 macOS — not supported
+- 🌐 Chrome, Edge, Firefox for domain blocking via hosts; block page over HTTP only
+- 🎥 Built-in or external webcam (optional, for attention)
 
 ---
 
-## 🏗️ Architecture Philosophy
+## 🏗️ Tech Stack
 
-- **Single-user, Offline-first:** No accounts, no cloud sync. Your data stays on your machine.
-- **Privacy by design:** Zero network connections made by the app itself. All task data, whitelist configs, and session history stored in a local SQLite/JSON database.
-- **System-level blocking:** Modifies the OS `hosts` file and/or uses a local proxy to block sites across all browsers (requires Admin/Root privilege).
-- **Tamper-proof:** In Strict Mode, the app resists being killed via Task Manager and prevents uninstallation mid-session.
+| Layer | Technology |
+|---|---|
+| **UI** | WPF .NET 10 LTS (target; code still targets `net9.0` and must be upgraded), MaterialDesignInXAML, CommunityToolkit.Mvvm |
+| **Architecture** | Clean Architecture + Ports & Adapters |
+| **Database** | SQLite + EF Core 10 (target; currently EF Core 9) |
+| **Blocking** | Windows hosts file (exact domains) + local HTTP block page |
+| **Activity** | Win32 foreground window, WMI, UI Automation |
+| **Attention** | OpenCvSharp4 + ONNX Runtime (MediaPipe Face/Iris) |
+| **Security** | PBKDF2-SHA256; no other secrets stored |
+| **Installer** | WiX Toolset v4 (MSI) |
+| **CI/CD** | GitHub Actions |
 
 ---
 
-## 📊 How It Works
+## 🚀 Install & Run
 
+### Release
+
+> EduFocus is being migrated from the predecessor project **Don't Be Lazy**. The MVP release is planned after Phase 7; features described here are not released yet.
+
+Once released, download from [Releases](https://github.com/Cong-ty-TNNH-Q-Tech/EduFocus/releases).
+
+### Run from source
+
+**Current requirements:** .NET 10 SDK (tests target `net10.0`; the WPF app is upgraded in Phase 1), Windows 11 23H2+ 64-bit (Windows 10 22H2 best-effort).
+
+```bash
+git clone https://github.com/Cong-ty-TNNH-Q-Tech/EduFocus.git
+cd EduFocus
+
+dotnet restore DontBeLazy.slnx
+dotnet run --project src/DontBeLazy.WPF/DontBeLazy.WPF.csproj
 ```
-[User creates Task] → [Assigns Whitelist Profile] → [Types commitment]
-         ↓
-[Start Focus Mode]
-         ↓
-[System blocks all apps/websites not in the Profile]
-         ↓
-[Psychological tricks fire at strategic moments]
-         ↓
-[Session ends] → [Streak +1, Analytics updated]
+
+> **Note:** The codebase still uses the `DontBeLazy.*` project names. Renaming to `EduFocus.*` happens in Phase 1, and these commands will be updated accordingly.
+
+Run tests:
+
+```bash
+dotnet test src/DontBeLazy.Domain.Tests/DontBeLazy.Domain.Tests.csproj
 ```
 
----
-
-## 🗂️ Documentation
-
-- [📄 BA Document](./docs/ba_document.md) — Business analysis, features, system requirements (Vietnamese)
-- [📋 Use Cases](./docs/use_cases.md) — Detailed use case flows UC01–UC06 (Vietnamese)
-- [📝 Changelog](./CHANGELOG.md) — Release history
-- [🤝 Contributing](./CONTRIBUTING.md) — How to contribute
-- [🔒 Security](./SECURITY.md) — Security policy and vulnerability reporting
+> The WPF app still targets `net9.0` (support ends November 10, 2026) while tests target `net10.0`; Phase 1 will move the entire solution to .NET 10 LTS and EF Core 10 before release.
 
 ---
 
-## 🚀 Project Status
+## 📚 Documentation
 
-Currently in **Planning & Design** phase. All BA documentation and Use Cases are finalized. Development begins next.
+- [📄 BA Document](./docs/ba_document.md) — Requirements, features, rules, NFRs (Vietnamese)
+- [📋 Use Cases](./docs/use_cases.md) — Detailed flows UC01–UC14 (Vietnamese)
+- [🏛️ System Architecture](./docs/system_architecture.md) — Architecture and design decisions (Vietnamese)
+- [🗄️ Database Schema](./docs/database_schema.md) — SQLite schema, indexes, retention (Vietnamese)
+- [📝 Changelog](./CHANGELOG.md)
+- [🤝 Contributing](./CONTRIBUTING.md)
+- [🔒 Security](./SECURITY.md)
 
-**Roadmap:**
-- [x] Business Analysis document
-- [x] Use Case documentation (UC01–UC06)
-- [ ] Tech stack decision (leaning towards C# WPF + Rust)
-- [ ] UI/UX wireframes
-- [ ] Core engine: system-level blocker
-- [ ] MVP release
+---
+
+## 🗺️ Roadmap
+
+- [x] Re-define product and scope
+- [x] Rewrite BA, Use Cases, Architecture, Database Schema
+- [ ] Phase 0: Camera + blocking + tamper-resistance spikes
+- [ ] Phase 1: Clean up legacy code, rename to EduFocus, new schema
+- [ ] Phase 2: PIN, Parent Mode, protection toggle
+- [ ] Phase 3: Chatbot blocking engine + block page
+- [ ] Phase 4: Study sessions + activity tracking
+- [ ] Phase 5: Attention monitoring
+- [ ] Phase 6: Dashboard, reports, settings
+- [ ] Phase 7: Hardening, installer, CI, MVP release
+
+---
+
+## ⚠️ Known Limitations
+
+- The PIN is not a security boundary if the student shares the Windows account or has Administrator rights.
+- The hosts file can be bypassed via DoH/DoT, VPN, or a proxy.
+- Hosts does not log HTTPS access; blocked-attempt counts are best-effort only.
+- The block page only appears over HTTP; HTTPS usually shows a connection/SSL error.
+- App blocking may close/kill a process and lose unsaved data; EduFocus sends `WM_CLOSE` before killing.
+- URL/path, wildcard subdomains, and AI sidebars are not in the MVP; they require a browser extension.
+- Detailed reports are limited to 30 days; long-range data uses session summaries (365 days).
+- Webcam-based attention is an estimate and must not be treated as certain.
+- Google Meet/Teams may hold the camera on machines without Multi-App Camera support.
+- New or embedded chatbots cannot all be detected.
+- The process watcher relies on process name/path; renamed or portable apps may evade detection.
+- The app cannot resist a user with SYSTEM/admin privileges; Windows shutdown/logoff remains a bypass.
+- A scheduled-task watchdog may take 30–60 seconds to restart; uninstall PIN is best-effort.
+
+EduFocus aims to **support study habits**, not to enable covert surveillance or exam cheating.
 
 ---
 
 ## 🤝 Contributing
 
-Contributions are welcome! Please read [CONTRIBUTING.md](./CONTRIBUTING.md) before submitting a Pull Request.
-
----
-
-## 💖 Support the Project
-
-If you find this project useful and want to support its development, feel free to buy me a coffee!
-
-[![Sponsor via PayPal](https://img.shields.io/badge/Donate-PayPal-00457C?style=for-the-badge&logo=paypal)](https://paypal.me/ntt68)
+Contributions are welcome. Please read [CONTRIBUTING.md](./CONTRIBUTING.md) before opening a Pull Request.
 
 ---
 
 ## 📜 License
 
-Distributed under the [MIT License](./LICENSE). © 2026 ThanhTrunggDEV
+Distributed under the [MIT License](./LICENSE).
+
+© 2026 ThanhTrunggDEV. EduFocus is built on the MIT-licensed Don't Be Lazy project.

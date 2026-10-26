@@ -1,291 +1,782 @@
-# Tài liệu Use Case (UC) - Dự án "Don't Be Lazy"
+# Tài liệu Use Case - EduFocus
 
-## Danh sách Tác nhân (Actors)
-- **Người dùng (User):** Người trực tiếp thao tác trên ứng dụng cài đặt tại máy cá nhân. (Hệ thống không có Multi-role hay Admin do đây là Private Single-user App).
+> **Trạng thái:** Thiết kế / đang chuyển đổi từ **Don't Be Lazy**.
+> **Phiên bản:** 2.0 — 2026-10-26
 
 ---
 
-## Danh sách Use Case Tổng Quan
-| Mã UC | Tên Use Case | Mô tả ngắn gọn |
+## 1. Tác nhân (Actors)
+
+| Tác nhân | Mô tả |
+|---|---|
+| **Phụ huynh (Parent)** | Người tạo PIN, bật/tắt bảo vệ, quản lý blocklist, xem báo cáo và thoát app |
+| **Học sinh (Student)** | Người sử dụng máy trong chế độ được bảo vệ; xem trạng thái và trang chặn |
+| **Hệ thống (System)** | Scheduler, protection engine, activity tracker, attention monitor, retention job |
+| **Windows OS** | Nguồn sự kiện khởi động, sleep/resume, camera, foreground window |
+
+---
+
+## 2. Danh sách Use Case
+
+| Mã | Tên Use Case | Tác nhân chính |
 |---|---|---|
-| UC01 | Quản lý công việc (Task) | Thêm, sửa, xóa và đánh dấu hoàn thành task. |
-| UC02 | Quản lý danh sách Whitelist | Thêm/Xóa các URL trang web và ứng dụng được phép chạy. |
-| UC03 | Bắt đầu phiên tập trung | Khởi động đồng hồ đếm ngược và hệ thống chặn app/web. |
-| UC04 | Cấu hình Strict Mode | Bật/tắt chế độ kỷ luật thép chặn mọi sự can thiệp giữa chừng. |
-| UC05 | Xem báo cáo & thống kê | Xem thời gian tập trung và số lần bị hệ thống chặn. |
-| UC06 | Hiển thị Motivation Quote | Hệ thống tự động xuất hiện các câu quote truyền động lực tại các thời điểm chiến lược. |
+| UC01 | Thiết lập lần đầu & tạo PIN phụ huynh | Phụ huynh, Hệ thống |
+| UC02 | Đăng nhập Parent Mode & khóa phiên | Phụ huynh, Hệ thống |
+| UC03 | Bật chế độ bảo vệ | Phụ huynh, Hệ thống |
+| UC04 | Tắt chế độ bảo vệ | Phụ huynh, Hệ thống |
+| UC05 | Quản lý blocklist / allowlist | Phụ huynh |
+| UC06 | Cấu hình lịch bảo vệ | Phụ huynh, Hệ thống |
+| UC07 | Phiên học & theo dõi hoạt động | Hệ thống |
+| UC08 | Ước lượng mức độ tập trung | Hệ thống |
+| UC09 | Trang chặn & chặn ứng dụng | Học sinh, Hệ thống |
+| UC10 | Xem dashboard & báo cáo | Phụ huynh, Học sinh |
+| UC11 | Quản lý dữ liệu & quyền riêng tư | Phụ huynh |
+| UC12 | Vòng đời ứng dụng & chống tắt | Phụ huynh, Học sinh, Hệ thống |
+| UC13 | Đổi PIN / khôi phục PIN | Phụ huynh, Hệ thống |
+| UC14 | Tự phục hồi sau crash/restart | Hệ thống |
 
 ---
 
-## Chi tiết các Use Case
+## 3. Permission Matrix
 
-### UC01: Quản lý công việc (Task Management)
-- **Tác nhân:** Người dùng
-- **Mô tả:** Người dùng tạo danh sách những việc cần làm trong ngày (To-do list).
-- **Tiền điều kiện:** Ứng dụng đang mở.
-- **Luồng sự kiện chính — Thêm Task mới:**
-  1. Người dùng chọn chức năng "Quản lý công việc" (hoặc nhập trực tiếp từ màn hình chính).
-  2. Hệ thống hiển thị danh sách các task hiện có, **sắp xếp theo thứ tự tạo mới nhất ở trên** (mặc định). Người dùng có thể kéo thả (drag-and-drop) để sắp xếp lại — thứ tự này được lưu vào Local DB (trường `sort_order`) và giữ nguyên sau khi khởi động lại app.
-  3. Người dùng nhập tên công việc, thiết lập thời gian (VD: 60 phút), chọn **Loại task** (One-time hoặc Recurring) và **gán một bộ Whitelist Profile** cấu hình riêng cho Task này.
-  4. Người dùng bấm "Thêm".
-  5. Hệ thống validate dữ liệu đầu vào (xem Validation Rules bên dưới), sau đó lưu kết nối (Task <-> Whitelist) vào Local DB và cập nhật hiển thị.
-- **Luồng thay thế — Sửa Task:**
-  - Người dùng nhấp "Sửa" trên một task ở trạng thái `Pending`, `Done` hoặc `Abandoned`.
-  - Hệ thống mở form Sửa với các trường có thể chỉnh sửa: **Tên task**, **Thời gian ước tính**, **Whitelist Profile được gán**, **Loại task (One-time / Recurring)** và cấu hình chu kỳ nếu là Recurring.
-  - **Đổi type:** Khi đổi từ Recurring → One-time: chu kỳ lặp bị xóa, trạng thái task giữ nguyên. Khi đổi từ One-time → Recurring: hệ thống yêu cầu cấu hình chu kỳ (Daily / Weekly / Custom) như khi tạo mới.
-  - Sau khi lưu, hệ thống cập nhật bản ghi trong Local DB mà không thay đổi trạng thái hiện tại của task.
-- **Luồng thay thế — Hoàn thành Task:**
-  - Người dùng click checkbox "Hoàn thành". Hệ thống gạch ngang task và chuyển trạng thái sang `Done`.
-- **Luồng thay thế — Hoàn tác Done (Undo Done):**
-  - Người dùng click lại vào checkbox của task đang ở trạng thái `Done` → hệ thống hiện xác nhận: *"Bỏ đánh dấu hoàn thành và đưa task về Pending?"* → Bấm "Xác nhận".
-  - Task trở về trạng thái `Pending`, gạch ngang biến mất. Streak **không bị ảnh hưởng** (phiên Focus đã hoàn thành vẫn được tính).
-- **Trạng thái của Task (Task State Machine):**
-  | Trạng thái | Ý nghĩa | Hiển thị trong danh sách |
-  |---|---|---|
-  | `Pending` | Task đã tạo, chưa bắt đầu phiên Focus nào | ✅ Hiện — bình thường |
-  | `Active` | Đang được thực hiện trong phiên Focus hiện tại | ✅ Hiện — có badge "Đang Focus" |
-  | `Done` | Đã được đánh dấu hoàn thành bởi người dùng | ✅ Hiện — gạch ngang, mờ đi |
-  | `Abandoned` | Phiên bị hủy sớm; task **ở lại danh sách với badge "Đã bỏ"** cho đến khi người dùng tự restart | ✅ Hiện — badge màu cam "Đã bỏ cuộc" |
-  - `Abandoned` là **persistent state** — task không tự động về `Pending`. Người dùng phải chủ động bấm "Thử lại" để chuyển task về `Pending`.
-  - **Ngoại lệ với Recurring Task:** Nếu recurring task đang ở trạng thái `Abandoned` khi đến ngày reset, hệ thống **ưu tiên reset về `Pending`** (recurring rule thắng persistent Abandoned). Badge "Đã bỏ cuộc" biến mất, task hiển thị lại bình thường.
-  - Task ở trạng thái `Active` sẽ **disable** nút Xóa và nút Sửa trên UI.
-  - Task chỉ được Xóa vĩnh viễn khi ở trạng thái `Pending`, `Done` hoặc `Abandoned`.
-- **Validation Rules — Tên Task:**
-  - Không được để trống hoặc chỉ có khoảng trắng → hiển thị lỗi *"Tên task không được để trống."*
-  - Độ dài tối đa: **200 ký tự** → nếu vượt quá, hệ thống highlight đỏ và hiển thị bộ đếm ký tự còn lại.
-- **Luồng ngoại lệ — Xóa task đang ở trạng thái `Active`:**
-  - Hệ thống từ chối và hiển thị: *"Không thể xóa task đang trong phiên Focus. Hãy kết thúc hoặc hủy phiên hiện tại trước."*
-- **✨ [Phase 2 - AI Feature]: AI Phân rã công việc (Task Breakdown)**
-  - **Mô tả:** Vũ khí chống lại sự "Tê liệt vì quy mô" (Analysis Paralysis). Biến một cục đá tảng thành nhiều viên sỏi nhỏ để dễ bắt đầu hơn.
-  - **Hoạt động:** Tại form tạo Task, nếu user gõ một task quá bự (VD: *"Làm báo cáo khóa luận (240 phút)"*), có thể nhấp nút "✨ Nhờ AI chia nhỏ".
-  - **Kết quả:** Hệ thống gọi model AI để đề xuất một chuỗi các Pomodoro nhỏ: *1. Thu thập số liệu (60p) -> 2. Lập dàn ý (45p) -> 3. Viết nội dung (60p) -> 4. Format & Nộp (30p)*.
-  - Người dùng bấm "Áp dụng" → hệ thống tự động băm nhỏ và tạo thành các Task con nối tiếp nhau trong danh sách chờ.
-- **Hậu điều kiện:** Dữ liệu task, trạng thái và thứ tự sắp xếp được lưu trữ cục bộ trên máy.
+| Hành động | Chưa đăng nhập | Student Mode | Parent Mode |
+|---|---:|---:|---:|
+| Xem trạng thái bảo vệ | ✅ | ✅ | ✅ |
+| Xem thời gian học hôm nay | ✅ (tổng hợp) | ✅ | ✅ |
+| Xem blocklist | ❌ | ❌ | ✅ |
+| Thêm/sửa/xóa block rule | ❌ | ❌ | ✅ |
+| Bật bảo vệ | ❌ | ❌ | ✅ |
+| Tắt bảo vệ | ❌ | ❌ | ✅ |
+| Xem báo cáo chi tiết | ❌ | ❌ | ✅ |
+| Đổi PIN / recovery code | ❌ | ❌ | ✅ |
+| Xóa dữ liệu | ❌ | ❌ | ✅ |
+| Thoát ứng dụng | ❌ | ❌ | ✅ |
+| Tắt máy / đăng xuất Windows | ✅ | ✅ | ✅ |
 
-- **Loại Task (Task Type):**
-  - Khi tạo hoặc sửa task, người dùng chọn một trong hai loại:
-    - **One-time** (mặc định): Task thông thường, hoàn thành xong là xong.
-    - **Recurring**: Task tự động tái xuất hiện theo chu kỳ đã cấu hình.
+---
 
-#### Cấu hình Recurring Task:
-  | Loại lặp | Mô tả |
-  |---|---|
-  | `Daily` | Reset về `Pending` mỗi ngày |
-  | `Weekly` | Chọn cụ thể các ngày trong tuần (VD: T2, T4, T6) — chỉ visible và `Pending` đúng ngày đã chọn |
-  | `Custom` | Tự đặt chu kỳ: sau mỗi X ngày kể từ `last_done_date`. Nếu chưa làm lần nào, tính từ `created_date`. |
+## 4. Chi tiết Use Case
 
-#### Logic reset Recurring Task:
-  - Hệ thống dùng **lazy reset** — không cần background process chạy đêm. Kiểm tra khi app mở hoặc tab Tasks được focus.
-  - Điều kiện reset: `last_done_date < hôm nay` (Daily) hoặc hôm nay nằm trong danh sách ngày đã chọn (Weekly) hoặc `today >= last_done_date + X` (Custom). Mọi điều kiện so sánh `Date` đều dùng **Múi giờ địa phương (Local Time)**.
-  - **Cross-midnight rule:** Nếu phiên focus kéo dài qua nửa đêm (VD: bắt đầu thứ Ba, kết thúc thứ Tư), `last_done_date` được ghi nhận theo **ngày bắt đầu phiên** (thứ Ba) để đồng bộ với Analytics và tránh bị lỗi chu kỳ lặp.
-  - Khi reset: task về trạng thái `Pending`. **Chỉ hiện 1 instance** — không backfill nếu bỏ lỡ nhiều ngày.
-  - **Không reset** nếu task đang ở trạng thái `Active`.
-  - **Recurring + Abandoned:** Nếu đến ngày reset mà task đang `Abandoned`, hệ thống reset về `Pending` bình thường.
-  - **Hoàn thành Task trên Recurring Task:** Hệ thống ghi `last_done_date`, Streak cộng bình thường. Task **KHÔNG reset ngay lập tức** — chờ đến lần kiểm tra tiếp theo (mở app hôm sau hoặc khi đủ điều kiện chu kỳ) mới reset về `Pending`.
-  - Xóa vĩnh viễn recurring task **không xóa lịch sử phiên** — Analytics vẫn giữ nguyên dữ liệu cũ.
+### UC01 — Thiết lập lần đầu & tạo PIN phụ huynh
 
-- **Luồng thay thế — Pause Recurring Task:**
-  - Người dùng nhấp icon ⏸ trên một recurring task → hệ thống hiện xác nhận: *"Tạm dừng task này? Task sẽ không hiện trong danh sách cho đến khi bạn bật lại."*
-  - Khi Pause: task ẩn khỏi danh sách, vòng lặp reset bị tạm dừng, **không ảnh hưởng Streak**.
-  - Người dùng có thể vào Settings → Recurring Tasks → xem danh sách đang Pause và bật lại bất kỳ lúc nào.
+**Tác nhân:** Phụ huynh, Hệ thống
+**Mô tả:** Lần chạy đầu tiên, ứng dụng hướng dẫn phụ huynh thiết lập PIN và giải thích phạm vi giám sát.
 
-- **Luồng ngoại lệ — Profile bị xóa trên Recurring Task:**
-  - Nếu Profile gắn với một recurring task bị xóa, task hiển thị badge cảnh báo màu vàng: *"Profile bị xóa — đang dùng Default"* mỗi khi task reset về Pending.
-  - Người dùng cần vào Sửa task để gán lại Profile phù hợp.
+**Tiền điều kiện**
+- Ứng dụng chưa có `ParentCredential`.
+- Database EduFocus mới đã được tạo; không có dữ liệu migrate từ 1.x.
 
-- **Luồng ngoại lệ — Weekly task visibility:**
-  - Task weekly chỉ **visible và có thể Focus** vào đúng các ngày đã chọn. Ngày khác: task ẩn hoàn toàn khỏi danh sách (không hiển thị dù đang Pending).
-  - Trong Analytics, vẫn hiển thị lịch sử các phiên đã làm đúng ngày.
+**Trigger**
+- Người dùng mở app lần đầu sau khi cài.
 
-### UC02: Quản lý bộ quy tắc ưu tiên (Whitelist Profiles)
-- **Tác nhân:** Người dùng
-- **Mô tả:** Người dùng tạo trước các tệp hồ sơ (Profiles) tập hợp các ứng dụng và trang web được phép chạy (VD: Profile "Lập trình", Profile "Học Ngoại Ngữ"). Các Profile này nhằm mục đích gán nhanh cho mỗi Task cụ thể sau này.
-- **Tiền điều kiện:** KHÔNG ở trong trạng thái Strict Mode của một Task đang dùng Profile đó.
-- **Luồng sự kiện chính:**
-  1. Chọn mục cài đặt "Whitelist Profiles" → Bấm tạo mới Profile.
-  2. Người dùng đặt tên Profile và chọn tab "Websites" hoặc "Apps".
-  3. Nhập URL theo quy tắc định dạng (xem URL Rules bên dưới) hoặc thêm ứng dụng theo đường dẫn hoặc tên process (xem App Rules bên dưới).
-  4. Bấm "Thêm". Hệ thống lưu Profile vào danh sách cục bộ để sẵn sàng gán cho Task.
-- **URL Rules — Định dạng cho phép:**
-  - Chỉ hỗ trợ **exact domain** (VD: `github.com`, `docs.google.com`). Ký tự wildcard (`*`) **không được hỗ trợ** ở giai đoạn MVP để đơn giản hóa engine chặn.
-  - Subdomain được tính riêng: `mail.google.com` và `docs.google.com` là 2 mục riêng biệt.
-  - URLs có thể có hoặc không có `https://` — hệ thống tự chuẩn hóa về dạng domain trần.
-- **App Rules — Nhận diện ứng dụng:**
-  - Hỗ trợ 2 cách thêm app:
-    - **Theo đường dẫn file thực thi** (VD: `C:\Program Files\Code\code.exe`) — chính xác nhưng phụ thuộc vào nơi cài đặt.
-    - **Theo process name** (VD: `code`) — linh hoạt hơn, không cần biết path. Hệ thống so sánh với tên process đang chạy trong Task Manager.
-  - Người dùng có thể dùng nút **"Browse..."** để chọn file `.exe` — hệ thống tự điền cả path và process name.
-- **Giới hạn entries & Empty Profile:**
-  - Mỗi Profile tối đa **50 entries** (website + app cộng lại). Nếu vượt quá, nút "Thêm" bị disable.
-  - **Empty Profile:** Hệ thống cho phép tạo Profile với 0 entries. Khi gán vào Task, Profile này đóng vai trò là "Block-All Profile" (chặn toàn bộ Internet và Apps lạ), cung cấp mức độ cô lập tuyệt đối.
-- **Validation Rules — Tên Profile:**
-  - Không được để trống. Độ dài tối đa: **100 ký tự**.
-- **Luồng ngoại lệ — URL không hợp lệ:**
-  - Nếu nhập sai format hoặc thiếu TLD, hệ thống highlight đỏ ô input và hiển thị gợi ý cú pháp đúng.
-- **Luồng ngoại lệ — Trùng tên Profile:**
-  - Nếu người dùng đặt tên Profile trùng với một Profile đã có, hệ thống từ chối và hiển thị: *"Tên Profile đã tồn tại. Vui lòng chọn tên khác."*
-- **Luồng ngoại lệ — Sửa/Xóa Profile đang dùng trong phiên Focus:**
-  - Hệ thống từ chối và hiển thị: *"Profile này đang được dùng trong phiên Focus. Không thể chỉnh sửa cho đến khi phiên kết thúc."*
-  - Mọi thay đổi với Profile chỉ có hiệu lực ở phiên **tiếp theo**.
-- **Luồng ngoại lệ — Xóa Profile đang được gán cho Task `Pending` hoặc `Abandoned`:**
-  - Hệ thống hiển thị cảnh báo: *"Profile này đang được gán cho [N] task chưa thực hiện. Nếu xóa, các task đó sẽ tự động fallback về Default Profile. Tiếp tục?"*
-  - Nếu xác nhận, hệ thống xóa Profile và tự động cập nhật các task bị ảnh hưởng sang Default Profile.
-- **Khái niệm Profile Mặc định (Default Profile):**
-  - Hệ thống luôn duy trì một **"Default Profile"** không thể xóa, chỉ có thể sửa nội dung.
-  - Task không gán Profile → tự động dùng Default Profile (chỉ cho phép mở chính app Don't Be Lazy, không có internet).
-  - Default Profile hiển thị badge **"Mặc định"** trên UI để nhắc nhở người dùng chưa cấu hình Whitelist.
-- **Luồng thay thế — Import/Export Profile:**
-  - Người dùng vào Settings → **"Whitelist Profiles"** → Bấm **"Export"** để xuất toàn bộ danh sách Profiles ra file `.json`.
-  - Người dùng bấm **"Import"** để nạp lại file `.json` đã export → hệ thống merge với danh sách hiện có.
-  - **Conflict resolution khi import:** Nếu Profile trong file trùng tên với Profile đang có, hệ thống hỏi từng trường hợp: **Ghi đè** (xóa toàn bộ entries cũ của Profile đó, thay bằng entries từ file) / **Bỏ qua** (giữ nguyên Profile cũ, bỏ Profile trong file).
-  - Dùng cho mục đích backup hoặc khôi phục sau khi cài lại app.
-- **✨ [Phase 2 - AI Feature]: AI Sinh Profile (Smart Profile Generator)**
-  - **Mô tả:** Giảm ma sát lúc cấu hình hệ thống chặn, tránh việc người dùng lười gõ từng URL.
-  - **Hoạt động:** Nút "✨ AI Sinh Profile" có sẵn trong form thêm mới Profile. Người dùng nhập mục đích tập trung (VD: *"Profile cho việc Code React và quản trị DB"*).
-  - **Kết quả:** AI tự động phân tích và điền vào form một danh sách đề xuất URL (`localhost`, `react.dev`, `stackoverflow.com`, `github.com`) và App Process (`code`, `postman`, `dbeaver`).
-  - Người dùng kiểm tra, thêm bớt tùy ý rồi bấm "Lưu".
+**Luồng chính**
+1. Hệ thống hiển thị màn hình giới thiệu EduFocus: mục đích, dữ liệu thu thập, giới hạn và cam kết local-only.
+2. Hệ thống yêu cầu phụ huynh xác nhận:
+   - Đã đọc chính sách quyền riêng tư.
+   - Đã thông báo cho học sinh về việc giám sát.
+3. Phụ huynh nhập PIN 6–8 chữ số và xác nhận lại.
+4. Hệ thống kiểm tra:
+   - Độ dài 6–8.
+   - Chỉ gồm chữ số.
+   - Hai lần nhập khớp nhau.
+   - Không nằm trong danh sách PIN yếu phổ biến (000000, 111111, 123456, 654321…).
+5. Hệ thống tạo `ParentCredential`:
+   - Salt ngẫu nhiên 16 byte.
+   - PBKDF2-SHA256, 600.000 iterations.
+   - Recovery code 12 ký tự ngẫu nhiên, hash tương tự PIN.
+6. Hệ thống hiển thị recovery code **một lần**, yêu cầu phụ huynh lưu lại.
+7. Hệ thống đánh dấu `OnboardingCompleted = true`, đăng nhập Parent Mode và mở dashboard.
 
-### UC03: Bắt đầu phiên tập trung (Focus Mode)
-- **Tác nhân:** Người dùng
-- **Mô tả:** Kích hoạt quá trình tính thời gian và hệ thống sẽ tự động bật khiên chắn Block mọi app/web nằm ngoài Whitelist.
-- **Tiền điều kiện:** Phải có ít nhất 1 task ở trạng thái `Pending` hoặc `Abandoned` (đã bấm "Thử lại") trong danh sách. Nếu danh sách trống (VD: tất cả Weekly task hôm nay không phải ngày của chúng), màn hình hiển thị Empty State với gợi ý: *"Không có task khả dụng hôm nay. Thêm task mới hoặc kiểm tra lại lịch Recurring."*
-- **Bảo mật đếm ngược (Time-Travel Protection):** Để ngăn chặn người dùng gian lận bằng cách chỉnh giờ OS Clock, đồng hồ đếm ngược sử dụng **Monotonic Clock** (hàng đợi đếm tick phần cứng của hệ thống) để tính mức chênh lệch thời gian thực. Chỉnh giờ máy tính sẽ không làm rút ngắn hoặc kết thúc sớm phiên Focus.
-- **Luồng sự kiện chính:**
-  1. Tại màn hình chính, người dùng chọn task cần thực hiện.
-  2. Hệ thống áp dụng trick **"Lời hứa chủ động"**: Yêu cầu đặt thời gian đếm ngược và tự tay gõ câu cam kết mục tiêu rồi mới được bấm "Start Focus".
-     - **Validation thời gian:** Tối thiểu **1 phút**, tối đa **240 phút** (4 giờ). Nếu nhập ngoài khoảng này, ô input highlight đỏ và hiển thị giới hạn cho phép.
-     - **Hiển thị cấu hình Strict Mode áp dụng:** Ngay trên màn hình này, hệ thống hiển thị rõ: *"Phiên này sẽ chạy với Strict Mode: [BẬT/TẮT]"* (theo thứ tự ưu tiên per-task > global) để người dùng biết trước.
-  3. Hệ thống bắt đầu bấm giờ đếm ngược. Task chuyển trạng thái sang `Active`.
-  4. Hệ thống gọi kịch bản xử lý ngầm để kích hoạt khiên chặn toàn bộ internet và ứng dụng lạ, sau đó đọc **Whitelist Profile gắn với Task hiện tại** để cấp quyền chạy ngoại lệ.
-     - **Profile Snapshot:** Hệ thống chụp lại (snapshot) toàn bộ Rules của Profile tại thời điểm Start. Mọi thay đổi vào Profile này từ UI sau đó sẽ không tác động đến khiên chặn của phiên hiện tại, đảm bảo tính nguyên vẹn của khiên.
-  5. Khi hết thời gian đếm ngược, hệ thống phát âm thông báo, thả ngắt chặn web/app, cập nhật **cộng dồn điểm Streak** và hiển thị hộp thoại xác nhận tình trạng Task:
-     > *"Phiên tập trung đã kết thúc. Bạn đã hoàn thành công việc này chưa?"*
-     > - **Nút 1: "Hoàn thành Task"** -> Task chuyển sang trạng thái `Done` (với Recurring thì cập nhật `last_done_date`).
-     > - **Nút 2: "Vẫn cần làm thêm"** -> Task giữ nguyên trạng thái `Pending` để sẵn sàng cho các phiên Pomodoro tiếp theo.
+**Luồng thay thế**
+- **PIN yếu:** Hiển thị cảnh báo và yêu cầu chọn PIN khác.
+- **Không xác nhận đồng ý:** Không cho tạo PIN; chỉ có thể thoát app.
 
-- **Luồng thay thế — Hoàn thành sớm hơn timer (Mark Done Early):**
-  - Trong lúc đếm giờ, nếu người dùng đã xong việc trước khi hết giờ, có thể bấm nút **"Hoàn thành sớm ✓"** (khác với nút Stop/Give up).
-  - Hệ thống hiện xác nhận: *"Bạn đã hoàn thành task trước thời hạn? Điều này sẽ kết thúc phiên và đánh dấu task là Done."* → Bấm "Xác nhận".
-  - Hành động này **gộp 2 thao tác:** Kết thúc phiên SỚM + Hoàn thành Task LUÔN. Hệ thống ghi nhận thời gian thực tế, mở khóa app/web, Task → `Done`, Streak được cộng.
-  - **Với Recurring Task:** Hệ thống ghi `last_done_date = hôm nay`. Task không reset ngay — chờ đến lần kiểm tra tiếp theo mới về `Pending`.
-- **Luồng thay thế — Nhiều phiên Focus cho 1 Task (Multi-Session / Pomodoro):**
-  - Nhờ cơ chế "Vẫn cần làm thêm" ở Bước 5 luồng chính, một task `Pending` (One-time hoặc Recurring) có thể được focus nhiều lần bằng cách lặp lại phiên.
-  - Mỗi phiên tạo ra 1 bản ghi session riêng trong DB. Analytics hiển thị tổng thời gian tập trung của tất cả các phiên.
-  - Streak chỉ cần có ít nhất 1 phiên **hoán thành phiên** trong ngày (bất kể task đã Done hay chưa).
-- **Luồng thay thế — Dừng sớm (Strict Mode Tắt — Kích hoạt Cản Bước Tâm Lý):**
-  - Trong quá trình đếm giờ, người dùng nhấp vào nút "Stop/Give up".
-  - Chức năng **Guilt-tripping** và **Loss Aversion** kích hoạt: Hệ thống hiện thông báo đỏ *"Bạn thực sự muốn vứt bỏ công sức và mất đi chuỗi Streak [X] ngày sao?"*.
-  - Chức năng **Tạo ma sát** kích hoạt: Yêu cầu người dùng tự gõ chính xác chuỗi **(1)** *"Tôi là kẻ lười biếng và tôi chấp nhận bỏ cuộc"* mới có thể bấm nút Tắt. *(Lưu ý: Đây là chuỗi Friction riêng cho ngữ cảnh bỏ cuộc Focus — khác với chuỗi Friction tắt Strict Mode trong UC04).*
-  - Sau khi gõ xong: hệ thống hủy phiên, mở khóa ứng dụng, Reset Streak về 0, Task chuyển sang trạng thái **`Abandoned`** (hiển thị badge cam trong danh sách).
-- **Luồng ngoại lệ — Strict Mode Bật:**
-  - Nút "Stop" bị Disable hoặc ẩn hoàn toàn. Mọi cơ chế đóng/kill app bị từ chối.
-- **Luồng ngoại lệ — Máy tính sleep / tắt màn hình giữa phiên:**
-  - Timer được **tạm dừng tự động** khi máy vào trạng thái sleep/hibernate/screen lock.
-  - Khi máy thức dậy, hệ thống hiển thị hộp thoại:
-    > *"Phiên Focus của bạn đã bị gián đoạn. Bạn muốn: **Tiếp tục** (tiếp tục đếm ngược từ chỗ dừng) hay **Đặt lại** (xóa bỏ phiên hiện tại)?"*
-  - Thời gian sleep không được tính vào Analytics.
-  - Trong Strict Mode: luôn tự động **Tiếp tục**, không hiển thị hộp thoại chọn.
-  - **Hibernation Drift (Phiên kéo dài qua ngày do Sleep):** Nếu thời gian ngủ kéo dài qua nhiều ngày (VD: Sleep 3 ngày mới mở lại), thời gian ngủ không tính vào tổng bộ đếm. Tuy nhiên, nếu user chọn "Tiếp tục" và hoàn thành, phiên đó vẫn lấy **Ngày bắt đầu gốc** làm cơ sở ghi nhận dữ liệu `last_done_date` và Analytics. Chuỗi Streak của những ngày Sleep trống sẽ bị đứt.
-- **Luồng ngoại lệ — Orphan Session (app bị force-close ngoài Strict Mode):**
-  - Nếu app bị tắt đột ngột (không phải Strict Mode), checkpoint vẫn được ghi trong DB.
-  - Khi app khởi động lại, nếu phát hiện checkpoint chưa kết thúc của phiên **không phải Strict**: hệ thống hiển thị: *"Có một phiên Focus chưa hoàn thành trước đó. Bạn muốn: **Khôi phục** hay **Bỏ qua** (xóa phiên đó)?"*
-  - Nếu "Bỏ qua": phiên bị xóa, task về `Abandoned`. Nếu "Khôi phục": timer tiếp tục từ checkpoint cuối.
-  - **Với Recurring Task bị đưa về `Abandoned` do Orphan Session:** Vòng reset vẫn hoạt động bình thường — nếu đến ngày reset, task tự về `Pending` theo rule Recurring.
-- **Hậu điều kiện:** Lưu lại thời gian tập trung thực tế và trạng thái task cuối cùng vào Local DB.
+**Ngoại lệ**
+- Ghi file thất bại: hiển thị lỗi quyền truy cập, hướng dẫn chạy với quyền Administrator.
+- Recovery code chỉ lưu hash: phụ huynh có thể tạo lại sau khi đăng nhập; mã cũ bị vô hiệu. Hệ thống không thể hiển thị lại mã cũ.
 
-### UC04: Quản lý cấu hình Strict Mode
-- **Tác nhân:** Người dùng
-- **Mô tả:** Cấu hình chế độ "kỷ luật thép" — có thể bật toàn cục hoặc per-task. Khi Strict Mode kích hoạt, mọi cơ chế dừng/can thiệp bị chặn hoàn toàn.
-- **Tiền điều kiện:** Chỉ được tinh chỉnh khi hệ thống **CHƯA** trong trạng thái Focus đang chạy.
-- **Phân cấp Strict Mode:**
-  - **Global Strict Mode:** Áp dụng cho tất cả các phiên Focus. Cấu hình trong Settings → Strict Mode.
-  - **Per-Task Strict Mode:** Cho phép bật/tắt Strict Mode riêng cho từng task khi tạo hoặc sửa task (ghi đè Global).
-  - Thứ tự ưu tiên: **Per-task setting > Global setting**.
-  - **Ví dụ cụ thể:** Global = ON, Task "Đọc email" có Per-Task = OFF → khi Start Focus trên task đó, phiên chạy **không có Strict Mode**. Ngược lại, Global = OFF, Task "Học thi" có Per-Task = ON → phiên chạy **có Strict Mode**. Người dùng được thông báo rõ trên màn hình xác nhận trước khi bắt đầu (UC03 bước 2).
+**Hậu điều kiện**
+- `ParentCredential` tồn tại; `OnboardingCompleted = true`.
+- PIN và recovery code không lưu plaintext.
 
-#### Luồng bật Strict Mode (OFF → ON):
-  1. Người dùng vào Settings → toggle "Strict Mode" sang ON (hoặc bật trong form tạo/sửa task).
-  2. Hệ thống hiển thị hộp thoại xác nhận cảnh báo:
-     > *"Khi bật Strict Mode trong phiên làm việc, bạn sẽ KHÔNG THỂ: dừng sớm, sửa Whitelist, hay kill app bằng Task Manager. Phiên chỉ kết thúc khi hết giờ hoặc hoàn thành task. Bạn có chắc chắn?"*
-  3. Người dùng xác nhận "Đồng ý". Hệ thống lưu trạng thái. UI hiển thị badge ⚔️ cảnh báo.
+**Business rules:** BR-01, BR-02, BR-22.
 
-#### Luồng tắt Strict Mode (ON → OFF):
-  1. Người dùng toggle "Strict Mode" sang OFF.
-  2. Hệ thống xác nhận 2 bước:
-     - **Bước 1:** *"Bạn có chắc muốn tắt Strict Mode? Điều này sẽ cho phép bỏ cuộc dễ dàng hơn."* → Bấm "Tiếp tục".
-     - **Bước 2:** Tự tay gõ chuỗi **(2)** *"Tôi chấp nhận giảm mức độ kỷ luật"* → Bấm "Xác nhận tắt". *(Lưu ý: Đây là chuỗi Friction riêng cho ngữ cảnh tắt Strict Mode — khác với chuỗi Friction bỏ cuộc Focus trong UC03).*
-  3. Hệ thống lưu `strict_mode = false`. Badge cảnh báo biến mất.
+---
 
-#### Luồng ngoại lệ — Đang trong phiên Focus:
-  - Toggle Strict Mode bị **disable hoàn toàn** — không thể thay đổi cho đến khi phiên kết thúc.
+### UC02 — Đăng nhập Parent Mode & khóa phiên
 
-#### Luồng ngoại lệ — Máy tắt/restart đột ngột trong Strict Mode (Crash Recovery):
-  - Hệ thống ghi một **session checkpoint** vào Local DB mỗi 30 giây trong lúc Focus (lưu: thời gian còn lại, task ID, strict state).
-  - Khi ứng dụng khởi động lại sau crash/restart, hệ thống kiểm tra DB xem có checkpoint chưa kết thúc không.
-  - Nếu tìm thấy checkpoint của phiên **Strict Mode** chưa hoàn thành:
-    - Hệ thống **tự động kích hoạt lại chế độ chặn** ngay khi app load xong.
-    - Hiển thị banner: *"Phiên Strict Mode của bạn đã bị gián đoạn do máy tắt. Hệ thống đã khôi phục lại — còn [X] phút (±30 giây do gián đoạn)."* *(Sai lệch tối đa 30 giây do khoảng cách giữa 2 checkpoint — người dùng được thông báo rõ.)*
-    - Timer tiếp tục đếm ngược từ thời điểm checkpoint cuối cùng.
-  - Nếu tìm thấy checkpoint của phiên **không Strict** chưa hoàn thành → xem UC03 luồng "Orphan Session".
+**Tác nhân:** Phụ huynh, Hệ thống
+**Mô tả:** Phụ huynh mở khóa quyền quản trị bằng PIN.
 
-### UC05: Xem báo cáo & thống kê
-- **Tác nhân:** Người dùng
-- **Mô tả:** Xem lại lịch sử kỷ luật của bản thân để đánh giá hành trình, nhìn thấy tiến bộ và duy trì động lực.
-- **Tiền điều kiện:** Ứng dụng đang mở.
-- **Múi giờ & ranh giới ngày:**
-  - Tất cả thời gian lưu vào DB theo **Local Time của máy người dùng**.
-  - Ranh giới ngày là **00:00 Local Time**. Phiên tính theo **ngày bắt đầu** — phiên bắt đầu lúc 23:30 và kết thúc lúc 00:10 thuộc ngày 23:30.
-- **Luồng sự kiện chính:**
-  1. Người dùng điều hướng tới tab "Thống kê" (Analytics/Dashboard).
-  2. Hệ thống mặc định hiển thị dữ liệu của **7 ngày gần nhất**.
-  3. Người dùng có thể chọn bộ lọc thời gian: **Hôm nay / 7 ngày / 30 ngày / Tất cả**.
-  4. Hệ thống query Local DB theo bộ lọc đã chọn và render các chỉ số:
-     - 📊 **Biểu đồ cột** — Tổng thời gian tập trung thực tế theo từng ngày (không tính thời gian sleep).
-     - 🔥 **Streak Counter** — Chuỗi ngày liên tục có ít nhất 1 phiên hoàn thành. Hiển thị nổi bật ở đầu trang.
-     - 🚫 **Số lần bị chặn** — Tổng số lần cố truy cập app/web nằm ngoài Whitelist.
-     - ✅ **Tỷ lệ hoàn thành** — Số phiên hoàn thành / tổng số phiên đã bắt đầu (%).
-- **Recurring Task trong Analytics:**
-  - Mỗi phiên Focus của recurring task được lưu là **1 bản ghi riêng** theo ngày — không group tự động theo task name.
-  - Người dùng có thể dùng bộ lọc **"Theo task"** (chọn tên task từ dropdown) để xem tổng số phiên và tổng thời gian của 1 recurring task qua nhiều ngày.
-- **Logic tính Streak:**
-  - Mỗi ngày dương lịch (theo Local Time) có ít nhất 1 phiên Focus **hoàn thành** (kể cả "Hoàn thành sớm") → cộng 1 ngày vào Streak.
-  - Nếu không có phiên hoàn thành nào trong ngày hôm qua → Streak **reset về 0**.
-  - Streak được cập nhật tự động sau mỗi phiên kết thúc.
-- **Luồng thay thế — Xóa lịch sử:**
-  - Người dùng vào Settings → **"Dữ liệu & Quyền riêng tư"** → Chọn "Xóa lịch sử".
-  - Hệ thống cho phép chọn phạm vi xóa: **Hôm nay / 7 ngày / 30 ngày / Tất cả**.
-  - Sau khi xác nhận, hệ thống xóa các bản ghi session tương ứng.
-  - **Logic Streak sau khi xóa một phần:** Hệ thống **tính lại Streak từ dữ liệu còn lại** (không reset về 0 nếu còn ngày hoàn thành liên tiếp trước phạm vi bị xóa). VD: Xóa "7 ngày gần nhất" nhưng trước đó đã có 14 ngày streak → Streak được cập nhật thành 7 (từ ngày trước phạm vi xóa).
-  - *Lưu ý thiết kế: Tính năng đặt sâu trong Settings để tránh người dùng bốc đồng xóa nhầm.*
-- **Luồng thay thế — Export dữ liệu (Session Export):**
-  - Người dùng vào Settings → **"Xuất dữ liệu"** → Chọn định dạng **CSV** hoặc **JSON**.
-  - **Scope của export:** Chỉ xuất **session history** (task name, thời gian bắt đầu, thời gian thực tế, trạng thái hoàn thành). Không bao gồm Tasks và Whitelist Profiles (dùng tính năng Import/Export Profile trong UC02 cho mục đích đó).
-  - Hệ thống mở hộp thoại Save As của hệ điều hành để người dùng chọn nơi lưu.
-- **Luồng ngoại lệ — Empty State (Lần đầu sử dụng, chưa có dữ liệu):**
-  - Nếu Local DB chưa có phiên nào, hệ thống hiển thị màn hình **Empty State** với:
-    - Icon minh họa (đồng hồ cát hoặc rocket chưa phóng).
-    - Dòng chữ: *"Bạn chưa có phiên làm việc nào. Hãy bắt đầu phiên đầu tiên để xây dựng Streak!"*
-    - Nút CTA *"Bắt đầu ngay"* dẫn thẳng về màn hình chọn Task.
+**Tiền điều kiện**
+- Đã hoàn tất UC01.
+- Ứng dụng đang chạy.
 
-### UC06: Hiển thị Motivation Quote
-- **Tác nhân:** Hệ thống (kích hoạt tự động theo sự kiện), Người dùng (có thể quản lý kho quote).
-- **Mô tả:** Hệ thống tự động hiển thị các câu quote truyền cảm hứng tại các **thời điểm chiến lược** trong hành trình làm việc nhằm duy trì động lực và củng cố thói quen tốt.
-- **Tiền điều kiện:** Ứng dụng đang mở **và** tính năng Quote chưa bị tắt trong Settings.
-- **Luồng sự kiện chính (Tự động theo sự kiện):**
-  - **Sự kiện 1 — Trước khi bắt đầu:** Ngay sau khi người dùng gõ xong câu cam kết mục tiêu, hệ thống hiển thị 1 quote ngắn tiếp thêm fuel: VD: *"The secret of getting ahead is getting started." — Mark Twain*.
-  - **Sự kiện 2 — Trong lúc tập trung (giữa phiên):** Khi đã trôi qua khoảng 50% thời gian **và** thời gian còn lại ≥ 2 phút, hệ thống hiện một toast nhỏ góc màn hình. Toast **tự động biến mất sau 5 giây** mà không cần người dùng bấm tắt. Người dùng có thể click vào toast để dismiss ngay lập tức. Nếu user "Mark Done Early" trước mốc 50%, sự kiện 2 bị bỏ qua hoàn toàn — không fallback.
-  - **Sự kiện 3 — Khi hoàn thành phiên:** Sau khi đồng hồ về 0 (hoặc Mark Done Early), cùng màn hình chúc mừng xuất hiện một câu quote ăn mừng chiến thắng: VD: *"Well done is better than well said." — Benjamin Franklin*.
-  - **Sự kiện 4 — Khi người dùng định bỏ cuộc (Stop sớm):** Trong luồng "Tạo ma sát", trước khi hiện ô gõ tự nhận thua, hệ thống flash một quote đánh thẳng vào sự tự ái: VD: *"Push yourself, because no one else is going to do it for you."*.
-- **Luồng thay thế — Người dùng tự quản lý kho Quote:**
-  1. Người dùng vào Settings → **"Motivation Quotes"**.
-  2. Hệ thống hiển thị danh sách quote mặc định (bundle sẵn, có thể xem theo sự kiện).
-  3. Người dùng có thể **thêm quote cá nhân**, **sửa**, hoặc **xóa** bất kỳ quote nào.
-  4. Người dùng có thể assign quote vào từng **sự kiện cụ thể** (trước phiên / giữa phiên / khi hoàn thành / khi bỏ cuộc) hoặc để chế độ **ngẫu nhiên (random)**.
-  5. Người dùng có thể chọn **ngôn ngữ hiển thị quote mặc định**: Tiếng Việt / Tiếng Anh. Bundle sẵn có quote cho cả 2 ngôn ngữ.
-  6. Người dùng có thể **tắt toàn bộ hệ thống Quote** bằng toggle "Hiển thị Motivation Quotes" (OFF). Khi tắt, không có quote nào được hiển thị ở bất kỳ sự kiện nào.
-  7. Hệ thống lưu danh sách, cài đặt ngôn ngữ và trạng thái bật/tắt vào Local DB.
-- **Luồng ngoại lệ — Kho quote của một sự kiện bị rỗng:**
-  - Nếu người dùng xóa hết toàn bộ quote của một sự kiện cụ thể, hệ thống **không hiển thị lỗi và không crash**.
-  - Thay vào đó hệ thống tự động **fallback về 1 quote hard-coded mặc định** cho sự kiện đó (không thể xóa). VD: *"Keep going."*
-  - UI hiển thị gợi ý: *"Kho quote của mục này đang trống. Thêm quote hoặc bật lại quote mặc định."*
-- **Hậu điều kiện:** Kho quote, cài đặt ngôn ngữ và trạng thái bật/tắt được lưu cục bộ, sẵn sàng render ở lần tiếp theo.
+**Trigger**
+- Phụ huynh bấm **Parent Login** hoặc thực hiện thao tác cần quyền quản trị.
+
+**Luồng chính**
+1. Hệ thống hiển thị màn hình nhập PIN.
+2. Phụ huynh nhập PIN.
+3. Hệ thống kiểm tra lockout:
+   - Nếu đang bị khóa, hiển thị thời gian còn lại.
+4. Hệ thống xác thực PIN bằng PBKDF2 + constant-time compare.
+5. Thành công:
+   - Reset `FailedAttempts`.
+   - Tạo Parent session (mặc định 5 phút idle).
+   - Mở dashboard.
+6. Hệ thống ghi audit log "Parent login".
+
+**Luồng thay thế**
+- **Sai PIN:** tăng `FailedAttempts`, hiển thị số lần còn lại.
+- **Sai 5 lần:** khóa 15 phút và ghi audit. Màn hình khóa cho phép chuyển sang **nhập recovery code** (không hiển thị lại mã).
+- **Idle 5 phút:** tự động khóa phiên, quay về Student Mode/khóa màn hình.
+- **Quên PIN:** chuyển sang UC13; recovery code dùng chung lockout với PIN để tránh bypass.
+
+**Ngoại lệ**
+- App bị tắt khi đang Parent Mode: phiên không được khôi phục; phải đăng nhập lại.
+- Database bị lỗi: hiển thị lỗi và không cho thay đổi cấu hình.
+
+**Hậu điều kiện**
+- Parent Mode active trong thời gian giới hạn.
+- Các thao tác nhạy cảm được phép.
+
+**Business rules:** BR-02, BR-03, BR-04, BR-21.
+
+---
+
+### UC03 — Bật chế độ bảo vệ
+
+**Tác nhân:** Phụ huynh, Hệ thống
+**Mô tả:** Kích hoạt chặn web/app và bắt đầu phiên học.
+
+**Tiền điều kiện**
+- Đã có PIN.
+- Parent Mode cho thao tác thủ công; scheduler được phép tự bật không cần Parent Mode.
+- Protection đang OFF.
+- Không có phiên học active khác.
+
+**Trigger**
+- Phụ huynh bấm **Bật bảo vệ**.
+- Hoặc đến khung giờ schedule (hệ thống tự bật).
+
+**Luồng chính**
+1. Nếu thao tác thủ công, hệ thống xác nhận cấu hình hiện tại (monitoring bật/tắt, lịch) và yêu cầu PIN nếu phiên Parent Mode đã khóa.
+2. Hệ thống kiểm tra blocklist và schedule hợp lệ. MVP chỉ áp dụng rule `Domain` exact và `App`; rule URL/path bị bỏ qua kèm cảnh báo. Nếu thao tác thủ công, xóa `ScheduleOverrideUntilUtc` còn hiệu lực.
+3. Hệ thống tạo `StudySession` mới với trạng thái `Active`, `LastHeartbeatAtUtc = now`, `ActiveSeconds = 0`.
+4. `ProtectionEngine`:
+   - Ghi các domain exact vào hosts.
+   - Khởi động block page server trên loopback:80 (nếu port khả dụng).
+   - Bật process watcher cho app bị chặn.
+   - Ghi trạng thái `ProtectionEnabled = true`.
+5. `ActivityTracker` bắt đầu ghi sample foreground app/URL và heartbeat.
+6. Nếu monitoring được bật và (nếu cấu hình) đang trong lớp online:
+   - Khởi động attention monitor.
+   - Nếu camera bận/không có quyền/không có webcam, ghi `CameraUnavailable`.
+7. Hệ thống hiển thị trạng thái ON, icon tray đổi màu, ghi audit.
+
+**Luồng thay thế**
+- **Đã có session active:** không tạo mới; hiển thị session hiện tại.
+- **Schedule tự bật:** không yêu cầu PIN; ghi audit actor = System.
+- **Không có quyền admin:** hiển thị lỗi, không bật protection, hướng dẫn chạy elevated.
+
+**Ngoại lệ**
+- Ghi hosts thất bại do antivirus: hiển thị lỗi rõ ràng, ghi log, giữ protection OFF.
+- Port 80 bị chiếm: vẫn áp dụng hosts và protection ON; block page HTTP không khả dụng, hiển thị cảnh báo.
+- Camera lỗi/không có webcam: protection vẫn ON; ghi `CameraUnavailable`, retry theo chu kỳ.
+- Database lỗi: rollback trạng thái, gỡ chặn nếu đã áp dụng.
+
+**Hậu điều kiện**
+- Protection ON.
+- Blocklist được áp dụng.
+- StudySession active.
+- Monitoring chạy hoặc ghi nhận không khả dụng.
+
+**Business rules:** BR-05, BR-06, BR-07, BR-11, BR-12, BR-14, BR-17.
+
+---
+
+### UC04 — Tắt chế độ bảo vệ
+
+**Tác nhân:** Phụ huynh, Hệ thống
+**Mô tả:** Gỡ chặn và kết thúc phiên học.
+
+**Tiền điều kiện**
+- Protection đang ON.
+- Có Parent Mode hoặc hành động hệ thống theo lịch.
+
+**Trigger**
+- Phụ huynh bấm **Tắt bảo vệ**.
+- Hoặc hết khung giờ schedule.
+
+**Luồng chính**
+1. Nếu thao tác thủ công, hệ thống yêu cầu PIN (nếu chưa ở Parent Mode) và xác nhận.
+2. `ProtectionEngine`:
+   - Dừng process watcher.
+   - Dừng block page server.
+   - Gỡ block khỏi hosts.
+   - Flush DNS.
+3. `ActivityTracker` dừng ghi sample.
+4. `AttentionMonitor` dừng camera.
+5. `StudySession` kết thúc:
+   - `Completed` nếu hết lịch hoặc phụ huynh tắt bình thường.
+   - `Aborted` nếu protection gặp lỗi nghiêm trọng/tamper và không thể tiếp tục.
+   - `Interrupted` nếu app crash và được phục hồi (xem UC14).
+6. Cập nhật `ActiveSeconds`, tổng hợp attention/category, blocked count (best-effort).
+7. Ghi audit, cập nhật UI/tray.
+
+**Luồng thay thế**
+- **Tắt trong khung giờ schedule:** hiển thị cảnh báo "Bảo vệ sẽ tắt đến hết khung giờ hiện tại; khung giờ kế tiếp sẽ tự bật lại." Ghi audit và lưu `ScheduleOverrideUntilUtc = cuối khung giờ hiện tại`.
+- **Không có session active:** chỉ gỡ chặn, không tạo session.
+
+**Ngoại lệ**
+- Gỡ hosts thất bại: giữ trạng thái ON, báo lỗi, không giả vờ đã tắt.
+- Camera đang được app khác dùng: dừng monitor an toàn, không ảnh hưởng app khác.
+- App crash giữa chừng: lần khởi động sau self-heal dọn block mồ côi; session cũ đóng tại heartbeat.
+
+**Hậu điều kiện**
+- Protection OFF.
+- Hosts sạch.
+- Session kết thúc và được lưu.
+- Không còn camera/monitor chạy.
+
+**Business rules:** BR-05, BR-06, BR-07, BR-17.
+
+---
+
+### UC05 — Quản lý blocklist / allowlist
+
+**Tác nhân:** Phụ huynh
+**Mô tả:** Xem, thêm, sửa, xóa rule chặn/cho phép.
+
+**Tiền điều kiện**
+- Parent Mode.
+
+**Trigger**
+- Phụ huynh mở **Blocklist**.
+
+**Luồng chính — Xem**
+1. Hệ thống hiển thị các nhóm:
+   - Chatbot / AI Assistant (mặc định).
+   - Social.
+   - Game.
+   - Custom.
+2. Mỗi rule hiển thị: giá trị, loại, trạng thái, nguồn (mặc định/tùy chỉnh), hết hạn.
+3. Hệ thống đánh dấu rule đang được allowlist override.
+
+**Luồng chính — Thêm rule**
+1. Phụ huynh chọn **Thêm rule**.
+2. Chọn loại: Domain / App (MVP). URL/path bị vô hiệu hóa kèm ghi chú "cần browser extension".
+3. Nhập giá trị.
+4. Chọn hiệu lực: Block / Allow.
+5. Chọn danh mục và thời hạn (nếu có).
+6. Hệ thống validate:
+   - Domain hợp lệ, lowercase, bỏ scheme/path/trailing dot; chặn domain cấp cao dùng chung và IP/localhost.
+   - Không phải domain thiết yếu trong danh sách bảo vệ.
+   - Không trùng rule cùng loại/hiệu lực; rule Allow cùng domain với Block được phép và thắng.
+7. Lưu rule; nếu Protection ON, áp dụng lại engine trong tối đa 60 giây hoặc yêu cầu xác nhận restart protection.
+
+**Luồng chính — Sửa / Xóa**
+1. Phụ huynh chọn rule.
+2. Sửa giá trị/hiệu lực/thời hạn hoặc xóa.
+3. Hệ thống yêu cầu xác nhận nếu rule đang được dùng.
+4. Lưu; áp dụng lại engine nếu cần.
+
+**Luồng thay thế**
+- **Allowlist trùng blocklist:** allowlist thắng; hiển thị cảnh báo. Hai rule khác `Effect` được phép tồn tại song song.
+- **Rule mặc định:** không cho xóa vĩnh viễn, chỉ tắt; có thể reset về mặc định.
+- **Thời hạn:** rule hết hạn tự động bị bỏ qua; không cần thao tác.
+- **Rule URL/path:** lưu được nhưng không enforce trong MVP; UI phải nói rõ.
+
+**Ngoại lệ**
+- Domain không hợp lệ: highlight, không lưu.
+- Domain thiết yếu (`meet.google.com`, `teams.microsoft.com`): từ chối chặn, gợi ý allowlist.
+- Lưu DB lỗi: giữ nguyên UI, báo lỗi.
+
+**Hậu điều kiện**
+- Rule được lưu và áp dụng.
+- Audit log ghi thay đổi.
+
+**Business rules:** BR-08, BR-09, BR-23, BR-24, BR-25.
+
+---
+
+### UC06 — Cấu hình lịch bảo vệ
+
+**Tác nhân:** Phụ huynh, Hệ thống
+**Mô tả:** Tự động bật/tắt bảo vệ theo khung giờ học.
+
+**Tiền điều kiện**
+- Parent Mode.
+
+**Trigger**
+- Phụ huynh mở **Schedule**.
+
+**Luồng chính**
+1. Hệ thống hiển thị danh sách khung giờ theo tuần.
+2. Phụ huynh thêm khung giờ:
+   - Chọn ngày (T2–CN).
+   - Giờ bắt đầu / kết thúc.
+   - Nhãn (ví dụ "Giờ học tối").
+3. Hệ thống validate:
+   - Giờ kết thúc > giờ bắt đầu; MVP không hỗ trợ khung qua nửa đêm.
+   - Không chồng lấn trong cùng ngày; từ chối lưu nếu trùng.
+4. Lưu schedule; bật `ScheduleEnabled`.
+5. Scheduler kiểm tra mỗi 30 giây:
+   - Nếu đang trong khung giờ và Protection OFF → tự bật.
+   - Nếu hết khung giờ và Protection ON do schedule → tự tắt.
+   - Nếu `ScheduleOverrideUntilUtc` còn hiệu lực → không tự bật lại trong khung giờ hiện tại.
+6. Khi app khởi động trong khung giờ → áp dụng ngay.
+
+**Luồng thay thế**
+- **Phụ huynh tắt Protection trong khung giờ:** override đến hết khung giờ hiện tại; khung giờ kế tiếp tự bật lại.
+- **Máy sleep qua khung giờ:** khi resume, scheduler đánh giá lại trạng thái hiện tại; thời gian sleep không cộng vào session.
+- **Trùng khung giờ:** báo lỗi, không tạo hai session.
+
+**Ngoại lệ**
+- Thay đổi giờ hệ thống: schedule dùng wall clock/local time; monotonic clock chỉ dùng để phát hiện nhảy giờ bất thường. Khi phát hiện nhảy giờ, ghi audit `TamperDetected` và không tự tắt protection chỉ vì thay đổi giờ.
+- Không có quyền admin khi tự bật: ghi lỗi, hiển thị cảnh báo cho phụ huynh.
+
+**Hậu điều kiện**
+- Schedule được lưu; trạng thái ON/OFF phản ánh đúng thời điểm.
+
+**Business rules:** BR-07, BR-20.
+
+---
+
+### UC07 — Phiên học & theo dõi hoạt động
+
+**Tác nhân:** Hệ thống
+**Mô tả:** Ghi nhận phiên học và app/URL đang dùng.
+
+**Tiền điều kiện**
+- Protection ON.
+- `StudySession` active.
+
+**Trigger**
+- Bắt đầu protection (UC03).
+- Timer sample mỗi 10–30 giây.
+- Heartbeat session mỗi 10 giây (độc lập với sample).
+
+**Luồng chính**
+1. Hệ thống tạo `ActivitySample`:
+   - Timestamp UTC.
+   - App name / process name.
+   - Window title.
+   - URL/domain nếu lấy được.
+   - Idle seconds.
+   - Cờ foreground.
+2. Hệ thống phân loại:
+   - `Study` nếu app/URL nằm trong nhóm học tập hoặc lớp online.
+   - `Neutral` nếu không xác định.
+   - `Distraction` nếu thuộc nhóm bị chặn/giải trí.
+3. Nếu là Google Meet/Teams/Zoom:
+   - Đánh dấu `IsOnlineClass = true`.
+   - Gắn URL/domain nếu có.
+4. Hệ thống cập nhật `StudySession`:
+   - `LastHeartbeatAtUtc` và `ActiveSeconds`.
+   - Tổng thời gian theo category (`StudySeconds`, `DistractionSeconds`, `NeutralSeconds`) và overlay `OnlineClassSeconds`.
+   - `IdleSeconds` lưu riêng, không trộn với category.
+5. Sample được lưu theo retention; báo cáo dài hạn dùng session summary khi sample đã bị xóa.
+
+**Luồng thay thế**
+- **Không lấy được URL:** lưu app + window title; đặt `UrlSource = None`.
+- **Idle > 5 phút:** tăng `IdleSeconds`; không tính là thời gian học active.
+- **App chuyển foreground liên tục:** debounce 2 giây để tránh nhiễu.
+
+**Ngoại lệ**
+- Quyền truy cập process bị từ chối: ghi `Unknown`, không crash.
+- Database đầy/lỗi: giữ sample trong bộ nhớ tối đa 5 phút, ghi log, thử lại.
+
+**Hậu điều kiện**
+- Activity sample và tổng hợp session được cập nhật.
+
+**Business rules:** BR-11, BR-12, BR-17.
+
+---
+
+### UC08 — Ước lượng mức độ tập trung
+
+**Tác nhân:** Hệ thống
+**Mô tả:** Dùng webcam để ước lượng học sinh có đang nhìn màn hình hay không.
+
+**Tiền điều kiện**
+- Protection ON.
+- StudySession active.
+- Monitoring được bật.
+- (Nếu `MonitorOnlyDuringClasses`) app đang phát hiện lớp online.
+- Camera được cấu hình; nếu không khả dụng, UC08 vẫn chạy nhánh `CameraUnavailable`.
+
+**Trigger**
+- Timer sample mỗi 1–2 giây (xử lý), tổng hợp mỗi 10 giây.
+- Bắt đầu/kết thúc lớp online khi `MonitorOnlyDuringClasses` bật.
+
+**Luồng chính**
+1. Hệ thống mở camera với resolution thấp (640×480), sampling 1–2 FPS.
+2. Với mỗi frame:
+   - Phát hiện khuôn mặt.
+   - Ước lượng head pose (yaw/pitch).
+   - Ước lượng iris/gaze (coarse).
+   - Tính eye aspect ratio.
+3. Hệ thống phân loại trạng thái:
+   - `Focused`: có mặt, đầu hướng màn hình, mắt mở, gaze on-screen.
+   - `Distracted`: gaze/head lệch > ngưỡng trong > 20 giây.
+   - `Absent`: không thấy mặt > 30 giây.
+   - `Drowsy`: mắt nhắm lặp lại > 2 giây.
+   - `CameraUnavailable`: không mở được camera.
+4. Khi trạng thái thay đổi, tạo/cập nhật `AttentionEvent`.
+5. Hệ thống cập nhật thời gian focused/distracted/absent/drowsy, `MonitoredSeconds`, `MonitoringEligibleSeconds` và attention score.
+6. Frame bị hủy ngay sau xử lý; không ghi disk/network.
+7. `ConfidenceAvg` là trung bình có trọng số theo thời lượng event; event confidence thấp không được dùng để kết luận `Distracted`.
+
+**Calibration**
+- Tùy chọn: học sinh nhìn 5 điểm trên màn hình 10–15 giây.
+- Nếu chưa calibration: chỉ phân loại nhị phân on-screen/off-screen, confidence thấp hơn.
+
+**Luồng thay thế**
+- **Camera bận (Meet/Teams đang dùng):**
+  - Ghi `CameraUnavailable`, thử mở lại sau 30 giây.
+  - Không tính là mất tập trung.
+  - `MonitoringEligibleSeconds` vẫn tăng; báo cáo hiển thị coverage giảm.
+- **Camera không có quyền:** hiển thị hướng dẫn bật quyền Windows; ghi `CameraUnavailable`.
+- **Không có webcam:** ghi `CameraUnavailable` cho phiên, tắt retry, protection vẫn hoạt động; báo phụ huynh.
+- **Nhiều khuôn mặt:** lấy khuôn mặt lớn nhất; ghi confidence thấp; không nhận diện danh tính.
+- **Ánh sáng yếu / đeo kính:** confidence thấp; không kết luận mất tập trung nếu confidence dưới ngưỡng.
+
+**Ngoại lệ**
+- App crash khi camera đang mở: camera được nhả bởi OS; event đang mở được đóng tại `LastHeartbeatAtUtc` khi phục hồi.
+- Session/monitoring dừng: đóng event đang mở tại thời điểm dừng; không cộng thời gian sau đó.
+- Học sinh che camera: `Absent` nếu camera vẫn mở; `CameraUnavailable` nếu không mở được; ghi nhận, không tự động phạt.
+
+**Hậu điều kiện**
+- Attention event và score được lưu.
+- Không có ảnh/video nào bị lưu.
+
+**Business rules:** BR-12, BR-13, BR-14, BR-15.
+
+---
+
+### UC09 — Trang chặn & chặn ứng dụng
+
+**Tác nhân:** Học sinh, Hệ thống
+**Mô tả:** Học sinh truy cập domain hoặc mở app bị chặn; hệ thống chặn, hiển thị thông báo và ghi log khi quan sát được.
+
+**Tiền điều kiện**
+- Protection ON.
+- Domain/app khớp rule Block và không có Allow override.
+
+**Trigger**
+- Học sinh mở URL trong trình duyệt.
+- Hoặc app bị chặn được phát hiện ở foreground/process start.
+
+**Luồng chính**
+1. Hosts file trỏ domain về `127.0.0.1` (kèm biến thể `www.` nếu có).
+2. `BlockPageServer` bind `127.0.0.1:80`, chỉ nhận request HTTP và trả HTML tĩnh.
+3. Trang chặn hiển thị:
+   - "Trang này không nằm trong môi trường học tập."
+   - Tên miền bị chặn (đã HTML-escape).
+   - Hướng dẫn nhờ phụ huynh.
+   - Không tải font/ảnh/script từ ngoài; không chứa dữ liệu nhạy cảm.
+   - Không hiển thị nội dung gây xấu hổ/guilt-trip.
+4. Khi quan sát được, hệ thống tạo `BlockedAttempt`:
+   - Timestamp.
+   - Domain/URL (URL chỉ khi có extension).
+   - Process/window nếu xác định được.
+   - SessionId.
+5. Hệ thống debounce: không ghi trùng cùng domain trong 30 giây.
+6. Học sinh quay lại học hoặc nhờ phụ huynh.
+
+**Luồng chặn ứng dụng**
+1. `ProcessWatcher` phát hiện process khớp rule Block, không có rule Allow, trong khi Protection ON.
+2. Gửi `WM_CLOSE` tới cửa sổ chính của app; chờ tối đa 2 giây.
+3. Nếu process vẫn chạy, kill process tree của app đó.
+4. Ghi `BlockedAttempt` với `TargetType = App`, `ObservedVia = ProcessWatcher`, process name và `SessionId` nếu có.
+5. Hiển thị thông báo ngắn "Ứng dụng này bị chặn trong giờ học"; không dùng trang chặn web cho app.
+6. Debounce 30 giây theo process để tránh spam log/thông báo.
+
+**Luồng thay thế**
+- **HTTPS:** trình duyệt thường báo lỗi kết nối/SSL thay vì trang chặn; domain vẫn bị chặn. Hosts không tạo log HTTPS; blocked attempt có thể không được ghi.
+- **Port 80 bị chiếm:** blocking vẫn hoạt động; block page không khả dụng; ghi cảnh báo.
+- **Allowlist:** nếu rule Allow còn hiệu lực, không chặn, không ghi blocked attempt.
+- **Parent override:** phụ huynh có thể thêm allowlist tạm thời từ app; block page không có nút mở khóa trực tiếp để tránh học sinh tự bỏ chặn.
+
+**Ngoại lệ**
+- Domain dùng chung (Google/Microsoft): không chặn; có allowlist mặc định.
+- Học sinh dùng VPN/DoH: hosts có thể bị bypass; ghi log cấu hình mạng nếu phát hiện; không tuyên bố chặn tuyệt đối.
+- Request không phải loopback hoặc Host header lạ: từ chối, không phục vụ.
+- App không cho phép truy cập process: bỏ qua, ghi log mức debug; không crash.
+- App không có cửa sổ chính hoặc `WM_CLOSE` không hiệu lực: kill process tree sau 2 giây.
+- App bị chặn đang có dữ liệu chưa lưu: việc kill có thể làm mất dữ liệu; thông báo cho người dùng và ghi rõ trong known limitations.
+
+**Hậu điều kiện**
+- Blocked attempt được lưu nếu quan sát được.
+- Trang chặn hiển thị với HTTP; HTTPS bị chặn nhưng browser báo lỗi.
+- App bị chặn đã đóng hoặc bị kill; process hệ thống/EduFocus/Allow không bị tác động.
+
+**Business rules:** BR-09, BR-10, BR-23, BR-24, BR-26, BR-29.
+
+---
+
+### UC10 — Xem dashboard & báo cáo
+
+**Tác nhân:** Phụ huynh, Học sinh
+**Mô tả:** Xem tổng quan học tập và chi tiết theo ngày/tuần.
+
+**Tiền điều kiện**
+- Ứng dụng đang chạy.
+- Có dữ liệu session.
+
+**Trigger**
+- Mở tab **Tổng quan** hoặc **Báo cáo**.
+
+**Luồng chính — Student summary**
+1. Học sinh thấy:
+   - Trạng thái bảo vệ.
+   - Thời gian học hôm nay.
+   - Thời gian còn lại của khung giờ (nếu có).
+2. Không thấy chi tiết vi phạm, blocklist hay báo cáo tuần.
+
+**Luồng chính — Parent dashboard**
+1. Phụ huynh đăng nhập Parent Mode.
+2. Hệ thống mặc định hiển thị **hôm nay**:
+   - Tổng thời gian học.
+   - % tập trung (kèm coverage).
+   - Số lần mất tập trung/vắng mặt.
+   - Số lần bị chặn (best-effort quan sát được).
+   - Timeline theo giờ.
+3. Phụ huynh chọn bộ lọc:
+   - Hôm nay / 7 ngày / 30 ngày: dữ liệu chi tiết.
+   - 90 ngày / 365 ngày: chỉ session summary và biểu đồ tổng hợp.
+4. Hệ thống query dữ liệu và render:
+   - Biểu đồ thời gian học theo ngày.
+   - Danh sách sự kiện attention (nếu còn trong retention chi tiết).
+   - Danh sách blocked attempts (nếu còn; ghi rõ best-effort).
+   - Top app/domain theo thời gian (nếu còn sample).
+5. Phụ huynh có thể xuất CSV theo phạm vi đang xem.
+
+**Luồng thay thế**
+- **Chưa có dữ liệu:** hiển thị empty state hướng dẫn bật bảo vệ.
+- **Camera không khả dụng nhiều:** hiển thị cảnh báo coverage thấp; không hiển thị % tập trung như dữ liệu chắc chắn.
+- **Session đang chạy:** dashboard cập nhật realtime mỗi 10–30 giây.
+- **Dữ liệu chi tiết đã hết retention:** chỉ hiển thị summary; không báo thiếu dữ liệu như lỗi.
+
+**Ngoại lệ**
+- Query lỗi: hiển thị lỗi, không crash.
+- Dữ liệu quá lớn: phân trang/tổng hợp theo ngày.
+
+**Hậu điều kiện**
+- Không thay đổi dữ liệu (trừ export).
+
+**Business rules:** BR-15, BR-21.
+
+---
+
+### UC11 — Quản lý dữ liệu & quyền riêng tư
+
+**Tác nhân:** Phụ huynh
+**Mô tả:** Xem chính sách, xóa dữ liệu, cấu hình retention.
+
+**Tiền điều kiện**
+- Parent Mode.
+
+**Trigger**
+- Phụ huynh mở **Dữ liệu & Quyền riêng tư**.
+
+**Luồng chính**
+1. Hệ thống hiển thị:
+   - Dữ liệu đang lưu (session, sample, event, blocked attempt).
+   - Không có ảnh/video.
+   - Retention hiện tại.
+2. Phụ huynh có thể:
+   - Đổi retention trong giới hạn cho phép.
+   - Xóa dữ liệu theo khoảng thời gian.
+   - Xuất dữ liệu CSV.
+   - Xem audit log thao tác.
+3. Xóa dữ liệu yêu cầu xác nhận và PIN.
+4. Hệ thống xóa đúng phạm vi, ghi audit.
+5. Retention job chạy mỗi ngày, xóa dữ liệu quá hạn.
+
+**Luồng thay thế**
+- **Xóa toàn bộ:** yêu cầu nhập lại PIN + gõ "XÓA".
+- **Đang có session active:** không cho xóa session hiện tại; chỉ xóa dữ liệu cũ.
+
+**Ngoại lệ**
+- File DB bị khóa: báo lỗi, thử lại sau.
+- Xóa một phần lỗi: ghi log, không báo thành công giả.
+
+**Hậu điều kiện**
+- Dữ liệu được xóa theo yêu cầu hoặc retention.
+
+**Business rules:** BR-13, BR-16.
+
+---
+
+### UC12 — Vòng đời ứng dụng & chống tắt
+
+**Tác nhân:** Phụ huynh, Học sinh, Hệ thống
+**Mô tả:** Quản lý đóng/mở/khởi động lại app và chống tắt trái phép.
+
+**Tiền điều kiện**
+- Ứng dụng đang chạy.
+
+**Trigger**
+- Người dùng đóng cửa sổ, thoát từ tray, khởi động lại Windows, hoặc app bị kill.
+
+**Luồng chính — Đóng cửa sổ**
+1. Người dùng bấm X hoặc Alt+F4.
+2. Nếu Protection ON:
+   - Ẩn cửa sổ xuống tray.
+   - Hiển thị thông báo "Ứng dụng vẫn đang bảo vệ".
+3. Nếu Protection OFF:
+   - Ẩn xuống tray (không thoát) để tránh tắt nhầm.
+
+**Luồng chính — Thoát ứng dụng**
+1. Người dùng chọn **Thoát** từ tray.
+2. Hệ thống luôn yêu cầu PIN, kể cả khi Protection OFF.
+3. Nếu Protection ON, cảnh báo rõ việc thoát sẽ tắt bảo vệ và yêu cầu xác nhận lần hai.
+4. Nếu hợp lệ:
+   - Dừng monitoring.
+   - Kết thúc session `Completed`.
+   - Gỡ block và hosts.
+   - Đặt `ProtectionEnabled = false` nếu đang ON; xóa `ScheduleOverrideUntilUtc`.
+   - Ghi `LastCleanShutdownAtUtc` và đánh dấu clean exit.
+   - Đóng app; watchdog không khởi động lại sau exit sạch.
+
+**Luồng chính — Khởi động cùng Windows**
+1. Khi Protection ON hoặc ScheduleEnabled, app đăng ký auto-start.
+2. Khi user đăng nhập Windows, app khởi động ẩn xuống tray.
+3. Nếu Protection ON trước khi tắt máy, app tự bật lại protection.
+
+**Luồng thay thế — App bị kill**
+1. Watchdog (scheduled task/service) phát hiện process chết.
+2. Chỉ khởi động lại khi `ProtectionEnabled = true` và lần thoát trước không phải clean exit.
+3. Khởi động lại app trong vòng 30–60 giây (scheduled task không đảm bảo chính xác 30 giây).
+4. Áp dụng lại protection nếu trạng thái trước đó là ON.
+5. Ghi audit "unexpected termination".
+
+**Ngoại lệ**
+- Windows shutdown/logoff: app cố gắng gỡ hosts và lưu trạng thái; session đang chạy được đóng với `Interrupted` và `Note = SystemShutdown` nếu kịp, nếu không thì self-heal lần sau. Không đặt `LastCleanShutdownAtUtc` và không xóa `ProtectionEnabled`, để lần đăng nhập sau phục hồi bảo vệ. Đây là đường bypass được chấp nhận và phải ghi rõ trong tài liệu.
+- Học sinh kill từ Task Manager: nếu có quyền admin, có thể kill; watchdog khởi động lại; ghi nhận.
+- Uninstall: yêu cầu PIN/cảnh báo nếu Protection ON ở mức best-effort; admin Windows vẫn có thể gỡ (giới hạn đã biết).
+
+**Hậu điều kiện**
+- App chạy nền hoặc thoát hợp lệ.
+- Protection state được bảo toàn.
+
+**Business rules:** BR-17, BR-18, BR-19, BR-28, BR-30.
+
+---
+
+### UC13 — Đổi PIN / Khôi phục PIN
+
+**Tác nhân:** Phụ huynh, Hệ thống
+**Mô tả:** Thay đổi PIN định kỳ hoặc khôi phục khi quên.
+
+**Tiền điều kiện**
+- Có `ParentCredential`.
+
+**Trigger**
+- Phụ huynh mở **Đổi PIN** hoặc **Quên PIN**.
+
+**Luồng chính — Đổi PIN**
+1. Phụ huynh nhập PIN hiện tại.
+2. Nhập PIN mới + xác nhận.
+3. Hệ thống validate như UC01.
+4. Cập nhật hash/salt, reset failed attempts, ghi audit.
+
+**Luồng chính — Khôi phục bằng recovery code**
+1. Phụ huynh chọn **Quên PIN**.
+2. Nhập recovery code.
+3. Hệ thống xác thực hash; dùng chung `FailedAttempts`/lockout với PIN.
+4. Cho phép đặt PIN mới.
+5. Vô hiệu hóa recovery code cũ, tạo recovery code mới và hiển thị một lần. Hệ thống không thể hiển thị lại mã cũ.
+
+**Luồng thay thế — Mất cả PIN và recovery code**
+1. Chỉ có thể reset bằng quyền Administrator Windows.
+2. Hệ thống cảnh báo: reset sẽ tắt protection và xóa credential.
+3. Phụ huynh cài đặt lại PIN; dữ liệu báo cáo có thể được giữ hoặc xóa theo lựa chọn.
+4. Ghi audit.
+
+**Ngoại lệ**
+- Recovery code sai quá 5 lần: khóa 15 phút, dùng chung lockout với PIN.
+- DB lỗi: không thay đổi credential.
+- Recovery code đã dùng: vô hiệu, không thể dùng lại.
+
+**Hậu điều kiện**
+- PIN mới có hiệu lực; recovery code mới được tạo.
+
+**Business rules:** BR-02, BR-03.
+
+---
+
+### UC14 — Tự phục hồi sau crash/restart
+
+**Tác nhân:** Hệ thống
+**Mô tả:** Khôi phục trạng thái bảo vệ và session sau khi app hoặc máy bị tắt đột ngột.
+
+**Tiền điều kiện**
+- Có trạng thái `ProtectionEnabled = true` hoặc session `Active` trong DB.
+
+**Trigger**
+- App khởi động.
+- Windows resume từ sleep.
+
+**Luồng chính**
+1. App khởi động, kiểm tra DB:
+   - Protection state.
+   - Session chưa kết thúc.
+   - Block rules.
+2. Đóng session cũ tại `LastHeartbeatAtUtc` với trạng thái `Interrupted`; đóng mọi `AttentionEvent` đang mở tại cùng thời điểm.
+3. Nếu Protection ON:
+   - Self-heal hosts (chỉ xóa block của EduFocus, không xóa block khác).
+   - Áp dụng lại blocklist.
+   - Tạo session mới với `Trigger = Recovery` nếu vẫn trong thời gian bảo vệ; không cộng thời gian app tắt.
+   - Khởi động activity/attention monitor nếu được bật.
+4. Nếu phát hiện block mồ côi:
+   - Xóa block cũ của EduFocus.
+   - Áp dụng lại theo trạng thái hiện tại.
+5. Ghi audit "recovery completed".
+6. Hiển thị banner cho phụ huynh nếu có gián đoạn.
+
+**Luồng thay thế**
+- **Protection OFF:** chỉ dọn block mồ côi, không bật lại; session cũ vẫn `Interrupted`.
+- **Session cũ đã quá stale (> 24h):** vẫn `Interrupted`, không cộng thời gian; không tạo session Recovery nếu ngoài lịch.
+- **DB hỏng:** backup file lỗi, tạo DB mới, cảnh báo phụ huynh.
+
+**Ngoại lệ**
+- Không có quyền admin: protection không thể khôi phục; hiển thị cảnh báo và yêu cầu chạy elevated.
+- Camera bận: attention monitor ghi `CameraUnavailable`.
+
+**Hậu điều kiện**
+- Trạng thái bảo vệ và session được khôi phục nhất quán.
+- Không còn block mồ côi.
+
+**Business rules:** BR-17, BR-20.
+
+---
+
+## 5. Luồng xuyên suốt: Một buổi học điển hình
+
+```text
+18:55  Phụ huynh mở app → Parent Login (PIN)
+18:57  Bật Protection ON
+18:58  Hệ thống chặn chatbot, bắt đầu session, bật camera
+19:00  Học sinh vào Google Meet → activity sample "Online class"
+19:15  Học sinh mở chatgpt.com → bị chặn (HTTPS: browser báo lỗi; BlockedAttempt có thể không ghi)
+19:20  Học sinh rời màn hình 45 giây → AttentionEvent "Absent"
+19:45  Học sinh quay lại, tiếp tục học → AttentionEvent "Focused"
+20:00  Hết khung giờ schedule → Protection OFF, session Completed
+20:05  Phụ huynh xem báo cáo: 60 phút học, 92% coverage, blocked attempts quan sát được
+```
+
+---
+
+## 6. Quy tắc chung khi viết Use Case
+
+- Mọi thời gian lưu DB là UTC; hiển thị theo local time.
+- Mọi thao tác nhạy cảm phải ghi audit log (không ghi PIN).
+- Không có thao tác nào được âm thầm bật camera khi chưa thông báo.
+- Khi có lỗi, ưu tiên trạng thái an toàn:
+  - Không chặn được → báo lỗi, không giả vờ ON.
+  - Không mở được camera → ghi `CameraUnavailable`, không kết luận mất tập trung.
+- Các thay đổi rule/state phải có hiệu lực ngay hoặc thông báo rõ khi nào có hiệu lực.
