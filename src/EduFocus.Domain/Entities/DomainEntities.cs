@@ -8,7 +8,8 @@ namespace EduFocus.Domain.Entities;
 public sealed class AppSettings
 {
     public static readonly Guid SingletonId = Guid.Parse("00000000-0000-0000-0000-000000000001");
-    public Guid Id => SingletonId;
+    private Guid _id = SingletonId;
+    public Guid Id => _id;
     public ProtectionState Protection { get; private set; }
     public bool MonitoringEnabled { get; private set; } = true;
     public bool ScheduleEnabled { get; private set; }
@@ -26,9 +27,10 @@ public sealed class AppSettings
     public bool OnboardingCompleted { get; private set; }
     public DateTimeOffset? ScheduleOverrideUntilUtc { get; private set; }
     public DateTimeOffset? LastCleanShutdownAtUtc { get; private set; }
-    public DateTimeOffset CreatedAtUtc { get; }
+    public DateTimeOffset CreatedAtUtc { get; private set; }
     public DateTimeOffset UpdatedAtUtc { get; private set; }
 
+    private AppSettings() { }
     private AppSettings(DateTimeOffset now) { CreatedAtUtc = UpdatedAtUtc = Utc.Require(now); }
     public static AppSettings Create(DateTimeOffset now) => new(now);
     public void SetProtection(ProtectionState state, DateTimeOffset now) { EnumGuard.Defined(state); Protection = state; Touch(now); }
@@ -51,16 +53,18 @@ public sealed class AppSettings
 
 public sealed class ParentCredentials
 {
-    public Guid Id { get; }
+    public static readonly Guid SingletonId = Guid.Parse("00000000-0000-0000-0000-000000000002");
+    public Guid Id { get; private set; }
     public CredentialHash Pin { get; private set; }
     public CredentialHash RecoveryCode { get; private set; }
     public int FailedAttempts { get; private set; }
     public DateTimeOffset? LockoutUntilUtc { get; private set; }
     public DateTimeOffset PinUpdatedAtUtc { get; private set; }
-    public DateTimeOffset CreatedAtUtc { get; }
+    public DateTimeOffset CreatedAtUtc { get; private set; }
+    private ParentCredentials() { Pin = null!; RecoveryCode = null!; }
     private ParentCredentials(Guid id, CredentialHash pin, CredentialHash recovery, DateTimeOffset now)
     { Id = id; Pin = pin; RecoveryCode = recovery; CreatedAtUtc = PinUpdatedAtUtc = Utc.Require(now); }
-    public static ParentCredentials Create(CredentialHash pin, CredentialHash recovery, DateTimeOffset now) => new(Guid.NewGuid(), pin, recovery, now);
+    public static ParentCredentials Create(CredentialHash pin, CredentialHash recovery, DateTimeOffset now) => new(SingletonId, pin, recovery, now);
     public bool IsLockedOut(DateTimeOffset now) => LockoutUntilUtc is { } until && Utc.Require(now) < until;
     public void RecordFailedAttempt(DateTimeOffset now)
     {
@@ -78,20 +82,21 @@ public sealed class ParentCredentials
 
 public sealed class BlockRule
 {
-    public Guid Id { get; }
-    public BlockRuleType RuleType { get; }
-    public BlockMatchType MatchType { get; }
-    public string Value { get; }
-    public string NormalizedValue { get; }
-    public BlockRuleCategory Category { get; }
-    public BlockRuleEffect Effect { get; }
+    public Guid Id { get; private set; }
+    public BlockRuleType RuleType { get; private set; }
+    public BlockMatchType MatchType { get; private set; }
+    public string Value { get; private set; }
+    public string NormalizedValue { get; private set; }
+    public BlockRuleCategory Category { get; private set; }
+    public BlockRuleEffect Effect { get; private set; }
     public bool IsEnabled { get; private set; }
-    public bool IsBuiltIn { get; }
-    public RuleEnforcementStatus EnforcementStatus { get; }
+    public bool IsBuiltIn { get; private set; }
+    public RuleEnforcementStatus EnforcementStatus { get; private set; }
     public DateTimeOffset? ExpiresAtUtc { get; private set; }
     public string? Note { get; private set; }
-    public DateTimeOffset CreatedAtUtc { get; }
+    public DateTimeOffset CreatedAtUtc { get; private set; }
     public DateTimeOffset UpdatedAtUtc { get; private set; }
+    private BlockRule() { Value = NormalizedValue = string.Empty; }
     private BlockRule(Guid id, BlockRuleType type, BlockMatchType match, string value, string normalized, BlockRuleCategory category, BlockRuleEffect effect, bool enabled, bool builtIn, RuleEnforcementStatus enforcement, DateTimeOffset? expires, string? note, DateTimeOffset now)
     { Id=id; RuleType=type; MatchType=match; Value=value; NormalizedValue=normalized; Category=category; Effect=effect; IsEnabled=enabled; IsBuiltIn=builtIn; EnforcementStatus=enforcement; ExpiresAtUtc=expires; Note=note; CreatedAtUtc=UpdatedAtUtc=Utc.Require(now); }
     public static BlockRule Create(BlockRuleType type, BlockMatchType match, string value, BlockRuleCategory category, BlockRuleEffect effect, DateTimeOffset now, bool enabled=true, bool builtIn=false, DateTimeOffset? expiresAtUtc=null, string? note=null)
@@ -130,14 +135,15 @@ public sealed class BlockRule
 
 public sealed class ScheduleWindow
 {
-    public Guid Id { get; }
-    public int DaysMask { get; }
-    public int StartMinutes { get; }
-    public int EndMinutes { get; }
-    public string? Label { get; }
+    public Guid Id { get; private set; }
+    public int DaysMask { get; private set; }
+    public int StartMinutes { get; private set; }
+    public int EndMinutes { get; private set; }
+    public string? Label { get; private set; }
     public bool IsEnabled { get; private set; }
-    public DateTimeOffset CreatedAtUtc { get; }
+    public DateTimeOffset CreatedAtUtc { get; private set; }
     public DateTimeOffset UpdatedAtUtc { get; private set; }
+    private ScheduleWindow() { }
     private ScheduleWindow(int days,int start,int end,string? label,bool enabled,DateTimeOffset now) { Id=Guid.NewGuid(); DaysMask=days; StartMinutes=start; EndMinutes=end; Label=label; IsEnabled=enabled; CreatedAtUtc=UpdatedAtUtc=Utc.Require(now); }
     public static ScheduleWindow Create(int daysMask,int startMinutes,int endMinutes,DateTimeOffset now,string? label=null,bool enabled=true)
     { if(daysMask is <1 or >127) throw new ArgumentOutOfRangeException(nameof(daysMask)); if(startMinutes is <0 or >1439) throw new ArgumentOutOfRangeException(nameof(startMinutes)); if(endMinutes is <1 or >1440 || endMinutes<=startMinutes) throw new ArgumentOutOfRangeException(nameof(endMinutes)); return new(daysMask,startMinutes,endMinutes,TextLimit.Optional(label,100),enabled,now); }
@@ -152,14 +158,14 @@ public sealed class ScheduleWindow
 
 public sealed class StudySession
 {
-    public Guid Id { get; }
-    public DateTimeOffset StartedAtUtc { get; }
+    public Guid Id { get; private set; }
+    public DateTimeOffset StartedAtUtc { get; private set; }
     public DateTimeOffset? EndedAtUtc { get; private set; }
     public DateTimeOffset LastHeartbeatAtUtc { get; private set; }
-    public DateOnly StartLocalDate { get; }
+    public DateOnly StartLocalDate { get; private set; }
     public StudySessionStatus Status { get; private set; } = StudySessionStatus.Active;
-    public StudySessionTrigger Trigger { get; }
-    public bool MonitoringEnabled { get; }
+    public StudySessionTrigger Trigger { get; private set; }
+    public bool MonitoringEnabled { get; private set; }
     public long ActiveSeconds { get; private set; }
     public long FocusedSeconds { get; private set; }
     public long DistractedSeconds { get; private set; }
@@ -171,28 +177,30 @@ public sealed class StudySession
     public long DistractionSeconds { get; private set; }
     public long NeutralSeconds { get; private set; }
     public long OnlineClassSeconds { get; private set; }
-    public long MonitoredSeconds => checked(FocusedSeconds+DistractedSeconds+AbsentSeconds+DrowsySeconds);
+    public long MonitoredSeconds { get; private set; }
     public long MonitoringEligibleSeconds { get; private set; }
-    public double? AttentionPercent => MonitoredSeconds==0?null:(double)FocusedSeconds/MonitoredSeconds*100;
-    public double? CoveragePercent => MonitoringEligibleSeconds==0?null:(double)MonitoredSeconds/MonitoringEligibleSeconds*100;
-    public double? ConfidenceAvg => ConfidenceWeight==0?null:ConfidenceWeighted/ConfidenceWeight;
+    public double? AttentionPercent { get; private set; }
+    public double? CoveragePercent { get; private set; }
+    public double? ConfidenceAvg { get; private set; }
     public int BlockedAttemptCount { get; private set; }
     public string? Note { get; private set; }
-    public DateTimeOffset CreatedAtUtc { get; }
+    public DateTimeOffset CreatedAtUtc { get; private set; }
     public DateTimeOffset UpdatedAtUtc { get; private set; }
     private long ConfidenceWeight; private double ConfidenceWeighted;
+    private StudySession() { }
     private StudySession(StudySessionTrigger trigger,bool monitoring,DateOnly localDate,DateTimeOffset now)
     { Id=Guid.NewGuid(); Trigger=trigger; MonitoringEnabled=monitoring; StartLocalDate=localDate; StartedAtUtc=LastHeartbeatAtUtc=CreatedAtUtc=UpdatedAtUtc=Utc.Require(now); }
     public static StudySession Start(IEnumerable<StudySession>? existing,StudySessionTrigger trigger,bool monitoring,DateOnly localDate,DateTimeOffset now)
     { EnumGuard.Defined(trigger); if(existing?.Any(s=>s.Status==StudySessionStatus.Active)==true) throw new InvalidOperationException("Only one study session may be active."); return new(trigger,monitoring,localDate,now); }
     public void Heartbeat(DateTimeOffset now) { EnsureActive(); now=Utc.Require(now); if(now<LastHeartbeatAtUtc) throw new ArgumentOutOfRangeException(nameof(now)); LastHeartbeatAtUtc=UpdatedAtUtc=now; }
     public void AddActiveSeconds(long seconds,DateTimeOffset now) { EnsureActive(); NonNegative(seconds,nameof(seconds)); ActiveSeconds=checked(ActiveSeconds+seconds); Heartbeat(now); }
-    public void AddMonitoringEligibleSeconds(long seconds,DateTimeOffset now) { EnsureActive(); NonNegative(seconds,nameof(seconds)); MonitoringEligibleSeconds=checked(MonitoringEligibleSeconds+seconds); Heartbeat(now); }
+    public void AddMonitoringEligibleSeconds(long seconds,DateTimeOffset now) { EnsureActive(); NonNegative(seconds,nameof(seconds)); MonitoringEligibleSeconds=checked(MonitoringEligibleSeconds+seconds); RefreshSummary(); Heartbeat(now); }
     public void AddAttention(AttentionState state,long seconds,double? confidence,DateTimeOffset now)
     {
         EnsureActive(); NonNegative(seconds,nameof(seconds)); if(confidence is <0 or >1) throw new ArgumentOutOfRangeException(nameof(confidence));
         switch(state){case AttentionState.Focused: FocusedSeconds=checked(FocusedSeconds+seconds); break; case AttentionState.Distracted: DistractedSeconds=checked(DistractedSeconds+seconds); break; case AttentionState.Absent: AbsentSeconds=checked(AbsentSeconds+seconds); break; case AttentionState.Drowsy: DrowsySeconds=checked(DrowsySeconds+seconds); break; case AttentionState.CameraUnavailable: CameraUnavailableSeconds=checked(CameraUnavailableSeconds+seconds); break; default: throw new ArgumentOutOfRangeException(nameof(state));}
-        if(confidence is { } c && seconds>0){ConfidenceWeight=checked(ConfidenceWeight+seconds);ConfidenceWeighted+=c*seconds;} Heartbeat(now);
+        if(state is not AttentionState.CameraUnavailable) MonitoredSeconds=checked(MonitoredSeconds+seconds);
+        if(confidence is { } c && seconds>0){ConfidenceWeight=checked(ConfidenceWeight+seconds);ConfidenceWeighted+=c*seconds;} RefreshSummary(); Heartbeat(now);
     }
     public void AddActivity(ActivityCategory category,long seconds,bool onlineClass,DateTimeOffset now)
     { EnsureActive(); NonNegative(seconds,nameof(seconds)); switch(category){case ActivityCategory.Study:StudySeconds=checked(StudySeconds+seconds);break;case ActivityCategory.Distraction:DistractionSeconds=checked(DistractionSeconds+seconds);break;case ActivityCategory.Neutral:case ActivityCategory.Unknown:NeutralSeconds=checked(NeutralSeconds+seconds);break;default:throw new ArgumentOutOfRangeException(nameof(category));} if(onlineClass)OnlineClassSeconds=checked(OnlineClassSeconds+seconds); Heartbeat(now); }
@@ -205,14 +213,16 @@ public sealed class StudySession
     private void End(StudySessionStatus status,DateTimeOffset now,bool heartbeat)
     { EnsureActive(); now=Utc.Require(now); if(now<LastHeartbeatAtUtc) throw new ArgumentOutOfRangeException(nameof(now)); Status=status; EndedAtUtc=now; if(heartbeat)LastHeartbeatAtUtc=now; UpdatedAtUtc=now; }
     private void EnsureActive(){if(Status!=StudySessionStatus.Active)throw new InvalidOperationException("Session has already ended.");}
+    private void RefreshSummary(){AttentionPercent=MonitoredSeconds==0?null:(double)FocusedSeconds/MonitoredSeconds*100;CoveragePercent=MonitoringEligibleSeconds==0?null:(double)MonitoredSeconds/MonitoringEligibleSeconds*100;ConfidenceAvg=ConfidenceWeight==0?null:ConfidenceWeighted/ConfidenceWeight;}
     private static void NonNegative(long value,string name){if(value<0)throw new ArgumentOutOfRangeException(name);}
 }
 
 public sealed class ActivitySample
 {
-    public Guid Id { get; } = Guid.NewGuid(); public Guid SessionId { get; } public DateTimeOffset SampledAtUtc { get; } public long DurationSeconds { get; }
-    public string? AppName { get; } public string? ProcessName { get; } public string? WindowTitle { get; } public string? Url { get; } public string? Domain { get; }
-    public ActivityUrlSource UrlSource { get; } public ActivityCategory Category { get; } public bool IsForeground { get; } public bool IsOnlineClass { get; } public long IdleSeconds { get; } public DateTimeOffset CreatedAtUtc { get; }
+    public Guid Id { get; private set; } = Guid.NewGuid(); public Guid SessionId { get; private set; } public DateTimeOffset SampledAtUtc { get; private set; } public long DurationSeconds { get; private set; }
+    public string? AppName { get; private set; } public string? ProcessName { get; private set; } public string? WindowTitle { get; private set; } public string? Url { get; private set; } public string? Domain { get; private set; }
+    public ActivityUrlSource UrlSource { get; private set; } public ActivityCategory Category { get; private set; } public bool IsForeground { get; private set; } public bool IsOnlineClass { get; private set; } public long IdleSeconds { get; private set; } public DateTimeOffset CreatedAtUtc { get; private set; }
+    private ActivitySample() { }
     private ActivitySample(Guid sid,DateTimeOffset time,long duration,string? app,string? process,string? title,string? url,string? domain,ActivityUrlSource source,ActivityCategory category,bool foreground,bool online,long idle,DateTimeOffset created)
     { if(sid==Guid.Empty)throw new ArgumentException("Session ID cannot be empty.",nameof(sid)); if(duration<0||idle<0)throw new ArgumentOutOfRangeException(nameof(duration)); SessionId=sid;SampledAtUtc=Utc.Require(time);DurationSeconds=duration;AppName=TextLimit.Optional(app,128);ProcessName=TextLimit.Optional(process,128);WindowTitle=TextLimit.Optional(title,512);Url=SanitizeUrl(url);Domain=TextLimit.Optional(domain,256)?.Trim().TrimEnd('.').ToLowerInvariant();UrlSource=source;Category=category;IsForeground=foreground;IsOnlineClass=online;IdleSeconds=idle;CreatedAtUtc=Utc.Require(created); }
     public static ActivitySample Create(Guid sessionId,DateTimeOffset sampledAtUtc,long durationSeconds,DateTimeOffset createdAtUtc,ActivityCategory category=ActivityCategory.Unknown,ActivityUrlSource urlSource=ActivityUrlSource.None,string? appName=null,string? processName=null,string? windowTitle=null,string? url=null,string? domain=null,bool isForeground=true,bool isOnlineClass=false,long idleSeconds=0)
@@ -222,7 +232,8 @@ public sealed class ActivitySample
 
 public sealed class AttentionEvent
 {
-    public Guid Id { get; }=Guid.NewGuid(); public Guid SessionId { get; } public AttentionState State { get; } public DateTimeOffset StartedAtUtc { get; } public DateTimeOffset? EndedAtUtc { get; private set; } public long DurationSeconds { get; private set; } public double? Confidence { get; } public string? AppName { get; } public string? Domain { get; } public string? Note { get; } public DateTimeOffset CreatedAtUtc { get; }
+    public Guid Id { get; private set; }=Guid.NewGuid(); public Guid SessionId { get; private set; } public AttentionState State { get; private set; } public DateTimeOffset StartedAtUtc { get; private set; } public DateTimeOffset? EndedAtUtc { get; private set; } public long DurationSeconds { get; private set; } public double? Confidence { get; private set; } public string? AppName { get; private set; } public string? Domain { get; private set; } public string? Note { get; private set; } public DateTimeOffset CreatedAtUtc { get; private set; }
+    private AttentionEvent() { }
     private AttentionEvent(Guid sid,AttentionState state,DateTimeOffset start,long duration,double? confidence,string? app,string? domain,string? note,DateTimeOffset created)
     { if(sid==Guid.Empty)throw new ArgumentException("Session ID cannot be empty.",nameof(sid)); if(duration<0)throw new ArgumentOutOfRangeException(nameof(duration)); if(confidence is <0 or >1)throw new ArgumentOutOfRangeException(nameof(confidence)); EnumGuard.Defined(state);SessionId=sid;State=state;StartedAtUtc=Utc.Require(start);DurationSeconds=duration;Confidence=confidence;AppName=TextLimit.Optional(app,128);Domain=TextLimit.Optional(domain,256);Note=TextLimit.Optional(note,256);CreatedAtUtc=Utc.Require(created); }
     public static AttentionEvent Start(Guid sid,AttentionState state,DateTimeOffset startedAtUtc,DateTimeOffset createdAtUtc,double? confidence=null,string? appName=null,string? domain=null,string? note=null)=>new(sid,state,startedAtUtc,0,confidence,appName,domain,note,createdAtUtc);
@@ -231,7 +242,8 @@ public sealed class AttentionEvent
 
 public sealed class BlockedAttempt
 {
-    public Guid Id { get; }=Guid.NewGuid(); public Guid? SessionId { get; } public DateTimeOffset OccurredAtUtc { get; } public BlockTargetType TargetType { get; } public string TargetValue { get; } public string? Domain { get; } public string? Url { get; } public string? ProcessName { get; } public string? WindowTitle { get; } public BlockAttemptSource ObservedVia { get; } public DateTimeOffset CreatedAtUtc { get; }
+    public Guid Id { get; private set; }=Guid.NewGuid(); public Guid? SessionId { get; private set; } public DateTimeOffset OccurredAtUtc { get; private set; } public BlockTargetType TargetType { get; private set; } public string TargetValue { get; private set; } public string? Domain { get; private set; } public string? Url { get; private set; } public string? ProcessName { get; private set; } public string? WindowTitle { get; private set; } public BlockAttemptSource ObservedVia { get; private set; } public DateTimeOffset CreatedAtUtc { get; private set; }
+    private BlockedAttempt() { TargetValue = string.Empty; }
     private BlockedAttempt(Guid? sid,DateTimeOffset occurred,BlockTargetType type,string target,string? domain,string? url,string? process,string? title,BlockAttemptSource source,DateTimeOffset created)
     { if(sid==Guid.Empty)throw new ArgumentException("Session ID cannot be empty.",nameof(sid));EnumGuard.Defined(type);EnumGuard.Defined(source);SessionId=sid;OccurredAtUtc=Utc.Require(occurred);TargetType=type;TargetValue=TextLimit.Required(target,512,nameof(target));Domain=TextLimit.Optional(domain,256)?.Trim().TrimEnd('.').ToLowerInvariant();Url=ActivitySample.Create(Guid.NewGuid(),occurred,0,created,url:url).Url;ProcessName=TextLimit.Optional(process,128);WindowTitle=TextLimit.Optional(title,512);ObservedVia=source;CreatedAtUtc=Utc.Require(created); }
     public static BlockedAttempt Create(Guid? sessionId,DateTimeOffset occurredAtUtc,BlockTargetType targetType,string targetValue,BlockAttemptSource observedVia,DateTimeOffset createdAtUtc,string? domain=null,string? url=null,string? processName=null,string? windowTitle=null)=>new(sessionId,occurredAtUtc,targetType,targetValue,domain,url,processName,windowTitle,observedVia,createdAtUtc);
@@ -239,7 +251,8 @@ public sealed class BlockedAttempt
 
 public sealed class AuditLog
 {
-    public Guid Id { get; }=Guid.NewGuid(); public DateTimeOffset OccurredAtUtc { get; } public AuditActor Actor { get; } public string EventType { get; } public string Description { get; } public string? MetadataJson { get; } public Guid? CorrelationId { get; } public DateTimeOffset CreatedAtUtc { get; }
+    public Guid Id { get; private set; }=Guid.NewGuid(); public DateTimeOffset OccurredAtUtc { get; private set; } public AuditActor Actor { get; private set; } public string EventType { get; private set; } public string Description { get; private set; } public string? MetadataJson { get; private set; } public Guid? CorrelationId { get; private set; } public DateTimeOffset CreatedAtUtc { get; private set; }
+    private AuditLog() { EventType = Description = string.Empty; }
     private AuditLog(DateTimeOffset occurred,AuditActor actor,string eventType,string description,string? metadata,Guid? correlation,DateTimeOffset created)
     {EnumGuard.Defined(actor);OccurredAtUtc=Utc.Require(occurred);Actor=actor;EventType=TextLimit.Required(eventType,64,nameof(eventType));Description=TextLimit.Required(description,512,nameof(description));if(metadata is not null){if(metadata.Length>2048)throw new ArgumentOutOfRangeException(nameof(metadata));using var doc=JsonDocument.Parse(metadata);if(ContainsSecret(doc.RootElement))throw new ArgumentException("Audit metadata must not contain secret fields.",nameof(metadata));}MetadataJson=metadata;if(correlation==Guid.Empty)throw new ArgumentException("Correlation ID cannot be empty.",nameof(correlation));CorrelationId=correlation;CreatedAtUtc=Utc.Require(created);}
     public static AuditLog Create(DateTimeOffset occurredAtUtc,AuditActor actor,string eventType,string description,DateTimeOffset createdAtUtc,string? metadataJson=null,Guid? correlationId=null)=>new(occurredAtUtc,actor,eventType,description,metadataJson,correlationId,createdAtUtc);

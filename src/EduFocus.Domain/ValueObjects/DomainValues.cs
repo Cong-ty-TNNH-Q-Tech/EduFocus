@@ -5,9 +5,10 @@ namespace EduFocus.Domain.ValueObjects;
 /// <summary>Opaque PBKDF2 output only. Callers must never pass the PIN or recovery code here.</summary>
 public sealed class CredentialHash
 {
-    public string HashBase64 { get; }
-    public string SaltBase64 { get; }
-    public int Iterations { get; }
+    public string HashBase64 { get; private set; }
+    public string SaltBase64 { get; private set; }
+    public int Iterations { get; private set; }
+    private CredentialHash() { HashBase64 = SaltBase64 = string.Empty; }
     private CredentialHash(string hash,string salt,int iterations) { HashBase64=hash;SaltBase64=salt;Iterations=iterations; }
     public static CredentialHash FromPbkdf2(string hashBase64,string saltBase64,int iterations)
     {

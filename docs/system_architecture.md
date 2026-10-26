@@ -167,14 +167,13 @@ Triển khai outbound ports, tương tác Windows.
 | `FileLogger` | Log xoay vòng theo ngày, redact dữ liệu nhạy cảm |
 | `MonotonicClockAdapter` | Giữ từ dự án cũ |
 
-### 3.5. Data Access (`EduFocus.SqliteDataAccess`)
+### 3.5. Persistence (`EduFocus.Infrastructure.Persistence`)
 
-- `AppDbContext` mới với các DbSet mới.
-- Repository implementations.
-- Fluent API cấu hình index, unique constraint, converter.
-- Migration schema mới; **không migrate** dữ liệu từ `EduFocus` 1.x.
-- DB path: `%ProgramData%\EduFocus\edufocus.db`.
-- Backup trước mỗi migration schema; giữ 3 bản gần nhất.
+- `AppDbContext` ánh xạ domain 2.0 sang SQLite; timestamp được chuyển sang ISO-8601 UTC.
+- Migration đầu `InitialEduFocusSchema` tạo các bảng, index và foreign key theo `docs/database_schema.md`.
+- Partial unique index bảo đảm tối đa một session `Active`; foreign keys bật trên mọi kết nối.
+- `DatabaseInitializer` dùng `%ProgramData%\EduFocus\edufocus.db`, bật WAL và incremental auto-vacuum, backup trước migration và chỉ giữ 3 backup gần nhất.
+- Migration lỗi được log; DB hiện có được giữ nguyên để phục hồi thủ công từ backup. DB không có EF migration history sẽ bị từ chối; không mở/migrate DB ở đường dẫn `DontBeLazy` 1.x.
 
 ### 3.6. UI (`EduFocus.WPF`)
 
@@ -561,7 +560,7 @@ Trạng thái lưu trong `AppSettings.ProtectionEnabled`; session active lưu tr
 `App.xaml.cs` (hoặc composition root mới) đăng ký:
 
 ```text
-AddSqliteDataAccess()
+AddEduFocusPersistence(databasePath)
 AddUseCases()
 AddInfrastructureServices()
 AddViewModels()
@@ -596,7 +595,7 @@ EduFocus/
 └── .github/workflows/
 ```
 
-Các project trong solution hiện chỉ chứa mô hình attention và dịch vụ nền dùng chung, cùng cửa sổ EduFocus 2.0 tối giản. Các spike trong `tools/` chạy độc lập, không được đăng ký hoặc khởi chạy bởi ứng dụng. Use cases và SQLite schema của 2.0 sẽ được thêm trong các issue kế tiếp; `docs/database_schema.md` hiện là thiết kế, chưa phải schema đang chạy.
+Các project trong solution chứa domain 2.0, persistence SQLite/migration, mô hình attention và dịch vụ nền dùng chung, cùng cửa sổ EduFocus 2.0 tối giản. Các spike trong `tools/` chạy độc lập, không được đăng ký hoặc khởi chạy bởi ứng dụng. Persistence đã sẵn sàng nhưng chưa được gọi từ WPF startup; việc khởi tạo UI/data flow thuộc các issue tiếp theo.
 
 ## 15. Dọn codebase 1.x
 
@@ -605,7 +604,7 @@ Các project trong solution hiện chỉ chứa mô hình attention và dịch v
 | Task, profile, Pomodoro/session, analytics, settings và quote entities/use cases | Đã xóa khỏi solution; thay thế theo các phase tính năng 2.0, chưa được kích hoạt. |
 | Gemini AI, guilt-trip, friction gate và quote asset | Đã xóa khỏi product code và output. |
 | WindowsStrictEngine, LocalRedirectServer, tray, updater và auto-start cũ | Đã xóa khỏi WPF/runtime registrations; blocking/watchdog hiện chỉ có spike thủ công trong `tools/`. |
-| DbContext, EF migrations và repositories dựa trên model 1.x | Đã xóa; chưa tạo database hoặc schema 2.0. DB và dữ liệu người dùng cũ không bị xóa hay import. |
+| DbContext, EF migrations và repositories dựa trên model 1.x | Đã xóa. Persistence 2.0 tạo DB riêng, không import dữ liệu 1.x; DB có schema không nhận diện sẽ không được migrate. |
 | Icon, UI và tên Don't Be Lazy | Asset icon và các màn hình cũ đã xóa; app/MSI dùng tên EduFocus. Lịch sử Git và tài liệu ghi nhận 1.x được giữ lại. |
 | Attention classifier/camera spike | Giữ lại riêng như nền tảng spike; WPF hiện không khởi tạo camera hoặc thu thập dữ liệu. |
 
@@ -615,7 +614,7 @@ Không migrate dữ liệu 1.x vì mục đích và schema sản phẩm khác. B
 
 ## 16. Testing Strategy
 
-> Đây là chiến lược kiểm thử mục tiêu. Hiện solution chỉ có unit tests cho attention classifier/state machine; các test khác sẽ được bổ sung cùng feature.
+> Test tự động hiện bao gồm unit test domain/attention và integration test SQLite cho migration, UTC mapping, active-session unique index, backup, PRAGMA và từ chối đường dẫn DB 1.x.
 
 
 ### Unit tests
@@ -624,9 +623,9 @@ Không migrate dữ liệu 1.x vì mục đích và schema sản phẩm khác. B
 - Fake ports; không chạm Windows API.
 
 ### Integration tests
-- SQLite repositories + migrations.
-- Rule persistence, session aggregation.
-- Retention deletion.
+- SQLite migration, UTC conversion, foreign keys and unique active-session index.
+- Backup-before-migration and retained DB on failure.
+- Rule persistence, session aggregation and retention deletion (future issues).
 
 ### Manual/system tests
 - Chặn web trên Chrome/Edge/Firefox; xác nhận HTTP block page và HTTPS báo lỗi.

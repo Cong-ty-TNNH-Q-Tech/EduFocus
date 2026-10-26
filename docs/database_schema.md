@@ -1,6 +1,6 @@
 # Cấu trúc Cơ sở dữ liệu - EduFocus
 
-> **Trạng thái:** Thiết kế đích / schema mới cho EduFocus.
+> **Trạng thái:** Schema 2.0 được triển khai bởi migration `InitialEduFocusSchema`.
 > **Phiên bản:** 2.0 — 2026-10-26
 > **DB engine:** SQLite + EF Core 10
 > **Tên file:** `%ProgramData%\EduFocus\edufocus.db`
