@@ -319,6 +319,8 @@ EduFocus.Monitor (user session, hidden)
 
 The application has a `ProtectionCoordinator` and an `IProtectionEnginePort` contract for state, session, audit and restart reconciliation. Until the hosts, block-page and process-watcher adapters are integrated, runtime DI uses `UnavailableProtectionEngine`: a request to turn Protection ON fails without changing SQLite state. The real adapters and engine orchestration are implemented in the later blocking issues; a test fake exercises the coordinator contract.
 
+`IHostsFilePort` owns only an atomically replaced `EduFocus` marker region. It writes active, enabled, unexpired exact Domain Block rules; an exact Allow for the same host wins. The original hosts bytes are backed up before the first write, DNS flush failure rolls the write back, and restore removes only the managed region while retaining other lines. The backup lives under the ACL-protected `%ProgramData%\EduFocus` directory. File/permission/DNS errors are surfaced so Protection cannot be persisted ON after failed enforcement.
+
 ### 6.1. Rule matching
 
 ```text

@@ -12,6 +12,21 @@ public static class InfrastructureServiceCollectionExtensions
         services.AddSingleton<IAppLogger, FileLogger>();
         services.AddSingleton<IMonotonicClockPort, MonotonicClockAdapter>();
         services.AddSingleton<IProtectionEnginePort, UnavailableProtectionEngine>();
+        services.AddSingleton<IHostsFileStorage, PhysicalHostsFileStorage>();
+        services.AddSingleton<IDnsCacheFlusher, WindowsDnsCacheFlusher>();
+        services.AddSingleton<IHostsFilePort>(provider =>
+        {
+            var windows = Environment.GetFolderPath(Environment.SpecialFolder.Windows);
+            var commonData = Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData);
+            if (string.IsNullOrWhiteSpace(windows) || string.IsNullOrWhiteSpace(commonData))
+                throw new InvalidOperationException("Windows system and common application data paths are required for hosts protection.");
+            return new WindowsHostsFilePort(
+                Path.Combine(windows, "System32", "drivers", "etc", "hosts"),
+                Path.Combine(commonData, "EduFocus", "hosts.original.backup"),
+                provider.GetRequiredService<IHostsFileStorage>(),
+                provider.GetRequiredService<IDnsCacheFlusher>(),
+                provider.GetRequiredService<IAppLogger>());
+        });
         return services;
     }
 }
