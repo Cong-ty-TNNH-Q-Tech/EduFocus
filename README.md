@@ -179,6 +179,8 @@ dotnet test src/EduFocus.Domain.Tests/EduFocus.Domain.Tests.csproj
 ## ⚠️ Giới hạn đã biết
 
 - PIN không phải ranh giới bảo mật nếu học sinh dùng chung tài khoản Windows hoặc có quyền Administrator.
+- Database, backup và log nằm trong `%ProgramData%\EduFocus` với ACL chỉ cấp quyền cho Administrators/SYSTEM; app cần chạy elevated để khởi tạo thư mục.
+- Nếu phụ huynh và học sinh dùng chung một tài khoản Windows, ACL không thể phân biệt hai người; hãy dùng tài khoản riêng và để học sinh dùng standard user.
 - Hosts file có thể bị bypass bởi DoH/DoT, VPN hoặc proxy.
 - Hosts không tạo log truy cập HTTPS; số blocked attempts chỉ là best-effort.
 - Trang chặn chỉ hiển thị với HTTP; HTTPS thường báo lỗi kết nối/SSL.

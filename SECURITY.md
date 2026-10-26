@@ -29,7 +29,8 @@ EduFocus là ứng dụng desktop **local-first** dành cho phụ huynh giám s�
 - **Không lưu ảnh, video, âm thanh hoặc frame webcam.**
 - **Không lưu nội dung trang, tin nhắn, clipboard hay lịch sử duyệt web đầy đủ.**
 - **Không nhận diện danh tính/khuôn mặt.**
-- Dữ liệu nằm trong `%ProgramData%\EduFocus`, được bảo vệ bằng ACL cho Administrators/SYSTEM.
+- Database, backup và log nằm trong `%ProgramData%\EduFocus`, được bảo vệ bằng DACL kế thừa chỉ cấp Full Control cho Administrators/SYSTEM. Ứng dụng cần chạy elevated để thiết lập và xác minh ACL; lỗi quyền không làm xóa database.
+- Migration tạo backup SQLite đã integrity-check trước khi thay đổi schema, giữ tối đa ba snapshot có tên duy nhất. Restore xác minh snapshot trước, giữ database và sidecar cũ trong thư mục recovery, rồi mới thay database.
 - PIN/recovery code chỉ lưu dưới dạng hash PBKDF2-SHA256 với salt riêng; dùng chung lockout 5 lần/15 phút. Recovery code chỉ hiển thị một lần.
 - Retention mặc định: sample 30 ngày, event/blocked attempt 90 ngày, session summary/audit 365 ngày.
 
@@ -44,7 +45,7 @@ Các điểm sau **không được coi là lỗ hổng bảo mật** vì đã đ
 - Windows shutdown/logoff vẫn là đường bypass; nếu scheduled-task watchdog được triển khai, việc phát hiện và phục hồi có thể mất khoảng một phút hoặc lâu hơn.
 - Uninstall PIN chỉ là best-effort; admin Windows vẫn gỡ được.
 - Chặn app có thể đóng/kill process và làm mất dữ liệu chưa lưu; EduFocus ưu tiên `WM_CLOSE` trước khi kill.
-- PIN không bảo vệ file DB nếu phụ huynh và học sinh dùng chung tài khoản Windows.
+- ACL không phân biệt phụ huynh và học sinh nếu họ dùng chung một tài khoản Windows; người dùng đó có thể chạy với cùng quyền nâng cao. Dùng tài khoản phụ huynh Administrator riêng và tài khoản học sinh standard user. PIN chỉ bảo vệ UI, không phải ranh giới bảo mật cho file DB.
 - Webcam attention chỉ là ước lượng, không phải eye tracker y khoa.
 - Ứng dụng không chống gian lận thi cử và không nên dùng cho mục đích đó.
 - Không phát hiện được mọi chatbot mới hoặc chatbot nhúng trong ứng dụng khác.

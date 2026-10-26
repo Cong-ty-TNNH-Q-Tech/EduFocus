@@ -4,9 +4,10 @@ using Microsoft.EntityFrameworkCore;
 
 namespace EduFocus.Infrastructure.Persistence;
 
-public sealed class DatabaseInitializer(IAppLogger logger)
+public sealed class DatabaseInitializer(IAppLogger logger, IDataDirectoryProtector directoryProtector)
 {
     private readonly IAppLogger _logger = logger ?? throw new ArgumentNullException(nameof(logger));
+    private readonly IDataDirectoryProtector _directoryProtector = directoryProtector ?? throw new ArgumentNullException(nameof(directoryProtector));
 
     public static string GetDatabasePath(string? commonApplicationData = null)
     {
@@ -15,13 +16,19 @@ public sealed class DatabaseInitializer(IAppLogger logger)
         return Path.Combine(root, "EduFocus", "edufocus.db");
     }
 
-    public async Task InitializeAsync(string databasePath, CancellationToken cancellationToken = default)
+    public static void ValidateDatabasePath(string databasePath)
     {
         if (string.IsNullOrWhiteSpace(databasePath)) throw new ArgumentException("A database path is required.", nameof(databasePath));
         var fullPath = Path.GetFullPath(databasePath);
         if (!string.Equals(Path.GetFileName(fullPath), "edufocus.db", StringComparison.OrdinalIgnoreCase) ||
             !string.Equals(Path.GetFileName(Path.GetDirectoryName(fullPath)), "EduFocus", StringComparison.OrdinalIgnoreCase))
             throw new ArgumentException("Only the EduFocus 2.0 database path is accepted; legacy database paths are not migrated.", nameof(databasePath));
+    }
+
+    public async Task InitializeAsync(string databasePath, CancellationToken cancellationToken = default)
+    {
+        ValidateDatabasePath(databasePath);
+        var fullPath = Path.GetFullPath(databasePath);
 
         var directory = Path.GetDirectoryName(fullPath)!;
         Directory.CreateDirectory(directory);
@@ -29,6 +36,7 @@ public sealed class DatabaseInitializer(IAppLogger logger)
         var cs = new SqliteConnectionStringBuilder { DataSource = fullPath, Mode = SqliteOpenMode.ReadWriteCreate, ForeignKeys = true, Pooling = false }.ToString();
         try
         {
+            _directoryProtector.Protect(directory);
             await using (var connection = new SqliteConnection(cs))
             {
                 await connection.OpenAsync(cancellationToken);
@@ -54,6 +62,7 @@ public sealed class DatabaseInitializer(IAppLogger logger)
             {
                 var backupPath = await CreateBackupAsync(fullPath, cancellationToken);
                 _logger.Info($"Database migration backup created: {Path.GetFileName(backupPath)}");
+                _directoryProtector.Protect(directory);
                 backupCreated = true;
             }
 
@@ -86,6 +95,7 @@ public sealed class DatabaseInitializer(IAppLogger logger)
         {
             var backupPath = await CreateBackupAsync(databasePath, cancellationToken);
             _logger.Info($"Database backup created before enabling incremental vacuum: {Path.GetFileName(backupPath)}");
+            _directoryProtector.Protect(Path.GetDirectoryName(databasePath)!);
         }
         await using var configure = connection.CreateCommand();
         configure.CommandText = "PRAGMA auto_vacuum=INCREMENTAL; VACUUM;";
@@ -96,7 +106,7 @@ public sealed class DatabaseInitializer(IAppLogger logger)
     {
         var backupDirectory = Path.Combine(Path.GetDirectoryName(databasePath)!, "backups");
         Directory.CreateDirectory(backupDirectory);
-        var backup = Path.Combine(backupDirectory, $"edufocus-{DateTime.UtcNow:yyyyMMddTHHmmssfffZ}.db");
+        var backup = Path.Combine(backupDirectory, $"edufocus-{DateTime.UtcNow:yyyyMMddTHHmmssfffZ}-{Guid.NewGuid():N}.db");
         var sourceCs = new SqliteConnectionStringBuilder { DataSource = databasePath, Mode = SqliteOpenMode.ReadWrite, ForeignKeys = true, Pooling = false }.ToString();
         var targetCs = new SqliteConnectionStringBuilder { DataSource = backup, Mode = SqliteOpenMode.ReadWriteCreate, ForeignKeys = true, Pooling = false }.ToString();
         await using (var source = new SqliteConnection(sourceCs))
@@ -106,6 +116,7 @@ public sealed class DatabaseInitializer(IAppLogger logger)
             await target.OpenAsync(cancellationToken);
             source.BackupDatabase(target);
         }
+        await SqliteIntegrity.VerifyAsync(backup, cancellationToken);
         foreach (var old in Directory.EnumerateFiles(backupDirectory, "edufocus-*.db").OrderByDescending(File.GetCreationTimeUtc).Skip(3)) File.Delete(old);
         return backup;
     }

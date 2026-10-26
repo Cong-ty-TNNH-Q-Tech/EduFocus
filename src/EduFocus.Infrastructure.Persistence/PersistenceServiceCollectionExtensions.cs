@@ -19,7 +19,9 @@ public static class PersistenceServiceCollectionExtensions
             Pooling = false
         }.ToString();
         services.AddDbContext<AppDbContext>(options => options.UseSqlite(connectionString, sqlite => sqlite.MigrationsAssembly(typeof(AppDbContext).Assembly.FullName)));
+        services.AddSingleton<IDataDirectoryProtector, WindowsDataDirectoryProtector>();
         services.AddSingleton<DatabaseInitializer>();
+        services.AddSingleton<DatabaseRecoveryService>();
         return services;
     }
 }

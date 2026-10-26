@@ -512,11 +512,12 @@ Trạng thái lưu trong `AppSettings.ProtectionEnabled`; session active lưu tr
 
 - DB: `%ProgramData%\EduFocus\edufocus.db`.
 - Logs: `%ProgramData%\EduFocus\logs`.
-- ACL: Administrators/SYSTEM full; học sinh standard user không đọc/ghi. Phụ huynh thao tác qua app elevated, không cấp quyền file trực tiếp.
+- ACL không kế thừa: chỉ Administrators/SYSTEM Full Control trên thư mục dữ liệu, DB, backup và log; app yêu cầu elevated startup. Standard-user validation script: `tools/verify-data-directory-acl.ps1`.
+- Nếu dùng chung tài khoản Windows, ACL không tách được phụ huynh và học sinh; dùng tài khoản riêng, học sinh dùng standard user.
 - Timestamp lưu **UTC**; hiển thị local. Query theo ngày dùng local boundary chuyển sang UTC.
 - Session summary giữ lâu hơn sample chi tiết (365 ngày vs 30 ngày).
 - Retention job chạy mỗi ngày; xóa theo batch để tránh khóa DB lâu.
-- Backup trước migration schema; giữ 3 bản gần nhất. Không migrate dữ liệu từ 1.x.
+- Backup integrity-checked trước migration schema; giữ 3 bản có tên duy nhất. Restore kiểm tra integrity trước và cách ly DB/sidecar cũ. Không migrate dữ liệu từ 1.x.
 - Không lưu ảnh/video/audio.
 - Không network call chứa dữ liệu học tập. Update check nếu có phải opt-in, chỉ gửi version/OS và có thể tắt; server vẫn thấy IP và điều này phải được thông báo.
 

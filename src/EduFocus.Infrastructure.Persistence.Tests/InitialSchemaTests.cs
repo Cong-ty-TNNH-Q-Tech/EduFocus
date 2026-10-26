@@ -73,7 +73,7 @@ public sealed class InitialSchemaTests
         var path = Path.Combine(directory, "edufocus.db");
         try
         {
-            await new DatabaseInitializer(new TestLogger()).InitializeAsync(path);
+            await new DatabaseInitializer(new TestLogger(), new TestProtector()).InitializeAsync(path);
             Assert.True(File.Exists(path));
             await using var connection = new SqliteConnection(new SqliteConnectionStringBuilder { DataSource = path, ForeignKeys = true, Pooling = false }.ToString());
             await connection.OpenAsync();
@@ -121,15 +121,18 @@ public sealed class InitialSchemaTests
             }
 
             var logger = new TestLogger();
-            await Assert.ThrowsAsync<InvalidOperationException>(() => new DatabaseInitializer(logger).InitializeAsync(path));
+            for (var i = 0; i < 4; i++)
+                await Assert.ThrowsAsync<InvalidOperationException>(() => new DatabaseInitializer(logger, new TestProtector()).InitializeAsync(path));
             Assert.NotEmpty(logger.Errors);
             Assert.Contains("retained", logger.Errors[^1], StringComparison.OrdinalIgnoreCase);
-            var backupPath = Assert.Single(Directory.EnumerateFiles(Path.Combine(directory, "backups"), "edufocus-*.db"));
+            var backupPaths = Directory.EnumerateFiles(Path.Combine(directory, "backups"), "edufocus-*.db").ToArray();
+            Assert.Equal(3, backupPaths.Length);
+            Assert.Equal(3, backupPaths.Select(Path.GetFileName).Distinct(StringComparer.OrdinalIgnoreCase).Count());
             Assert.True(File.Exists(path));
             await using var current = new SqliteConnection(new SqliteConnectionStringBuilder { DataSource = path, Pooling = false }.ToString());
             await current.OpenAsync();
             Assert.Equal(1L, (long)(await Scalar(current, "SELECT COUNT(*) FROM AppSettings"))!);
-            Assert.True(new FileInfo(backupPath).Length > 0);
+            Assert.All(backupPaths, backupPath => Assert.True(new FileInfo(backupPath).Length > 0));
             await current.CloseAsync();
         }
         finally
@@ -149,7 +152,7 @@ public sealed class InitialSchemaTests
         await File.WriteAllTextAsync(oldPath, "legacy-canary");
         try
         {
-            await Assert.ThrowsAsync<ArgumentException>(() => new DatabaseInitializer(new TestLogger()).InitializeAsync(oldPath));
+            await Assert.ThrowsAsync<ArgumentException>(() => new DatabaseInitializer(new TestLogger(), new TestProtector()).InitializeAsync(oldPath));
             Assert.Equal("legacy-canary", await File.ReadAllTextAsync(oldPath));
         }
         finally
@@ -173,7 +176,7 @@ public sealed class InitialSchemaTests
                 command.CommandText = "CREATE TABLE OldTask (Id INTEGER PRIMARY KEY, Name TEXT NOT NULL); INSERT INTO OldTask(Name) VALUES ('legacy-data');";
                 await command.ExecuteNonQueryAsync();
             }
-            await Assert.ThrowsAsync<InvalidOperationException>(() => new DatabaseInitializer(new TestLogger()).InitializeAsync(path));
+            await Assert.ThrowsAsync<InvalidOperationException>(() => new DatabaseInitializer(new TestLogger(), new TestProtector()).InitializeAsync(path));
             await using var verify = new SqliteConnection(new SqliteConnectionStringBuilder { DataSource = path, Pooling = false }.ToString());
             await verify.OpenAsync();
             Assert.Equal("legacy-data", await ScalarText(verify, "SELECT Name FROM OldTask"));
@@ -187,7 +190,50 @@ public sealed class InitialSchemaTests
         }
     }
 
+    [Fact]
+    public async Task Recovery_verifies_backup_then_restores_it_while_quarantining_current_database()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "EduFocus-Restore-" + Guid.NewGuid().ToString("N"));
+        var directory = Path.Combine(root, "EduFocus"); var backups = Path.Combine(directory, "backups");
+        Directory.CreateDirectory(backups);
+        var target = Path.Combine(directory, "edufocus.db");
+        var backup = Path.Combine(backups, $"edufocus-{DateTime.UtcNow:yyyyMMddTHHmmssfffZ}-{Guid.NewGuid():N}.db");
+        try
+        {
+            await CreateDatabaseWithAuditAsync(target, "current database");
+            await CreateDatabaseWithAuditAsync(backup, "backup snapshot");
+            var recovery = new DatabaseRecoveryService(new TestLogger(), new TestProtector());
+            Assert.True(await recovery.VerifyAsync(backup));
+            var corrupt = Path.Combine(backups, $"edufocus-corrupt-{Guid.NewGuid():N}.db");
+            await File.WriteAllTextAsync(corrupt, "not a SQLite database");
+            Assert.False(await recovery.VerifyAsync(corrupt));
+            Assert.True(File.Exists(corrupt));
+            await recovery.RestoreAsync(target, backup);
+            await using var connection = new SqliteConnection(new SqliteConnectionStringBuilder { DataSource = target, Pooling = false }.ToString());
+            await connection.OpenAsync();
+            Assert.Equal("backup snapshot", await ScalarText(connection, "SELECT Description FROM AuditLogs LIMIT 1"));
+            Assert.Contains(Directory.EnumerateDirectories(directory), path => Path.GetFileName(path).StartsWith("recovery-", StringComparison.Ordinal));
+            await connection.CloseAsync();
+        }
+        finally
+        {
+            var fullRoot = Path.GetFullPath(root);
+            if (fullRoot.StartsWith(Path.GetFullPath(Path.GetTempPath()), StringComparison.OrdinalIgnoreCase) && Directory.Exists(fullRoot)) Directory.Delete(fullRoot, true);
+        }
+    }
+
     private static CredentialHash Hash(byte seed) => CredentialHash.FromPbkdf2(Convert.ToBase64String(Enumerable.Repeat(seed, 32).ToArray()), Convert.ToBase64String(Enumerable.Repeat((byte)(seed + 10), 16).ToArray()), 600_000);
+    private static async Task CreateDatabaseWithAuditAsync(string path, string description)
+    {
+        await using var connection = new SqliteConnection(new SqliteConnectionStringBuilder { DataSource = path, Pooling = false }.ToString());
+        await connection.OpenAsync();
+        var options = new DbContextOptionsBuilder<AppDbContext>().UseSqlite(connection).Options;
+        await using var db = new AppDbContext(options);
+        await db.Database.MigrateAsync();
+        db.AuditLogs.Add(AuditLog.Create(UtcNow, AuditActor.System, "RecoveryTest", description, UtcNow));
+        await db.SaveChangesAsync();
+        await connection.CloseAsync();
+    }
     private static async Task<HashSet<string>> ReadTableNames(SqliteConnection connection)
     {
         var names = new HashSet<string>(StringComparer.Ordinal);
@@ -203,4 +249,5 @@ public sealed class InitialSchemaTests
         public void Warning(string message) { }
         public void Error(string message, Exception? ex = null) => Errors.Add(message);
     }
+    private sealed class TestProtector : IDataDirectoryProtector { public void Protect(string directoryPath) { } }
 }

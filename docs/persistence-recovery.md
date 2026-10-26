@@ -11,3 +11,7 @@ To restore a snapshot after reviewing the error log:
 5. Start EduFocus and inspect the log. Keep the quarantined files until the restored database is confirmed.
 
 Do not point EduFocus at a `DontBeLazy` 1.x database. Databases with application tables but no EF migration history are refused; they are never converted or cleaned up automatically.
+
+## Verify access with a standard user
+
+After an Administrator has launched EduFocus once, inspect the ACL from an elevated PowerShell prompt with `icacls "$env:ProgramData\EduFocus"`. It should show only `BUILTIN\Administrators` and `NT AUTHORITY\SYSTEM` with Full Control. Then sign in as a separate standard Windows user and run `tools\verify-data-directory-acl.ps1`; both directory listing and file creation must be denied. Do not run this check while logged into the same Windows account used by the parent.

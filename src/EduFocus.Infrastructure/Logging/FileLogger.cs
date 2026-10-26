@@ -15,7 +15,7 @@ public sealed class FileLogger : IAppLogger, IDisposable
     public FileLogger()
     {
         _logDirectory = Path.Combine(
-            Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
+            Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData),
             "EduFocus", "logs");
 
         Directory.CreateDirectory(_logDirectory);
