@@ -17,6 +17,7 @@ public partial class App : Application
     private CancellationTokenSource? _heartbeatStop;
     private Task? _heartbeatTask;
     private Task? _activityTask;
+    private Task? _retentionTask;
     private volatile bool _sessionLocked;
 
     protected override async void OnStartup(StartupEventArgs e)
@@ -103,6 +104,7 @@ public partial class App : Application
         _heartbeatStop = new CancellationTokenSource();
         _heartbeatTask = RunSessionHeartbeatAsync(_services, _heartbeatStop.Token);
         _activityTask = RunActivityTrackingAsync(_services, _heartbeatStop.Token);
+        _retentionTask = RunRetentionSchedulerAsync(_services, _heartbeatStop.Token);
         MainWindow = new MainWindow(
             _windowScope.ServiceProvider.GetRequiredService<ParentCredentialService>(),
             _windowScope.ServiceProvider.GetRequiredService<ProtectionCoordinator>(),
@@ -137,7 +139,8 @@ public partial class App : Application
         SystemEvents.PowerModeChanged -= OnPowerModeChanged;
         SystemEvents.SessionSwitch -= OnSessionSwitch;
         _heartbeatStop?.Cancel();
-        try { Task.WhenAll(_heartbeatTask ?? Task.CompletedTask, _activityTask ?? Task.CompletedTask).GetAwaiter().GetResult(); }
+        try { Task.WhenAll(_heartbeatTask ?? Task.CompletedTask, _activityTask ?? Task.CompletedTask,
+            _retentionTask ?? Task.CompletedTask).GetAwaiter().GetResult(); }
         catch (OperationCanceledException) { }
         _heartbeatStop?.Dispose();
         _windowScope?.Dispose();
@@ -175,6 +178,40 @@ public partial class App : Application
             try { await tracker.ScanOnceAsync(DateTimeOffset.UtcNow, cancellationToken); }
             catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested) { throw; }
             catch (Exception ex) { services.GetRequiredService<IAppLogger>().Error("Activity sample could not be saved.", ex); }
+        }
+    }
+
+    private static async Task RunRetentionSchedulerAsync(IServiceProvider services, CancellationToken cancellationToken)
+    {
+        var startupSucceeded = await RunRetentionOnceAsync(services, cancellationToken);
+        var localNow = TimeZoneInfo.ConvertTime(DateTimeOffset.UtcNow, TimeZoneInfo.Local).DateTime;
+        var lastScheduledDate = startupSucceeded && localNow.TimeOfDay >= TimeSpan.FromHours(3)
+            ? DateOnly.FromDateTime(localNow)
+            : DateOnly.FromDateTime(localNow).AddDays(-1);
+        using var timer = new PeriodicTimer(TimeSpan.FromSeconds(30));
+        while (await timer.WaitForNextTickAsync(cancellationToken))
+        {
+            var local = TimeZoneInfo.ConvertTime(DateTimeOffset.UtcNow, TimeZoneInfo.Local).DateTime;
+            var localDate = DateOnly.FromDateTime(local);
+            if (local.TimeOfDay < TimeSpan.FromHours(3) || localDate <= lastScheduledDate) continue;
+            if (await RunRetentionOnceAsync(services, cancellationToken)) lastScheduledDate = localDate;
+        }
+    }
+
+    private static async Task<bool> RunRetentionOnceAsync(IServiceProvider services, CancellationToken cancellationToken)
+    {
+        try
+        {
+            using var scope = services.CreateScope();
+            await scope.ServiceProvider.GetRequiredService<RetentionService>()
+                .RunAsync(DateTimeOffset.UtcNow, cancellationToken);
+            return true;
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested) { throw; }
+        catch (Exception ex)
+        {
+            services.GetRequiredService<IAppLogger>().Error("Retention cleanup did not complete; it will retry safely.", ex);
+            return false;
         }
     }
 
