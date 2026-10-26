@@ -92,6 +92,7 @@ public sealed class ActivityTrackingServiceTests
         Assert.True(ActivityTrackingService.IsOnlineClass(Snapshot("Zoom", "Zoom Meeting")));
         Assert.False(ActivityTrackingService.IsOnlineClass(Snapshot("ms-teams", "Microsoft Teams | Chat")));
         Assert.False(ActivityTrackingService.IsOnlineClass(Snapshot("discord", "General chat")));
+        Assert.Equal(ActivityCategory.Unknown, ActivityTrackingService.ClassifyProcess("ms-teams"));
     }
 
     [Fact]

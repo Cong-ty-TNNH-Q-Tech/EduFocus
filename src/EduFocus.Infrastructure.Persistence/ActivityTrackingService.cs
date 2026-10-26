@@ -19,6 +19,7 @@ public sealed class ActivityTrackingService(
     private DateTimeOffset _candidateSinceUtc;
     private DateTimeOffset? _lastSampleUtc;
     private DateTimeOffset? _noSessionRetryUtc;
+    private Guid? _sessionId;
     private bool _idleRecorded;
     private static readonly TimeSpan SampleInterval = TimeSpan.FromSeconds(15);
 
@@ -66,10 +67,19 @@ public sealed class ActivityTrackingService(
             var session = await db.StudySessions.SingleOrDefaultAsync(x => x.Status == StudySessionStatus.Active, cancellationToken);
             if (session is null)
             {
+                _sessionId = null;
+                _lastSampleUtc = null;
+                _idleRecorded = false;
                 _noSessionRetryUtc = now + SampleInterval;
                 return;
             }
             _noSessionRetryUtc = null;
+            if (_sessionId != session.Id)
+            {
+                _sessionId = session.Id;
+                _lastSampleUtc = now;
+                _idleRecorded = false;
+            }
             var monitorOnlyDuringClasses = await db.AppSettings.AsNoTracking()
                 .Select(settings => settings.MonitorOnlyDuringClasses).SingleOrDefaultAsync(cancellationToken);
 
