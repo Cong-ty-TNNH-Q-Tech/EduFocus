@@ -30,9 +30,9 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options) : DbCon
         model.Entity<AppSettings>(b => {
             b.ToTable("AppSettings",t=>t.HasCheckConstraint("CK_AppSettings_SingletonId","Id = '00000000-0000-0000-0000-000000000001'")); b.HasKey(x=>x.Id); b.Property(x=>x.Id).ValueGeneratedNever();
             b.Property(x=>x.Protection).HasColumnName("ProtectionEnabled").HasConversion(v=>v==ProtectionState.On,v=>v?ProtectionState.On:ProtectionState.Off).HasDefaultValue(ProtectionState.Off);
-            b.Property(x=>x.MonitoringEnabled).HasDefaultValue(true); b.Property(x=>x.ScheduleEnabled).HasDefaultValue(false); b.Property(x=>x.MonitorOnlyDuringClasses).HasDefaultValue(false);
+            b.Property(x=>x.MonitoringEnabled).HasDefaultValue(false); b.Property(x=>x.ScheduleEnabled).HasDefaultValue(false); b.Property(x=>x.MonitorOnlyDuringClasses).HasDefaultValue(false);
             b.Property(x=>x.CameraDeviceId).HasMaxLength(256); b.Property(x=>x.DistractionThresholdSeconds).HasDefaultValue(20); b.Property(x=>x.AbsenceThresholdSeconds).HasDefaultValue(30); b.Property(x=>x.SampleIntervalSeconds).HasDefaultValue(15);
-            b.Property(x=>x.ActivityRetentionDays).HasDefaultValue(30); b.Property(x=>x.EventRetentionDays).HasDefaultValue(90); b.Property(x=>x.SessionRetentionDays).HasDefaultValue(365); b.Property(x=>x.StartWithWindows).HasDefaultValue(true);
+            b.Property(x=>x.ActivityRetentionDays).HasDefaultValue(30); b.Property(x=>x.EventRetentionDays).HasDefaultValue(90); b.Property(x=>x.SessionRetentionDays).HasDefaultValue(365); b.Property(x=>x.StartWithWindows).HasDefaultValue(false);
             b.Property(x=>x.Theme).HasConversion(v=>v.ToString().ToLowerInvariant(),v=>Enum.Parse<ThemePreference>(v,true)).HasMaxLength(16).HasDefaultValue(ThemePreference.Dark);
             b.Property(x=>x.Language).HasConversion(v=>v==LanguagePreference.Vietnamese?"vi":"en",v=>v=="vi"?LanguagePreference.Vietnamese:LanguagePreference.English).HasMaxLength(8).HasDefaultValue(LanguagePreference.Vietnamese);
             NullableUtcProperty(b.Property(x=>x.ScheduleOverrideUntilUtc),nullableUtc); NullableUtcProperty(b.Property(x=>x.LastCleanShutdownAtUtc),nullableUtc);

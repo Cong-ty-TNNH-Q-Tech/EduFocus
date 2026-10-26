@@ -153,7 +153,7 @@ namespace EduFocus.Infrastructure.Persistence.Migrations
                     b.Property<bool>("MonitoringEnabled")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("INTEGER")
-                        .HasDefaultValue(true);
+                        .HasDefaultValue(false);
 
                     b.Property<bool>("OnboardingCompleted")
                         .HasColumnType("INTEGER");
@@ -185,7 +185,7 @@ namespace EduFocus.Infrastructure.Persistence.Migrations
                     b.Property<bool>("StartWithWindows")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("INTEGER")
-                        .HasDefaultValue(true);
+                        .HasDefaultValue(false);
 
                     b.Property<string>("Theme")
                         .IsRequired()

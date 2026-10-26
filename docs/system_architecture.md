@@ -513,7 +513,7 @@ Trạng thái lưu trong `AppSettings.ProtectionEnabled`; session active lưu tr
 - DB: `%ProgramData%\EduFocus\edufocus.db`.
 - Logs: `%ProgramData%\EduFocus\logs`.
 - Technical logs are UTF-8 JSON Lines (`app-yyyyMMdd-NNN.jsonl`) with UTC timestamp, level, category and correlation ID. A correlation scope flows through async work; begin one at each top-level operation and pass its ID into any corresponding `AuditLog` record. The current foundation has only the startup scope; protection/session/block-page flows do not exist yet.
-- Each file is limited to 5 MiB; files older than 14 days are removed and the directory is capped at 112 files. Credential-like assignments, bearer tokens and full URLs in text are redacted. Structured fields for URLs, window/page titles or content, and camera/media data are omitted. Do not put sensitive data in event messages. The database `AuditLogs` table is a separate business audit trail; the present foundation defines its schema but has no audit writer/use cases.
+- Each file is limited to 5 MiB; files older than 14 days are removed and the directory is capped at 112 files. Credential-like assignments, bearer tokens and full URLs in text are redacted. Structured fields for URLs, window/page titles or content, and camera/media data are omitted. Do not put sensitive data in event messages. The database `AuditLogs` table is a separate business audit trail; credential and onboarding events are written there without secrets.
 - To collect diagnostics, have an administrator copy the newest relevant `.jsonl` files from `%ProgramData%\EduFocus\logs` to a support location after checking that they contain no unexpected sensitive data. Include the incident time and correlation ID where available. Never send camera frames, page contents, full URLs, PINs, recovery codes or tokens.
 - ACL không kế thừa: chỉ Administrators/SYSTEM Full Control trên thư mục dữ liệu, DB, backup và log; app yêu cầu elevated startup. Standard-user validation script: `tools/verify-data-directory-acl.ps1`.
 - Nếu dùng chung tài khoản Windows, ACL không tách được phụ huynh và học sinh; dùng tài khoản riêng, học sinh dùng standard user.
@@ -607,10 +607,10 @@ Các project trong solution chứa domain 2.0, persistence SQLite/migration, mô
 |---|---|
 | Task, profile, Pomodoro/session, analytics, settings và quote entities/use cases | Đã xóa khỏi solution; thay thế theo các phase tính năng 2.0, chưa được kích hoạt. |
 | Gemini AI, guilt-trip, friction gate và quote asset | Đã xóa khỏi product code và output. |
-| WindowsStrictEngine, LocalRedirectServer, tray, updater và auto-start cũ | Đã xóa khỏi WPF/runtime registrations; blocking/watchdog hiện chỉ có spike thủ công trong `tools/`. |
+| WindowsStrictEngine, LocalRedirectServer, tray, updater và auto-start cũ | Đã xóa khỏi WPF/runtime registrations; blocking/watchdog hiện chỉ có spike thủ công trong `tools/`. Onboarding có thể đăng ký Scheduled Task tự chạy nếu phụ huynh chọn bật. |
 | DbContext, EF migrations và repositories dựa trên model 1.x | Đã xóa. Persistence 2.0 tạo DB riêng, không import dữ liệu 1.x; DB có schema không nhận diện sẽ không được migrate. |
 | Icon, UI và tên Don't Be Lazy | Asset icon và các màn hình cũ đã xóa; app/MSI dùng tên EduFocus. Lịch sử Git và tài liệu ghi nhận 1.x được giữ lại. |
-| Attention classifier/camera spike | Giữ lại riêng như nền tảng spike; WPF hiện không khởi tạo camera hoặc thu thập dữ liệu. |
+| Attention classifier/camera spike | Giữ lại riêng như nền tảng spike; WPF chỉ mở/đóng camera để kiểm tra quyền trong onboarding, chưa khởi chạy analyzer hoặc thu thập mẫu. |
 
 Không migrate dữ liệu 1.x vì mục đích và schema sản phẩm khác. Blocklist tùy chỉnh chỉ được nhập nếu có công cụ riêng được thiết kế và kiểm thử sau này.
 

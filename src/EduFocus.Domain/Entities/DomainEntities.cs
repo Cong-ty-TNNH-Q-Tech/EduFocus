@@ -11,7 +11,7 @@ public sealed class AppSettings
     private Guid _id = SingletonId;
     public Guid Id => _id;
     public ProtectionState Protection { get; private set; }
-    public bool MonitoringEnabled { get; private set; } = true;
+    public bool MonitoringEnabled { get; private set; }
     public bool ScheduleEnabled { get; private set; }
     public bool MonitorOnlyDuringClasses { get; private set; }
     public string? CameraDeviceId { get; private set; }
@@ -21,7 +21,7 @@ public sealed class AppSettings
     public int ActivityRetentionDays { get; private set; } = 30;
     public int EventRetentionDays { get; private set; } = 90;
     public int SessionRetentionDays { get; private set; } = 365;
-    public bool StartWithWindows { get; private set; } = true;
+    public bool StartWithWindows { get; private set; }
     public ThemePreference Theme { get; private set; } = ThemePreference.Dark;
     public LanguagePreference Language { get; private set; } = LanguagePreference.Vietnamese;
     public bool OnboardingCompleted { get; private set; }
@@ -46,6 +46,7 @@ public sealed class AppSettings
         ActivityRetentionDays = activityRetentionDays; EventRetentionDays = eventRetentionDays; SessionRetentionDays = sessionRetentionDays; StartWithWindows = startWithWindows;
         Theme = theme; Language = language; OnboardingCompleted = onboardingCompleted; Touch(now);
     }
+    public void CompleteOnboarding(DateTimeOffset now) { OnboardingCompleted = true; Touch(now); }
     public void SetScheduleOverride(DateTimeOffset? untilUtc, DateTimeOffset now) { if (untilUtc is { } v) Utc.Require(v); ScheduleOverrideUntilUtc = untilUtc; Touch(now); }
     public void RecordCleanShutdown(DateTimeOffset now) { LastCleanShutdownAtUtc = Utc.Require(now); Protection = ProtectionState.Off; Touch(now); }
     private void Touch(DateTimeOffset now) => UpdatedAtUtc = Utc.Require(now);

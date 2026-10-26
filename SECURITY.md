@@ -4,6 +4,8 @@
 
 Technical logs are stored as JSON Lines under `%ProgramData%\EduFocus\logs`, protected by the same Administrators/SYSTEM data-directory ACL. They rotate at 5 MiB per file, retain up to 14 days and at most 112 files. Credential-like assignments, bearer tokens and URLs in text are redacted; sensitive structured fields such as window titles, page data and camera/media content are omitted. Before sharing a log for support, review it and remove unexpected sensitive data. The SQLite `AuditLogs` table is reserved for minimal business audit events and is separate from technical logs.
 
+First-run setup keeps attention monitoring and Windows auto-start disabled unless a parent explicitly opts in. The camera check only opens and closes the selected device; it does not save a frame. If auto-start is selected, EduFocus registers a per-user Scheduled Task at the highest available run level. The task is named `EduFocus AutoStart`, and registration is allowed only from a protected installation under Program Files. It can be removed with the Windows Task Scheduler.
+
 ## Phiên bản được hỗ trợ
 
 EduFocus đang ở giai đoạn **Pre-release / đang chuyển đổi**. Bảng dưới đây sẽ được cập nhật khi có bản phát hành chính thức.

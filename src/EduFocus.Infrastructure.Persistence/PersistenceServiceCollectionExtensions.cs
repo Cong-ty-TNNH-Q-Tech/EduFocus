@@ -23,6 +23,7 @@ public static class PersistenceServiceCollectionExtensions
         services.AddSingleton<DatabaseInitializer>();
         services.AddSingleton<DatabaseRecoveryService>();
         services.AddScoped<ParentCredentialService>();
+        services.AddScoped<OnboardingService>();
         return services;
     }
 }

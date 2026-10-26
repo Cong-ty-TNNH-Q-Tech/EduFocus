@@ -85,11 +85,16 @@
    - PBKDF2-SHA256, 600.000 iterations.
    - Recovery code 16 ký tự ngẫu nhiên từ alphabet 32 ký tự dễ đọc (80 bit entropy), hash tương tự PIN.
 6. Hệ thống hiển thị recovery code **một lần**, yêu cầu phụ huynh lưu lại.
-7. Hệ thống đánh dấu `OnboardingCompleted = true`, đăng nhập Parent Mode và mở dashboard.
+7. Phụ huynh chọn camera, thử quyền truy cập, bật/tắt monitoring và auto-start; hai tùy chọn này mặc định tắt.
+8. Hệ thống lưu lựa chọn, đăng ký Scheduled Task nếu auto-start được bật, rồi mới đánh dấu `OnboardingCompleted = true`.
+9. Hệ thống mở Student Mode; Parent Mode cần đăng nhập PIN riêng.
 
 **Luồng thay thế**
 - **PIN yếu:** Hiển thị cảnh báo và yêu cầu chọn PIN khác.
 - **Không xác nhận đồng ý:** Không cho tạo PIN; chỉ có thể thoát app.
+- **Camera bị từ chối/không có:** Hiển thị lỗi; phụ huynh có thể chọn camera khác hoặc tiếp tục với monitoring tắt.
+- **Hủy hoặc app thoát giữa chừng:** Không đánh dấu onboarding hoàn tất; consent, credential đã băm và preferences đã lưu được giữ để tiếp tục. Nếu recovery code chưa được xác nhận đã lưu, lần chạy sau yêu cầu PIN và tạo mã thay thế.
+- **Lưu tùy chọn hoặc auto-start thất bại:** Không mở app; giữ dữ liệu đã lưu và cho phép thử lại.
 
 **Ngoại lệ**
 - Ghi file thất bại: hiển thị lỗi quyền truy cập, hướng dẫn chạy với quyền Administrator.

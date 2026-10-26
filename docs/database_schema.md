@@ -75,7 +75,7 @@ Singleton — ứng dụng đảm bảo chỉ có 1 bản ghi với `Id` cố đ
 |---|---|---|---|
 | `Id` | TEXT(36) | PK | GUID cố định |
 | `ProtectionEnabled` | INTEGER | NOT NULL, default 0 | Trạng thái bảo vệ hiện tại; exit hợp lệ đặt 0, Windows shutdown giữ nguyên |
-| `MonitoringEnabled` | INTEGER | NOT NULL, default 1 | Bật attention monitoring |
+| `MonitoringEnabled` | INTEGER | NOT NULL, default 0 | Bật attention monitoring (off by default until parent opts in) |
 | `ScheduleEnabled` | INTEGER | NOT NULL, default 0 | Bật lịch tự động |
 | `MonitorOnlyDuringClasses` | INTEGER | NOT NULL, default 0 | Chỉ monitor khi phát hiện Meet/Teams/Zoom |
 | `CameraDeviceId` | TEXT(256) | NULL | Thiết bị camera được chọn |
@@ -85,7 +85,7 @@ Singleton — ứng dụng đảm bảo chỉ có 1 bản ghi với `Id` cố đ
 | `ActivityRetentionDays` | INTEGER | NOT NULL, default 30 | Giữ ActivitySample |
 | `EventRetentionDays` | INTEGER | NOT NULL, default 90 | Giữ AttentionEvent/BlockedAttempt |
 | `SessionRetentionDays` | INTEGER | NOT NULL, default 365 | Giữ StudySession |
-| `StartWithWindows` | INTEGER | NOT NULL, default 1 | Auto-start |
+| `StartWithWindows` | INTEGER | NOT NULL, default 0 | Auto-start (off by default until parent opts in) |
 | `Theme` | TEXT(16) | NOT NULL, default `'dark'` | `dark` / `light` / `system` |
 | `Language` | TEXT(8) | NOT NULL, default `'vi'` | `vi` / `en` (dự kiến) |
 | `OnboardingCompleted` | INTEGER | NOT NULL, default 0 | Đã setup PIN |

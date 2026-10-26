@@ -16,6 +16,7 @@ public partial class App : Application
     protected override async void OnStartup(StartupEventArgs e)
     {
         base.OnStartup(e);
+        ShutdownMode = ShutdownMode.OnExplicitShutdown;
 
         var databasePath = DatabaseInitializer.GetDatabasePath();
         try
@@ -58,6 +59,21 @@ public partial class App : Application
         {
             _windowScope = _services.CreateScope();
             var db = _windowScope.ServiceProvider.GetRequiredService<AppDbContext>();
+            var onboarding = _windowScope.ServiceProvider.GetRequiredService<OnboardingService>();
+            var progress = await onboarding.GetProgressAsync();
+            if (!progress.Completed)
+            {
+                var wizard = new OnboardingWindow(onboarding,
+                    _windowScope.ServiceProvider.GetRequiredService<ParentCredentialService>(),
+                    _services.GetRequiredService<IAppLogger>());
+                if (wizard.ShowDialog() != true)
+                {
+                    _windowScope.Dispose();
+                    _windowScope = null;
+                    Shutdown(-1);
+                    return;
+                }
+            }
             configured = await db.ParentCredentials.AnyAsync();
         }
         catch (Exception ex)
@@ -77,6 +93,7 @@ public partial class App : Application
             configured);
         MainWindow.Closed += (_, _) => _windowScope?.Dispose();
         MainWindow.Show();
+        ShutdownMode = ShutdownMode.OnLastWindowClose;
     }
 
     protected override void OnExit(ExitEventArgs e)
