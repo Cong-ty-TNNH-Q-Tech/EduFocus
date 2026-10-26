@@ -83,7 +83,7 @@
 5. Hệ thống tạo `ParentCredential`:
    - Salt ngẫu nhiên 16 byte.
    - PBKDF2-SHA256, 600.000 iterations.
-   - Recovery code 12 ký tự ngẫu nhiên, hash tương tự PIN.
+   - Recovery code 16 ký tự ngẫu nhiên từ alphabet 32 ký tự dễ đọc (80 bit entropy), hash tương tự PIN.
 6. Hệ thống hiển thị recovery code **một lần**, yêu cầu phụ huynh lưu lại.
 7. Hệ thống đánh dấu `OnboardingCompleted = true`, đăng nhập Parent Mode và mở dashboard.
 

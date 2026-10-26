@@ -64,11 +64,12 @@ public sealed class ParentCredentials
     private ParentCredentials() { Pin = null!; RecoveryCode = null!; }
     private ParentCredentials(Guid id, CredentialHash pin, CredentialHash recovery, DateTimeOffset now)
     { Id = id; Pin = pin; RecoveryCode = recovery; CreatedAtUtc = PinUpdatedAtUtc = Utc.Require(now); }
-    public static ParentCredentials Create(CredentialHash pin, CredentialHash recovery, DateTimeOffset now) => new(SingletonId, pin, recovery, now);
+    public static ParentCredentials Create(CredentialHash pin, CredentialHash recovery, DateTimeOffset now) { ArgumentNullException.ThrowIfNull(pin); ArgumentNullException.ThrowIfNull(recovery); return new(SingletonId, pin, recovery, now); }
     public bool IsLockedOut(DateTimeOffset now) => LockoutUntilUtc is { } until && Utc.Require(now) < until;
     public void RecordFailedAttempt(DateTimeOffset now)
     {
         now = Utc.Require(now); if (IsLockedOut(now)) throw new InvalidOperationException("Credential entry is locked out.");
+        if (LockoutUntilUtc is not null) { FailedAttempts = 0; LockoutUntilUtc = null; }
         FailedAttempts = checked(FailedAttempts + 1); if (FailedAttempts >= 5) { FailedAttempts = 5; LockoutUntilUtc = now.AddMinutes(15); }
     }
     public void RecordSuccessfulAuthentication(DateTimeOffset now) { Utc.Require(now); FailedAttempts = 0; LockoutUntilUtc = null; }
@@ -77,7 +78,7 @@ public sealed class ParentCredentials
         ArgumentNullException.ThrowIfNull(newPin); if (Pin.SameHash(newPin)) throw new ArgumentException("A changed PIN must use a new hash and salt.", nameof(newPin));
         Pin = newPin; PinUpdatedAtUtc = Utc.Require(now); FailedAttempts = 0; LockoutUntilUtc = null;
     }
-    public void ChangeRecoveryCode(CredentialHash newCode) { ArgumentNullException.ThrowIfNull(newCode); if (RecoveryCode.SameHash(newCode)) throw new ArgumentException("A changed recovery code must use a new hash and salt.", nameof(newCode)); RecoveryCode = newCode; }
+    public void ChangeRecoveryCode(CredentialHash newCode) { ArgumentNullException.ThrowIfNull(newCode); if (RecoveryCode.SameHash(newCode)) throw new ArgumentException("A changed recovery code must use a new hash and salt.", nameof(newCode)); RecoveryCode = newCode; FailedAttempts = 0; LockoutUntilUtc = null; }
 }
 
 public sealed class BlockRule

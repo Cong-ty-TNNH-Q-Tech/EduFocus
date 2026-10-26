@@ -22,6 +22,7 @@ public static class PersistenceServiceCollectionExtensions
         services.AddSingleton<IDataDirectoryProtector, WindowsDataDirectoryProtector>();
         services.AddSingleton<DatabaseInitializer>();
         services.AddSingleton<DatabaseRecoveryService>();
+        services.AddScoped<ParentCredentialService>();
         return services;
     }
 }

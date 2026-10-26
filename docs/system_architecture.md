@@ -480,7 +480,7 @@ AttentionPercent =
 
 - PIN 6–8 chữ số.
 - PBKDF2-SHA256, 600.000 iterations, salt 16 byte.
-- Recovery code 12 ký tự, hash tương tự PIN; chỉ hiển thị một lần, không thể xem lại.
+- Recovery code 16 ký tự ngẫu nhiên (80 bit entropy), hash tương tự PIN; chỉ hiển thị một lần, không thể xem lại.
 - Constant-time compare.
 - Lockout 5 lần / 15 phút, dùng chung cho PIN và recovery code.
 - Không lưu plaintext; không log PIN/recovery code.
