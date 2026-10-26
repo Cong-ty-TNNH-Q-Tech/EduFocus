@@ -10,7 +10,8 @@ namespace EduFocus.Infrastructure.Persistence;
 public sealed class ActivityTrackingService(
     IServiceScopeFactory scopeFactory,
     IForegroundActivityPort foreground,
-    IAppLogger logger)
+    IAppLogger logger,
+    IMonotonicClockPort? monotonicClock = null)
 {
     private static readonly TimeSpan ForegroundDebounce = TimeSpan.FromSeconds(2);
     private readonly SemaphoreSlim _gate = new(1, 1);
@@ -20,6 +21,7 @@ public sealed class ActivityTrackingService(
     private DateTimeOffset? _lastSampleUtc;
     private DateTimeOffset? _noSessionRetryUtc;
     private Guid? _sessionId;
+    private long? _lastSampleMonotonicTicks;
     private bool _idleRecorded;
     private static readonly TimeSpan SampleInterval = TimeSpan.FromSeconds(15);
 
@@ -36,6 +38,15 @@ public sealed class ActivityTrackingService(
                 logger.Warning("Foreground activity metadata is temporarily unavailable.");
                 logger.Error("Foreground activity capture failed.", ex);
                 return;
+            }
+
+            if (_lastSampleUtc is { } lastSample && now < lastSample)
+            {
+                _lastSampleUtc = now;
+                _lastSampleMonotonicTicks = monotonicClock?.GetTickCount().Ticks;
+                _current = null;
+                _candidate = null;
+                _idleRecorded = false;
             }
 
             var isIdle = snapshot.IdleSeconds > 300;
@@ -69,6 +80,7 @@ public sealed class ActivityTrackingService(
             {
                 _sessionId = null;
                 _lastSampleUtc = null;
+                _lastSampleMonotonicTicks = null;
                 _idleRecorded = false;
                 _noSessionRetryUtc = now + SampleInterval;
                 return;
@@ -78,6 +90,7 @@ public sealed class ActivityTrackingService(
             {
                 _sessionId = session.Id;
                 _lastSampleUtc = now;
+                _lastSampleMonotonicTicks = monotonicClock?.GetTickCount().Ticks;
                 _idleRecorded = false;
             }
             var monitorOnlyDuringClasses = await db.AppSettings.AsNoTracking()
@@ -98,6 +111,7 @@ public sealed class ActivityTrackingService(
                     session.AddMonitoringEligibleSeconds(duration, now);
                 await db.SaveChangesAsync(cancellationToken);
                 _lastSampleUtc = now;
+                _lastSampleMonotonicTicks = monotonicClock?.GetTickCount().Ticks;
                 _idleRecorded = true;
                 return;
             }
@@ -116,12 +130,36 @@ public sealed class ActivityTrackingService(
                 session.AddMonitoringEligibleSeconds(elapsed, now);
             await db.SaveChangesAsync(cancellationToken);
             _lastSampleUtc = now;
+            _lastSampleMonotonicTicks = monotonicClock?.GetTickCount().Ticks;
+        }
+        finally { _gate.Release(); }
+    }
+
+    public async Task ResetAfterResumeAsync(DateTimeOffset now, CancellationToken cancellationToken = default)
+    {
+        if (now.Offset != TimeSpan.Zero) throw new ArgumentException("Timestamp must be UTC.", nameof(now));
+        await _gate.WaitAsync(cancellationToken);
+        try
+        {
+            _current = null;
+            _candidate = null;
+            _candidateSinceUtc = now;
+            _lastSampleUtc = now;
+            _lastSampleMonotonicTicks = monotonicClock?.GetTickCount().Ticks;
+            _noSessionRetryUtc = null;
+            _idleRecorded = false;
         }
         finally { _gate.Release(); }
     }
 
     private long GetDuration(DateTimeOffset now)
     {
+        if (monotonicClock is not null)
+        {
+            var currentTicks = monotonicClock.GetTickCount().Ticks;
+            if (_lastSampleMonotonicTicks is not { } previousTicks || currentTicks < previousTicks) return 0;
+            return (currentTicks - previousTicks) / TimeSpan.TicksPerSecond;
+        }
         if (_lastSampleUtc is not { } previous || now <= previous) return 0;
         return (long)Math.Min(30, Math.Floor((now - previous).TotalSeconds));
     }

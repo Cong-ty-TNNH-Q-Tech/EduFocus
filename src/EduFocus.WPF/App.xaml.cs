@@ -6,6 +6,7 @@ using EduFocus.Infrastructure.Persistence;
 using EduFocus.Ports.Outbound.Services;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Win32;
 
 namespace EduFocus.WPF;
 
@@ -16,6 +17,7 @@ public partial class App : Application
     private CancellationTokenSource? _heartbeatStop;
     private Task? _heartbeatTask;
     private Task? _activityTask;
+    private volatile bool _sessionLocked;
 
     protected override async void OnStartup(StartupEventArgs e)
     {
@@ -40,6 +42,8 @@ public partial class App : Application
         services.AddInfrastructureServices();
         services.AddEduFocusPersistence(databasePath);
         _services = services.BuildServiceProvider();
+        SystemEvents.PowerModeChanged += OnPowerModeChanged;
+        SystemEvents.SessionSwitch += OnSessionSwitch;
 
         try
         {
@@ -130,6 +134,8 @@ public partial class App : Application
 
     protected override void OnExit(ExitEventArgs e)
     {
+        SystemEvents.PowerModeChanged -= OnPowerModeChanged;
+        SystemEvents.SessionSwitch -= OnSessionSwitch;
         _heartbeatStop?.Cancel();
         try { Task.WhenAll(_heartbeatTask ?? Task.CompletedTask, _activityTask ?? Task.CompletedTask).GetAwaiter().GetResult(); }
         catch (OperationCanceledException) { }
@@ -139,11 +145,12 @@ public partial class App : Application
         base.OnExit(e);
     }
 
-    private static async Task RunSessionHeartbeatAsync(IServiceProvider services, CancellationToken cancellationToken)
+    private async Task RunSessionHeartbeatAsync(IServiceProvider services, CancellationToken cancellationToken)
     {
         using var timer = new PeriodicTimer(TimeSpan.FromSeconds(10));
         while (await timer.WaitForNextTickAsync(cancellationToken))
         {
+            if (_sessionLocked) continue;
             try
             {
                 using var scope = services.CreateScope();
@@ -158,15 +165,59 @@ public partial class App : Application
         }
     }
 
-    private static async Task RunActivityTrackingAsync(IServiceProvider services, CancellationToken cancellationToken)
+    private async Task RunActivityTrackingAsync(IServiceProvider services, CancellationToken cancellationToken)
     {
         var tracker = services.GetRequiredService<ActivityTrackingService>();
         using var timer = new PeriodicTimer(TimeSpan.FromSeconds(1));
         while (await timer.WaitForNextTickAsync(cancellationToken))
         {
+            if (_sessionLocked) continue;
             try { await tracker.ScanOnceAsync(DateTimeOffset.UtcNow, cancellationToken); }
             catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested) { throw; }
             catch (Exception ex) { services.GetRequiredService<IAppLogger>().Error("Activity sample could not be saved.", ex); }
         }
+    }
+
+    private void OnPowerModeChanged(object? sender, PowerModeChangedEventArgs e)
+    {
+        if (_services is null) return;
+        try
+        {
+            using var scope = _services.CreateScope();
+            var coordinator = scope.ServiceProvider.GetRequiredService<ProtectionCoordinator>();
+            if (e.Mode == PowerModes.Suspend && !_sessionLocked)
+                coordinator.HeartbeatAsync(DateTimeOffset.UtcNow).GetAwaiter().GetResult();
+            else if (e.Mode == PowerModes.Resume)
+                ResynchronizeAfterResumeAsync(scope.ServiceProvider, DateTimeOffset.UtcNow).GetAwaiter().GetResult();
+        }
+        catch (Exception ex) { _services.GetRequiredService<IAppLogger>().Error("Protection session could not be synchronized with a power state change.", ex); }
+    }
+
+    private void OnSessionSwitch(object? sender, SessionSwitchEventArgs e)
+    {
+        if (_services is null) return;
+        try
+        {
+            using var scope = _services.CreateScope();
+            var coordinator = scope.ServiceProvider.GetRequiredService<ProtectionCoordinator>();
+            if (e.Reason == SessionSwitchReason.SessionLock)
+            {
+                _sessionLocked = true;
+                coordinator.HeartbeatAsync(DateTimeOffset.UtcNow).GetAwaiter().GetResult();
+            }
+            else if (e.Reason == SessionSwitchReason.SessionUnlock)
+            {
+                ResynchronizeAfterResumeAsync(scope.ServiceProvider, DateTimeOffset.UtcNow).GetAwaiter().GetResult();
+                _sessionLocked = false;
+            }
+        }
+        catch (Exception ex) { _services.GetRequiredService<IAppLogger>().Error("Protection session could not be synchronized with a Windows session change.", ex); }
+    }
+
+    private static async Task ResynchronizeAfterResumeAsync(IServiceProvider services, DateTimeOffset now)
+    {
+        await services.GetRequiredService<ProtectionCoordinator>().ResynchronizeHeartbeatAsync(now);
+        await services.GetRequiredService<ActivityTrackingService>().ResetAfterResumeAsync(now);
+        services.GetRequiredService<IForegroundActivityPort>().OnResume();
     }
 }

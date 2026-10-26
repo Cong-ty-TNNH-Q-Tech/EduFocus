@@ -151,6 +151,18 @@ public sealed class DomainEntityTests
     }
 
     [Fact]
+    public void Ending_session_after_clock_rollback_uses_last_valid_heartbeat()
+    {
+        var active = StudySession.Start(null, StudySessionTrigger.Manual, false, new DateOnly(2026, 10, 26), Now);
+        active.Heartbeat(Now.AddMinutes(5));
+
+        active.Complete(Now.AddMinutes(2));
+
+        Assert.Equal(Now.AddMinutes(5), active.EndedAtUtc);
+        Assert.Equal(Now.AddMinutes(5), active.LastHeartbeatAtUtc);
+    }
+
+    [Fact]
     public void Activity_urls_strip_query_and_fragment_and_audit_rejects_secret_metadata()
     {
         var sample = ActivitySample.Create(Guid.NewGuid(), Now, 1, Now, url: "https://example.com/path?token=private#part");

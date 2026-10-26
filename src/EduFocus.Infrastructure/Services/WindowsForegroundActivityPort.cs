@@ -9,6 +9,10 @@ namespace EduFocus.Infrastructure.Services;
 /// <summary>Captures foreground process metadata without reading page contents, clipboard, or keyboard input.</summary>
 public sealed class WindowsForegroundActivityPort : IForegroundActivityPort
 {
+    private long _idleSuppressedUntilTick;
+
+    public void OnResume() => Interlocked.Exchange(ref _idleSuppressedUntilTick, Environment.TickCount64 + 30_000);
+
     public ForegroundActivitySnapshot Capture()
     {
         var idleSeconds = GetIdleSeconds();
@@ -36,8 +40,9 @@ public sealed class WindowsForegroundActivityPort : IForegroundActivityPort
         }
     }
 
-    private static long GetIdleSeconds()
+    private long GetIdleSeconds()
     {
+        if (Environment.TickCount64 < Volatile.Read(ref _idleSuppressedUntilTick)) return 0;
         var input = new LastInputInfo { Size = (uint)Marshal.SizeOf<LastInputInfo>() };
         if (!GetLastInputInfo(ref input)) return 0;
         var elapsed = unchecked((uint)Environment.TickCount - input.Time);

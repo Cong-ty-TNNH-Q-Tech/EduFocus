@@ -4,6 +4,7 @@ namespace EduFocus.Ports.Outbound.Services;
 public interface IForegroundActivityPort
 {
     ForegroundActivitySnapshot Capture();
+    void OnResume() { }
 }
 
 public sealed record ForegroundActivitySnapshot(

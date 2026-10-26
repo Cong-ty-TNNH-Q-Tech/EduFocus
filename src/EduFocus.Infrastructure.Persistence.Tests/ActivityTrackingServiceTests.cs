@@ -121,6 +121,31 @@ public sealed class ActivityTrackingServiceTests
         Assert.All(samples, sample => Assert.True(sample.IsOnlineClass));
     }
 
+    [Fact]
+    public async Task Activity_duration_uses_monotonic_time_and_resume_excludes_sleep()
+    {
+        await using var fixture = await Fixture.Create();
+        fixture.Db.StudySessions.Add(StudySession.Start(null, StudySessionTrigger.Manual, true, new DateOnly(2026, 10, 26), Now));
+        await fixture.Db.SaveChangesAsync();
+        var foreground = new FakeForeground(Snapshot("winword", "lesson"));
+        var clock = new FakeMonotonicClock();
+        using var provider = fixture.CreateServices(foreground);
+        var tracker = new ActivityTrackingService(provider.GetRequiredService<IServiceScopeFactory>(), foreground, new FakeLogger(), clock);
+
+        await tracker.ScanOnceAsync(Now);
+        await tracker.ScanOnceAsync(Now.AddSeconds(2));
+        clock.Advance(TimeSpan.FromSeconds(10));
+        await tracker.ScanOnceAsync(Now.AddDays(1));
+        fixture.Db.ChangeTracker.Clear();
+        Assert.Equal(10, (await fixture.Db.StudySessions.SingleAsync()).MonitoringEligibleSeconds);
+
+        await tracker.ResetAfterResumeAsync(Now.AddDays(1).AddSeconds(1));
+        await tracker.ScanOnceAsync(Now.AddDays(1).AddSeconds(2));
+        await tracker.ScanOnceAsync(Now.AddDays(1).AddSeconds(4));
+        fixture.Db.ChangeTracker.Clear();
+        Assert.Equal(10, (await fixture.Db.StudySessions.SingleAsync()).MonitoringEligibleSeconds);
+    }
+
     private static ForegroundActivitySnapshot Snapshot(string process, string title, long idle = 0) =>
         new(process, process, title, null, ActivityUrlSource.None, idle);
 
@@ -140,6 +165,13 @@ public sealed class ActivityTrackingServiceTests
         public void Info(string message) { }
         public void Warning(string message) { }
         public void Error(string message, Exception? ex = null) { }
+    }
+
+    private sealed class FakeMonotonicClock : IMonotonicClockPort
+    {
+        private long _ticks;
+        public TimeSpan GetTickCount() => TimeSpan.FromTicks(_ticks);
+        public void Advance(TimeSpan elapsed) => _ticks = checked(_ticks + elapsed.Ticks);
     }
 
     private sealed class Fixture(SqliteConnection connection, AppDbContext db, DbContextOptions<AppDbContext> options) : IAsyncDisposable

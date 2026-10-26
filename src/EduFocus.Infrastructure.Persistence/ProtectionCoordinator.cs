@@ -2,15 +2,17 @@ using EduFocus.Domain.Entities;
 using EduFocus.Domain.Enums;
 using EduFocus.Ports.Outbound.Services;
 using Microsoft.EntityFrameworkCore;
+using System.Collections.Concurrent;
 
 namespace EduFocus.Infrastructure.Persistence;
 
 public sealed record ProtectionStatus(ProtectionState State, Guid? ActiveSessionId, bool EngineAvailable, StudySessionTrigger? ActiveTrigger = null);
 
 /// <summary>Persists Protection state only after the enforcement engine has accepted the matching transition.</summary>
-public sealed class ProtectionCoordinator(AppDbContext db, IProtectionEnginePort engine)
+public sealed class ProtectionCoordinator(AppDbContext db, IProtectionEnginePort engine, IMonotonicClockPort? monotonicClock = null)
 {
     private static readonly SemaphoreSlim ProcessGate = new(1, 1);
+    private static readonly ConcurrentDictionary<Guid, long> LastMonotonicTicks = new();
     private bool _restored;
 
     public async Task<ProtectionStatus> GetStatusAsync(CancellationToken cancellationToken = default)
@@ -28,9 +30,32 @@ public sealed class ProtectionCoordinator(AppDbContext db, IProtectionEnginePort
         try
         {
             var active = await db.StudySessions.SingleOrDefaultAsync(x => x.Status == StudySessionStatus.Active, cancellationToken);
-            if (active is null || now < active.LastHeartbeatAtUtc) return;
-            var elapsedSeconds = (long)Math.Min(10, Math.Floor((now - active.LastHeartbeatAtUtc).TotalSeconds));
+            if (active is null) return;
+            if (now < active.LastHeartbeatAtUtc)
+            {
+                active.ResynchronizeHeartbeat(now);
+                SetClockBaseline(active.Id);
+                await db.SaveChangesAsync(cancellationToken);
+                return;
+            }
+            var elapsedSeconds = GetElapsedActiveSeconds(active, now);
             active.AddActiveSeconds(elapsedSeconds, now);
+            await db.SaveChangesAsync(cancellationToken);
+        }
+        finally { ProcessGate.Release(); }
+    }
+
+    /// <summary>Moves the heartbeat anchor after resume without counting suspended time as active.</summary>
+    public async Task ResynchronizeHeartbeatAsync(DateTimeOffset now, CancellationToken cancellationToken = default)
+    {
+        now = RequireUtc(now);
+        await ProcessGate.WaitAsync(cancellationToken);
+        try
+        {
+            var active = await db.StudySessions.SingleOrDefaultAsync(x => x.Status == StudySessionStatus.Active, cancellationToken);
+            if (active is null) return;
+            active.ResynchronizeHeartbeat(now);
+            SetClockBaseline(active.Id);
             await db.SaveChangesAsync(cancellationToken);
         }
         finally { ProcessGate.Release(); }
@@ -89,12 +114,19 @@ public sealed class ProtectionCoordinator(AppDbContext db, IProtectionEnginePort
                 {
                     await engine.StopAsync(cancellationToken);
                     await using var transaction = await db.Database.BeginTransactionAsync(cancellationToken);
+                    Guid? endedSessionId = null;
                     var active = await db.StudySessions.SingleOrDefaultAsync(x => x.Status == StudySessionStatus.Active, cancellationToken);
-                    active?.Complete(now);
+                    if (active is not null)
+                    {
+                        active.Complete(now);
+                        endedSessionId = active.Id;
+                        await CloseOpenAttentionEventsAsync(active.Id, now, cancellationToken);
+                    }
                     settings.SetProtection(ProtectionState.Off, now);
                     db.AuditLogs.Add(AuditLog.Create(now, actor, "ProtectionOff", enabled ? "Protection schedule state was reconciled." : actor == AuditActor.Parent ? "Protection was disabled by the parent." : "Protection was disabled by the schedule.", now));
                     await db.SaveChangesAsync(cancellationToken);
                     await transaction.CommitAsync(cancellationToken);
+                    if (endedSessionId is { } completedId) ForgetClockBaseline(completedId);
                 }
                 catch
                 {
@@ -139,15 +171,20 @@ public sealed class ProtectionCoordinator(AppDbContext db, IProtectionEnginePort
             {
                 await using var transaction = await db.Database.BeginTransactionAsync(cancellationToken);
                 var active = await db.StudySessions.SingleOrDefaultAsync(x => x.Status == StudySessionStatus.Active, cancellationToken);
+                if (enabled && active is not null) SetClockBaseline(active.Id);
                 if (!enabled && active is not null)
                 {
                     active.InterruptAtLastHeartbeat();
+                    ForgetClockBaseline(active.Id);
+                    await CloseOpenAttentionEventsAsync(active.Id, active.EndedAtUtc!.Value, cancellationToken);
                     db.AuditLogs.Add(AuditLog.Create(now, AuditActor.System, "SessionInterrupted", "An active session was interrupted while Protection was OFF.", now));
                     await db.SaveChangesAsync(cancellationToken);
                 }
                 else if (enabled && active is not null)
                 {
                     active.InterruptAtLastHeartbeat();
+                    ForgetClockBaseline(active.Id);
+                    await CloseOpenAttentionEventsAsync(active.Id, active.EndedAtUtc!.Value, cancellationToken);
                     db.AuditLogs.Add(AuditLog.Create(now, AuditActor.System, "SessionInterrupted", "The previous session ended at its last heartbeat during restart.", now));
                     await db.SaveChangesAsync(cancellationToken);
                     active = null;
@@ -158,6 +195,7 @@ public sealed class ProtectionCoordinator(AppDbContext db, IProtectionEnginePort
                     var recovered = StudySession.Start(null, StudySessionTrigger.Recovery, settings.MonitoringEnabled,
                         DateOnly.FromDateTime(now.LocalDateTime), now);
                     db.StudySessions.Add(recovered);
+                    SetClockBaseline(recovered.Id);
                     db.AuditLogs.Add(AuditLog.Create(now, AuditActor.System, "ProtectionRecovered", "Protection resources were reconciled after restart.", now));
                     await db.SaveChangesAsync(cancellationToken);
                 }
@@ -192,7 +230,12 @@ public sealed class ProtectionCoordinator(AppDbContext db, IProtectionEnginePort
                 if (engine.IsAvailable) await engine.StopAsync(cancellationToken);
                 await using var transaction = await db.Database.BeginTransactionAsync(cancellationToken);
                 var active = await db.StudySessions.SingleOrDefaultAsync(x => x.Status == StudySessionStatus.Active, cancellationToken);
-                active?.Complete(now);
+                if (active is not null)
+                {
+                    active.Complete(now);
+                    ForgetClockBaseline(active.Id);
+                    await CloseOpenAttentionEventsAsync(active.Id, now, cancellationToken);
+                }
                 settings.RecordCleanShutdown(now);
                 if (wasOn) db.AuditLogs.Add(AuditLog.Create(now, AuditActor.Parent, "ProtectionOff", "Protection was disabled during an authorized clean exit.", now));
                 db.AuditLogs.Add(AuditLog.Create(now, AuditActor.Parent, "CleanExit", "The parent authorized a clean application exit.", now));
@@ -224,6 +267,8 @@ public sealed class ProtectionCoordinator(AppDbContext db, IProtectionEnginePort
             if (active is not null)
             {
                 active.InterruptAtLastHeartbeat();
+                ForgetClockBaseline(active.Id);
+                await CloseOpenAttentionEventsAsync(active.Id, active.EndedAtUtc!.Value, cancellationToken);
                 db.AuditLogs.Add(AuditLog.Create(now, AuditActor.System, "SessionInterrupted", "The active session was interrupted by Windows shutdown or logoff.", now));
             }
             db.AuditLogs.Add(AuditLog.Create(now, AuditActor.System, "SystemShutdown", "Windows shutdown or logoff was received; Protection state was preserved.", now));
@@ -239,11 +284,14 @@ public sealed class ProtectionCoordinator(AppDbContext db, IProtectionEnginePort
         if (active is not null)
         {
             active.InterruptAtLastHeartbeat();
+            ForgetClockBaseline(active.Id);
+            await CloseOpenAttentionEventsAsync(active.Id, active.EndedAtUtc!.Value, cancellationToken);
             await db.SaveChangesAsync(cancellationToken);
         }
         settings.SetProtection(ProtectionState.On, now);
         if (clearOverride) settings.SetScheduleOverride(null, now);
         var session = StudySession.Start(null, trigger, settings.MonitoringEnabled, DateOnly.FromDateTime(now.LocalDateTime), now);
+        SetClockBaseline(session.Id);
         db.StudySessions.Add(session);
         db.AuditLogs.Add(AuditLog.Create(now, actor, "ProtectionOn", "Protection was enabled.", now));
         await db.SaveChangesAsync(cancellationToken);
@@ -265,4 +313,43 @@ public sealed class ProtectionCoordinator(AppDbContext db, IProtectionEnginePort
             // Failure auditing is best-effort and must not hide the original adapter/persistence error.
         }
     }
+
+    private async Task CloseOpenAttentionEventsAsync(Guid sessionId, DateTimeOffset endedAtUtc, CancellationToken cancellationToken)
+    {
+        var openEvents = await db.AttentionEvents
+            .Where(x => x.SessionId == sessionId && x.EndedAtUtc == null)
+            .ToArrayAsync(cancellationToken);
+        foreach (var attentionEvent in openEvents)
+        {
+            var safeEnd = endedAtUtc < attentionEvent.StartedAtUtc ? attentionEvent.StartedAtUtc : endedAtUtc;
+            attentionEvent.Close(safeEnd);
+        }
+    }
+
+    private void SetClockBaseline(Guid sessionId)
+    {
+        if (monotonicClock is not null) LastMonotonicTicks[sessionId] = monotonicClock.GetTickCount().Ticks;
+    }
+
+    private long GetElapsedActiveSeconds(StudySession active, DateTimeOffset now)
+    {
+        if (monotonicClock is null)
+            return (long)Math.Min(10, Math.Floor((now - active.LastHeartbeatAtUtc).TotalSeconds));
+
+        var currentTicks = monotonicClock.GetTickCount().Ticks;
+        if (!LastMonotonicTicks.TryGetValue(active.Id, out var previousTicks))
+        {
+            LastMonotonicTicks[active.Id] = currentTicks;
+            return 0;
+        }
+        if (currentTicks < previousTicks)
+        {
+            LastMonotonicTicks[active.Id] = currentTicks;
+            return 0;
+        }
+        LastMonotonicTicks[active.Id] = currentTicks;
+        return (currentTicks - previousTicks) / TimeSpan.TicksPerSecond;
+    }
+
+    private static void ForgetClockBaseline(Guid sessionId) => LastMonotonicTicks.TryRemove(sessionId, out _);
 }

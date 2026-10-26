@@ -1,5 +1,6 @@
 using EduFocus.Domain.Entities;
 using EduFocus.Domain.Enums;
+using EduFocus.Domain.Attention;
 using EduFocus.Infrastructure.Persistence;
 using EduFocus.Ports.Outbound.Services;
 using Microsoft.Data.Sqlite;
@@ -155,6 +156,50 @@ public sealed class ProtectionCoordinatorTests
     }
 
     [Fact]
+    public async Task Monotonic_heartbeat_excludes_sleep_and_survives_wall_clock_jumps()
+    {
+        await using var fixture = await Fixture.Create();
+        var session = StudySession.Start(null, StudySessionTrigger.Manual, true, new DateOnly(2026, 10, 26), Now);
+        fixture.Db.StudySessions.Add(session);
+        await fixture.Db.SaveChangesAsync();
+        var clock = new FakeMonotonicClock();
+        var coordinator = new ProtectionCoordinator(fixture.Db, new FakeProtectionEngine(), clock);
+        await coordinator.ResynchronizeHeartbeatAsync(Now);
+
+        clock.Advance(TimeSpan.FromSeconds(10));
+        await coordinator.HeartbeatAsync(Now.AddSeconds(10));
+        clock.Advance(TimeSpan.FromSeconds(2));
+        await coordinator.HeartbeatAsync(Now.AddMinutes(10));
+        Assert.Equal(12, (await fixture.Db.StudySessions.SingleAsync()).ActiveSeconds);
+
+        clock.Advance(TimeSpan.FromSeconds(10));
+        await coordinator.HeartbeatAsync(Now.AddSeconds(15));
+        Assert.Equal(12, (await fixture.Db.StudySessions.SingleAsync()).ActiveSeconds);
+        clock.Advance(TimeSpan.FromSeconds(10));
+        await coordinator.HeartbeatAsync(Now.AddSeconds(25));
+        Assert.Equal(22, (await fixture.Db.StudySessions.SingleAsync()).ActiveSeconds);
+    }
+
+    [Fact]
+    public async Task System_shutdown_closes_open_attention_event_at_last_heartbeat()
+    {
+        await using var fixture = await Fixture.Create();
+        var session = StudySession.Start(null, StudySessionTrigger.Manual, true, new DateOnly(2026, 10, 26), Now);
+        session.Heartbeat(Now.AddSeconds(10));
+        fixture.Db.StudySessions.Add(session);
+        fixture.Db.AttentionEvents.Add(AttentionEvent.Start(session.Id, AttentionState.Focused, Now.AddSeconds(5), Now.AddSeconds(5)));
+        await fixture.Db.SaveChangesAsync();
+        var coordinator = new ProtectionCoordinator(fixture.Db, new FakeProtectionEngine());
+
+        await coordinator.HandleSystemShutdownAsync(Now.AddMinutes(5));
+
+        var attentionEvent = await fixture.Db.AttentionEvents.SingleAsync();
+        Assert.Equal(Now.AddSeconds(10), attentionEvent.EndedAtUtc);
+        Assert.Equal(5, attentionEvent.DurationSeconds);
+        Assert.Equal(Now.AddSeconds(10), (await fixture.Db.StudySessions.SingleAsync()).EndedAtUtc);
+    }
+
+    [Fact]
     public async Task No_engine_never_changes_persisted_protection_state()
     {
         await using var fixture = await Fixture.Create();
@@ -184,6 +229,9 @@ public sealed class ProtectionCoordinatorTests
         var engine = new FakeProtectionEngine();
         var coordinator = new ProtectionCoordinator(fixture.Db, engine);
         await coordinator.SetProtectionAsync(true, AuthenticatedSession(), Now.AddSeconds(1));
+        var active = await fixture.Db.StudySessions.SingleAsync(x => x.Status == StudySessionStatus.Active);
+        fixture.Db.AttentionEvents.Add(AttentionEvent.Start(active.Id, AttentionState.Focused, Now.AddSeconds(10), Now.AddSeconds(10)));
+        await fixture.Db.SaveChangesAsync();
 
         await coordinator.CleanExitAsync(Now.AddMinutes(1));
 
@@ -192,6 +240,7 @@ public sealed class ProtectionCoordinatorTests
         Assert.Equal(Now.AddMinutes(1), settings.LastCleanShutdownAtUtc);
         Assert.False(engine.Active);
         Assert.Equal(StudySessionStatus.Completed, (await fixture.Db.StudySessions.SingleAsync()).Status);
+        Assert.Equal(Now.AddMinutes(1), (await fixture.Db.AttentionEvents.SingleAsync()).EndedAtUtc);
         Assert.Contains(await fixture.Db.AuditLogs.Select(x => x.EventType).ToArrayAsync(), x => x == "ProtectionOff");
         Assert.Contains(await fixture.Db.AuditLogs.Select(x => x.EventType).ToArrayAsync(), x => x == "CleanExit");
     }
@@ -279,6 +328,13 @@ public sealed class ProtectionCoordinatorTests
             Active = protectionEnabled;
             return Task.CompletedTask;
         }
+    }
+
+    private sealed class FakeMonotonicClock : IMonotonicClockPort
+    {
+        private long _ticks;
+        public TimeSpan GetTickCount() => TimeSpan.FromTicks(_ticks);
+        public void Advance(TimeSpan amount) => _ticks = checked(_ticks + amount.Ticks);
     }
 
     private sealed class Fixture(SqliteConnection connection, AppDbContext db) : IAsyncDisposable

@@ -215,6 +215,7 @@ public sealed class StudySession
     public static StudySession Start(IEnumerable<StudySession>? existing,StudySessionTrigger trigger,bool monitoring,DateOnly localDate,DateTimeOffset now)
     { EnumGuard.Defined(trigger); if(existing?.Any(s=>s.Status==StudySessionStatus.Active)==true) throw new InvalidOperationException("Only one study session may be active."); return new(trigger,monitoring,localDate,now); }
     public void Heartbeat(DateTimeOffset now) { EnsureActive(); now=Utc.Require(now); if(now<LastHeartbeatAtUtc) throw new ArgumentOutOfRangeException(nameof(now)); LastHeartbeatAtUtc=now; if(now>UpdatedAtUtc)UpdatedAtUtc=now; }
+    public void ResynchronizeHeartbeat(DateTimeOffset now) { EnsureActive(); now=Utc.Require(now); if(now<StartedAtUtc)now=StartedAtUtc; LastHeartbeatAtUtc=now; if(now>UpdatedAtUtc)UpdatedAtUtc=now; }
     public void AddActiveSeconds(long seconds,DateTimeOffset now) { EnsureActive(); NonNegative(seconds,nameof(seconds)); ActiveSeconds=checked(ActiveSeconds+seconds); Heartbeat(now); }
     public void AddMonitoringEligibleSeconds(long seconds,DateTimeOffset now) { EnsureActive(); NonNegative(seconds,nameof(seconds)); MonitoringEligibleSeconds=checked(MonitoringEligibleSeconds+seconds); RefreshSummary(); TouchActivity(now); }
     public void AddAttention(AttentionState state,long seconds,double? confidence,DateTimeOffset now)
@@ -233,7 +234,7 @@ public sealed class StudySession
     public void Abort(DateTimeOffset now)=>End(StudySessionStatus.Aborted,now,true);
     public void InterruptAtLastHeartbeat(){End(StudySessionStatus.Interrupted,LastHeartbeatAtUtc,false);}
     private void End(StudySessionStatus status,DateTimeOffset now,bool heartbeat)
-    { EnsureActive(); now=Utc.Require(now); if(now<LastHeartbeatAtUtc) throw new ArgumentOutOfRangeException(nameof(now)); Status=status; EndedAtUtc=now; if(heartbeat)LastHeartbeatAtUtc=now; UpdatedAtUtc=now; }
+    { EnsureActive(); now=Utc.Require(now); if(now<LastHeartbeatAtUtc)now=LastHeartbeatAtUtc; Status=status; EndedAtUtc=now; if(heartbeat)LastHeartbeatAtUtc=now; if(now>UpdatedAtUtc)UpdatedAtUtc=now; }
     private void EnsureActive(){if(Status!=StudySessionStatus.Active)throw new InvalidOperationException("Session has already ended.");}
     private void TouchActivity(DateTimeOffset now){now=Utc.Require(now);if(now>UpdatedAtUtc)UpdatedAtUtc=now;}
     private void RefreshSummary(){AttentionPercent=MonitoredSeconds==0?null:(double)FocusedSeconds/MonitoredSeconds*100;CoveragePercent=MonitoringEligibleSeconds==0?null:(double)MonitoredSeconds/MonitoringEligibleSeconds*100;ConfidenceAvg=ConfidenceWeight==0?null:ConfidenceWeighted/ConfidenceWeight;}
