@@ -105,7 +105,8 @@ public sealed class BlockRule
     {
         EnumGuard.Defined(type); EnumGuard.Defined(match); EnumGuard.Defined(category); EnumGuard.Defined(effect);
         value = TextLimit.Required(value,512,nameof(value)); var normalized = Normalize(type,value);
-        var enforceable = type is BlockRuleType.Domain or BlockRuleType.App && match == BlockMatchType.Exact;
+        var wildcard = type == BlockRuleType.Domain && value.Trim().StartsWith("*.", StringComparison.Ordinal);
+        var enforceable = (type is BlockRuleType.Domain or BlockRuleType.App) && match == BlockMatchType.Exact && !wildcard;
         return new(Guid.NewGuid(),type,match,value,normalized,category,effect,enabled,builtIn,enforceable?RuleEnforcementStatus.Enforced:RuleEnforcementStatus.NotEnforced,expiresAtUtc is { } e ? Utc.Require(e) : null,TextLimit.Optional(note,512),now);
     }
     public void SetEnabled(bool enabled, DateTimeOffset now) { IsEnabled=enabled; UpdatedAtUtc=Utc.Require(now); }
@@ -116,9 +117,13 @@ public sealed class BlockRule
         var input=value.Trim();
         if(type == BlockRuleType.Domain)
         {
-            if(Uri.TryCreate(input.Contains("://",StringComparison.Ordinal)?input:"https://"+input,UriKind.Absolute,out var uri)) input=uri.Host;
-            input=input.TrimEnd('.').ToLowerInvariant();
-            if(input.Length==0 || input.Any(char.IsWhiteSpace)) throw new ArgumentException("Domain rule must contain a valid host.",nameof(value));
+            if (input.StartsWith("*.", StringComparison.Ordinal)) input = input[2..];
+            var candidate = input.Contains("://", StringComparison.Ordinal) ? input : "https://" + input;
+            if (!Uri.TryCreate(candidate, UriKind.Absolute, out var uri) || string.IsNullOrWhiteSpace(uri.Host))
+                throw new ArgumentException("Domain rule must contain a valid host.", nameof(value));
+            input = uri.IdnHost.TrimEnd('.').ToLowerInvariant();
+            if (input.Length == 0 || Uri.CheckHostName(input) == UriHostNameType.Unknown || input.Any(char.IsWhiteSpace))
+                throw new ArgumentException("Domain rule must contain a valid host.", nameof(value));
             return input;
         }
         if(type == BlockRuleType.App) return input.ToLowerInvariant();

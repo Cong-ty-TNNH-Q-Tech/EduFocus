@@ -65,6 +65,24 @@ public sealed class DomainEntityTests
     }
 
     [Fact]
+    public void Block_rule_exact_matching_handles_idn_disabled_wildcard_and_host_lookalikes()
+    {
+        var idn = BlockRule.Create(BlockRuleType.Domain, BlockMatchType.Exact,
+            "HTTPS://BÜCHER.DE./some/path?query=yes#fragment", BlockRuleCategory.Custom, BlockRuleEffect.Block, Now);
+        Assert.Equal("xn--bcher-kva.de", idn.NormalizedValue);
+        Assert.Equal(BlockDecision.Block, BlockRule.Evaluate(new[] { idn }, BlockRuleType.Domain, "bücher.de", Now));
+        Assert.Equal(BlockDecision.None, BlockRule.Evaluate(new[] { idn }, BlockRuleType.Domain, "xn--bcher-kva.de.evil.test", Now));
+
+        var disabled = BlockRule.Create(BlockRuleType.Domain, BlockMatchType.Exact, "disabled.example", BlockRuleCategory.Custom, BlockRuleEffect.Block, Now, enabled: false);
+        Assert.Equal(BlockDecision.None, BlockRule.Evaluate(new[] { disabled }, BlockRuleType.Domain, "disabled.example", Now));
+
+        var wildcard = BlockRule.Create(BlockRuleType.Domain, BlockMatchType.Exact, "*.example.test", BlockRuleCategory.Custom, BlockRuleEffect.Block, Now);
+        Assert.Equal(RuleEnforcementStatus.NotEnforced, wildcard.EnforcementStatus);
+        Assert.Equal(BlockDecision.None, BlockRule.Evaluate(new[] { wildcard }, BlockRuleType.Domain, "example.test", Now));
+        Assert.Throws<ArgumentException>(() => BlockRule.Create(BlockRuleType.Domain, BlockMatchType.Exact, "https://bad host/", BlockRuleCategory.Custom, BlockRuleEffect.Block, Now));
+    }
+
+    [Fact]
     public void Schedule_rejects_invalid_ranges_and_overlaps_only_on_shared_days()
     {
         Assert.Throws<ArgumentOutOfRangeException>(() => ScheduleWindow.Create(1, 900, 800, Now));
