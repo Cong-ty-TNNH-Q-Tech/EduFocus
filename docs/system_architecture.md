@@ -323,6 +323,8 @@ The application has a `ProtectionCoordinator` and an `IProtectionEnginePort` con
 
 `IBlockPagePort` binds a TCP listener only to `127.0.0.1:80`. It serves a small static UTF-8 page, escapes the Host value, excludes paths and query strings, and sets a restrictive CSP with no remote assets. If port 80 cannot bind, the listener reports unavailable while block enforcement may continue through hosts; it does not change Protection state.
 
+`IProcessWatcherPort` polls interactive processes every second and matches enabled exact App rules against process name or executable path. It skips protected Windows/EduFocus processes, allow matches, and processes without a main window. It sends close, waits at most two seconds, then attempts process-tree termination. This is best-effort, may lose unsaved work, and can be bypassed by renaming/moving an executable; attempts are debounced and recorded without storing window titles or executable paths.
+
 ### 6.1. Rule matching
 
 ```text

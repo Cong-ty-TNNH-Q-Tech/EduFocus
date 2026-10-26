@@ -66,6 +66,7 @@
         <StackPanel x:Name="BlocklistPanel" Visibility="Collapsed" HorizontalAlignment="Center" VerticalAlignment="Center" Width="560">
             <TextBlock Text="Built-in blocklist and learning allowlist" FontSize="26" FontWeight="SemiBold" Foreground="#17324D" HorizontalAlignment="Center" />
             <TextBlock Text="Rules match exact domains. Allow rules take precedence over block rules. URL/path and wildcard rules are not enforced." Margin="0,10,0,10" Foreground="#52677A" TextWrapping="Wrap" />
+            <TextBlock Text="Blocked apps are closed on a best-effort basis; forced closing can lose unsaved work. Process name or path rules may be bypassed by renaming or relocating an app." Margin="0,0,0,10" Foreground="#9A3412" TextWrapping="Wrap" />
             <ListBox x:Name="BlockRuleList" Height="340" DisplayMemberPath="Label" SelectionChanged="OnBlockRuleSelectionChanged" />
             <TextBlock x:Name="BlockRuleStatus" Margin="0,8,0,8" MinHeight="24" Foreground="#52677A" TextWrapping="Wrap" />
             <Button x:Name="ToggleBuiltInRuleButton" Content="Select a rule" Height="38" IsEnabled="False" Click="ToggleBuiltInRule" />

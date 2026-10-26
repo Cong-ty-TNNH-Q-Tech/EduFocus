@@ -1,6 +1,7 @@
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using EduFocus.Ports.Outbound.Services;
 
 namespace EduFocus.Infrastructure.Persistence;
 
@@ -28,6 +29,7 @@ public static class PersistenceServiceCollectionExtensions
         services.AddScoped<ScheduleService>();
         services.AddScoped<DefaultBlockRuleSeeder>();
         services.AddScoped<BlockRuleService>();
+        services.AddScoped<IBlockedAttemptRecorder, BlockedAttemptRecorder>();
         return services;
     }
 }
