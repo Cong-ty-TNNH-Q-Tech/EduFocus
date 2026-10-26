@@ -45,7 +45,19 @@
             <TextBlock Text="Parent controls are unlocked." Margin="0,12,0,4" Foreground="#34536F" HorizontalAlignment="Center" />
             <TextBlock x:Name="SessionCountdown" Margin="0,0,0,20" Foreground="#52677A" HorizontalAlignment="Center" />
             <TextBlock x:Name="ProtectionStatusText" Margin="0,0,0,10" Foreground="#34536F" TextWrapping="Wrap" HorizontalAlignment="Center" />
+            <TextBlock x:Name="ScheduleStatusText" Margin="0,0,0,10" Foreground="#52677A" TextWrapping="Wrap" HorizontalAlignment="Center" />
             <Button x:Name="ToggleProtectionButton" Content="Protection unavailable" Height="40" IsEnabled="False" Click="ToggleProtection" />
+            <TextBlock Text="Weekly protection schedules (days: Mon=1 to Sun=64; combine bits)" Margin="0,12,0,4" Foreground="#34536F" TextWrapping="Wrap" />
+            <DockPanel Margin="0,0,0,6">
+                <TextBox x:Name="ScheduleDaysInput" Width="58" Margin="0,0,5,0" ToolTip="Days mask 1-127" Text="31" />
+                <TextBox x:Name="ScheduleStartInput" Width="58" Margin="0,0,5,0" ToolTip="Start minute 0-1439" Text="540" />
+                <TextBox x:Name="ScheduleEndInput" Width="58" Margin="0,0,5,0" ToolTip="End minute 1-1440" Text="1020" />
+                <TextBox x:Name="ScheduleLabelInput" MinWidth="100" ToolTip="Schedule label" />
+                <Button x:Name="SaveScheduleButton" Content="Add" Width="52" Margin="5,0,0,0" Click="AddSchedule" />
+            </DockPanel>
+            <ListBox x:Name="ScheduleList" Height="76" DisplayMemberPath="Label" SelectionChanged="OnScheduleSelectionChanged" />
+            <Button Content="Clear selection / new schedule" Height="28" Margin="0,4,0,0" Click="ClearScheduleSelection" />
+            <Button x:Name="DeleteScheduleButton" Content="Delete selected schedule" Height="30" Margin="0,4,0,10" IsEnabled="False" Click="DeleteSchedule" />
             <Button Content="Change PIN" Height="40" Click="OpenChangePin" />
             <Button Content="Lock Parent Mode" Margin="0,10,0,0" Height="40" Click="LockNow" />
         </StackPanel>

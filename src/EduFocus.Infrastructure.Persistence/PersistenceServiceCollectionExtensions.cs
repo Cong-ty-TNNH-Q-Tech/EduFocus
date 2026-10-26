@@ -25,6 +25,7 @@ public static class PersistenceServiceCollectionExtensions
         services.AddScoped<ParentCredentialService>();
         services.AddScoped<OnboardingService>();
         services.AddScoped<ProtectionCoordinator>();
+        services.AddScoped<ScheduleService>();
         return services;
     }
 }

@@ -76,6 +76,18 @@ public sealed class DomainEntityTests
     }
 
     [Fact]
+    public void Schedule_uses_monday_first_local_days_and_half_open_minute_ranges_including_midnight_end()
+    {
+        var monday = ScheduleWindow.Create(1, 1380, 1440, Now);
+        var sunday = ScheduleWindow.Create(64, 0, 60, Now);
+        Assert.True(monday.AppliesAt(new DateTime(2026, 10, 26, 23, 59, 0)));
+        Assert.False(monday.AppliesAt(new DateTime(2026, 10, 27, 0, 0, 0)));
+        Assert.True(sunday.AppliesAt(new DateTime(2026, 11, 1, 0, 59, 0)));
+        Assert.False(sunday.AppliesAt(new DateTime(2026, 11, 1, 1, 0, 0)));
+        Assert.False(ScheduleWindow.Create(1, 60, 120, Now).AppliesAt(new DateTime(2026, 10, 26, 0, 59, 0)));
+    }
+
+    [Fact]
     public void Session_enforces_single_active_lifecycle_and_computes_percentages()
     {
         var active = StudySession.Start(null, StudySessionTrigger.Manual, true, new DateOnly(2026, 10, 26), Now);

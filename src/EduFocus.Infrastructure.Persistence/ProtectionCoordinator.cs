@@ -5,7 +5,7 @@ using Microsoft.EntityFrameworkCore;
 
 namespace EduFocus.Infrastructure.Persistence;
 
-public sealed record ProtectionStatus(ProtectionState State, Guid? ActiveSessionId, bool EngineAvailable);
+public sealed record ProtectionStatus(ProtectionState State, Guid? ActiveSessionId, bool EngineAvailable, StudySessionTrigger? ActiveTrigger = null);
 
 /// <summary>Persists Protection state only after the enforcement engine has accepted the matching transition.</summary>
 public sealed class ProtectionCoordinator(AppDbContext db, IProtectionEnginePort engine)
@@ -17,7 +17,7 @@ public sealed class ProtectionCoordinator(AppDbContext db, IProtectionEnginePort
     {
         var settings = await db.AppSettings.AsNoTracking().SingleOrDefaultAsync(cancellationToken);
         var active = await db.StudySessions.AsNoTracking().SingleOrDefaultAsync(x => x.Status == StudySessionStatus.Active, cancellationToken);
-        return new(settings?.Protection ?? ProtectionState.Off, active?.Id, engine.IsAvailable);
+        return new(settings?.Protection ?? ProtectionState.Off, active?.Id, engine.IsAvailable, active?.Trigger);
     }
 
     public async Task<ProtectionStatus> SetProtectionAsync(bool enabled, ParentModeSession parentSession, DateTimeOffset now, CancellationToken cancellationToken = default)
@@ -25,6 +25,15 @@ public sealed class ProtectionCoordinator(AppDbContext db, IProtectionEnginePort
         ArgumentNullException.ThrowIfNull(parentSession);
         now = RequireUtc(now);
         if (!parentSession.IsActive(now)) throw new UnauthorizedAccessException("An active Parent Mode session is required.");
+        return await SetProtectionCoreAsync(enabled, now, AuditActor.Parent, StudySessionTrigger.Manual, clearOverride: enabled, cancellationToken);
+    }
+
+    public async Task<ProtectionStatus> ApplyScheduledStateAsync(bool enabled, DateTimeOffset now, CancellationToken cancellationToken = default) =>
+        await SetProtectionCoreAsync(enabled, RequireUtc(now), AuditActor.System, StudySessionTrigger.Schedule, clearOverride: false, cancellationToken);
+
+    private async Task<ProtectionStatus> SetProtectionCoreAsync(bool enabled, DateTimeOffset now, AuditActor actor,
+        StudySessionTrigger trigger, bool clearOverride, CancellationToken cancellationToken)
+    {
         await ProcessGate.WaitAsync(cancellationToken);
         try
         {
@@ -46,7 +55,7 @@ public sealed class ProtectionCoordinator(AppDbContext db, IProtectionEnginePort
                 {
                     await engine.StartAsync(rules, cancellationToken);
                     await using var transaction = await db.Database.BeginTransactionAsync(cancellationToken);
-                    await StartStateAsync(settings, now, actor: AuditActor.Parent, trigger: StudySessionTrigger.Manual, cancellationToken);
+                    await StartStateAsync(settings, now, actor, trigger, clearOverride, cancellationToken);
                     await transaction.CommitAsync(cancellationToken);
                 }
                 catch
@@ -66,7 +75,7 @@ public sealed class ProtectionCoordinator(AppDbContext db, IProtectionEnginePort
                     var active = await db.StudySessions.SingleOrDefaultAsync(x => x.Status == StudySessionStatus.Active, cancellationToken);
                     active?.Complete(now);
                     settings.SetProtection(ProtectionState.Off, now);
-                    db.AuditLogs.Add(AuditLog.Create(now, AuditActor.Parent, "ProtectionOff", "Protection was disabled by the parent.", now));
+                    db.AuditLogs.Add(AuditLog.Create(now, actor, "ProtectionOff", enabled ? "Protection schedule state was reconciled." : actor == AuditActor.Parent ? "Protection was disabled by the parent." : "Protection was disabled by the schedule.", now));
                     await db.SaveChangesAsync(cancellationToken);
                     await transaction.CommitAsync(cancellationToken);
                 }
@@ -134,7 +143,7 @@ public sealed class ProtectionCoordinator(AppDbContext db, IProtectionEnginePort
         finally { ProcessGate.Release(); }
     }
 
-    private async Task StartStateAsync(AppSettings settings, DateTimeOffset now, AuditActor actor, StudySessionTrigger trigger, CancellationToken cancellationToken)
+    private async Task StartStateAsync(AppSettings settings, DateTimeOffset now, AuditActor actor, StudySessionTrigger trigger, bool clearOverride, CancellationToken cancellationToken)
     {
         var active = await db.StudySessions.SingleOrDefaultAsync(x => x.Status == StudySessionStatus.Active, cancellationToken);
         if (active is not null)
@@ -143,7 +152,7 @@ public sealed class ProtectionCoordinator(AppDbContext db, IProtectionEnginePort
             await db.SaveChangesAsync(cancellationToken);
         }
         settings.SetProtection(ProtectionState.On, now);
-        if (trigger == StudySessionTrigger.Manual) settings.SetScheduleOverride(null, now);
+        if (clearOverride) settings.SetScheduleOverride(null, now);
         var session = StudySession.Start(null, trigger, settings.MonitoringEnabled, DateOnly.FromDateTime(now.LocalDateTime), now);
         db.StudySessions.Add(session);
         db.AuditLogs.Add(AuditLog.Create(now, actor, "ProtectionOn", "Protection was enabled.", now));

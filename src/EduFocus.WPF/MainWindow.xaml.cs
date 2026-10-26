@@ -12,9 +12,11 @@ namespace EduFocus.WPF;
 public partial class MainWindow : Window
 {
     private enum Page { Student, Login, Recovery, NewRecovery, Parent, ChangePin }
+    private sealed record ScheduleListItem(Guid Id, string Label, int Days, int Start, int End, string? Note);
 
     private readonly ParentCredentialService _credentials;
     private readonly ProtectionCoordinator _protection;
+    private readonly ScheduleService _schedule;
     private readonly IAppLogger _logger;
     private readonly ParentModeSession _parentSession = new();
     private readonly DispatcherTimer _timer;
@@ -22,12 +24,14 @@ public partial class MainWindow : Window
     private DateTimeOffset? _lockoutUntilUtc;
     private bool _authenticationUnavailable;
     private Page _page = Page.Student;
+    private DateTimeOffset _lastScheduleEvaluationUtc = DateTimeOffset.MinValue;
 
-    public MainWindow(ParentCredentialService credentials, ProtectionCoordinator protection, IAppLogger logger, bool credentialsConfigured)
+    public MainWindow(ParentCredentialService credentials, ProtectionCoordinator protection, ScheduleService schedule, IAppLogger logger, bool credentialsConfigured)
     {
         InitializeComponent();
         _credentials = credentials ?? throw new ArgumentNullException(nameof(credentials));
         _protection = protection ?? throw new ArgumentNullException(nameof(protection));
+        _schedule = schedule ?? throw new ArgumentNullException(nameof(schedule));
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
         _credentialsConfigured = credentialsConfigured;
         if (!credentialsConfigured)
@@ -76,6 +80,7 @@ public partial class MainWindow : Window
                     SetPage(Page.Parent);
                     UpdateSessionCountdown();
                     await RefreshProtectionStatus();
+                    await RefreshSchedules();
                     return;
                 }
                 await RefreshLockoutStatus("The PIN was not accepted.");
@@ -186,8 +191,86 @@ public partial class MainWindow : Window
         {
             SetPage(Page.Parent);
             _ = RefreshProtectionStatus();
+            _ = RefreshSchedules();
         }
     }
+
+    private async void AddSchedule(object sender, RoutedEventArgs e)
+    {
+        if (!EnsureParentSession()) return;
+        if (!int.TryParse(ScheduleDaysInput.Text, out var days) || !int.TryParse(ScheduleStartInput.Text, out var start) || !int.TryParse(ScheduleEndInput.Text, out var end))
+        {
+            ScheduleStatusText.Text = "Enter numeric days and minute values for the schedule.";
+            return;
+        }
+        try
+        {
+            if (ScheduleList.SelectedItem is ScheduleListItem selected)
+                await _schedule.UpdateAsync(selected.Id, days, start, end, ScheduleLabelInput.Text, true, _parentSession, DateTimeOffset.UtcNow);
+            else
+                await _schedule.AddAsync(days, start, end, ScheduleLabelInput.Text, true, _parentSession, DateTimeOffset.UtcNow);
+            ScheduleLabelInput.Clear();
+            ScheduleStatusText.Text = "Schedule saved.";
+            await RefreshSchedules();
+            await EvaluateSchedule(DateTimeOffset.UtcNow);
+        }
+        catch (Exception ex)
+        {
+            _logger.Error("Protection schedule could not be added.", ex);
+            ScheduleStatusText.Text = "Schedule was not saved. Check the day mask (1-127), minute range, and overlaps.";
+        }
+    }
+
+    private async void DeleteSchedule(object sender, RoutedEventArgs e)
+    {
+        if (!EnsureParentSession() || ScheduleList.SelectedItem is not ScheduleListItem selected) return;
+        try
+        {
+            await _schedule.DeleteAsync(selected.Id, _parentSession, DateTimeOffset.UtcNow);
+            ScheduleStatusText.Text = "Schedule deleted.";
+            await RefreshSchedules();
+            await EvaluateSchedule(DateTimeOffset.UtcNow);
+        }
+        catch (Exception ex)
+        {
+            _logger.Error("Protection schedule could not be deleted.", ex);
+            ScheduleStatusText.Text = "Schedule could not be deleted.";
+        }
+    }
+
+    private void OnScheduleSelectionChanged(object sender, SelectionChangedEventArgs e) =>
+        OnScheduleSelected();
+
+    private void OnScheduleSelected()
+    {
+        DeleteScheduleButton.IsEnabled = _parentSession.IsActive(DateTimeOffset.UtcNow) && ScheduleList.SelectedItem is ScheduleListItem;
+        SaveScheduleButton.Content = ScheduleList.SelectedItem is ScheduleListItem ? "Save" : "Add";
+        if (ScheduleList.SelectedItem is ScheduleListItem selected)
+        {
+            ScheduleDaysInput.Text = selected.Days.ToString();
+            ScheduleStartInput.Text = selected.Start.ToString();
+            ScheduleEndInput.Text = selected.End.ToString();
+            ScheduleLabelInput.Text = selected.Note ?? string.Empty;
+        }
+    }
+
+    private void ClearScheduleSelection(object sender, RoutedEventArgs e)
+    {
+        ScheduleList.SelectedIndex = -1;
+        ScheduleLabelInput.Clear();
+        SaveScheduleButton.Content = "Add";
+    }
+
+    private async Task RefreshSchedules()
+    {
+        var windows = await _schedule.GetWindowsAsync();
+        ScheduleList.ItemsSource = windows.Select(window => new ScheduleListItem(window.Id,
+            $"{(string.IsNullOrWhiteSpace(window.Label) ? "Protection" : window.Label)} — days {window.DaysMask}, {MinuteTime(window.StartMinutes)}–{MinuteTime(window.EndMinutes)}",
+            window.DaysMask, window.StartMinutes, window.EndMinutes, window.Label)).ToArray();
+        OnScheduleSelected();
+    }
+
+    private static string MinuteTime(int minutes) => minutes == 1440 ? "24:00" : $"{minutes / 60:00}:{minutes % 60:00}";
 
     private async void ToggleProtection(object sender, RoutedEventArgs e)
     {
@@ -203,7 +286,15 @@ public partial class MainWindow : Window
                     : "The protection engine is not installed. Protection remains OFF.";
                 return;
             }
-            await _protection.SetProtectionAsync(current.State != ProtectionState.On, _parentSession, DateTimeOffset.UtcNow);
+            var now = DateTimeOffset.UtcNow;
+            var enabling = current.State != ProtectionState.On;
+            await _protection.SetProtectionAsync(enabling, _parentSession, now);
+            if (!enabling)
+            {
+                var until = await _schedule.OverrideCurrentWindowAsync(_parentSession, now);
+                if (until is { } end)
+                    ScheduleStatusText.Text = $"Protection is paused until this schedule ends at {end.ToLocalTime():t}. The next scheduled window will turn it on again.";
+            }
             await RefreshProtectionStatus();
         }
         catch (Exception ex)
@@ -258,12 +349,41 @@ public partial class MainWindow : Window
 
     private void OnTimerTick(object? sender, EventArgs e)
     {
+        var now = DateTimeOffset.UtcNow;
+        if (now - _lastScheduleEvaluationUtc >= TimeSpan.FromSeconds(30))
+        {
+            _lastScheduleEvaluationUtc = now;
+            _ = EvaluateSchedule(now);
+        }
         if (_page is Page.Parent or Page.ChangePin)
         {
             if (!_parentSession.IsActive(DateTimeOffset.UtcNow)) ExpireParentSession();
             else if (_page == Page.Parent) UpdateSessionCountdown();
         }
         UpdateLockoutCountdown();
+    }
+
+    private async Task EvaluateSchedule(DateTimeOffset now)
+    {
+        try
+        {
+            var evaluation = await _schedule.EvaluateAsync(now);
+            var status = await _protection.GetStatusAsync();
+            var scheduledOn = evaluation.IsScheduled && !evaluation.IsOverridden;
+            if (status.EngineAvailable && ((scheduledOn && status.State == ProtectionState.Off) ||
+                (!scheduledOn && status.State == ProtectionState.On && status.ActiveTrigger == StudySessionTrigger.Schedule)))
+            {
+                await _protection.ApplyScheduledStateAsync(scheduledOn, now);
+                status = await _protection.GetStatusAsync();
+            }
+            ScheduleStatusText.Text = evaluation.IsOverridden
+                ? $"Schedule override active until {evaluation.OverrideUntilUtc:HH:mm} UTC."
+                : evaluation.IsScheduled
+                    ? $"Scheduled protection window active{(string.IsNullOrWhiteSpace(evaluation.ActiveLabel) ? "." : $": {evaluation.ActiveLabel}.")}"
+                    : "No protection schedule window is active.";
+            if (_page == Page.Parent) await RefreshProtectionStatus();
+        }
+        catch (Exception ex) { _logger.Error("Protection schedule evaluation failed.", ex); }
     }
 
     private bool EnsureParentSession()

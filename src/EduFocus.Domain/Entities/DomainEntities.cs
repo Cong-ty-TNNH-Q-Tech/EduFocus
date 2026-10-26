@@ -149,12 +149,27 @@ public sealed class ScheduleWindow
     private ScheduleWindow(int days,int start,int end,string? label,bool enabled,DateTimeOffset now) { Id=Guid.NewGuid(); DaysMask=days; StartMinutes=start; EndMinutes=end; Label=label; IsEnabled=enabled; CreatedAtUtc=UpdatedAtUtc=Utc.Require(now); }
     public static ScheduleWindow Create(int daysMask,int startMinutes,int endMinutes,DateTimeOffset now,string? label=null,bool enabled=true)
     { if(daysMask is <1 or >127) throw new ArgumentOutOfRangeException(nameof(daysMask)); if(startMinutes is <0 or >1439) throw new ArgumentOutOfRangeException(nameof(startMinutes)); if(endMinutes is <1 or >1440 || endMinutes<=startMinutes) throw new ArgumentOutOfRangeException(nameof(endMinutes)); return new(daysMask,startMinutes,endMinutes,TextLimit.Optional(label,100),enabled,now); }
+    public void Update(int daysMask,int startMinutes,int endMinutes,string? label,bool enabled,DateTimeOffset now)
+    {
+        if(daysMask is <1 or >127) throw new ArgumentOutOfRangeException(nameof(daysMask));
+        if(startMinutes is <0 or >1439) throw new ArgumentOutOfRangeException(nameof(startMinutes));
+        if(endMinutes is <1 or >1440 || endMinutes<=startMinutes) throw new ArgumentOutOfRangeException(nameof(endMinutes));
+        DaysMask=daysMask; StartMinutes=startMinutes; EndMinutes=endMinutes;
+        Label=TextLimit.Optional(label,100); IsEnabled=enabled; UpdatedAtUtc=Utc.Require(now);
+    }
     public static void EnsureNoOverlap(IEnumerable<ScheduleWindow> windows)
     {
         var active=windows.Where(w=>w.IsEnabled).ToArray();
         for(var i=0;i<active.Length;i++) for(var j=i+1;j<active.Length;j++)
             if((active[i].DaysMask & active[j].DaysMask)!=0 && active[i].StartMinutes<active[j].EndMinutes && active[j].StartMinutes<active[i].EndMinutes)
                 throw new InvalidOperationException("Enabled schedule windows overlap on at least one day.");
+    }
+
+    public bool AppliesAt(DateTime localTime)
+    {
+        var dayBit = 1 << (((int)localTime.DayOfWeek + 6) % 7);
+        var minute = localTime.Hour * 60 + localTime.Minute;
+        return IsEnabled && (DaysMask & dayBit) != 0 && minute >= StartMinutes && minute < EndMinutes;
     }
 }
 

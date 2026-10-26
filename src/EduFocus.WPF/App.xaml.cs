@@ -92,6 +92,7 @@ public partial class App : Application
         MainWindow = new MainWindow(
             _windowScope.ServiceProvider.GetRequiredService<ParentCredentialService>(),
             _windowScope.ServiceProvider.GetRequiredService<ProtectionCoordinator>(),
+            _windowScope.ServiceProvider.GetRequiredService<ScheduleService>(),
             _services.GetRequiredService<IAppLogger>(),
             configured);
         MainWindow.Closed += (_, _) => _windowScope?.Dispose();

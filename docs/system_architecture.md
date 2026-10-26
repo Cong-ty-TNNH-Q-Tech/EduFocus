@@ -253,11 +253,12 @@ Timer 1–2s
 ### 4.4. Schedule
 
 ```text
-Timer 30s
-  → ScheduleUseCase.Evaluate(localNow)
-  → nếu vào window và OFF → ProtectionUseCase.EnableAsync(System)
-  → nếu hết window và ON do schedule → ProtectionUseCase.DisableAsync(System)
-  → Manual override được ghi audit và hết hiệu lực khi window kết thúc
+Dispatcher timer (30s)
+  → ScheduleService.EvaluateAsync(TimeZoneInfo.Local wall clock)
+  → nếu vào window và OFF → ProtectionCoordinator.ApplyScheduledStateAsync(ON)
+  → nếu hết window và session được tạo bởi Schedule → ProtectionCoordinator.ApplyScheduledStateAsync(OFF)
+  → Parent Mode CRUD validates [start,end), Monday-first day masks, and overlap; changes are audited
+  → manual OFF within an active window persists an override through that window's local end
 ```
 
 Schedule dùng **wall clock/local time** để xác định khung giờ. Monotonic clock chỉ dùng đo elapsed trong một process và phát hiện nhảy giờ; không dùng monotonic xuyên reboot. Khi phát hiện nhảy giờ, ghi audit `TamperDetected` và không tự tắt protection chỉ vì thay đổi giờ.
