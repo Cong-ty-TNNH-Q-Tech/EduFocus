@@ -21,7 +21,7 @@ EduFocus là ứng dụng desktop **local-first** dành cho phụ huynh giám s�
 - Theo dõi foreground window/process.
 - Có thể kill process nằm trong blocklist.
 - Truy cập webcam để ước lượng trạng thái tập trung (nếu bật).
-- Tự khởi động và tự phục hồi sau crash; watchdog scheduled task có thể mất 30–60 giây.
+- App hiện có thể đặt HKCU Run trong phiên tập trung để chạy lại ở lần đăng nhập kế tiếp; chưa có watchdog tự restart sau crash.
 
 ### Cam kết dữ liệu
 
@@ -41,7 +41,7 @@ Các điểm sau **không được coi là lỗ hổng bảo mật** vì đã đ
 - File `hosts` có thể bị bypass bằng DoH/DoT, VPN, proxy hoặc sửa registry.
 - Hosts không tạo log truy cập HTTPS; `BlockedAttempt` là best-effort, không phải tổng tuyệt đối.
 - Trang chặn chỉ hiển thị với HTTP; HTTPS thường báo lỗi kết nối/SSL.
-- Windows shutdown/logoff vẫn là đường bypass; watchdog scheduled task có độ trễ 30–60 giây.
+- Windows shutdown/logoff vẫn là đường bypass; nếu scheduled-task watchdog được triển khai, việc phát hiện và phục hồi có thể mất khoảng một phút hoặc lâu hơn.
 - Uninstall PIN chỉ là best-effort; admin Windows vẫn gỡ được.
 - Chặn app có thể đóng/kill process và làm mất dữ liệu chưa lưu; EduFocus ưu tiên `WM_CLOSE` trước khi kill.
 - PIN không bảo vệ file DB nếu phụ huynh và học sinh dùng chung tài khoản Windows.
@@ -54,6 +54,18 @@ Các điểm sau **không được coi là lỗ hổng bảo mật** vì đã đ
 Nếu bạn phát hiện cách vượt qua các giới hạn trên **trong điều kiện người dùng standard user**, hãy báo cáo — đó có thể là lỗ hổng thực sự.
 
 ---
+
+### Watchdog và giới hạn phục hồi
+
+- Recovery launcher MVP được đề xuất là Windows Scheduled Task chạy theo user, kiểm tra ở thời điểm đăng nhập và định kỳ khi user đang đăng nhập. Cấu hình restart-on-failure có khoảng nghỉ tối thiểu một phút; không cam kết phục hồi dưới một phút.
+- Watchdog chỉ được khởi động lại app khi protection đang bật và lần thoát trước không sạch. Dùng mutex theo user/product, exponential backoff có giới hạn và circuit breaker để tránh nhiều instance hoặc vòng lặp restart.
+- Ghi `WatchdogRestart` vào audit với UTC time, số lần restart và lý do ngắn; không ghi command line, secret hoặc dữ liệu camera.
+- HKCU Run/Startup chỉ khởi động app ở lần đăng nhập kế tiếp, không phát hiện app vừa bị kill trong phiên hiện tại.
+- Windows Service chưa thuộc MVP: cần quyền cài đặt Administrator, UI phải chạy riêng trong interactive session và IPC cần ACL/authentication chặt.
+- Người có quyền Administrator có thể tắt/gỡ Scheduled Task; shutdown/logoff tạo khoảng thời gian bảo vệ bị gián đoạn. Đây là giới hạn đã biết, không phải cam kết chống can thiệp tuyệt đối.
+- Khi uninstall, installer phải stop và xóa task/entry auto-start trước khi xóa binary; nếu cleanup thất bại phải báo rõ và giữ lại thành phần cần thiết để gỡ sạch.
+
+Chi tiết so sánh và kết quả prototype: [`docs/spikes/watchdog-evaluation.md`](docs/spikes/watchdog-evaluation.md).
 
 ## 🐛 Báo cáo lỗ hổng bảo mật
 
