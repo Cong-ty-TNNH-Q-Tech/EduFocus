@@ -1,20 +1,62 @@
 <Window x:Class="EduFocus.WPF.MainWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        Title="EduFocus"
-        Width="760" Height="480"
-        MinWidth="600" MinHeight="360"
-        WindowStartupLocation="CenterScreen">
-    <Grid Background="#F5F7FA">
-        <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center" MaxWidth="560">
-            <TextBlock Text="EduFocus" FontSize="36" FontWeight="SemiBold"
-                       Foreground="#17324D" HorizontalAlignment="Center" />
-            <TextBlock Text="Nền tảng phiên bản 2.0"
-                       FontSize="20" Margin="0,12,0,0"
-                       Foreground="#34536F" HorizontalAlignment="Center" />
-            <TextBlock Text="Các tính năng sẽ được triển khai theo lộ trình sản phẩm."
-                       FontSize="14" Margin="0,16,0,0" TextWrapping="Wrap"
-                       Foreground="#52677A" HorizontalAlignment="Center" />
+        Title="EduFocus" Width="760" Height="500" MinWidth="600" MinHeight="420"
+        WindowStartupLocation="CenterScreen" Background="#F5F7FA"
+        PreviewKeyDown="OnUserActivity" PreviewMouseDown="OnUserActivity" Loaded="OnLoaded">
+    <Grid Margin="32">
+        <StackPanel x:Name="StudentPanel" HorizontalAlignment="Center" VerticalAlignment="Center" Width="440">
+            <TextBlock Text="EduFocus" FontSize="36" FontWeight="SemiBold" Foreground="#17324D" HorizontalAlignment="Center" />
+            <TextBlock Text="Student Mode" FontSize="20" Margin="0,8,0,0" Foreground="#34536F" HorizontalAlignment="Center" />
+            <TextBlock x:Name="StudentStatus" Text="Parent settings are protected." FontSize="14" Margin="0,16,0,20" TextWrapping="Wrap" Foreground="#52677A" HorizontalAlignment="Center" />
+            <Button x:Name="OpenLoginButton" Content="Parent Login" Height="42" Click="OpenLogin" />
+        </StackPanel>
+
+        <StackPanel x:Name="LoginPanel" Visibility="Collapsed" HorizontalAlignment="Center" VerticalAlignment="Center" Width="360">
+            <TextBlock Text="Parent Login" FontSize="28" FontWeight="SemiBold" Foreground="#17324D" HorizontalAlignment="Center" />
+            <TextBlock Text="Enter your parent PIN to unlock settings." Margin="0,12,0,16" Foreground="#52677A" TextWrapping="Wrap" HorizontalAlignment="Center" />
+            <PasswordBox x:Name="PinInput" MaxLength="8" Height="38" FontSize="18" PasswordChar="●" />
+            <TextBlock x:Name="LoginStatus" Margin="0,10,0,10" MinHeight="24" Foreground="#9A3412" TextWrapping="Wrap" />
+            <Button x:Name="LoginButton" Content="Unlock" Height="40" Click="Login" />
+            <Button Content="Forgot PIN? Use recovery code" Margin="0,10,0,0" Height="36" Click="OpenRecovery" />
+            <Button Content="Back" Margin="0,8,0,0" Height="34" Click="BackToStudent" />
+        </StackPanel>
+
+        <StackPanel x:Name="RecoveryPanel" Visibility="Collapsed" HorizontalAlignment="Center" VerticalAlignment="Center" Width="380">
+            <TextBlock Text="Recover Parent PIN" FontSize="28" FontWeight="SemiBold" Foreground="#17324D" HorizontalAlignment="Center" />
+            <TextBlock Text="Enter your one-time recovery code and choose a new PIN. The code will be replaced." Margin="0,12,0,16" Foreground="#52677A" TextWrapping="Wrap" />
+            <PasswordBox x:Name="RecoveryInput" MaxLength="16" Height="38" FontSize="16" />
+            <TextBlock Text="New PIN (6–8 digits)" Margin="0,12,0,5" Foreground="#34536F" />
+            <PasswordBox x:Name="RecoveryNewPinInput" MaxLength="8" Height="38" FontSize="18" PasswordChar="●" />
+            <TextBlock x:Name="RecoveryStatus" Margin="0,10,0,10" MinHeight="24" Foreground="#9A3412" TextWrapping="Wrap" />
+            <Button x:Name="RecoverButton" Content="Reset PIN" Height="40" Click="RecoverPin" />
+            <Button Content="Back to login" Margin="0,8,0,0" Height="34" Click="OpenLogin" />
+        </StackPanel>
+
+        <StackPanel x:Name="NewRecoveryPanel" Visibility="Collapsed" HorizontalAlignment="Center" VerticalAlignment="Center" Width="420">
+            <TextBlock Text="Save your new recovery code" FontSize="26" FontWeight="SemiBold" Foreground="#17324D" HorizontalAlignment="Center" />
+            <TextBlock Text="This code is shown once. Store it somewhere private. You must sign in with your new PIN next." Margin="0,12,0,18" Foreground="#52677A" TextWrapping="Wrap" HorizontalAlignment="Center" />
+            <TextBlock x:Name="NewRecoveryCodeText" FontFamily="Consolas" FontSize="22" FontWeight="Bold" Foreground="#17324D" HorizontalAlignment="Center" Margin="0,0,0,20" />
+            <Button Content="Continue to login" Height="40" Click="FinishRecovery" />
+        </StackPanel>
+
+        <StackPanel x:Name="ParentPanel" Visibility="Collapsed" HorizontalAlignment="Center" VerticalAlignment="Center" Width="440">
+            <TextBlock Text="Parent Mode" FontSize="30" FontWeight="SemiBold" Foreground="#17324D" HorizontalAlignment="Center" />
+            <TextBlock Text="Parent controls are unlocked." Margin="0,12,0,4" Foreground="#34536F" HorizontalAlignment="Center" />
+            <TextBlock x:Name="SessionCountdown" Margin="0,0,0,20" Foreground="#52677A" HorizontalAlignment="Center" />
+            <Button Content="Change PIN" Height="40" Click="OpenChangePin" />
+            <Button Content="Lock Parent Mode" Margin="0,10,0,0" Height="40" Click="LockNow" />
+        </StackPanel>
+
+        <StackPanel x:Name="ChangePinPanel" Visibility="Collapsed" HorizontalAlignment="Center" VerticalAlignment="Center" Width="360">
+            <TextBlock Text="Change Parent PIN" FontSize="28" FontWeight="SemiBold" Foreground="#17324D" HorizontalAlignment="Center" />
+            <TextBlock Text="Changing your PIN ends this Parent Mode session." Margin="0,12,0,14" Foreground="#52677A" TextWrapping="Wrap" />
+            <PasswordBox x:Name="CurrentPinInput" MaxLength="8" Height="38" FontSize="18" PasswordChar="●" />
+            <TextBlock Text="New PIN (6–8 digits)" Margin="0,12,0,5" Foreground="#34536F" />
+            <PasswordBox x:Name="NewPinInput" MaxLength="8" Height="38" FontSize="18" PasswordChar="●" />
+            <TextBlock x:Name="ChangePinStatus" Margin="0,10,0,10" MinHeight="24" Foreground="#9A3412" TextWrapping="Wrap" />
+            <Button Content="Change PIN" Height="40" Click="ChangePin" />
+            <Button Content="Cancel" Margin="0,8,0,0" Height="34" Click="ShowParent" />
         </StackPanel>
     </Grid>
 </Window>

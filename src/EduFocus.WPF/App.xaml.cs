@@ -3,6 +3,7 @@ using System.Windows;
 using EduFocus.Infrastructure;
 using EduFocus.Infrastructure.Persistence;
 using EduFocus.Ports.Outbound.Services;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace EduFocus.WPF;
@@ -10,6 +11,7 @@ namespace EduFocus.WPF;
 public partial class App : Application
 {
     private ServiceProvider? _services;
+    private IServiceScope? _windowScope;
 
     protected override async void OnStartup(StartupEventArgs e)
     {
@@ -51,12 +53,35 @@ public partial class App : Application
             return;
         }
 
-        MainWindow = new MainWindow();
+        bool configured;
+        try
+        {
+            _windowScope = _services.CreateScope();
+            var db = _windowScope.ServiceProvider.GetRequiredService<AppDbContext>();
+            configured = await db.ParentCredentials.AnyAsync();
+        }
+        catch (Exception ex)
+        {
+            _services.GetRequiredService<IAppLogger>().Error("EduFocus could not read parent authentication state.", ex);
+            _windowScope?.Dispose();
+            _windowScope = null;
+            _services.Dispose();
+            _services = null;
+            MessageBox.Show("EduFocus could not read its authentication state. No protected settings were opened.", "EduFocus authentication error", MessageBoxButton.OK, MessageBoxImage.Error);
+            Shutdown(-1);
+            return;
+        }
+        MainWindow = new MainWindow(
+            _windowScope.ServiceProvider.GetRequiredService<ParentCredentialService>(),
+            _services.GetRequiredService<IAppLogger>(),
+            configured);
+        MainWindow.Closed += (_, _) => _windowScope?.Dispose();
         MainWindow.Show();
     }
 
     protected override void OnExit(ExitEventArgs e)
     {
+        _windowScope?.Dispose();
         _services?.Dispose();
         base.OnExit(e);
     }

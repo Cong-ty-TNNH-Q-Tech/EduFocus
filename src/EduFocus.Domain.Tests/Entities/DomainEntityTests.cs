@@ -35,6 +35,22 @@ public sealed class DomainEntityTests
     }
 
     [Fact]
+    public void Parent_mode_expires_after_five_idle_minutes_and_manual_lock_clears_session()
+    {
+        var session = new ParentModeSession();
+        Assert.False(session.IsActive(Now));
+        session.Unlock(Now);
+        Assert.True(session.IsActive(Now.AddMinutes(4)));
+        Assert.True(session.RecordActivity(Now.AddMinutes(4)));
+        Assert.Equal(Now.AddMinutes(9), session.ExpiresAtUtc);
+        Assert.True(session.IsActive(Now.AddMinutes(8).AddSeconds(59)));
+        Assert.False(session.IsActive(Now.AddMinutes(9)));
+        session.Unlock(Now.AddMinutes(10));
+        session.Lock();
+        Assert.False(session.IsActive(Now.AddMinutes(10)));
+    }
+
+    [Fact]
     public void Block_rule_normalizes_and_allow_wins_while_expired_rules_are_ignored()
     {
         var block = BlockRule.Create(BlockRuleType.Domain, BlockMatchType.Exact, "HTTPS://ChatGPT.com/path", BlockRuleCategory.Chatbot, BlockRuleEffect.Block, Now);

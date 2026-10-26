@@ -487,11 +487,11 @@ AttentionPercent =
 
 ### 9.2. Parent session
 
-- `ParentSessionState` singleton:
-  - `IsAuthenticated`
-  - `LastActivityAt`
-  - `LockAsync()` sau 5 phút idle.
-- Mọi use case nhạy cảm kiểm tra `IParentAuthorizer` trước khi thực thi.
+- Parent Mode is an in-memory authorization window; it is never restored after app restart.
+- User activity renews the five-minute idle timeout. The UI returns to Student Mode and clears credential fields when it expires or the parent locks manually.
+- Recovery requires both the one-time recovery code and a new PIN. A successful recovery rotates the recovery code and returns to PIN login; it does not open Parent Mode.
+- The login, PIN change and recovery screens use masked inputs. Parent login, failed attempts and credential changes are audited without credentials or hashes.
+- Future sensitive use cases must check the active Parent Mode session before executing. There are no protection controls in the foundation UI yet.
 - Thoát app luôn yêu cầu PIN, kể cả Protection OFF; Windows shutdown/logoff không chặn.
 
 ### 9.3. Protection state machine

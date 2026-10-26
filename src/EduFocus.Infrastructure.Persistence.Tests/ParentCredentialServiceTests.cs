@@ -27,7 +27,7 @@ public sealed class ParentCredentialServiceTests
         Assert.DoesNotContain("482951", columns);
         Assert.DoesNotContain(result.RecoveryCode!, columns);
         Assert.Equal(CredentialOperationStatus.Succeeded, (await fixture.Service.AuthenticatePinAsync("482951", Now.AddSeconds(1))).Status);
-        Assert.Equal(CredentialOperationStatus.Succeeded, (await fixture.Service.AuthenticateRecoveryCodeAsync(result.RecoveryCode!, Now.AddSeconds(2))).Status);
+        Assert.True(stored.RecoveryCode.VerifySecret(result.RecoveryCode!));
     }
 
     [Fact]
@@ -35,10 +35,20 @@ public sealed class ParentCredentialServiceTests
     {
         await using var fixture = await Fixture.Create();
         await fixture.Service.SetUpAsync("482951", Now);
-        for (var i = 0; i < 5; i++)
+        for (var i = 0; i < 4; i++)
             Assert.Equal(CredentialOperationStatus.InvalidCredential, (await fixture.Service.AuthenticatePinAsync("000000", Now.AddMinutes(i))).Status);
-        Assert.Equal(CredentialOperationStatus.LockedOut, (await fixture.Service.AuthenticateRecoveryCodeAsync("BADCODE", Now.AddMinutes(4).AddSeconds(1))).Status);
+        Assert.Equal(CredentialOperationStatus.InvalidCredential, (await fixture.Service.RecoverPinAsync("BADCODE", "739204", Now.AddMinutes(4))).Status);
+        Assert.Equal(CredentialOperationStatus.LockedOut, (await fixture.Service.AuthenticatePinAsync("482951", Now.AddMinutes(4).AddSeconds(1))).Status);
         Assert.Equal(Now.AddMinutes(19), (await fixture.Db.ParentCredentials.SingleAsync()).LockoutUntilUtc);
+
+        var reopenedOptions = new DbContextOptionsBuilder<AppDbContext>().UseSqlite(fixture.Connection).Options;
+        await using (var reopenedDb = new AppDbContext(reopenedOptions))
+        {
+            var persistedStatus = await new ParentCredentialService(reopenedDb).GetLockoutStatusAsync(Now.AddMinutes(4).AddSeconds(1));
+            Assert.True(persistedStatus.IsLockedOut);
+            Assert.Equal(5, persistedStatus.FailedAttempts);
+            Assert.Equal(TimeSpan.FromMinutes(14).Add(TimeSpan.FromSeconds(59)), persistedStatus.Remaining);
+        }
 
         Assert.Equal(CredentialOperationStatus.InvalidCredential, (await fixture.Service.AuthenticatePinAsync("000000", Now.AddMinutes(20))).Status);
         Assert.Equal(1, (await fixture.Db.ParentCredentials.SingleAsync()).FailedAttempts);
@@ -61,7 +71,10 @@ public sealed class ParentCredentialServiceTests
         Assert.Equal(CredentialOperationStatus.Succeeded, (await fixture.Service.AuthenticatePinAsync("739204", Now.AddMinutes(3))).Status);
         var audit = await fixture.Db.AuditLogs.Select(x => x.Description).ToArrayAsync();
         Assert.DoesNotContain(audit, x => x.Contains("482951", StringComparison.Ordinal) || x.Contains("739204", StringComparison.Ordinal));
-        Assert.Contains(await fixture.Db.AuditLogs.ToArrayAsync(), x => x.EventType == "PinChanged");
+        var events = await fixture.Db.AuditLogs.ToArrayAsync();
+        Assert.Contains(events, x => x.EventType == "PinChanged");
+        Assert.Contains(events, x => x.EventType == "ParentLogin");
+        Assert.All(events, x => Assert.DoesNotContain("Hash", x.MetadataJson ?? string.Empty, StringComparison.OrdinalIgnoreCase));
     }
 
     [Fact]
@@ -72,9 +85,11 @@ public sealed class ParentCredentialServiceTests
         var recovered = await fixture.Service.RecoverPinAsync(initial, "739204", Now.AddMinutes(1));
         Assert.Equal(CredentialOperationStatus.Succeeded, recovered.Status);
         Assert.NotEqual(initial, recovered.RecoveryCode);
-        Assert.Equal(CredentialOperationStatus.InvalidCredential, (await fixture.Service.AuthenticateRecoveryCodeAsync(initial, Now.AddMinutes(2))).Status);
-        Assert.Equal(CredentialOperationStatus.Succeeded, (await fixture.Service.AuthenticateRecoveryCodeAsync(recovered.RecoveryCode!, Now.AddMinutes(3))).Status);
-        Assert.Equal(CredentialOperationStatus.Succeeded, (await fixture.Service.AuthenticatePinAsync("739204", Now.AddMinutes(4))).Status);
+        Assert.Equal(CredentialOperationStatus.InvalidCredential, (await fixture.Service.RecoverPinAsync(initial, "827415", Now.AddMinutes(2))).Status);
+        var secondRecovery = await fixture.Service.RecoverPinAsync(recovered.RecoveryCode!, "827415", Now.AddMinutes(3));
+        Assert.Equal(CredentialOperationStatus.Succeeded, secondRecovery.Status);
+        Assert.Equal(CredentialOperationStatus.InvalidCredential, (await fixture.Service.AuthenticatePinAsync("739204", Now.AddMinutes(4))).Status);
+        Assert.Equal(CredentialOperationStatus.Succeeded, (await fixture.Service.AuthenticatePinAsync("827415", Now.AddMinutes(5))).Status);
         Assert.Contains(await fixture.Db.AuditLogs.ToArrayAsync(), x => x.EventType == "PinRecovered");
     }
 

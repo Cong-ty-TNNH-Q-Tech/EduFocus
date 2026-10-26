@@ -7,6 +7,10 @@ using Microsoft.EntityFrameworkCore;
 namespace EduFocus.Infrastructure.Persistence;
 
 public enum CredentialOperationStatus { Succeeded, InvalidCredential, LockedOut }
+public sealed record CredentialLockoutStatus(int FailedAttempts, DateTimeOffset? LockoutUntilUtc, TimeSpan Remaining)
+{
+    public bool IsLockedOut => Remaining > TimeSpan.Zero;
+}
 
 /// <summary>Recovery code is returned only by creation or rotation; callers must present it once and never persist or log it.</summary>
 public sealed record CredentialOperationResult(CredentialOperationStatus Status, string? RecoveryCode = null);
@@ -38,10 +42,15 @@ public sealed class ParentCredentialService(AppDbContext db)
     }
 
     public Task<CredentialOperationResult> AuthenticatePinAsync(string pin, DateTimeOffset now, CancellationToken cancellationToken = default) =>
-        AuthenticateAsync(pin, now, recovery: false, cancellationToken);
+        AuthenticateAsync(pin, now, cancellationToken);
 
-    public Task<CredentialOperationResult> AuthenticateRecoveryCodeAsync(string recoveryCode, DateTimeOffset now, CancellationToken cancellationToken = default) =>
-        AuthenticateAsync(recoveryCode, now, recovery: true, cancellationToken);
+    public async Task<CredentialLockoutStatus> GetLockoutStatusAsync(DateTimeOffset now, CancellationToken cancellationToken = default)
+    {
+        now = RequireUtc(now);
+        var credentials = await GetCredentialsAsync(cancellationToken);
+        var remaining = credentials.LockoutUntilUtc is { } until && until > now ? until - now : TimeSpan.Zero;
+        return new(credentials.FailedAttempts, credentials.LockoutUntilUtc, remaining);
+    }
 
     public async Task<CredentialOperationResult> ChangePinAsync(string currentPin, string newPin, DateTimeOffset now, CancellationToken cancellationToken = default)
     {
@@ -128,7 +137,7 @@ public sealed class ParentCredentialService(AppDbContext db)
         finally { ProcessGate.Release(); }
     }
 
-    private async Task<CredentialOperationResult> AuthenticateAsync(string secret, DateTimeOffset now, bool recovery, CancellationToken cancellationToken)
+    private async Task<CredentialOperationResult> AuthenticateAsync(string secret, DateTimeOffset now, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(secret);
         now = RequireUtc(now);
@@ -138,8 +147,12 @@ public sealed class ParentCredentialService(AppDbContext db)
             await using var transaction = await db.Database.BeginTransactionAsync(cancellationToken);
             var credentials = await GetCredentialsAsync(cancellationToken);
             if (credentials.IsLockedOut(now)) return new(CredentialOperationStatus.LockedOut);
-            var valid = (recovery ? credentials.RecoveryCode : credentials.Pin).VerifySecret(secret);
-            if (valid) credentials.RecordSuccessfulAuthentication(now);
+            var valid = credentials.Pin.VerifySecret(secret);
+            if (valid)
+            {
+                credentials.RecordSuccessfulAuthentication(now);
+                db.AuditLogs.Add(AuditLog.Create(now, AuditActor.Parent, "ParentLogin", "Parent Mode login succeeded.", now));
+            }
             else RecordFailure(credentials, now);
             await db.SaveChangesAsync(cancellationToken);
             await transaction.CommitAsync(cancellationToken);
