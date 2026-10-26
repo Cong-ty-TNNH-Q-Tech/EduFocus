@@ -62,6 +62,7 @@ public sealed class ProtectionCoordinator(AppDbContext db, IProtectionEnginePort
                 {
                     try { await engine.ReconcileAsync(false, rules, cancellationToken); }
                     catch { /* Keep the original persistence error; startup reconciliation will retry. */ }
+                    await RecordFailureAuditAsync(now, actor, "ProtectionOnFailed", "Protection could not be enabled safely.");
                     throw;
                 }
             }
@@ -83,6 +84,7 @@ public sealed class ProtectionCoordinator(AppDbContext db, IProtectionEnginePort
                 {
                     try { await engine.ReconcileAsync(true, rules, cancellationToken); }
                     catch { /* Persisted state remains ON; startup reconciliation will report engine failure. */ }
+                    await RecordFailureAuditAsync(now, actor, "ProtectionOffFailed", "Protection could not be disabled safely.");
                     throw;
                 }
             }
@@ -107,7 +109,15 @@ public sealed class ProtectionCoordinator(AppDbContext db, IProtectionEnginePort
 
             var enabled = settings.Protection == ProtectionState.On;
             var rules = await db.BlockRules.AsNoTracking().Where(rule => rule.IsEnabled && rule.EnforcementStatus == RuleEnforcementStatus.Enforced && (rule.ExpiresAtUtc == null || rule.ExpiresAtUtc > now)).ToArrayAsync(cancellationToken);
-            if (!_restored) await engine.ReconcileAsync(enabled, rules, cancellationToken);
+            if (!_restored)
+            {
+                try { await engine.ReconcileAsync(enabled, rules, cancellationToken); }
+                catch
+                {
+                    await RecordFailureAuditAsync(now, AuditActor.System, "ProtectionReconcileFailed", "Protection resources could not be reconciled after restart.");
+                    throw;
+                }
+            }
 
             if (!_restored)
             {
@@ -224,4 +234,19 @@ public sealed class ProtectionCoordinator(AppDbContext db, IProtectionEnginePort
     }
 
     private static DateTimeOffset RequireUtc(DateTimeOffset now) => now.Offset == TimeSpan.Zero ? now : throw new ArgumentException("Timestamp must be UTC.", nameof(now));
+
+    private async Task RecordFailureAuditAsync(DateTimeOffset now, AuditActor actor, string eventType, string description)
+    {
+        try
+        {
+            db.ChangeTracker.Clear();
+            db.AuditLogs.Add(AuditLog.Create(now, actor, eventType, description, now));
+            await db.SaveChangesAsync(CancellationToken.None);
+        }
+        catch
+        {
+            db.ChangeTracker.Clear();
+            // Failure auditing is best-effort and must not hide the original adapter/persistence error.
+        }
+    }
 }

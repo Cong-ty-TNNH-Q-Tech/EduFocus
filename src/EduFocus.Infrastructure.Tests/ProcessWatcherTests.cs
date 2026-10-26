@@ -153,7 +153,9 @@ public sealed class ProcessWatcherTests
     {
         public List<string> Attempts { get; } = [];
         public Task RecordBlockedAppAsync(string processName, DateTimeOffset occurredAtUtc, CancellationToken cancellationToken = default)
-        { Attempts.Add(processName); return Task.CompletedTask; }
+        { if (!Attempts.Contains(processName, StringComparer.OrdinalIgnoreCase)) Attempts.Add(processName); return Task.CompletedTask; }
+        public Task RecordBlockedDomainAsync(string domain, DateTimeOffset occurredAtUtc, CancellationToken cancellationToken = default)
+        { if (!Attempts.Contains(domain, StringComparer.OrdinalIgnoreCase)) Attempts.Add(domain); return Task.CompletedTask; }
     }
 
     private sealed class FakeLogger : IAppLogger

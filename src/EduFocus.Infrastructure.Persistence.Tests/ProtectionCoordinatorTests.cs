@@ -53,7 +53,7 @@ public sealed class ProtectionCoordinatorTests
         Assert.Equal(1, engine.ReconcileCalls);
         Assert.Equal(ProtectionState.Off, (await fixture.Db.AppSettings.SingleAsync()).Protection);
         Assert.Empty(await fixture.Db.StudySessions.ToArrayAsync());
-        Assert.Empty(await fixture.Db.AuditLogs.ToArrayAsync());
+        Assert.Equal("ProtectionOnFailed", (await fixture.Db.AuditLogs.SingleAsync()).EventType);
     }
 
     [Fact]
@@ -71,6 +71,7 @@ public sealed class ProtectionCoordinatorTests
         Assert.Equal(ProtectionState.On, (await fixture.Db.AppSettings.SingleAsync()).Protection);
         Assert.Equal(StudySessionStatus.Active, (await fixture.Db.StudySessions.SingleAsync()).Status);
         Assert.Empty(await fixture.Db.AuditLogs.Where(x => x.EventType == "ProtectionOff").ToArrayAsync());
+        Assert.Equal("ProtectionOffFailed", (await fixture.Db.AuditLogs.SingleAsync(x => x.EventType == "ProtectionOffFailed")).EventType);
     }
 
     [Fact]

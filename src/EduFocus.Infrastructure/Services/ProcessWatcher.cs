@@ -105,7 +105,6 @@ public sealed class ProcessWatcher : IProcessWatcherPort, IAsyncDisposable
     private readonly TimeSpan _closeGrace;
     private readonly SemaphoreSlim _lifecycleGate = new(1, 1);
     private readonly SemaphoreSlim _scanGate = new(1, 1);
-    private readonly Dictionary<string, DateTimeOffset> _lastRecordedByApp = new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<string, DateTimeOffset> _lastWarningByApp = new(StringComparer.OrdinalIgnoreCase);
     private DateTimeOffset _lastScanErrorUtc = DateTimeOffset.MinValue;
     private IReadOnlyCollection<BlockRule> _rules = Array.Empty<BlockRule>();
@@ -202,8 +201,6 @@ public sealed class ProcessWatcher : IProcessWatcherPort, IAsyncDisposable
                     }
                 }
             }
-            foreach (var old in _lastRecordedByApp.Where(pair => now - pair.Value >= TimeSpan.FromMinutes(30)).Select(pair => pair.Key).ToArray())
-                _lastRecordedByApp.Remove(old);
         }
         finally { _scanGate.Release(); }
     }
@@ -226,17 +223,13 @@ public sealed class ProcessWatcher : IProcessWatcherPort, IAsyncDisposable
     private async Task EnforceAsync(IWatchedProcess process, DateTimeOffset now, CancellationToken cancellationToken)
     {
         var appKey = NormalizeCandidate(process.Name);
-        if (!_lastRecordedByApp.TryGetValue(appKey, out var last) || now - last >= TimeSpan.FromSeconds(30))
+        try
         {
-            _lastRecordedByApp[appKey] = now;
-            try
-            {
-                using var scope = _scopeFactory.CreateScope();
-                var recorder = scope.ServiceProvider.GetRequiredService<IBlockedAttemptRecorder>();
-                await recorder.RecordBlockedAppAsync(process.Name, now, cancellationToken);
-            }
-            catch (Exception ex) { _logger.Error("EduFocus could not record an observed blocked app attempt.", ex); }
+            using var scope = _scopeFactory.CreateScope();
+            var recorder = scope.ServiceProvider.GetRequiredService<IBlockedAttemptRecorder>();
+            await recorder.RecordBlockedAppAsync(process.Name, now, cancellationToken);
         }
+        catch (Exception ex) { _logger.Error("EduFocus could not record an observed blocked app attempt.", ex); }
 
         try
         {

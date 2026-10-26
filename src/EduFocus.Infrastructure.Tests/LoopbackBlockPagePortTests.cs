@@ -1,6 +1,8 @@
 using System.Net;
 using System.Net.Sockets;
 using System.Text;
+using EduFocus.Domain.Entities;
+using EduFocus.Domain.Enums;
 using EduFocus.Infrastructure.Services;
 using EduFocus.Ports.Outbound.Services;
 
@@ -26,7 +28,8 @@ public sealed class LoopbackBlockPagePortTests
         var prefix = $"http://127.0.0.1:{portNumber}/";
         var logger = new FakeLogger();
         await using var listener = new LoopbackBlockPagePort(logger, prefix);
-        Assert.True(await listener.StartAsync());
+        Assert.True(await listener.StartAsync([BlockRule.Create(BlockRuleType.Domain, BlockMatchType.Exact, "chatgpt.com",
+            BlockRuleCategory.Chatbot, BlockRuleEffect.Block, DateTimeOffset.UtcNow)]));
         Assert.True(listener.IsAvailable);
 
         using var client = new HttpClient();
@@ -53,8 +56,9 @@ public sealed class LoopbackBlockPagePortTests
         await using var first = new LoopbackBlockPagePort(logger, prefix);
         await using var second = new LoopbackBlockPagePort(logger, prefix);
 
-        Assert.True(await first.StartAsync());
-        Assert.False(await second.StartAsync());
+        var rule = BlockRule.Create(BlockRuleType.Domain, BlockMatchType.Exact, "chatgpt.com", BlockRuleCategory.Chatbot, BlockRuleEffect.Block, DateTimeOffset.UtcNow);
+        Assert.True(await first.StartAsync([rule]));
+        Assert.False(await second.StartAsync([rule]));
         Assert.True(first.IsAvailable);
         Assert.False(second.IsAvailable);
         Assert.Contains(logger.Messages, message => message.Contains("could not bind", StringComparison.Ordinal));
@@ -65,6 +69,20 @@ public sealed class LoopbackBlockPagePortTests
     {
         Assert.Throws<ArgumentException>(() => new LoopbackBlockPagePort(new FakeLogger(), "http://0.0.0.0:8080/"));
         Assert.Throws<ArgumentException>(() => new LoopbackBlockPagePort(new FakeLogger(), "http://example.com:8080/"));
+    }
+
+    [Fact]
+    public async Task Listener_does_not_serve_or_record_hosts_that_are_not_currently_blocked()
+    {
+        var portNumber = GetFreeLoopbackPort();
+        await using var listener = new LoopbackBlockPagePort(new FakeLogger(), $"http://127.0.0.1:{portNumber}/");
+        Assert.True(await listener.StartAsync([BlockRule.Create(BlockRuleType.Domain, BlockMatchType.Exact, "chatgpt.com",
+            BlockRuleCategory.Chatbot, BlockRuleEffect.Block, DateTimeOffset.UtcNow)]));
+        using var client = new HttpClient();
+        using var request = new HttpRequestMessage(HttpMethod.Get, $"http://127.0.0.1:{portNumber}/");
+        request.Headers.Host = "school.example";
+        using var response = await client.SendAsync(request);
+        Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
     }
 
     private static int GetFreeLoopbackPort()

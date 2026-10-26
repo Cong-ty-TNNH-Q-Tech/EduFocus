@@ -1,7 +1,10 @@
 using System.Net;
 using System.Net.Sockets;
 using System.Text;
+using EduFocus.Domain.Entities;
+using EduFocus.Domain.Enums;
 using EduFocus.Ports.Outbound.Services;
+using Microsoft.Extensions.DependencyInjection;
 
 namespace EduFocus.Infrastructure.Services;
 
@@ -13,14 +16,17 @@ public sealed class LoopbackBlockPagePort : IBlockPagePort, IAsyncDisposable
     private static readonly SemaphoreSlim LifecycleGate = new(1, 1);
     private readonly int _port;
     private readonly IAppLogger _logger;
+    private readonly IServiceScopeFactory? _scopeFactory;
+    private IReadOnlySet<string> _blockedDomains = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
     private TcpListener? _listener;
     private CancellationTokenSource? _stop;
     private Task? _serveTask;
     private int _serving;
 
-    public LoopbackBlockPagePort(IAppLogger logger, string prefix = DefaultPrefix)
+    public LoopbackBlockPagePort(IAppLogger logger, string prefix = DefaultPrefix, IServiceScopeFactory? scopeFactory = null)
     {
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
+        _scopeFactory = scopeFactory;
         ArgumentNullException.ThrowIfNull(prefix);
         if (!Uri.TryCreate(prefix, UriKind.Absolute, out var uri) || uri.Scheme != Uri.UriSchemeHttp ||
             !IPAddress.TryParse(uri.Host, out var address) || !IPAddress.IsLoopback(address) || uri.AbsolutePath != "/" || uri.Port is < 1 or > 65535)
@@ -30,11 +36,13 @@ public sealed class LoopbackBlockPagePort : IBlockPagePort, IAsyncDisposable
 
     public bool IsAvailable => Volatile.Read(ref _serving) == 1 && _listener is not null;
 
-    public async Task<bool> StartAsync(CancellationToken cancellationToken = default)
+    public async Task<bool> StartAsync(IReadOnlyCollection<BlockRule> rules, CancellationToken cancellationToken = default)
     {
+        ArgumentNullException.ThrowIfNull(rules);
         await LifecycleGate.WaitAsync(cancellationToken);
         try
         {
+            _blockedDomains = GetBlockedDomains(rules, DateTimeOffset.UtcNow);
             if (IsAvailable) return true;
             if (_listener is not null)
             {
@@ -66,6 +74,14 @@ public sealed class LoopbackBlockPagePort : IBlockPagePort, IAsyncDisposable
         finally { LifecycleGate.Release(); }
     }
 
+    public Task UpdateRulesAsync(IReadOnlyCollection<BlockRule> rules, CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(rules);
+        cancellationToken.ThrowIfCancellationRequested();
+        _blockedDomains = GetBlockedDomains(rules, DateTimeOffset.UtcNow);
+        return Task.CompletedTask;
+    }
+
     public async Task StopAsync(CancellationToken cancellationToken = default)
     {
         await LifecycleGate.WaitAsync(cancellationToken);
@@ -77,6 +93,7 @@ public sealed class LoopbackBlockPagePort : IBlockPagePort, IAsyncDisposable
             _listener = null;
             _stop = null;
             _serveTask = null;
+            _blockedDomains = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             Volatile.Write(ref _serving, 0);
             if (stop is not null) stop.Cancel();
             listener?.Stop();
@@ -117,7 +134,7 @@ public sealed class LoopbackBlockPagePort : IBlockPagePort, IAsyncDisposable
         finally { Volatile.Write(ref _serving, 0); }
     }
 
-    private static async Task RespondAsync(TcpClient client, CancellationToken cancellationToken)
+    private async Task RespondAsync(TcpClient client, CancellationToken cancellationToken)
     {
         var stream = client.GetStream();
         using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
@@ -152,6 +169,12 @@ public sealed class LoopbackBlockPagePort : IBlockPagePort, IAsyncDisposable
             var hostHeader = lines.Skip(1).Select(line => line.Split(':', 2))
                 .FirstOrDefault(parts => parts.Length == 2 && parts[0].Equals("Host", StringComparison.OrdinalIgnoreCase))?[1].Trim();
             var host = ExtractDomain(hostHeader);
+            if (host is null || !_blockedDomains.Contains(host))
+            {
+                await WriteResponseAsync(stream, "404 Not Found", "text/plain; charset=utf-8", "Not found.", timeout.Token);
+                return;
+            }
+            await RecordBlockedDomainAsync(host, cancellationToken);
             var body = Encoding.UTF8.GetBytes(BuildPage(host));
             await WriteResponseAsync(stream, "200 OK", "text/html; charset=utf-8", body, timeout.Token);
         }
@@ -177,5 +200,25 @@ public sealed class LoopbackBlockPagePort : IBlockPagePort, IAsyncDisposable
         if (string.IsNullOrWhiteSpace(hostHeader) || !Uri.TryCreate("http://" + hostHeader, UriKind.Absolute, out var uri)) return null;
         var host = uri.IdnHost;
         return Uri.CheckHostName(host) == UriHostNameType.Dns ? host : null;
+    }
+
+    private async Task RecordBlockedDomainAsync(string domain, CancellationToken cancellationToken)
+    {
+        if (_scopeFactory is null) return;
+        try
+        {
+            using var scope = _scopeFactory.CreateScope();
+            await scope.ServiceProvider.GetRequiredService<IBlockedAttemptRecorder>()
+                .RecordBlockedDomainAsync(domain, DateTimeOffset.UtcNow, cancellationToken);
+        }
+        catch (Exception ex) { _logger.Error("EduFocus could not record a locally observed blocked domain attempt.", ex); }
+    }
+
+    private static IReadOnlySet<string> GetBlockedDomains(IReadOnlyCollection<BlockRule> rules, DateTimeOffset now)
+    {
+        var applicable = rules.Where(rule => rule.RuleType == BlockRuleType.Domain && rule.MatchType == BlockMatchType.Exact && rule.IsApplicable(now)).ToArray();
+        return new HashSet<string>(applicable.Where(rule => rule.Effect == BlockRuleEffect.Block)
+            .Where(rule => !applicable.Any(allow => allow.Effect == BlockRuleEffect.Allow && allow.NormalizedValue == rule.NormalizedValue))
+            .Select(rule => rule.NormalizedValue), StringComparer.OrdinalIgnoreCase);
     }
 }

@@ -6,6 +6,7 @@ namespace EduFocus.Ports.Outbound.Services;
 public interface IProtectionEnginePort
 {
     bool IsAvailable { get; }
+    bool IsBlockPageAvailable => true;
     Task StartAsync(IReadOnlyCollection<BlockRule> rules, CancellationToken cancellationToken = default);
     Task StopAsync(CancellationToken cancellationToken = default);
     Task ReconcileAsync(bool protectionEnabled, IReadOnlyCollection<BlockRule> rules, CancellationToken cancellationToken = default);

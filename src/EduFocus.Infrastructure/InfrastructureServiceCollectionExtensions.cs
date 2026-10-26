@@ -11,11 +11,12 @@ public static class InfrastructureServiceCollectionExtensions
     {
         services.AddSingleton<IAppLogger, FileLogger>();
         services.AddSingleton<IMonotonicClockPort, MonotonicClockAdapter>();
-        services.AddSingleton<IProtectionEnginePort, UnavailableProtectionEngine>();
+        services.AddSingleton<IProtectionEnginePort, ProtectionEngine>();
         services.AddSingleton<IHostsFileStorage, PhysicalHostsFileStorage>();
         services.AddSingleton<IDnsCacheFlusher, WindowsDnsCacheFlusher>();
         services.AddSingleton<IBlockPagePort>(provider =>
-            new LoopbackBlockPagePort(provider.GetRequiredService<IAppLogger>()));
+            new LoopbackBlockPagePort(provider.GetRequiredService<IAppLogger>(),
+                scopeFactory: provider.GetRequiredService<IServiceScopeFactory>()));
         services.AddSingleton<IProcessSnapshotProvider, SystemProcessSnapshotProvider>();
         services.AddSingleton<IProcessWatcherPort>(provider => new ProcessWatcher(
             provider.GetRequiredService<IProcessSnapshotProvider>(),
