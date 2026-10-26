@@ -427,6 +427,8 @@ Camera (640×480, 1–2 FPS)
   → AttentionEvent + aggregate
 ```
 
+> Phase 0 (ADR-17): dùng OpenCV MSMF + YuNet ONNX để phát hiện mặt và suy ra yaw/pitch proxy; EAR/iris/gaze và `Drowsy` để Phase 5. Adapter nằm ở `DontBeLazy.Infrastructure.Attention`; Domain/Ports không phụ thuộc OpenCV/ONNX.
+
 ### 8.2. State machine
 
 | State | Điều kiện |
@@ -705,6 +707,7 @@ EduFocus/
 | ADR-14 | URL/path rules chỉ enforce khi có extension | Hosts không thể match path; tránh UI hứa hẹn sai |
 | ADR-15 | Không có secret phụ trợ | Chỉ lưu hash PIN/recovery; giảm bề mặt tấn công và phức tạp |
 | ADR-16 | Thoát app luôn cần PIN | Nhất quán bảo vệ; Windows shutdown vẫn được phép |
+| ADR-17 | (Đề xuất) OpenCV MSMF + ONNX Runtime + YuNet cho attention Phase 0; Haar chỉ baseline; Drowsy/gaze ở Phase 5 | Face 99,2%/30 phút, CPU 0,23% máy, RAM 184 MB; Haar bỏ sót nhiều; giữ local-first |
 
 ---
 

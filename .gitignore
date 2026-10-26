@@ -483,6 +483,9 @@ $RECYCLE.BIN/
 # Windows shortcuts
 *.lnk
 
+# Attention pipeline spike: models are fetched by fetch-models.ps1 (hashes verified)
+tools/AttentionPipelineSpike/models/
+
 # Vim temporary swap files
 *.swp
 p u b l i s h - t e s t /  

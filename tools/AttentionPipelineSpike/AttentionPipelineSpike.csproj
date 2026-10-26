@@ -1,0 +1,24 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net9.0-windows</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <AssemblyName>AttentionPipelineSpike</AssemblyName>
+    <RootNamespace>AttentionPipelineSpike</RootNamespace>
+    <InvariantGlobalization>true</InvariantGlobalization>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\DontBeLazy.Domain\DontBeLazy.Domain.csproj" />
+    <ProjectReference Include="..\..\src\DontBeLazy.Ports\DontBeLazy.Ports.csproj" />
+    <ProjectReference Include="..\..\src\DontBeLazy.Infrastructure.Attention\DontBeLazy.Infrastructure.Attention.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="OpenCvSharp4" Version="4.13.0.20260627" />
+    <PackageReference Include="OpenCvSharp4.runtime.win" Version="4.13.0.20260627" />
+  </ItemGroup>
+
+</Project>

@@ -1,0 +1,195 @@
+﻿{
+  "environment": {
+    "osDescription": "Microsoft Windows 10.0.19045",
+    "framework": ".NET 9.0.15",
+    "processArchitecture": "X64",
+    "logicalProcessors": 8,
+    "cpuName": "Intel(R) Core(TM) i5-9300H CPU @ 2.40GHz",
+    "approximatePhysicalMemoryBytes": 17024684032,
+    "startedAtUtc": "2026-10-26T05:05:57.2795987+00:00"
+  },
+  "backend": {
+    "name": "haar",
+    "model": "Haar cascades (1241.7 KiB)",
+    "modelLoadMs": 44,
+    "onnxThreads": 1,
+    "scoreThreshold": 0.6,
+    "nmsThreshold": 0.3,
+    "lowLightThreshold": 40
+  },
+  "initialization": {
+    "cameraOpenMs": 40.459,
+    "warmupMs": 0,
+    "firstInferenceMs": 0,
+    "cameraOpened": false,
+    "cameraError": "camera-open-failed",
+    "captureApi": "msmf",
+    "requestedWidth": 640,
+    "requestedHeight": 480
+  },
+  "resources": {
+    "avgCpuPercentNormalized": 0.02420521183189768,
+    "maxCpuPercentNormalized": 0.19465454816175845,
+    "avgCpuPercentSingleCore": 0.19364169465518144,
+    "maxCpuPercentSingleCore": 1.5572363852940676,
+    "avgWorkingSetMb": 35.70166015625,
+    "maxWorkingSetMb": 36.828125,
+    "avgPrivateMb": 78.91471354166667,
+    "maxPrivateMb": 80.46875
+  },
+  "captureLatency": {
+    "p50Ms": 0,
+    "p95Ms": 0,
+    "p99Ms": 0,
+    "maxMs": 0
+  },
+  "detectLatency": {
+    "p50Ms": 0,
+    "p95Ms": 0,
+    "p99Ms": 0,
+    "maxMs": 0
+  },
+  "stability": {
+    "plannedSamples": 6,
+    "successfulSamples": 0,
+    "failedSamples": 6,
+    "cameraUnavailableSamples": 6,
+    "reopenAttempts": 0,
+    "longestFailureStreak": 6,
+    "actualDurationSeconds": 25.0107771
+  },
+  "luminanceAvg": 0,
+  "luminanceMin": 0,
+  "faceDetectedPercent": 0,
+  "committedDurations": [
+    {
+      "name": "CameraUnavailable",
+      "seconds": 25.0107771,
+      "percentOfKnown": 100
+    }
+  ],
+  "rawDurations": [
+    {
+      "name": "CameraUnavailable",
+      "seconds": 25.0107771,
+      "percentOfKnown": 100
+    }
+  ],
+  "samples": [
+    {
+      "index": 0,
+      "timestampUtc": "2026-10-26T05:05:57.3860464+00:00",
+      "captureMs": 0,
+      "detectMs": 0,
+      "totalMs": 1.7424,
+      "luminance": 0,
+      "facePresent": false,
+      "faceCount": 0,
+      "confidence": 0,
+      "yawRatio": 0,
+      "pitchRatio": 0,
+      "eyeCount": 0,
+      "rawState": "CameraUnavailable",
+      "committedState": "CameraUnavailable",
+      "reason": "camera-unavailable",
+      "error": "camera-not-open"
+    },
+    {
+      "index": 1,
+      "timestampUtc": "2026-10-26T05:06:02.3925685+00:00",
+      "captureMs": 0,
+      "detectMs": 0,
+      "totalMs": 0.7219,
+      "luminance": 0,
+      "facePresent": false,
+      "faceCount": 0,
+      "confidence": 0,
+      "yawRatio": 0,
+      "pitchRatio": 0,
+      "eyeCount": 0,
+      "rawState": "CameraUnavailable",
+      "committedState": "CameraUnavailable",
+      "reason": "camera-unavailable",
+      "error": "camera-not-open"
+    },
+    {
+      "index": 2,
+      "timestampUtc": "2026-10-26T05:06:07.3926172+00:00",
+      "captureMs": 0,
+      "detectMs": 0,
+      "totalMs": 0.0579,
+      "luminance": 0,
+      "facePresent": false,
+      "faceCount": 0,
+      "confidence": 0,
+      "yawRatio": 0,
+      "pitchRatio": 0,
+      "eyeCount": 0,
+      "rawState": "CameraUnavailable",
+      "committedState": "CameraUnavailable",
+      "reason": "camera-unavailable",
+      "error": "camera-not-open"
+    },
+    {
+      "index": 3,
+      "timestampUtc": "2026-10-26T05:06:12.3985073+00:00",
+      "captureMs": 0,
+      "detectMs": 0,
+      "totalMs": 0.031,
+      "luminance": 0,
+      "facePresent": false,
+      "faceCount": 0,
+      "confidence": 0,
+      "yawRatio": 0,
+      "pitchRatio": 0,
+      "eyeCount": 0,
+      "rawState": "CameraUnavailable",
+      "committedState": "CameraUnavailable",
+      "reason": "camera-unavailable",
+      "error": "camera-not-open"
+    },
+    {
+      "index": 4,
+      "timestampUtc": "2026-10-26T05:06:17.3943377+00:00",
+      "captureMs": 0,
+      "detectMs": 0,
+      "totalMs": 0.0326,
+      "luminance": 0,
+      "facePresent": false,
+      "faceCount": 0,
+      "confidence": 0,
+      "yawRatio": 0,
+      "pitchRatio": 0,
+      "eyeCount": 0,
+      "rawState": "CameraUnavailable",
+      "committedState": "CameraUnavailable",
+      "reason": "camera-unavailable",
+      "error": "camera-not-open"
+    },
+    {
+      "index": 5,
+      "timestampUtc": "2026-10-26T05:06:22.3968235+00:00",
+      "captureMs": 0,
+      "detectMs": 0,
+      "totalMs": 0.0317,
+      "luminance": 0,
+      "facePresent": false,
+      "faceCount": 0,
+      "confidence": 0,
+      "yawRatio": 0,
+      "pitchRatio": 0,
+      "eyeCount": 0,
+      "rawState": "CameraUnavailable",
+      "committedState": "CameraUnavailable",
+      "reason": "camera-unavailable",
+      "error": "camera-not-open"
+    }
+  ],
+  "notes": [
+    "Analyzer init wall time (including model load and JIT): 53.2 ms; reported model load: 44 ms.",
+    "Camera open failed: camera-open-failed",
+    "No face was detected in any sample.",
+    "Drowsy state is not evaluated: it requires eye-aspect-ratio landmarks or a dedicated model.",
+    "Privacy: no frames, landmarks, or embeddings are written to disk; only aggregate metrics and sample rows are persisted."
+  ]
+}
