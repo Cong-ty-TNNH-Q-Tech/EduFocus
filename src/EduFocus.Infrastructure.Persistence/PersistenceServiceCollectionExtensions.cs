@@ -26,6 +26,7 @@ public static class PersistenceServiceCollectionExtensions
         services.AddScoped<ParentCredentialService>();
         services.AddScoped<OnboardingService>();
         services.AddScoped<ProtectionCoordinator>();
+        services.AddSingleton<ActivityTrackingService>();
         services.AddScoped<ScheduleService>();
         services.AddScoped<DefaultBlockRuleSeeder>();
         services.AddScoped<BlockRuleService>();

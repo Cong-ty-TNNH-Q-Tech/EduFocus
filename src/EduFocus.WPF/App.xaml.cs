@@ -15,6 +15,7 @@ public partial class App : Application
     private IServiceScope? _windowScope;
     private CancellationTokenSource? _heartbeatStop;
     private Task? _heartbeatTask;
+    private Task? _activityTask;
 
     protected override async void OnStartup(StartupEventArgs e)
     {
@@ -97,6 +98,7 @@ public partial class App : Application
         }
         _heartbeatStop = new CancellationTokenSource();
         _heartbeatTask = RunSessionHeartbeatAsync(_services, _heartbeatStop.Token);
+        _activityTask = RunActivityTrackingAsync(_services, _heartbeatStop.Token);
         MainWindow = new MainWindow(
             _windowScope.ServiceProvider.GetRequiredService<ParentCredentialService>(),
             _windowScope.ServiceProvider.GetRequiredService<ProtectionCoordinator>(),
@@ -129,7 +131,7 @@ public partial class App : Application
     protected override void OnExit(ExitEventArgs e)
     {
         _heartbeatStop?.Cancel();
-        try { _heartbeatTask?.GetAwaiter().GetResult(); }
+        try { Task.WhenAll(_heartbeatTask ?? Task.CompletedTask, _activityTask ?? Task.CompletedTask).GetAwaiter().GetResult(); }
         catch (OperationCanceledException) { }
         _heartbeatStop?.Dispose();
         _windowScope?.Dispose();
@@ -153,6 +155,18 @@ public partial class App : Application
             {
                 services.GetRequiredService<IAppLogger>().Error("Study session heartbeat could not be saved.", ex);
             }
+        }
+    }
+
+    private static async Task RunActivityTrackingAsync(IServiceProvider services, CancellationToken cancellationToken)
+    {
+        var tracker = services.GetRequiredService<ActivityTrackingService>();
+        using var timer = new PeriodicTimer(TimeSpan.FromSeconds(15));
+        while (await timer.WaitForNextTickAsync(cancellationToken))
+        {
+            try { await tracker.ScanOnceAsync(DateTimeOffset.UtcNow, cancellationToken); }
+            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested) { throw; }
+            catch (Exception ex) { services.GetRequiredService<IAppLogger>().Error("Activity sample could not be saved.", ex); }
         }
     }
 }

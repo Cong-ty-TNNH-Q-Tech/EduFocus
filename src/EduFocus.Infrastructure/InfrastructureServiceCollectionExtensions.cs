@@ -11,6 +11,7 @@ public static class InfrastructureServiceCollectionExtensions
     {
         services.AddSingleton<IAppLogger, FileLogger>();
         services.AddSingleton<IMonotonicClockPort, MonotonicClockAdapter>();
+        services.AddSingleton<IForegroundActivityPort, WindowsForegroundActivityPort>();
         services.AddSingleton<IProtectionEnginePort, ProtectionEngine>();
         services.AddSingleton<IHostsFileStorage, PhysicalHostsFileStorage>();
         services.AddSingleton<IDnsCacheFlusher, WindowsDnsCacheFlusher>();
