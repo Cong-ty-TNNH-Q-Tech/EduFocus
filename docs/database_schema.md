@@ -175,6 +175,8 @@ Singleton.
 | Domain | Exact | `meet.google.com` | Study | Allow |
 | Domain | Exact | `teams.microsoft.com` | Study | Allow |
 
+Built-in rules are applied by the versioned startup seeder. Version updates only add missing exact host/effect pairs; an existing parent rule with the same pair, custom fields, and disabled built-in state are preserved. Seed versions are recorded as `AuditLog.EventType = DefaultBlockRulesSeeded`. Essential login and online-class hosts are allow rules so Allow wins over Block. Broad shared roots and path-scoped services are omitted because exact host rules cannot isolate a chat path safely.
+
 ---
 
 ## 7. Bảng `ScheduleWindows`

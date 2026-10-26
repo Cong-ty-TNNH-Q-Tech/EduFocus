@@ -58,8 +58,18 @@
             <ListBox x:Name="ScheduleList" Height="76" DisplayMemberPath="Label" SelectionChanged="OnScheduleSelectionChanged" />
             <Button Content="Clear selection / new schedule" Height="28" Margin="0,4,0,0" Click="ClearScheduleSelection" />
             <Button x:Name="DeleteScheduleButton" Content="Delete selected schedule" Height="30" Margin="0,4,0,10" IsEnabled="False" Click="DeleteSchedule" />
+            <Button Content="Manage built-in blocklist" Height="36" Margin="0,0,0,8" Click="OpenBlocklist" />
             <Button Content="Change PIN" Height="40" Click="OpenChangePin" />
             <Button Content="Lock Parent Mode" Margin="0,10,0,0" Height="40" Click="LockNow" />
+        </StackPanel>
+
+        <StackPanel x:Name="BlocklistPanel" Visibility="Collapsed" HorizontalAlignment="Center" VerticalAlignment="Center" Width="560">
+            <TextBlock Text="Built-in blocklist and learning allowlist" FontSize="26" FontWeight="SemiBold" Foreground="#17324D" HorizontalAlignment="Center" />
+            <TextBlock Text="Rules match exact domains. Allow rules take precedence over block rules. URL/path and wildcard rules are not enforced." Margin="0,10,0,10" Foreground="#52677A" TextWrapping="Wrap" />
+            <ListBox x:Name="BlockRuleList" Height="340" DisplayMemberPath="Label" SelectionChanged="OnBlockRuleSelectionChanged" />
+            <TextBlock x:Name="BlockRuleStatus" Margin="0,8,0,8" MinHeight="24" Foreground="#52677A" TextWrapping="Wrap" />
+            <Button x:Name="ToggleBuiltInRuleButton" Content="Select a rule" Height="38" IsEnabled="False" Click="ToggleBuiltInRule" />
+            <Button Content="Back to Parent Mode" Margin="0,8,0,0" Height="36" Click="ShowParent" />
         </StackPanel>
 
         <StackPanel x:Name="ChangePinPanel" Visibility="Collapsed" HorizontalAlignment="Center" VerticalAlignment="Center" Width="360">

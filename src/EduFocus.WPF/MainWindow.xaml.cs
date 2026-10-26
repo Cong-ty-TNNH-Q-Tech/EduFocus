@@ -12,12 +12,14 @@ namespace EduFocus.WPF;
 
 public partial class MainWindow : Window
 {
-    private enum Page { Student, Login, Recovery, NewRecovery, Parent, ChangePin }
+    private enum Page { Student, Login, Recovery, NewRecovery, Parent, Blocklist, ChangePin }
     private sealed record ScheduleListItem(Guid Id, string Label, int Days, int Start, int End, string? Note);
+    private sealed record BlockRuleListItem(Guid Id, string Label, bool Enabled, bool CanChange);
 
     private readonly ParentCredentialService _credentials;
     private readonly ProtectionCoordinator _protection;
     private readonly ScheduleService _schedule;
+    private readonly BlockRuleService _blockRules;
     private readonly IAppLogger _logger;
     private readonly ParentModeSession _parentSession = new();
     private readonly DispatcherTimer _timer;
@@ -30,12 +32,13 @@ public partial class MainWindow : Window
     private bool _systemShutdown;
     private bool _exitInProgress;
 
-    public MainWindow(ParentCredentialService credentials, ProtectionCoordinator protection, ScheduleService schedule, IAppLogger logger, bool credentialsConfigured)
+    public MainWindow(ParentCredentialService credentials, ProtectionCoordinator protection, ScheduleService schedule, BlockRuleService blockRules, IAppLogger logger, bool credentialsConfigured)
     {
         InitializeComponent();
         _credentials = credentials ?? throw new ArgumentNullException(nameof(credentials));
         _protection = protection ?? throw new ArgumentNullException(nameof(protection));
         _schedule = schedule ?? throw new ArgumentNullException(nameof(schedule));
+        _blockRules = blockRules ?? throw new ArgumentNullException(nameof(blockRules));
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
         _credentialsConfigured = credentialsConfigured;
         if (!credentialsConfigured)
@@ -239,6 +242,58 @@ public partial class MainWindow : Window
         }
     }
 
+    private async void OpenBlocklist(object sender, RoutedEventArgs e)
+    {
+        if (!EnsureParentSession()) return;
+        BlockRuleStatus.Text = string.Empty;
+        SetPage(Page.Blocklist);
+        await RefreshBlockRules();
+    }
+
+    private async void ToggleBuiltInRule(object sender, RoutedEventArgs e)
+    {
+        if (!EnsureParentSession() || BlockRuleList.SelectedItem is not BlockRuleListItem selected) return;
+        try
+        {
+            await _blockRules.SetEnabledAsync(selected.Id, !selected.Enabled, _parentSession, DateTimeOffset.UtcNow);
+            BlockRuleStatus.Text = "Built-in rule updated.";
+            await RefreshBlockRules();
+        }
+        catch (Exception ex)
+        {
+            _logger.Error("Built-in block rule could not be changed.", ex);
+            BlockRuleStatus.Text = "Rule was not changed. Protection settings were retained.";
+        }
+    }
+
+    private void OnBlockRuleSelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (BlockRuleList.SelectedItem is not BlockRuleListItem selected)
+        {
+            ToggleBuiltInRuleButton.IsEnabled = false;
+            ToggleBuiltInRuleButton.Content = "Select a rule";
+            return;
+        }
+        ToggleBuiltInRuleButton.IsEnabled = selected.CanChange && _parentSession.IsActive(DateTimeOffset.UtcNow);
+        ToggleBuiltInRuleButton.Content = selected.CanChange
+            ? selected.Enabled ? "Disable selected rule" : "Enable selected rule"
+            : "Essential allowlist is protected";
+    }
+
+    private async Task RefreshBlockRules()
+    {
+        var rules = await _blockRules.GetRulesAsync();
+        BlockRuleList.ItemsSource = rules.Select(rule =>
+        {
+            var canChange = rule.IsBuiltIn && !(rule.Effect == BlockRuleEffect.Allow && DefaultBlockRuleSeeder.IsEssentialAllowlist(rule.NormalizedValue));
+            return new BlockRuleListItem(rule.Id,
+                $"{rule.NormalizedValue} — {rule.Category} / {rule.Effect} / {(rule.IsEnabled ? "enabled" : "disabled")}{(rule.IsBuiltIn ? " / built-in" : " / parent")}{(canChange ? string.Empty : " / protected")}",
+                rule.IsEnabled, canChange);
+        }).ToArray();
+        ToggleBuiltInRuleButton.IsEnabled = false;
+        ToggleBuiltInRuleButton.Content = "Select a rule";
+    }
+
     private async void AddSchedule(object sender, RoutedEventArgs e)
     {
         if (!EnsureParentSession()) return;
@@ -385,7 +440,7 @@ public partial class MainWindow : Window
 
     private void OnUserActivity(object sender, RoutedEventArgs e)
     {
-        if (!_parentSession.RecordActivity(DateTimeOffset.UtcNow) && _page is Page.Parent or Page.ChangePin)
+        if (!_parentSession.RecordActivity(DateTimeOffset.UtcNow) && _page is Page.Parent or Page.Blocklist or Page.ChangePin)
             ExpireParentSession();
         else if (_page == Page.Parent)
             UpdateSessionCountdown();
@@ -399,7 +454,7 @@ public partial class MainWindow : Window
             _lastScheduleEvaluationUtc = now;
             _ = EvaluateSchedule(now);
         }
-        if (_page is Page.Parent or Page.ChangePin)
+        if (_page is Page.Parent or Page.Blocklist or Page.ChangePin)
         {
             if (!_parentSession.IsActive(DateTimeOffset.UtcNow)) ExpireParentSession();
             else if (_page == Page.Parent) UpdateSessionCountdown();
@@ -526,6 +581,7 @@ public partial class MainWindow : Window
         RecoveryPanel.Visibility = page == Page.Recovery ? Visibility.Visible : Visibility.Collapsed;
         NewRecoveryPanel.Visibility = page == Page.NewRecovery ? Visibility.Visible : Visibility.Collapsed;
         ParentPanel.Visibility = page == Page.Parent ? Visibility.Visible : Visibility.Collapsed;
+        BlocklistPanel.Visibility = page == Page.Blocklist ? Visibility.Visible : Visibility.Collapsed;
         ChangePinPanel.Visibility = page == Page.ChangePin ? Visibility.Visible : Visibility.Collapsed;
     }
 }

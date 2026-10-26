@@ -60,6 +60,8 @@ public partial class App : Application
         try
         {
             _windowScope = _services.CreateScope();
+            await _windowScope.ServiceProvider.GetRequiredService<DefaultBlockRuleSeeder>()
+                .SeedAsync(DateTimeOffset.UtcNow);
             var db = _windowScope.ServiceProvider.GetRequiredService<AppDbContext>();
             var onboarding = _windowScope.ServiceProvider.GetRequiredService<OnboardingService>();
             var progress = await onboarding.GetProgressAsync();
@@ -95,6 +97,7 @@ public partial class App : Application
             _windowScope.ServiceProvider.GetRequiredService<ParentCredentialService>(),
             _windowScope.ServiceProvider.GetRequiredService<ProtectionCoordinator>(),
             _windowScope.ServiceProvider.GetRequiredService<ScheduleService>(),
+            _windowScope.ServiceProvider.GetRequiredService<BlockRuleService>(),
             _services.GetRequiredService<IAppLogger>(),
             configured);
         MainWindow.Closed += (_, _) => _windowScope?.Dispose();

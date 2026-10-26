@@ -26,6 +26,8 @@ public static class PersistenceServiceCollectionExtensions
         services.AddScoped<OnboardingService>();
         services.AddScoped<ProtectionCoordinator>();
         services.AddScoped<ScheduleService>();
+        services.AddScoped<DefaultBlockRuleSeeder>();
+        services.AddScoped<BlockRuleService>();
         return services;
     }
 }
