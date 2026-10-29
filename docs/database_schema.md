@@ -474,11 +474,17 @@ Giả định:
 - Thư mục `%ProgramData%\EduFocus`:
   - ACL: `Administrators` và `SYSTEM` full control.
   - Học sinh standard user: không đọc/ghi.
+  - `DataDirectorySecurity` áp ACL khi khởi tạo DB; quyền kế thừa cho file DB, `-wal`/`-shm` và thư mục `backups`.
+  - Nếu không áp được ACL, initializer log lỗi và ném `DataDirectorySecurityException`; không xóa dữ liệu.
 - Nếu phụ huynh và học sinh dùng chung tài khoản Windows, ACL không tách được; đây là giới hạn đã biết. PIN chỉ bảo vệ UI, không bảo vệ file DB.
 - Không lưu secret trong DB ngoài hash PIN/recovery code.
 - Cân nhắc SQLCipher ở post-MVP nếu cần mã hóa toàn bộ DB.
 - Backup DB trước migration; giữ tối đa 3 bản.
 - Log không chứa dữ liệu nhạy cảm.
+
+**Kiểm tra ACL (thủ công, sau lần chạy đầu tiên bằng Administrator)**
+- `icacls "%ProgramData%\EduFocus"` chỉ hiển thị `BUILTIN\Administrators:(OI)(CI)(F)` và `NT AUTHORITY\SYSTEM:(OI)(CI)(F)`; không còn `Users`/`Authenticated Users`.
+- Đăng nhập tài khoản standard user: `dir "%ProgramData%\EduFocus"` bị từ chối truy cập; chạy EduFocus dưới tài khoản này nhận thông báo an toàn thay vì mở DB.
 
 ---
 
@@ -486,15 +492,18 @@ Giả định:
 
 - Dùng EF Core migrations.
 - Migration đầu tiên: `InitialEduFocusSchema` — đã tạo trong `src/EduFocus.SqliteDataAccess/Migrations` (issue #9), gồm 9 bảng, index, check constraint, FK và generated column.
-- Mỗi migration có backup tự động trước khi chạy — `SqliteDatabaseInitializer` backup bằng SQLite backup API vào thư mục `backups`, giữ 3 bản gần nhất.
+- Mỗi migration có backup tự động trước khi chạy — `SqliteBackupStore` backup bằng SQLite backup API, kiểm tra `PRAGMA integrity_check` và chỉ tiếp tục khi bản backup hợp lệ; giữ tối đa 3 bản gần nhất.
+- Tên backup `edufocus-{UTC}-{nn}.db` là duy nhất, không ghi đè bản cũ; retention chỉ xóa bản cũ nhất.
 - Nếu migration thất bại:
   - Giữ DB cũ.
   - Ghi log.
   - Hiển thị lỗi cho phụ huynh; không tự xóa dữ liệu.
+- Nếu DB hiện có hỏng integrity check: không sửa file, ném `SqliteDatabaseCorruptException` kèm đường dẫn thư mục backup.
+- Khôi phục: đóng EduFocus, gọi `SqliteDatabaseInitializer.RestoreBackup(path)` (API) — backup được kiểm tra integrity, DB hiện tại được snapshot best-effort, file `-wal`/`-shm` được xóa trước khi thay thế. UI khôi phục sẽ ở phase Reports/Settings.
 - Không hỗ trợ downgrade schema; nếu cần, khôi phục từ backup.
 - DB từ `DontBeLazy` 1.x không được mở bởi EduFocus.
 - Convention khi mở kết nối: `PRAGMA foreign_keys = ON` (interceptor); DB mới được set `auto_vacuum = INCREMENTAL` trước khi tạo bảng và `journal_mode = WAL`; DB cũ được bật WAL sau khi backup, trước migration.
-- Test tích hợp: `src/EduFocus.SqliteDataAccess.Tests` (schema, khởi tạo/backup/retention, roundtrip entity).
+- Test tích hợp: `src/EduFocus.SqliteDataAccess.Tests` (schema, khởi tạo/backup/retention, roundtrip entity, ACL, corrupt DB và restore).
 
 ---
 

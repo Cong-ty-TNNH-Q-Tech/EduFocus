@@ -17,7 +17,8 @@ internal sealed class TempDatabase : IAsyncDisposable
         Options = new EduFocusDatabaseOptions
         {
             DatabasePath = DatabasePath,
-            BackupDirectory = BackupDirectory
+            BackupDirectory = BackupDirectory,
+            ProtectDataDirectory = false
         };
     }
 

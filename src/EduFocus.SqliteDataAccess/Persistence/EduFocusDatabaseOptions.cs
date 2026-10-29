@@ -27,6 +27,13 @@ public sealed class EduFocusDatabaseOptions
 
     public int MaxBackups { get; init; } = 3;
 
+    /// <summary>
+    /// Restricts the data and backup folders to Administrators/SYSTEM on
+    /// Windows. Tests disable this so temporary folders stay deletable, and
+    /// tools that only read a copy can opt out (database_schema §16).
+    /// </summary>
+    public bool ProtectDataDirectory { get; init; } = true;
+
     public string ResolvedBackupDirectory =>
         string.IsNullOrWhiteSpace(BackupDirectory)
             ? Path.Combine(Path.GetDirectoryName(Path.GetFullPath(DatabasePath))!, DefaultBackupFolderName)

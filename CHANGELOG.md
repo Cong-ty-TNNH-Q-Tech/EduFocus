@@ -65,6 +65,14 @@ và dự án tuân theo [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 - **Config:** `EduFocusDatabaseOptions` mặc định `%ProgramData%\EduFocus\edufocus.db`, backup trong `backups`; design-time factory cho `dotnet ef`.
 - **Tests:** project `EduFocus.SqliteDataAccess.Tests` với 19 test — schema/index/constraint, khởi tạo/backup/retention, roundtrip entity và ràng buộc một session `Active`.
 
+### Added (Phase 1 — Data folder protection, issue #10)
+- **ACL thư mục dữ liệu:** `DataDirectorySecurity` đặt `%ProgramData%\EduFocus` chỉ cho Administrators/SYSTEM full control, tắt kế thừa cũ; DB, WAL và `backups` kế thừa ACL. Standard user không đọc/ghi được; lỗi quyền ném `DataDirectorySecurityException` và không xóa dữ liệu.
+- **Backup được kiểm chứng:** `SqliteBackupStore` tạo backup bằng SQLite backup API, verify `PRAGMA integrity_check` trước khi migration; tên file duy nhất nên không ghi đè; retention giữ tối đa 3 bản.
+- **Phát hiện DB hỏng:** initializer chạy integrity check trước migration; DB hỏng giữ nguyên file và ném `SqliteDatabaseCorruptException` kèm hướng dẫn restore.
+- **Restore an toàn:** `RestoreBackup` chỉ chấp nhận backup hợp lệ, snapshot DB hiện tại (best-effort), xóa `-wal`/`-shm` trước khi thay thế.
+- **Tài liệu:** giới hạn shared Windows account và ACL được ghi trong [SECURITY.md](SECURITY.md), README vi/en và [docs/database_schema.md](docs/database_schema.md) §16–§17.
+- **Tests:** thêm 6 test ACL/backup/restore/corrupt DB, tổng 25 test persistence.
+
 ### Removed (khỏi phạm vi EduFocus)
 - Quản lý task, profile học tập, quote động lực và Gemini AI.
 - Cơ chế "friction" bắt gõ câu xác nhận bỏ cuộc.

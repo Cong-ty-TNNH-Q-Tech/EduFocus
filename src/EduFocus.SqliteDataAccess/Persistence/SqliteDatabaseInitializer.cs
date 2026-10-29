@@ -10,17 +10,18 @@ public sealed record DatabaseInitializationResult(
     string? BackupPath);
 
 /// <summary>
-/// Creates the database directory, backs up before migrations (keeping the newest
-/// three), applies EF Core migrations and configures SQLite pragmas. A failed
-/// migration keeps the existing file and surfaces <see cref="SqliteMigrationException"/>
-/// instead of deleting data (database_schema §14, §17).
+/// Creates and protects the data directory, verifies the existing database,
+/// backs up before migrations (verified copy, newest three kept), applies EF
+/// Core migrations and configures SQLite pragmas. Failures keep the existing
+/// file and surface a safe exception instead of deleting data
+/// (database_schema §14, §16, §17).
 /// </summary>
 public sealed class SqliteDatabaseInitializer
 {
     private readonly EduFocusDatabaseOptions _options;
     private readonly IAppLogger _logger;
-    private readonly TimeProvider _timeProvider;
     private readonly DbContextOptions<EduFocusDbContext> _dbContextOptions;
+    private readonly SqliteBackupStore _backupStore;
 
     public SqliteDatabaseInitializer(
         EduFocusDatabaseOptions options,
@@ -32,22 +33,25 @@ public sealed class SqliteDatabaseInitializer
 
         _options = options;
         _logger = logger;
-        _timeProvider = timeProvider ?? TimeProvider.System;
         _dbContextOptions = new DbContextOptionsBuilder<EduFocusDbContext>()
             .UseSqlite(options.ConnectionString)
             .AddInterceptors(new SqlitePragmaInterceptor())
             .Options;
+        _backupStore = new SqliteBackupStore(options, logger, timeProvider);
     }
 
     public async Task<DatabaseInitializationResult> InitializeAsync(CancellationToken cancellationToken = default)
     {
-        EnsureDatabaseDirectory();
+        EnsureDataDirectory();
 
         var existed = File.Exists(_options.DatabasePath)
             && new FileInfo(_options.DatabasePath).Length > 0;
 
+        if (existed)
+            EnsureDatabaseIsHealthy();
+
         if (!existed)
-            ConfigureNewDatabase();
+            ConfigureNewDatabaseSafely();
 
         string? backupPath = null;
         List<string> pending;
@@ -67,7 +71,7 @@ public sealed class SqliteDatabaseInitializer
 
             if (existed)
             {
-                backupPath = CreateBackup();
+                backupPath = _backupStore.CreateBackup();
                 EnsureWalMode();
             }
 
@@ -77,6 +81,12 @@ public sealed class SqliteDatabaseInitializer
         }
         catch (OperationCanceledException)
         {
+            throw;
+        }
+        catch (SqliteBackupException)
+        {
+            _logger.Error(
+                "The pre-migration database backup failed, so no migration was started. The existing database was kept.");
             throw;
         }
         catch (Exception ex)
@@ -98,16 +108,77 @@ public sealed class SqliteDatabaseInitializer
         return new DatabaseInitializationResult(!existed, pending, backupPath);
     }
 
-    private void EnsureDatabaseDirectory()
+    /// <summary>
+    /// Restores a verified backup over the current database. Stop EduFocus
+    /// first; a pre-restore snapshot is created when possible and the current
+    /// file is left untouched when the backup is missing or corrupt.
+    /// </summary>
+    public string? RestoreBackup(string backupPath) => _backupStore.Restore(backupPath);
+
+    private void EnsureDataDirectory()
     {
         var directory = Path.GetDirectoryName(Path.GetFullPath(_options.DatabasePath));
         if (string.IsNullOrEmpty(directory))
             return;
 
-        Directory.CreateDirectory(directory);
+        try
+        {
+            Directory.CreateDirectory(directory);
+
+            if (!_options.ProtectDataDirectory)
+                return;
+
+            DataDirectorySecurity.Apply(directory);
+            _logger.Info($"Data directory restricted to Administrators and SYSTEM: '{directory}'.");
+        }
+        catch (Exception ex) when (ex is UnauthorizedAccessException or IOException
+            or DirectoryNotFoundException or PlatformNotSupportedException)
+        {
+            _logger.Error(
+                $"Could not prepare or restrict the data directory '{directory}'. No data was deleted.",
+                ex);
+
+            throw new DataDirectorySecurityException(
+                "EduFocus could not prepare the data folder. Run EduFocus as an administrator; existing data was not modified.",
+                ex);
+        }
+    }
+
+    private void EnsureDatabaseIsHealthy()
+    {
+        if (_backupStore.VerifyIntegrity(_options.DatabasePath))
+            return;
+
+        var backupDirectory = _options.ResolvedBackupDirectory;
+
+        _logger.Error(
+            $"Database integrity check failed for '{_options.DatabasePath}'. The file was not modified and no data was deleted.");
+        _logger.Warning($"Restore a verified backup from '{backupDirectory}' before using EduFocus again.");
+
+        throw new SqliteDatabaseCorruptException(
+            "The EduFocus database failed the integrity check. The file was not modified; restore a backup before continuing.",
+            backupDirectory);
     }
 
     /// <summary>auto_vacuum only takes effect before the first table is created.</summary>
+    private void ConfigureNewDatabaseSafely()
+    {
+        try
+        {
+            ConfigureNewDatabase();
+        }
+        catch (Exception ex) when (ex is SqliteException or IOException or UnauthorizedAccessException)
+        {
+            _logger.Error(
+                $"Could not create the database at '{_options.DatabasePath}'. Check folder permissions and free disk space.",
+                ex);
+
+            throw new DataDirectorySecurityException(
+                "EduFocus could not create the database. Run EduFocus as an administrator and check free disk space; no data was deleted.",
+                ex);
+        }
+    }
+
     private void ConfigureNewDatabase()
     {
         using var connection = new SqliteConnection(_options.ConnectionString);
@@ -131,58 +202,6 @@ public sealed class SqliteDatabaseInitializer
         using var connection = new SqliteConnection(_options.ConnectionString);
         connection.Open();
         ExecuteNonQuery(connection, "PRAGMA journal_mode = WAL;");
-    }
-
-    private string CreateBackup()
-    {
-        var backupDirectory = _options.ResolvedBackupDirectory;
-        Directory.CreateDirectory(backupDirectory);
-
-        var fileName = $"edufocus-{_timeProvider.GetUtcNow():yyyyMMdd-HHmmssfff}.db";
-        var backupPath = Path.Combine(backupDirectory, fileName);
-
-        using var source = new SqliteConnection(_options.ConnectionString);
-        using var destination = new SqliteConnection(
-            new SqliteConnectionStringBuilder
-            {
-                DataSource = backupPath,
-                Mode = SqliteOpenMode.ReadWriteCreate
-            }.ToString());
-
-        source.Open();
-        destination.Open();
-        source.BackupDatabase(destination);
-
-        _logger.Info($"Database backup created at '{backupPath}'.");
-        ApplyBackupRetention(backupDirectory);
-        return backupPath;
-    }
-
-    private void ApplyBackupRetention(string backupDirectory)
-    {
-        var keep = Math.Max(1, _options.MaxBackups);
-
-        var backups = Directory
-            .EnumerateFiles(backupDirectory, "edufocus-*.db")
-            .OrderByDescending(path => path, StringComparer.OrdinalIgnoreCase)
-            .ToList();
-
-        foreach (var oldBackup in backups.Skip(keep))
-        {
-            try
-            {
-                File.Delete(oldBackup);
-                _logger.Info($"Removed old database backup '{oldBackup}'.");
-            }
-            catch (IOException ex)
-            {
-                _logger.Warning($"Could not remove old database backup '{oldBackup}': {ex.Message}");
-            }
-            catch (UnauthorizedAccessException ex)
-            {
-                _logger.Warning($"Could not remove old database backup '{oldBackup}': {ex.Message}");
-            }
-        }
     }
 
     private static object? ExecuteScalar(SqliteConnection connection, string sql)

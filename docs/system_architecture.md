@@ -175,7 +175,9 @@ Triển khai outbound ports, tương tác Windows.
 - `EduFocusDbContext` với 9 DbSet mới; Fluent API cấu hình index, unique constraint, converter và check constraint.
 - Migration `InitialEduFocusSchema`; **không migrate** dữ liệu từ `DontBeLazy` 1.x.
 - DB path: `%ProgramData%\EduFocus\edufocus.db` (mặc định trong `EduFocusDatabaseOptions`).
-- `SqliteDatabaseInitializer`: backup trước mỗi migration schema (giữ 3 bản gần nhất), giữ DB nếu migration lỗi, ghi log hướng dẫn khôi phục.
+- `SqliteDatabaseInitializer`: tạo/khóa thư mục dữ liệu, kiểm tra integrity DB hiện có, backup trước migration (verified, giữ 3 bản), giữ DB nếu lỗi và ghi log hướng dẫn khôi phục.
+- `SqliteBackupStore`: tạo/verify/rotate backup và `Restore` an toàn (snapshot trước khi thay thế).
+- `DataDirectorySecurity`: ACL Administrators/SYSTEM, kế thừa cho file DB và backup.
 - `SqlitePragmaInterceptor`: `PRAGMA foreign_keys = ON` mỗi kết nối; WAL và `auto_vacuum` do initializer thiết lập.
 - Repository implementations sẽ được thêm ở các issue sau.
 
@@ -520,6 +522,9 @@ Trạng thái lưu trong `AppSettings.ProtectionEnabled`; session active lưu tr
 - DB: `%ProgramData%\EduFocus\edufocus.db`.
 - Logs: `%ProgramData%\EduFocus\logs`.
 - ACL: Administrators/SYSTEM full; học sinh standard user không đọc/ghi. Phụ huynh thao tác qua app elevated, không cấp quyền file trực tiếp.
+- `DataDirectorySecurity` áp ACL khi initializer chạy; quyền kế thừa cho DB, WAL và `backups`; lỗi ACL ném `DataDirectorySecurityException` và không xóa dữ liệu.
+- Backup trước migration bằng `SqliteBackupStore`: verify `PRAGMA integrity_check`, tên file duy nhất, giữ tối đa 3 bản.
+- DB hỏng integrity check: giữ nguyên file, ném `SqliteDatabaseCorruptException`; `RestoreBackup` thay thế bằng backup đã verify và snapshot DB hiện tại khi có thể.
 - Timestamp lưu **UTC**; hiển thị local. Query theo ngày dùng local boundary chuyển sang UTC.
 - Session summary giữ lâu hơn sample chi tiết (365 ngày vs 30 ngày).
 - Retention job chạy mỗi ngày; xóa theo batch để tránh khóa DB lâu.
@@ -644,7 +649,8 @@ EduFocus/
 >
 > Issue #7 đã xóa toàn bộ code 1.x; issue #8 đã thêm domain model 2.0; issue #9 đã thêm
 > `EduFocus.SqliteDataAccess` (DbContext, configuration, converter, migration
-> `InitialEduFocusSchema`, initializer + backup). `UseCases` vẫn là scaffold chờ các issue
+> `InitialEduFocusSchema`, initializer + backup); issue #10 thêm ACL thư mục dữ liệu và
+> quy trình verify/restore backup. `UseCases` vẫn là scaffold chờ các issue
 > repository/use case; `WPF` là shell tối thiểu.
 > Inventory 1.x ở [legacy-cleanup.md](./legacy-cleanup.md), invariant domain ở
 > [domain-invariants.md](./domain-invariants.md).

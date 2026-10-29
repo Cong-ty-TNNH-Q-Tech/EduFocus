@@ -177,7 +177,7 @@ dotnet test src/EduFocus.Domain.Tests/EduFocus.Domain.Tests.csproj
 
 ## ⚠️ Known Limitations
 
-- The PIN is not a security boundary if the student shares the Windows account or has Administrator rights.
+- The PIN is not a security boundary if the student shares the Windows account or has Administrator rights. The data-folder ACL only separates access when parent and student use separate Windows accounts; the PIN protects the UI, not the database file.
 - The hosts file can be bypassed via DoH/DoT, VPN, or a proxy.
 - Hosts does not log HTTPS access; blocked-attempt counts are best-effort only.
 - The block page only appears over HTTP; HTTPS usually shows a connection/SSL error.

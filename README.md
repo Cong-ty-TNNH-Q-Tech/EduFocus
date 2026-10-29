@@ -177,7 +177,7 @@ dotnet test src/EduFocus.Domain.Tests/EduFocus.Domain.Tests.csproj
 
 ## ⚠️ Giới hạn đã biết
 
-- PIN không phải ranh giới bảo mật nếu học sinh dùng chung tài khoản Windows hoặc có quyền Administrator.
+- PIN không phải ranh giới bảo mật nếu học sinh dùng chung tài khoản Windows hoặc có quyền Administrator. ACL thư mục dữ liệu chỉ tách được quyền khi phụ huynh và học sinh dùng tài khoản Windows riêng; PIN chỉ bảo vệ UI, không bảo vệ file DB.
 - Hosts file có thể bị bypass bởi DoH/DoT, VPN hoặc proxy.
 - Hosts không tạo log truy cập HTTPS; số blocked attempts chỉ là best-effort.
 - Trang chặn chỉ hiển thị với HTTP; HTTPS thường báo lỗi kết nối/SSL.

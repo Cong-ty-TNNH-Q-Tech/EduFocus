@@ -29,7 +29,8 @@ EduFocus là ứng dụng desktop **local-first** dành cho phụ huynh giám s�
 - **Không lưu ảnh, video, âm thanh hoặc frame webcam.**
 - **Không lưu nội dung trang, tin nhắn, clipboard hay lịch sử duyệt web đầy đủ.**
 - **Không nhận diện danh tính/khuôn mặt.**
-- Dữ liệu nằm trong `%ProgramData%\EduFocus`, được bảo vệ bằng ACL cho Administrators/SYSTEM.
+- Dữ liệu nằm trong `%ProgramData%\EduFocus`, được bảo vệ bằng ACL cho Administrators/SYSTEM. Ứng dụng áp ACL khi khởi tạo DB; file DB, WAL và backup kế thừa ACL này. Khởi tạo dữ liệu cần quyền Administrator.
+- Backup trước migration được kiểm tra `PRAGMA integrity_check`; giữ tối đa 3 bản. Khi DB hỏng, ứng dụng giữ nguyên file và yêu cầu khôi phục từ backup, không tự xóa dữ liệu.
 - PIN/recovery code chỉ lưu dưới dạng hash PBKDF2-SHA256 với salt riêng; dùng chung lockout 5 lần/15 phút. Recovery code chỉ hiển thị một lần.
 - Retention mặc định: sample 30 ngày, event/blocked attempt 90 ngày, session summary/audit 365 ngày.
 
@@ -47,7 +48,7 @@ Các điểm sau **không được coi là lỗ hổng bảo mật** vì đã đ
 - Phát hiện treo dựa trên heartbeat; nếu file heartbeat/state bị khóa, hỏng hoặc ổ đĩa đầy, watchdog có thể phát hiện sai hoặc trễ.
 - Uninstall PIN chỉ là best-effort; admin Windows vẫn gỡ được.
 - Chặn app có thể đóng/kill process và làm mất dữ liệu chưa lưu; EduFocus ưu tiên `WM_CLOSE` trước khi kill.
-- PIN không bảo vệ file DB nếu phụ huynh và học sinh dùng chung tài khoản Windows.
+- PIN không bảo vệ file DB nếu phụ huynh và học sinh dùng chung tài khoản Windows; ACL thư mục dữ liệu cũng không tách được quyền trong trường hợp này.
 - Webcam attention chỉ là ước lượng, không phải eye tracker y khoa.
 - Ứng dụng không chống gian lận thi cử và không nên dùng cho mục đích đó.
 - Không phát hiện được mọi chatbot mới hoặc chatbot nhúng trong ứng dụng khác.

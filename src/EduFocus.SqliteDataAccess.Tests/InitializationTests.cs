@@ -99,7 +99,8 @@ public sealed class InitializationTests
         {
             DatabasePath = db.DatabasePath,
             BackupDirectory = db.BackupDirectory,
-            MaxBackups = 2
+            MaxBackups = 2,
+            ProtectDataDirectory = false
         };
 
         CreateConflictingDatabase(db.DatabasePath);
