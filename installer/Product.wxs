@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!--
   WiX v4 installer definition for Don't Be Lazy.
-  Build: wix build installer/Product.wxs -ext WixToolset.UI.wixext -o DontBeLazy.msi -d Version=1.2.3 -d PublishDir=publish/
+  Build: wix build installer/Product.wxs -ext WixToolset.UI.wixext -o EduFocus.msi -d Version=1.2.3 -d PublishDir=publish/
 -->
 <Wix xmlns="http://wixtoolset.org/schemas/v4/wxs"
      xmlns:ui="http://wixtoolset.org/schemas/v4/wxs/ui">
@@ -45,7 +45,7 @@
     <Directory Id="TARGETDIR" Name="SourceDir">
 
       <Directory Id="ProgramFiles64Folder">
-        <Directory Id="INSTALLFOLDER" Name="DontBeLazy"/>
+        <Directory Id="INSTALLFOLDER" Name="EduFocus"/>
       </Directory>
 
       <Directory Id="DesktopFolder"/>
@@ -64,8 +64,8 @@
       <!-- Main executable -->
       <Component Id="MainExe" Guid="A1B2C3D4-E5F6-7890-ABCD-EF1234567890">
         <File Id="MainExeFile"
-              Source="$(PublishDir)DontBeLazy.exe"
-              Name="DontBeLazy.exe"
+              Source="$(PublishDir)EduFocus.exe"
+              Name="EduFocus.exe"
               KeyPath="yes"/>
       </Component>
 
@@ -88,12 +88,12 @@
       <Shortcut Id="ShortcutDesktop"
                 Name="Don't Be Lazy"
                 Description="Stay focused. Don't be lazy."
-                Target="[INSTALLFOLDER]DontBeLazy.exe"
+                Target="[INSTALLFOLDER]EduFocus.exe"
                 WorkingDirectory="INSTALLFOLDER"
                 Icon="AppIcon.ico"/>
       <RemoveFolder Id="RemoveDesktopShortcut" Directory="DesktopFolder" On="uninstall"/>
       <RegistryValue Root="HKCU"
-                     Key="Software\ThanhTrunggDEV\DontBeLazy"
+                     Key="Software\ThanhTrunggDEV\EduFocus"
                      Name="DesktopShortcut"
                      Value="1" Type="integer" KeyPath="yes"/>
     </Component>
@@ -107,12 +107,12 @@
       <Shortcut Id="ShortcutStartMenu"
                 Name="Don't Be Lazy"
                 Description="Stay focused. Don't be lazy."
-                Target="[INSTALLFOLDER]DontBeLazy.exe"
+                Target="[INSTALLFOLDER]EduFocus.exe"
                 WorkingDirectory="INSTALLFOLDER"
                 Icon="AppIcon.ico"/>
       <RemoveFolder Id="RemoveStartMenu" Directory="ProgramMenuSubFolder" On="uninstall"/>
       <RegistryValue Root="HKCU"
-                     Key="Software\ThanhTrunggDEV\DontBeLazy"
+                     Key="Software\ThanhTrunggDEV\EduFocus"
                      Name="StartMenuShortcut"
                      Value="1" Type="integer" KeyPath="yes"/>
     </Component>

@@ -132,16 +132,14 @@ Khi có bản phát hành, tải tại [Releases](https://github.com/Cong-ty-TNN
 git clone https://github.com/Cong-ty-TNNH-Q-Tech/EduFocus.git
 cd EduFocus
 
-dotnet restore DontBeLazy.slnx
-dotnet run --project src/DontBeLazy.WPF/DontBeLazy.WPF.csproj
+dotnet restore EduFocus.slnx
+dotnet run --project src/EduFocus.WPF/EduFocus.WPF.csproj
 ```
-
-> **Lưu ý:** Codebase hiện vẫn dùng tên project `DontBeLazy.*`. Việc đổi tên sang `EduFocus.*` sẽ được thực hiện ở Phase 1. Lệnh build sẽ được cập nhật tương ứng.
 
 Chạy test:
 
 ```bash
-dotnet test src/DontBeLazy.Domain.Tests/DontBeLazy.Domain.Tests.csproj
+dotnet test src/EduFocus.Domain.Tests/EduFocus.Domain.Tests.csproj
 ```
 
 > WPF hiện target `net9.0` (hết hỗ trợ 10/11/2026) trong khi tests target `net10.0`; Phase 1 sẽ nâng toàn bộ solution lên .NET 10 LTS và EF Core 10 trước release.

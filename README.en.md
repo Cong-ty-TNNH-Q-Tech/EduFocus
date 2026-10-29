@@ -132,16 +132,14 @@ Once released, download from [Releases](https://github.com/Cong-ty-TNNH-Q-Tech/E
 git clone https://github.com/Cong-ty-TNNH-Q-Tech/EduFocus.git
 cd EduFocus
 
-dotnet restore DontBeLazy.slnx
-dotnet run --project src/DontBeLazy.WPF/DontBeLazy.WPF.csproj
+dotnet restore EduFocus.slnx
+dotnet run --project src/EduFocus.WPF/EduFocus.WPF.csproj
 ```
-
-> **Note:** The codebase still uses the `DontBeLazy.*` project names. Renaming to `EduFocus.*` happens in Phase 1, and these commands will be updated accordingly.
 
 Run tests:
 
 ```bash
-dotnet test src/DontBeLazy.Domain.Tests/DontBeLazy.Domain.Tests.csproj
+dotnet test src/EduFocus.Domain.Tests/EduFocus.Domain.Tests.csproj
 ```
 
 > The WPF app still targets `net9.0` (support ends November 10, 2026) while tests target `net10.0`; Phase 1 will move the entire solution to .NET 10 LTS and EF Core 10 before release.

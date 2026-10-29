@@ -10,7 +10,7 @@ Trước khi bắt đầu, vui lòng đọc:
 - [Code of Conduct](./CODE_OF_CONDUCT.md)
 - [Security Policy](./SECURITY.md)
 
-> **Trạng thái dự án:** EduFocus đang chuyển đổi từ dự án tiền nhiệm **Don't Be Lazy**. Codebase hiện vẫn dùng tên project `DontBeLazy.*`; việc đổi tên diễn ra ở Phase 1.
+> **Trạng thái dự án:** EduFocus đang chuyển đổi từ dự án tiền nhiệm **Don't Be Lazy**. Codebase đã dùng tên project `EduFocus.*` từ Phase 1.
 
 ---
 
@@ -43,14 +43,14 @@ git checkout -b fix/mo-ta-loi
 - SQLite tooling (tùy chọn, để xem DB)
 
 ```bash
-dotnet restore DontBeLazy.slnx
-dotnet build DontBeLazy.slnx
+dotnet restore EduFocus.slnx
+dotnet build EduFocus.slnx
 ```
 
 Chạy app:
 
 ```bash
-dotnet run --project src/DontBeLazy.WPF/DontBeLazy.WPF.csproj
+dotnet run --project src/EduFocus.WPF/EduFocus.WPF.csproj
 ```
 
 > Một số tính năng (ghi hosts, kill process) cần chạy **as Administrator**. Khi debug, hãy chạy Visual Studio với quyền admin nếu cần kiểm thử blocking.
@@ -58,7 +58,7 @@ dotnet run --project src/DontBeLazy.WPF/DontBeLazy.WPF.csproj
 Chạy test:
 
 ```bash
-dotnet test src/DontBeLazy.Domain.Tests/DontBeLazy.Domain.Tests.csproj
+dotnet test src/EduFocus.Domain.Tests/EduFocus.Domain.Tests.csproj
 ```
 
 > WPF hiện target `net9.0` (hết hỗ trợ 10/11/2026) trong khi `Domain.Tests` target `net10.0`. Phase 1 sẽ nâng toàn bộ solution lên .NET 10 LTS và EF Core 10; không tự đổi target trong PR tính năng.

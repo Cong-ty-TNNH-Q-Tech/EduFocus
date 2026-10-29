@@ -171,7 +171,7 @@ Từ thư mục gốc repo:
 pwsh tools/AttentionPipelineSpike/fetch-models.ps1
 
 # Test logic Domain
-dotnet test src/DontBeLazy.Domain.Tests/DontBeLazy.Domain.Tests.csproj
+dotnet test src/EduFocus.Domain.Tests/EduFocus.Domain.Tests.csproj
 
 # Smoke 30 giây
 dotnet run --project tools/AttentionPipelineSpike -c Release -- `

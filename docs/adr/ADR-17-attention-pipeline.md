@@ -25,7 +25,7 @@ Chọn **OpenCvSharp + OpenCV MSMF + ONNX Runtime + YuNet 2023mar** làm backend
 - Sampling: mặc định 15 giây cho đo dài; hỗ trợ 1-2 FPS khi cần.
 - Haar cascade chỉ giữ làm baseline chẩn đoán, không làm backend sản phẩm.
 - `Drowsy`, gaze và iris để Phase 5; không tuyên bố hỗ trợ trước khi có EAR/model riêng.
-- Adapter nằm ở `DontBeLazy.Infrastructure.Attention`; Domain/Ports không phụ thuộc OpenCV/ONNX.
+- Adapter nằm ở `EduFocus.Infrastructure.Attention`; Domain/Ports không phụ thuộc OpenCV/ONNX.
 - Camera phải được mở bất đồng bộ ở Phase 5; không block startup.
 
 ## Evidence

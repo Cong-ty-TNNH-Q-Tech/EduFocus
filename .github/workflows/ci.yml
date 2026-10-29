@@ -21,10 +21,10 @@ jobs:
           dotnet-version: "9.0.x"
 
       - name: Restore
-        run: dotnet restore DontBeLazy.slnx
+        run: dotnet restore EduFocus.slnx
 
       - name: Build
-        run: dotnet build DontBeLazy.slnx --no-restore --configuration Release
+        run: dotnet build EduFocus.slnx --no-restore --configuration Release
 
       - name: Test
-        run: dotnet test DontBeLazy.slnx --no-build --configuration Release --verbosity minimal
+        run: dotnet test EduFocus.slnx --no-build --configuration Release --verbosity minimal

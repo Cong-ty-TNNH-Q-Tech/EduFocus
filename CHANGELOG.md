@@ -35,6 +35,11 @@ và dự án tuân theo [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 - Dữ liệu chuyển từ `%AppData%` sang `%ProgramData%\EduFocus` với ACL cho Administrators/SYSTEM.
 - Database schema mới; không migrate dữ liệu từ 1.x.
 
+### Changed (Phase 1 — Foundation)
+- **Đổi tên codebase (issue #5):** solution, toàn bộ project, namespace, assembly và test project chuyển từ `DontBeLazy.*` sang `EduFocus.*`; file thực thi đổi thành `EduFocus.exe`.
+- **Đường dẫn dữ liệu mới:** DB `%LocalAppData%\EduFocus\edufocus.db`, log `%AppData%\EduFocus\logs`; không đọc hoặc migrate DB 1.x.
+- **Cập nhật tích hợp:** auto-start registry, mutex single-instance, updater (repo `Cong-ty-TNNH-Q-Tech/EduFocus`), EF design-time DB, CI/release workflow và README/CONTRIBUTING.
+
 ### Removed (khỏi phạm vi EduFocus)
 - Quản lý task, profile học tập, quote động lực và Gemini AI.
 - Cơ chế "friction" bắt gõ câu xác nhận bỏ cuộc.
@@ -42,7 +47,7 @@ và dự án tuân theo [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ### Planned
 - Phase 0: Spike camera, blocking, tamper resistance.
-- Phase 1: Đổi tên codebase sang `EduFocus.*`, schema mới, CI/installer.
+- Phase 1: Schema mới, CI/installer, nâng .NET 10.
 - Phase 2–7: PIN & Parent Mode → blocking engine → session/activity → attention → reports → hardening/release MVP.
 
 ---

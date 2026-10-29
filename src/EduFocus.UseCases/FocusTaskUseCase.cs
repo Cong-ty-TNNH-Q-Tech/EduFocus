@@ -1,0 +1,131 @@
+using System.Collections.Generic;
+using System.Text.Json;
+using System.Threading.Tasks;
+using EduFocus.Domain.Entities;
+using EduFocus.Domain.ValueObjects;
+using EduFocus.Ports.DTOs;
+using EduFocus.Ports.Inbound;
+using EduFocus.Ports.Outbound.Repositories;
+using EduFocus.Ports.Outbound.Services;
+using EduFocus.UseCases.Mappers;
+
+namespace EduFocus.UseCases;
+
+public class FocusTaskUseCase : IFocusTaskUseCase
+{
+    private readonly ITaskRepository _taskRepository;
+    private readonly IUnitOfWork _unitOfWork;
+    private readonly IAiTaskAssistantPort _aiTaskAssistant;
+
+    public FocusTaskUseCase(
+        ITaskRepository taskRepository,
+        IUnitOfWork unitOfWork,
+        IAiTaskAssistantPort aiTaskAssistant)
+    {
+        _taskRepository = taskRepository;
+        _unitOfWork = unitOfWork;
+        _aiTaskAssistant = aiTaskAssistant;
+    }
+
+    public async Task<IReadOnlyCollection<FocusTaskDto>> GetAllTasksAsync()
+    {
+        var tasks = await _taskRepository.GetAllAsync();
+        return tasks.Select(DtoMapper.ToDto).ToList();
+    }
+
+    public async Task<FocusTaskDto> CreateTaskAsync(string name, int expectedMinutes, Guid? profileId = null, bool? perTaskStrictMode = null)
+    {
+        var task = new FocusTask(name, expectedMinutes);
+        if (profileId.HasValue || perTaskStrictMode.HasValue)
+        {
+            var pid = profileId.HasValue ? new ProfileId(profileId.Value) : (ProfileId?)null;
+            task.UpdateDetails(name, expectedMinutes, pid, perTaskStrictMode);
+        }
+
+        await _taskRepository.AddAsync(task);
+        await _unitOfWork.SaveChangesAsync();
+        return DtoMapper.ToDto(task);
+    }
+
+    public async Task UpdateTaskAsync(Guid taskId, string name, int expectedMinutes, Guid? profileId, bool? perTaskStrictMode)
+    {
+        var task = await _taskRepository.GetByIdAsync(new TaskId(taskId));
+        if (task == null) throw new KeyNotFoundException($"Task {taskId} not found.");
+
+        var pid = profileId.HasValue ? new ProfileId(profileId.Value) : (ProfileId?)null;
+        task.UpdateDetails(name, expectedMinutes, pid, perTaskStrictMode);
+        await _taskRepository.UpdateAsync(task);
+        await _unitOfWork.SaveChangesAsync();
+    }
+
+    public async Task DeleteTaskAsync(Guid taskId)
+    {
+        await _taskRepository.DeleteAsync(new TaskId(taskId));
+        await _unitOfWork.SaveChangesAsync();
+    }
+
+    public async Task ChangeTaskStatusAsync(Guid taskId, TaskStatusDto newStatus)
+    {
+        var task = await _taskRepository.GetByIdAsync(new TaskId(taskId));
+        if (task == null) throw new KeyNotFoundException($"Task {taskId} not found.");
+
+        task.ChangeStatus(DtoMapper.ToDomain(newStatus));
+        await _taskRepository.UpdateAsync(task);
+        await _unitOfWork.SaveChangesAsync();
+    }
+
+    public async Task SetTaskRecurringAsync(Guid taskId, string recurringType, string config)
+    {
+        var task = await _taskRepository.GetByIdAsync(new TaskId(taskId));
+        if (task == null) throw new KeyNotFoundException($"Task {taskId} not found.");
+
+        if (Enum.TryParse<Domain.Enums.RecurringType>(recurringType, out var type))
+            task.SetRecurring(type, config);
+
+        await _taskRepository.UpdateAsync(task);
+        await _unitOfWork.SaveChangesAsync();
+    }
+
+    public async Task UpdateTaskSortOrderAsync(Guid taskId, int newSortOrder)
+    {
+        var task = await _taskRepository.GetByIdAsync(new TaskId(taskId));
+        if (task == null) throw new KeyNotFoundException($"Task {taskId} not found.");
+
+        task.UpdateSortOrder(newSortOrder);
+        await _taskRepository.UpdateAsync(task);
+        await _unitOfWork.SaveChangesAsync();
+    }
+
+    public async Task PauseTaskAsync(Guid taskId, bool isPaused)
+    {
+        var task = await _taskRepository.GetByIdAsync(new TaskId(taskId));
+        if (task == null) throw new KeyNotFoundException($"Task {taskId} not found.");
+
+        task.SetPaused(isPaused);
+        await _taskRepository.UpdateAsync(task);
+        await _unitOfWork.SaveChangesAsync();
+    }
+
+    public async Task<string> AiSuggestPriorityAsync()
+    {
+        var tasks = await _taskRepository.GetAllAsync();
+        var pendingTasks = tasks
+            .Where(t => t.Status == EduFocus.Domain.Enums.TaskStatus.Pending ||
+                        t.Status == EduFocus.Domain.Enums.TaskStatus.Active)
+            .Select(t => new { Id = t.Id.Value, t.Name, EstimatedMinutes = t.ExpectedMinutes })
+            .ToList();
+
+        if (!pendingTasks.Any())
+            return "Không có công việc nào cần phân tích.";
+
+        var dump = JsonSerializer.Serialize(pendingTasks, new JsonSerializerOptions { WriteIndented = true });
+        return await _aiTaskAssistant.AnalyzeAndSuggestTaskPriorityAsync(dump);
+    }
+
+    public async Task<string> AiBreakdownTaskAsync(Guid taskId)
+    {
+        var task = await _taskRepository.GetByIdAsync(new TaskId(taskId));
+        if (task == null) throw new KeyNotFoundException($"Task {taskId} not found.");
+        return await _aiTaskAssistant.BreakdownTaskAsync(task.Name);
+    }
+}

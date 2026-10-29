@@ -5,6 +5,8 @@
 - **Trạng thái:** Spike hoàn tất; các thay đổi Phase 1 chờ review trước khi triển khai
 - **Phạm vi:** kiểm tra .NET 10 SDK, WPF `net10.0-windows`, EF Core 10, WiX và các package hiện dùng; xác định điểm vỡ, thứ tự migration, rollback; lập data map và checklist DPIA sơ bộ theo Luật BVDLCN 91/2025/QH15 và Nghị định 356/2025/NĐ-CP.
 
+> **Ghi chú lịch sử:** spike được đo trước issue #5, nên lệnh, đường dẫn và tên artifact trong tài liệu giữ tên cũ `DontBeLazy.*`. Sau đổi tên, thay bằng `EduFocus.*` (ví dụ `EduFocus.slnx`, `src/EduFocus.WPF`, `edufocus.db`).
+
 ## 1. Kết luận
 
 1. **Nâng cấp .NET 10 khả thi.** Toàn bộ solution build thành công trên .NET 10, 57/57 unit test đạt, publish framework-dependent và self-contained single-file đều thành công. EF Core 10 áp dụng đủ 4 migration hiện có; WiX 4.0.6 tạo được MSI.

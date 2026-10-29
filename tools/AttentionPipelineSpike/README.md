@@ -15,10 +15,10 @@ Không nằm trong phạm vi: `Drowsy` (cần eye-aspect-ratio hoặc model riê
 
 ## Vị trí trong kiến trúc
 
-- `src/DontBeLazy.Domain/Attention/`: trạng thái, classifier, state machine thuần business rule.
-- `src/DontBeLazy.Ports/`: `IAttentionFrameAnalyzer` + DTO, không phụ thuộc OpenCV/ONNX.
-- `src/DontBeLazy.Infrastructure.Attention/`: adapter OpenCV MSMF/DSHOW + YuNet ONNX + Haar cascade.
-- `tools/AttentionPipelineSpike/`: harness đo lường/báo cáo dùng một lần, không nằm trong `DontBeLazy.slnx`.
+- `src/EduFocus.Domain/Attention/`: trạng thái, classifier, state machine thuần business rule.
+- `src/EduFocus.Ports/`: `IAttentionFrameAnalyzer` + DTO, không phụ thuộc OpenCV/ONNX.
+- `src/EduFocus.Infrastructure.Attention/`: adapter OpenCV MSMF/DSHOW + YuNet ONNX + Haar cascade.
+- `tools/AttentionPipelineSpike/`: harness đo lường/báo cáo dùng một lần, không nằm trong `EduFocus.slnx`.
 
 Adapter chưa được wire vào WPF/DI; việc đó thuộc Phase 5 sau khi chốt ADR.
 
@@ -55,7 +55,7 @@ Model nằm trong `tools/AttentionPipelineSpike/models/` (đã gitignore).
 ## Kiểm thử logic
 
 ```powershell
-dotnet test src/DontBeLazy.Domain.Tests/DontBeLazy.Domain.Tests.csproj
+dotnet test src/EduFocus.Domain.Tests/EduFocus.Domain.Tests.csproj
 ```
 
 Test bao phủ classifier và state machine (debounce 20s/30s, low-light, camera unavailable).
@@ -134,4 +134,4 @@ Kết quả ghi vào `docs/spikes/results/`:
 - Chưa tự điều chỉnh exposure/focus của webcam; kết quả phụ thuộc ánh sáng phòng.
 - Chưa thử Windows.Media.FaceAnalysis (WinRT): chỉ có face box, không landmark, và cần thêm MediaCapture; ghi nhận định tính trong báo cáo.
 - Benchmark chạy trên một máy và một webcam; số liệu mang tính tham chiếu, cần lặp lại trên cấu hình mục tiêu.
-- Harness cố ý không nằm trong `DontBeLazy.slnx` để không ảnh hưởng CI; adapter `DontBeLazy.Infrastructure.Attention` nằm trong solution và được build cùng.
+- Harness cố ý không nằm trong `EduFocus.slnx` để không ảnh hưởng CI; adapter `EduFocus.Infrastructure.Attention` nằm trong solution và được build cùng.

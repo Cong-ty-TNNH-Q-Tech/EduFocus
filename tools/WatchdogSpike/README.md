@@ -14,7 +14,7 @@ Không nằm trong phạm vi: đăng ký scheduled task thật, Windows Service,
 ## Vị trí trong kiến trúc
 
 - Phase 7 có thể tái dùng logic trong `tools/WatchdogSpike/` làm tham chiếu cho watchdog scheduled task.
-- Tool nằm ngoài `DontBeLazy.slnx`, chỉ chạy thủ công; không ảnh hưởng CI.
+- Tool nằm ngoài `EduFocus.slnx`, chỉ chạy thủ công; không ảnh hưởng CI.
 - Không có mã nào trong `src/` phụ thuộc vào tool này.
 
 ## An toàn

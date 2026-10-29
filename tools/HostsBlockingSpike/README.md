@@ -14,7 +14,7 @@ Không nằm trong phạm vi: wildcard/URL/path, browser extension, DoH/VPN bypa
 
 ## Vị trí trong kiến trúc
 
-- `tools/HostsBlockingSpike/`: harness dùng một lần, **không** nằm trong `DontBeLazy.slnx`.
+- `tools/HostsBlockingSpike/`: harness dùng một lần, **không** nằm trong `EduFocus.slnx`.
 - Đề xuất Phase 3: chuyển logic an toàn sang `HostsFileBlocker` (Infrastructure, implement port `IWebsiteBlocker`) và `BlockPageServer`; UseCase không thao tác file trực tiếp.
 - Kết quả đo và kết luận: [`docs/spikes/hosts-blocking-evaluation.md`](../../docs/spikes/hosts-blocking-evaluation.md).
 
