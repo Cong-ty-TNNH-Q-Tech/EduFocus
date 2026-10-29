@@ -306,6 +306,10 @@ Singleton.
 > bằng `SqliteStudySessionRepository.AddActivitySecondsAsync` — `UPDATE` targeted chỉ trên session `Active`
 > và chạy trước khi insert sample, nên sample không xuất hiện cho session đã kết thúc và full-entity write
 > không đè heartbeat. Sample vẫn bị retention xóa theo §14; báo cáo dài hạn đọc session summary.
+>
+> **Bổ sung issue #27:** `IsOnlineClass` chỉ được đặt khi sample không idle và foreground khớp Meet/Teams/Zoom,
+> nên cửa sổ lớp bị bỏ quên khi người dùng rời máy không tạo thời gian lớp online. `OnlineClassSeconds` là
+> overlay; báo cáo cộng nó tách khỏi `StudySeconds`/`DistractionSeconds`/`NeutralSeconds`.
 
 ---
 

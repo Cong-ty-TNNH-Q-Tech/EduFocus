@@ -209,6 +209,14 @@ không đếm đôi; lỗi insert chỉ log và thử lại ở beat sau. Activi
 làm hỏng Protection. Adapter Windows: `WindowsForegroundActivityPort` (Win32 + `GetLastInputInfo`) và
 `UiAutomationBrowserUrlProvider` (UIA address bar, allowlist trình duyệt).
 
+**Hiện trạng issue #27:** `OnlineClassDetector` nhận Meet/Teams/Zoom theo domain, process đã chuẩn hóa
+(path, `.exe`, dấu nháy) và title Meet có kiểm tra ranh giới; title chat chung và process chat như Discord,
+Slack, Messenger, Zalo không bị nhận nhầm. Sample idle luôn có `IsOnlineClass = false`, còn
+`OnlineClassSeconds` vẫn chỉ là overlay của category time nên không cộng trùng. Policy domain
+`MonitoringEligibility.IsEligible(monitoringEnabled, monitorOnlyDuringClasses, isOnlineClass)` chuẩn bị cho
+attention pipeline (#33): khi `MonitorOnlyDuringClasses` bật, chỉ thời gian phát hiện lớp online mới vào
+`MonitoringEligibleSeconds`, nên coverage không bị chia cho thời gian ngoài lớp.
+
 ### 3.4. Infrastructure (`EduFocus.Infrastructure`)
 
 Triển khai outbound ports, tương tác Windows.
@@ -613,10 +621,18 @@ Không lưu query string/fragment trong `ActivitySamples`; chỉ lưu domain và
 
 ### 7.3. Nhận diện lớp online
 
-- Google Meet: `meet.google.com` hoặc window title chứa `Meet`.
-- Microsoft Teams: process `ms-teams`/`Teams` hoặc URL `teams.microsoft.com`.
-- Zoom: process `Zoom`.
-- Lưu `IsOnlineClass` để báo cáo riêng.
+- Google Meet: domain `meet.google.com` (kể cả subdomain); window title chứa `Google Meet` hoặc bắt đầu bằng
+  `Meet` theo sau là dấu phân cách (`-`, `–`, `—`, `|`, `:`). Title như `Meeting notes`/`Meet the team`
+  không khớp.
+- Microsoft Teams: process `ms-teams` (Teams mới) hoặc `teams` (Teams classic) sau khi chuẩn hóa path/`.exe`;
+  domain `teams.microsoft.com`. Title `Microsoft Teams` một mình không đủ vì chat cũng dùng title đó.
+- Zoom: process `zoom` sau chuẩn hóa; domain `zoom.us` (kể cả subdomain như `us02web.zoom.us`).
+- Không nhận nhầm ứng dụng chat: Discord, Slack, Messenger, Zalo và process không khớp exact (ví dụ
+  `zoominfo`) đều trả `false`.
+- Sample idle không đánh dấu `IsOnlineClass`, vì cửa sổ lớp bị bỏ quên không phải thời gian học.
+- Lưu `IsOnlineClass` để báo cáo riêng; `OnlineClassSeconds` là overlay, không cộng trùng category.
+- `MonitoringEligibility.IsEligible` quyết định `MonitoringEligibleSeconds` có tăng hay không: monitoring
+  phải bật và, khi `MonitorOnlyDuringClasses`, phải đang trong lớp online.
 
 ### 7.4. Sampling
 
@@ -676,6 +692,7 @@ AttentionPercent =
 - `MonitoredSeconds` = tổng bốn trạng thái trên (camera khả dụng).
 - Không tính `CameraUnavailable` vào mẫu số attention.
 - `MonitoringEligibleSeconds` = thời gian monitoring được kỳ vọng (toàn session hoặc chỉ lúc lớp online nếu `MonitorOnlyDuringClasses`).
+  - Quyết định bởi `MonitoringEligibility.IsEligible`: monitoring phải bật; nếu `MonitorOnlyDuringClasses` thì chỉ cộng khi `IsOnlineClass` (issue #27).
 - Báo cáo luôn hiển thị:
   - `Coverage = MonitoredSeconds / MonitoringEligibleSeconds`; null nếu eligible = 0.
   - `ConfidenceAvg` trung bình có trọng số theo thời lượng event, dựa trên face detection score, ánh sáng, số khuôn mặt.

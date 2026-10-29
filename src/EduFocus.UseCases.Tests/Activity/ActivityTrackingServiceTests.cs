@@ -139,6 +139,78 @@ public sealed class ActivityTrackingServiceTests
     }
 
     [Fact]
+    public async Task Teams_process_marks_study_time_without_duplicating_counters()
+    {
+        await using var harness = new ActivityHarness();
+        await harness.StartAsync();
+
+        harness.Foreground = harness.Snapshot("ms-teams", "Microsoft Teams");
+        harness.Urls.Url = null;
+
+        await harness.WriteSampleAsync();
+
+        var sample = harness.Samples.Samples.Should().ContainSingle().Subject;
+        sample.IsOnlineClass.Should().BeTrue();
+        sample.Category.Should().Be(ActivityCategory.Study);
+        sample.UrlSource.Should().Be(UrlSource.None);
+        harness.Session.StudySeconds.Should().Be(17);
+        harness.Session.OnlineClassSeconds.Should().Be(17);
+        harness.Session.NeutralSeconds.Should().Be(0);
+    }
+
+    [Fact]
+    public async Task Multilingual_meet_title_is_detected_without_a_url()
+    {
+        await using var harness = new ActivityHarness();
+        await harness.StartAsync();
+
+        harness.Foreground = harness.Snapshot("chrome", "Google Meet – Lớp Vật lý");
+        harness.Urls.Url = null;
+
+        await harness.WriteSampleAsync();
+
+        var sample = harness.Samples.Samples.Should().ContainSingle().Subject;
+        sample.IsOnlineClass.Should().BeTrue();
+        sample.Category.Should().Be(ActivityCategory.Study);
+        harness.Session.OnlineClassSeconds.Should().Be(17);
+    }
+
+    [Fact]
+    public async Task Chat_app_is_not_marked_as_an_online_class()
+    {
+        await using var harness = new ActivityHarness();
+        await harness.StartAsync();
+
+        harness.Foreground = harness.Snapshot("discord", "Discord | friends");
+
+        await harness.WriteSampleAsync();
+
+        var sample = harness.Samples.Samples.Should().ContainSingle().Subject;
+        sample.IsOnlineClass.Should().BeFalse();
+        sample.Category.Should().Be(ActivityCategory.Neutral);
+        harness.Session.NeutralSeconds.Should().Be(17);
+        harness.Session.OnlineClassSeconds.Should().Be(0);
+    }
+
+    [Fact]
+    public async Task Idle_class_window_is_not_marked_as_online_class()
+    {
+        await using var harness = new ActivityHarness();
+        await harness.StartAsync();
+
+        harness.Foreground = harness.Snapshot("chrome", "Meet - abc-defg-hij", idleSeconds: 301);
+
+        (await harness.SampleAfterAsync(TimeSpan.FromSeconds(15))).Should().BeTrue();
+
+        var sample = harness.Samples.Samples.Should().ContainSingle().Subject;
+        sample.IsOnlineClass.Should().BeFalse();
+        sample.IdleSeconds.Should().Be(15);
+        harness.Session.StudySeconds.Should().Be(0);
+        harness.Session.OnlineClassSeconds.Should().Be(0);
+        harness.Session.IdleSeconds.Should().Be(15);
+    }
+
+    [Fact]
     public async Task Blocked_domain_is_distraction()
     {
         await using var harness = new ActivityHarness();

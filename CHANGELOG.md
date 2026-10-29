@@ -200,6 +200,13 @@ và dự án tuân theo [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 - **DI:** đăng ký `ActivityTrackingOptions`, `IActivitySampleRepository`/`SqliteActivitySampleRepository`, `IForegroundActivityPort`, `IBrowserUrlProviderPort` và singleton `IActivityUseCase`.
 - **Tests:** 13 test `ActivityTrackingService` (foreground đổi nhanh, idle một sample, thiếu URL/quyền, process biến mất, DB retry, session kết thúc, suspend cap, wall clock lùi), 2 test SQLite sample round-trip + targeted counters, bổ sung assertion activity vào test ProtectionService/lifecycle; tổng **564 test pass**, build Release 0 warning.
 
+### Added (Phase 4 — Online class detection, issue #27)
+- **Nhận diện chặt hơn:** `OnlineClassDetector` vẫn nhận domain `meet.google.com`/`teams.microsoft.com`/`zoom.us` (kể cả subdomain) và process `ms-teams`/`teams`/`zoom` (chuẩn hóa path, `.exe`, dấu nháy, không phân biệt hoa thường). Meet qua window title chỉ khớp `Google Meet` hoặc `Meet` theo sau là dấu phân cách, nên `Meeting notes`, `Meet the team` hay `Microsoft Teams` không bị nhận nhầm; title đa ngôn ngữ như `Google Meet – Lớp Vật lý` vẫn khớp.
+- **Không nhận nhầm chat:** Discord, Slack, Messenger, Zalo và process chứa `zoom` khác (ví dụ `zoominfo`) không bị coi là lớp online; title Teams đơn thuần không đủ, Teams chỉ nhận qua process/domain.
+- **Overlay nhất quán:** sample idle không còn đánh dấu `IsOnlineClass`, nên cửa sổ Meet/Teams bị bỏ quên khi người dùng rời máy không tạo thời gian lớp online; `OnlineClassSeconds` vẫn là overlay trên `StudySeconds`, không cộng trùng.
+- **MonitorOnlyDuringClasses:** thêm policy domain `MonitoringEligibility.IsEligible(monitoringEnabled, monitorOnlyDuringClasses, isOnlineClass)` để attention pipeline (#33) chỉ cộng `MonitoringEligibleSeconds` khi monitoring bật và, nếu chọn chỉ-trong-lớp, khi đang phát hiện lớp online; test chứng minh mẫu số coverage đổi từ 200 giây (mọi lúc) xuống 50 giây (chỉ trong lớp) trên cùng 40 giây monitored.
+- **Tests:** 6 test domain detector theo nền tảng/âm bản, 3 test `MonitoringEligibility`, 4 test `ActivityTrackingService` (Teams, title Meet đa ngôn ngữ, chat, idle) và 1 test SQLite `IsOnlineClass` round-trip; tổng **594 test pass**, build Release 0 warning.
+
 ### Removed (khỏi phạm vi EduFocus)
 - Quản lý task, profile học tập, quote động lực và Gemini AI.
 - Cơ chế "friction" bắt gõ câu xác nhận bỏ cuộc.

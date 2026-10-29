@@ -312,7 +312,9 @@ public sealed class ActivityTrackingService : IActivityUseCase, IAsyncDisposable
 
         var url = isIdle ? null : ReadUrl(snapshot);
         var domain = UrlSanitizer.DeriveDomain(url);
-        var isOnlineClass = OnlineClassDetector.IsOnlineClass(
+        // An idle foreground window is not an active class: the student may have
+        // left Meet/Teams open, so the overlay must not claim class time.
+        var isOnlineClass = !isIdle && OnlineClassDetector.IsOnlineClass(
             domain,
             snapshot?.ProcessName,
             snapshot?.WindowTitle);

@@ -450,6 +450,14 @@
 > session `Active` trước khi insert sample; lỗi DB được log và thử lại ở beat sau, session kết thúc thì
 > sampling tự dừng. Sampling start/stop cùng heartbeat trong enable/disable/reconcile và shutdown.
 
+> **Triển khai (issue #27):** `OnlineClassDetector` nhận Meet qua `meet.google.com`/title `Google Meet` hoặc
+> `Meet` + dấu phân cách, Teams qua process `ms-teams`/`teams` hoặc `teams.microsoft.com`, Zoom qua process
+> `zoom` hoặc `zoom.us`; path/`.exe`/dấu nháy được chuẩn hóa và chat như Discord/Slack/Messenger/Zalo không
+> bị nhận nhầm. Sample idle không đánh dấu `IsOnlineClass`, nên overlay `OnlineClassSeconds` không cộng
+> trùng với category time. `MonitoringEligibility.IsEligible` là policy dùng chung cho UC08: khi
+> `MonitorOnlyDuringClasses` bật, chỉ thời gian phát hiện lớp online mới được cộng vào
+> `MonitoringEligibleSeconds`.
+
 ---
 
 ### UC08 — Ước lượng mức độ tập trung
@@ -510,6 +518,11 @@
 - Không có ảnh/video nào bị lưu.
 
 **Business rules:** BR-12, BR-13, BR-14, BR-15.
+
+> **Triển khai (issue #27):** policy `MonitoringEligibility.IsEligible(monitoringEnabled,
+> monitorOnlyDuringClasses, isOnlineClass)` đã có trong domain để UC08 quyết định mỗi tick attention có cộng
+> `MonitoringEligibleSeconds` hay không. Việc cộng eligible/monitored theo tick và tính coverage thuộc
+> issue #33; policy được test với cùng 40 giây monitored cho coverage 20% (mọi lúc) và 80% (chỉ trong lớp).
 
 ---
 

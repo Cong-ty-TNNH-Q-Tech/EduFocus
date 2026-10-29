@@ -88,4 +88,37 @@ public sealed class ActivitySampleRepositoryTests
         stored.UrlSource.Should().Be(UrlSource.None);
         stored.Category.Should().Be(ActivityCategory.Neutral);
     }
+
+    [Fact]
+    public async Task Online_class_sample_round_trips()
+    {
+        await using var db = new TempDatabase();
+        await db.CreateInitializer().InitializeAsync();
+
+        var sessions = new SqliteStudySessionRepository(db.Options);
+        var session = StudySession.Start(Now, new DateOnly(2026, 10, 30), SessionTrigger.Manual, true);
+        await sessions.AddAsync(session);
+
+        var repository = new SqliteActivitySampleRepository(db.Options);
+        var sample = ActivitySample.Capture(
+            session.Id,
+            Now.AddSeconds(15),
+            durationSeconds: 15,
+            ActivityCategory.Study,
+            isForeground: true,
+            isOnlineClass: true,
+            idleSeconds: 0,
+            appName: "Microsoft Teams",
+            processName: "ms-teams",
+            windowTitle: "Microsoft Teams");
+
+        await repository.AddAsync(sample);
+
+        await using var context = db.CreateContext();
+        var stored = await context.ActivitySamples.SingleAsync();
+
+        stored.IsOnlineClass.Should().BeTrue();
+        stored.Category.Should().Be(ActivityCategory.Study);
+        stored.ProcessName.Should().Be("ms-teams");
+    }
 }
