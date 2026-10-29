@@ -363,6 +363,7 @@ Thứ tự:
 - DoH/DoT, VPN, proxy có thể bypass hosts.
 - Hosts không tạo log truy cập HTTPS; không thể đếm đầy đủ blocked attempts.
 - Trang chặn chỉ hiển thị với HTTP; HTTPS thường báo lỗi kết nối/SSL.
+- UI Protection phải hiển thị cảnh báo thường trực: chặn web chỉ áp dụng HTTP/domain exact; HTTPS, DoH/VPN/proxy có thể bypass và blocked attempts HTTPS không được ghi nhận đầy đủ.
 - Browser extension (post-MVP) giải quyết URL/path và logging chính xác hơn.
 - Process watcher dựa trên tên/đường dẫn process; app đổi tên, chạy portable hoặc khởi động/thoát quá nhanh có thể không bị phát hiện.
 - Học sinh có admin có thể sửa hosts/tắt app; không chống được.

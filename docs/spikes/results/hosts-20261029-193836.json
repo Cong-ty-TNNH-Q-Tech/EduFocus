@@ -1,0 +1,175 @@
+{
+  "StartedAt": "2026-10-29T12:38:36.1666403+00:00",
+  "FinishedAt": "2026-10-29T12:38:36.3621531+00:00",
+  "CommandLine": "C:\\Coding Space\\Projects\\EduFocus\\tools\\HostsBlockingSpike\\bin\\Release\\net9.0-windows\\HostsBlockingSpike.dll --output-dir docs/spikes/results",
+  "OsDescription": "Microsoft Windows 10.0.19045",
+  "FrameworkDescription": ".NET 9.0.15",
+  "IsElevated": false,
+  "ApplyHostsRequested": false,
+  "HostsPath": "C:\\Windows\\System32\\drivers\\etc\\hosts",
+  "BackupDir": "C:\\ProgramData\\EduFocus\\spike-backup",
+  "Proxy": {
+    "EffectiveProxy": "(none)",
+    "UsesProxy": false
+  },
+  "Note": "Ch\u1EC9 ch\u1EA1y self-test sandbox v\u00E0 block page loopback. D\u00F9ng --apply-hosts (elevated) \u0111\u1EC3 ki\u1EC3m ch\u1EE9ng hosts th\u1EADt v\u00E0 tr\u00ECnh duy\u1EC7t.",
+  "FatalError": null,
+  "SelfTests": [
+    {
+      "Name": "fresh apply \u002B idempotency",
+      "Passed": true,
+      "Detail": "domains=example.com,www.example.com; firstChanged=True; secondChanged=False; identical=True",
+      "DurationMs": 48
+    },
+    {
+      "Name": "restore exact bytes",
+      "Passed": true,
+      "Detail": "blockRemoved=True; exact=True; bytesEqual=True",
+      "DurationMs": 12
+    },
+    {
+      "Name": "restore without trailing newline",
+      "Passed": true,
+      "Detail": "exact=True; bytesEqual=True",
+      "DurationMs": 13
+    },
+    {
+      "Name": "external edit preserved",
+      "Passed": true,
+      "Detail": "blockRemoved=True; exact=False; editKept=True",
+      "DurationMs": 11
+    },
+    {
+      "Name": "orphan marker self-heal",
+      "Passed": true,
+      "Detail": "performed=True; fromJournal=False; markersGone=True",
+      "DurationMs": 3
+    },
+    {
+      "Name": "crash recovery via journal",
+      "Passed": true,
+      "Detail": "performed=True; fromJournal=True; bytesEqual=True; journalRemoved=True",
+      "DurationMs": 12
+    },
+    {
+      "Name": "invalid domains rejected",
+      "Passed": true,
+      "Detail": "rejected=5/5; hostsUnchanged=True",
+      "DurationMs": 2
+    }
+  ],
+  "BlockPageChecks": [
+    {
+      "Name": "blocked host",
+      "HostHeader": "example.com",
+      "Path": "/",
+      "StatusCode": 200,
+      "MarkerFound": true,
+      "NoExternalResources": true,
+      "DurationMs": 39
+    },
+    {
+      "Name": "blocked host with port",
+      "HostHeader": "example.com:1234",
+      "Path": "/",
+      "StatusCode": 200,
+      "MarkerFound": true,
+      "NoExternalResources": true,
+      "DurationMs": 1
+    },
+    {
+      "Name": "blocked host trailing dot",
+      "HostHeader": "example.com.",
+      "Path": "/",
+      "StatusCode": 200,
+      "MarkerFound": true,
+      "NoExternalResources": true,
+      "DurationMs": 0
+    },
+    {
+      "Name": "blocked host with path/query",
+      "HostHeader": "example.com",
+      "Path": "/some/path?q=1",
+      "StatusCode": 200,
+      "MarkerFound": true,
+      "NoExternalResources": true,
+      "DurationMs": 0
+    },
+    {
+      "Name": "www variant",
+      "HostHeader": "www.example.com",
+      "Path": "/",
+      "StatusCode": 200,
+      "MarkerFound": true,
+      "NoExternalResources": true,
+      "DurationMs": 0
+    },
+    {
+      "Name": "unblocked host",
+      "HostHeader": "not-blocked.test",
+      "Path": "/",
+      "StatusCode": 404,
+      "MarkerFound": false,
+      "NoExternalResources": true,
+      "DurationMs": 0
+    },
+    {
+      "Name": "HTML escape",
+      "HostHeader": "\u003Cscript\u003Ealert(1)\u003C/script\u003E",
+      "Path": "-",
+      "StatusCode": 0,
+      "MarkerFound": true,
+      "NoExternalResources": true,
+      "DurationMs": 0
+    }
+  ],
+  "Recovery": null,
+  "HostsApply": null,
+  "HostsRestore": null,
+  "HostsSha256Before": "",
+  "HostsSha256After": "",
+  "PortConflict": null,
+  "DnsFlush": null,
+  "DnsResults": [],
+  "HttpResults": [],
+  "Browsers": [
+    {
+      "Name": "Chrome",
+      "ExecutablePath": "C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe",
+      "Version": "156.0.8078.73"
+    },
+    {
+      "Name": "Edge",
+      "ExecutablePath": "C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe",
+      "Version": "156.0.4314.50"
+    },
+    {
+      "Name": "Firefox",
+      "ExecutablePath": "C:\\Program Files\\Mozilla Firefox\\firefox.exe",
+      "Version": "158.0.1"
+    }
+  ],
+  "BrowserRuns": [],
+  "ServerRequests": [],
+  "Log": [
+    "[19:38:36] OS: Microsoft Windows 10.0.19045; runtime: .NET 9.0.15; elevated=False",
+    "[19:38:36] System proxy: (none); usesProxy=False",
+    "[19:38:36] Browsers: Chrome 156.0.8078.73; Edge 156.0.4314.50; Firefox 158.0.1",
+    "[19:38:36] Self-test \u0027fresh apply \u002B idempotency\u0027: PASS - domains=example.com,www.example.com; firstChanged=True; secondChanged=False; identical=True",
+    "[19:38:36] Self-test \u0027restore exact bytes\u0027: PASS - blockRemoved=True; exact=True; bytesEqual=True",
+    "[19:38:36] Self-test \u0027restore without trailing newline\u0027: PASS - exact=True; bytesEqual=True",
+    "[19:38:36] Self-test \u0027external edit preserved\u0027: PASS - blockRemoved=True; exact=False; editKept=True",
+    "[19:38:36] Self-test \u0027orphan marker self-heal\u0027: PASS - performed=True; fromJournal=False; markersGone=True",
+    "[19:38:36] Self-test \u0027crash recovery via journal\u0027: PASS - performed=True; fromJournal=True; bytesEqual=True; journalRemoved=True",
+    "[19:38:36] Self-test \u0027invalid domains rejected\u0027: PASS - rejected=5/5; hostsUnchanged=True",
+    "[19:38:36] Loopback block page listening on 127.0.0.1:51273 (start 1 ms)",
+    "[19:38:36] Loopback block page checks: 6 HTTP checks \u002B escape check."
+  ],
+  "Limitations": [
+    "Hosts ch\u1EC9 ch\u1EB7n domain exact; kh\u00F4ng ph\u00E2n bi\u1EC7t URL/path, n\u00EAn block page \u00E1p d\u1EE5ng cho m\u1ECDi path c\u1EE7a domain.",
+    "Block page ch\u1EC9 ph\u1EE5c v\u1EE5 HTTP; truy c\u1EADp HTTPS th\u01B0\u1EDDng b\u00E1o l\u1ED7i k\u1EBFt n\u1ED1i/SSL thay v\u00EC hi\u1EC3n th\u1ECB trang ch\u1EB7n.",
+    "Hosts kh\u00F4ng t\u1EA1o log truy c\u1EADp HTTPS; server ch\u1EC9 ghi nh\u1EADn request HTTP th\u1EF1c t\u1EBF \u0111\u1EBFn c\u1ED5ng block page.",
+    "DoH/DoT, VPN, proxy ho\u1EB7c browser extension c\u00F3 th\u1EC3 bypass hosts.",
+    "H\u1ECDc sinh c\u00F3 quy\u1EC1n admin c\u00F3 th\u1EC3 s\u1EEDa hosts ho\u1EB7c d\u1EEBng ti\u1EBFn tr\u00ECnh; self-heal/journal ch\u1EC9 gi\u1EA3m thi\u1EC3u, kh\u00F4ng ch\u1ED1ng admin."
+  ]
+}

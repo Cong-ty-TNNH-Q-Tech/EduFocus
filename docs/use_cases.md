@@ -497,6 +497,7 @@
 **Luồng thay thế**
 - **HTTPS:** trình duyệt thường báo lỗi kết nối/SSL thay vì trang chặn; domain vẫn bị chặn. Hosts không tạo log HTTPS; blocked attempt có thể không được ghi.
 - **Port 80 bị chiếm:** blocking vẫn hoạt động; block page không khả dụng; ghi cảnh báo.
+- **Giới hạn hiển thị:** màn hình Protection hiển thị cảnh báo thường trực về HTTPS/DoH/VPN/proxy và về việc block page không khả dụng khi cổng 80 bị chiếm.
 - **Allowlist:** nếu rule Allow còn hiệu lực, không chặn, không ghi blocked attempt.
 - **Parent override:** phụ huynh có thể thêm allowlist tạm thời từ app; block page không có nút mở khóa trực tiếp để tránh học sinh tự bỏ chặn.
 
