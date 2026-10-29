@@ -230,6 +230,9 @@ EduFocus cung cấp một lớp bảo vệ và quan sát **tối thiểu, minh b
 - Focus timer Pomodoro.
 - Dữ liệu và migration từ `DontBeLazy` 1.x.
 
+> Issue #7 đã xóa toàn bộ các thành phần trên khỏi codebase; inventory chi tiết ở
+> [legacy-cleanup.md](./legacy-cleanup.md).
+
 ---
 
 ## 7. Quy tắc nghiệp vụ (Business Rules)

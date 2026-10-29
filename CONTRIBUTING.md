@@ -10,7 +10,7 @@ Trước khi bắt đầu, vui lòng đọc:
 - [Code of Conduct](./CODE_OF_CONDUCT.md)
 - [Security Policy](./SECURITY.md)
 
-> **Trạng thái dự án:** EduFocus đang chuyển đổi từ dự án tiền nhiệm **Don't Be Lazy**. Codebase đã dùng tên project `EduFocus.*` từ Phase 1.
+> **Trạng thái dự án:** EduFocus đang chuyển đổi từ dự án tiền nhiệm **Don't Be Lazy**. Codebase đã dùng tên project `EduFocus.*` từ Phase 1 và code 1.x đã được xóa ở issue #7 ([inventory](./docs/legacy-cleanup.md)).
 
 ---
 

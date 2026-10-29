@@ -1,13 +1,13 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!--
-  WiX v4 installer definition for Don't Be Lazy.
+  WiX v4 installer definition for EduFocus.
   Build: wix build installer/Product.wxs -ext WixToolset.UI.wixext -o EduFocus.msi -d Version=1.2.3 -d PublishDir=publish/
 -->
 <Wix xmlns="http://wixtoolset.org/schemas/v4/wxs"
      xmlns:ui="http://wixtoolset.org/schemas/v4/wxs/ui">
 
   <Package
-    Name="Don't Be Lazy"
+    Name="EduFocus"
     Manufacturer="ThanhTrunggDEV"
     Version="$(Version)"
     UpgradeCode="E3A4B2C1-9F8D-4E7A-B3C2-1A2B3C4D5E6F"
@@ -16,9 +16,9 @@
     InstallerVersion="500"
     Scope="perMachine">
 
-    <!-- Prevent downgrades -->
+    <!-- Same UpgradeCode keeps the 1.x → 2.0 upgrade path -->
     <MajorUpgrade
-      DowngradeErrorMessage="A newer version of Don't Be Lazy is already installed."
+      DowngradeErrorMessage="A newer version of EduFocus is already installed."
       Schedule="afterInstallInitialize"/>
 
     <!-- Embed cab into MSI -->
@@ -27,15 +27,11 @@
     <!-- Built-in UI with license step -->
     <ui:WixUI Id="WixUI_InstallDir" InstallDirectory="INSTALLFOLDER"/>
 
-    <Icon Id="AppIcon.ico" SourceFile="$(PublishDir)app.ico" />
-    <Property Id="ARPPRODUCTICON" Value="AppIcon.ico" />
-
     <!-- Features -->
-    <Feature Id="Main" Title="Don't Be Lazy" Level="1">
+    <Feature Id="Main" Title="EduFocus" Level="1">
       <ComponentGroupRef Id="AppFiles"/>
       <ComponentRef Id="AppShortcutDesktop"/>
       <ComponentRef Id="AppShortcutStartMenu"/>
-      <ComponentRef Id="AppIconComp"/>
     </Feature>
 
   </Package>
@@ -51,7 +47,7 @@
       <Directory Id="DesktopFolder"/>
 
       <Directory Id="ProgramMenuFolder">
-        <Directory Id="ProgramMenuSubFolder" Name="Don't Be Lazy"/>
+        <Directory Id="ProgramMenuSubFolder" Name="EduFocus"/>
       </Directory>
 
     </Directory>
@@ -69,14 +65,6 @@
               KeyPath="yes"/>
       </Component>
 
-      <!-- App icon (auto-published alongside exe) -->
-      <Component Id="AppIconComp" Guid="D4E5F6A7-B890-1234-CDEF-1234567890AB">
-        <File Id="AppIconFile"
-              Source="$(PublishDir)app.ico"
-              Name="app.ico"
-              KeyPath="yes"/>
-      </Component>
-
     </ComponentGroup>
   </Fragment>
 
@@ -86,11 +74,10 @@
                Directory="DesktopFolder"
                Guid="B2C3D4E5-F6A7-8901-BCDE-F12345678901">
       <Shortcut Id="ShortcutDesktop"
-                Name="Don't Be Lazy"
-                Description="Stay focused. Don't be lazy."
+                Name="EduFocus"
+                Description="Responsible study monitoring for parents."
                 Target="[INSTALLFOLDER]EduFocus.exe"
-                WorkingDirectory="INSTALLFOLDER"
-                Icon="AppIcon.ico"/>
+                WorkingDirectory="INSTALLFOLDER"/>
       <RemoveFolder Id="RemoveDesktopShortcut" Directory="DesktopFolder" On="uninstall"/>
       <RegistryValue Root="HKCU"
                      Key="Software\ThanhTrunggDEV\EduFocus"
@@ -105,11 +92,10 @@
                Directory="ProgramMenuSubFolder"
                Guid="C3D4E5F6-A7B8-9012-CDEF-123456789012">
       <Shortcut Id="ShortcutStartMenu"
-                Name="Don't Be Lazy"
-                Description="Stay focused. Don't be lazy."
+                Name="EduFocus"
+                Description="Responsible study monitoring for parents."
                 Target="[INSTALLFOLDER]EduFocus.exe"
-                WorkingDirectory="INSTALLFOLDER"
-                Icon="AppIcon.ico"/>
+                WorkingDirectory="INSTALLFOLDER"/>
       <RemoveFolder Id="RemoveStartMenu" Directory="ProgramMenuSubFolder" On="uninstall"/>
       <RegistryValue Root="HKCU"
                      Key="Software\ThanhTrunggDEV\EduFocus"

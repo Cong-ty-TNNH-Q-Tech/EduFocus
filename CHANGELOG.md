@@ -37,11 +37,18 @@ và dự án tuân theo [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ### Changed (Phase 1 — Foundation)
 - **Đổi tên codebase (issue #5):** solution, toàn bộ project, namespace, assembly và test project chuyển từ `DontBeLazy.*` sang `EduFocus.*`; file thực thi đổi thành `EduFocus.exe`.
-- **Đường dẫn dữ liệu mới:** DB `%LocalAppData%\EduFocus\edufocus.db`, log `%AppData%\EduFocus\logs`; không đọc hoặc migrate DB 1.x.
+- **Đường dẫn dữ liệu mới (dự kiến):** DB `%LocalAppData%\EduFocus\edufocus.db`, log `%AppData%\EduFocus\logs`; không đọc hoặc migrate DB 1.x. Sau issue #7 app chưa mở DB; schema/database 2.0 sẽ được tạo lại ở issue #9/#10 (`%ProgramData%\EduFocus`).
 - **Cập nhật tích hợp:** auto-start registry, mutex single-instance, updater (repo `Cong-ty-TNNH-Q-Tech/EduFocus`), EF design-time DB, CI/release workflow và README/CONTRIBUTING.
 - **Nâng nền tảng .NET 10 (issue #6):** toàn bộ project chuyển sang `net10.0`/`net10.0-windows`; EF Core 10.0.14; đồng bộ `Microsoft.Extensions.*` và `System.Management` 10.0.14; CI/release dùng .NET 10; pin `dotnet-ef` 10.0.14 qua tool manifest.
 - **Cảnh báo build:** bỏ fallback `Assembly.Location` (IL3000), bổ sung annotation Windows cho Infrastructure (CA1416), dọn nullable trong test; giữ manifest DPI của WPF và suppress WFO0003 (analyzer chỉ dành cho WinForms). Build Release hiện 0 warning.
 - **Theo dõi:** đã chạy đủ 4 migration trên DB dev bằng EF Core 10; trước khi migration DB thật cần backup theo `docs/database_schema.md` §17; kiểm tra DPI và auto-start trên bản publish single-file.
+
+### Changed (Phase 1 — Legacy cleanup, issue #7)
+- **Dọn code 1.x:** xóa toàn bộ entity/enum/value object, use-case port, repository, use case, EF Core DbContext + 4 migration, Gemini AI, `WindowsStrictEngine`, `LocalRedirectServer` và 5 view/view model của 1.x. Chi tiết ở [docs/legacy-cleanup.md](docs/legacy-cleanup.md).
+- **Shell tối thiểu:** `App` không còn mở DB, migration/self-heal, seed settings/profile, MaterialDesign theme, `GlobalStrictMode`, auto-start registry hay tray icon; chỉ giữ single-instance, logging, update flow và shell hiển thị version.
+- **Giữ hạ tầng 2.0:** attention domain/adapter + spike, `FileLogger`, `MonotonicClockAdapter`, `UpdaterService`/`UpdateViewModel`; `UseCases` và `SqliteDataAccess` tạm là project scaffold chờ issue #8/#9.
+- **Rebrand build/installer:** MSI và GitHub Release dùng tên **EduFocus**; bỏ shortcut/description/icon 1.x và `app.ico`/`assets/logo.png`. Giữ `UpgradeCode` cũ để nâng cấp từ 1.x.
+- **Không còn entry point 1.x:** hosts marker `DONTBELAZY`, chặn process và guilt-trip không còn được tạo bởi bất kỳ code nào trong build.
 
 ### Removed (khỏi phạm vi EduFocus)
 - Quản lý task, profile học tập, quote động lực và Gemini AI.

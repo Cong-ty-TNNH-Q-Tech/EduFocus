@@ -1,8 +1,7 @@
-using System.Net.Http;
 using System.Runtime.Versioning;
-using EduFocus.Ports.Outbound.Services;
-using EduFocus.Infrastructure.Services;
 using EduFocus.Infrastructure.Logging;
+using EduFocus.Infrastructure.Services;
+using EduFocus.Ports.Outbound.Services;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace EduFocus.Infrastructure;
@@ -12,23 +11,8 @@ public static class InfrastructureServiceCollectionExtensions
     [SupportedOSPlatform("windows")]
     public static IServiceCollection AddInfrastructureServices(this IServiceCollection services)
     {
-        services.AddSingleton<IMonotonicClockPort, MonotonicClockAdapter>();
-
-        // Logger — singleton shared across all decorators
         services.AddSingleton<IAppLogger, FileLogger>();
-
-        // StrictEngine: real impl wrapped by logging decorator
-        services.AddSingleton<WindowsStrictEngine>();
-        services.AddSingleton<IStrictEnginePort>(sp =>
-            new LoggingStrictEngineDecorator(
-                sp.GetRequiredService<WindowsStrictEngine>(),
-                sp.GetRequiredService<IAppLogger>()));
-
-        // Gemini AI services
-        services.AddHttpClient<GeminiAiServices>();
-        services.AddTransient<IAiTaskAssistantPort>(sp => sp.GetRequiredService<GeminiAiServices>());
-        services.AddTransient<IAiGuiltTripPort>(sp => sp.GetRequiredService<GeminiAiServices>());
-        services.AddTransient<IAiProfileAssistantPort>(sp => sp.GetRequiredService<GeminiAiServices>());
+        services.AddSingleton<IMonotonicClockPort, MonotonicClockAdapter>();
 
         return services;
     }

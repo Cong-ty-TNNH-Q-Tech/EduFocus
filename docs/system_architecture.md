@@ -575,6 +575,10 @@ AddViews()
 - Scoped/transient: repositories, use cases (trừ stateful).
 - `IProtectionEnginePort` được bọc bởi `LoggingProtectionEngineDecorator`.
 
+> **Hiện trạng sau issue #7:** composition root chỉ gọi `AddInfrastructureServices()`
+> (logger + monotonic clock) và đăng ký updater/update view model. Các nhóm đăng ký trên
+> sẽ được thêm lại theo từng issue của Phase 2–7.
+
 ---
 
 ## 14. Cấu trúc thư mục đích
@@ -607,6 +611,8 @@ EduFocus/
 │   │   ├── Auth/
 │   │   ├── Watchdog/
 │   │   └── EduFocus.Infrastructure.csproj
+│   ├── EduFocus.Infrastructure.Attention/
+│   │   └── ... (adapter OpenCvSharp/ONNX từ spike attention)
 │   ├── EduFocus.SqliteDataAccess/
 │   │   ├── AppDbContext.cs
 │   │   ├── Repositories/
@@ -630,6 +636,10 @@ EduFocus/
 ```
 
 > Phase 1 (issue #5) đã đổi đồng bộ tên file, namespace, solution và CI sang `EduFocus.*`.
+>
+> Issue #7 đã xóa toàn bộ code 1.x: `Domain` chỉ còn `Attention/`, `Ports` còn contract
+> attention/logger/clock, `UseCases` và `SqliteDataAccess` tạm là project rỗng chờ issue #8/#9,
+> `WPF` là shell tối thiểu. Inventory đầy đủ ở [legacy-cleanup.md](./legacy-cleanup.md).
 
 ---
 
@@ -651,6 +661,11 @@ EduFocus/
 | CI release | Đổi artifact, app name, product name |
 
 **Không migrate dữ liệu 1.x** vì schema và mục đích sản phẩm khác. Nếu cần giữ blocklist tùy chỉnh, cung cấp tool import riêng (post-MVP).
+
+> **Đã thực thi ở issue #7:** các dòng "Xóa"/"Thay thế" trong bảng đã được áp dụng cho code 1.x;
+> `WindowsStrictEngine`, `LocalRedirectServer`, `GeminiAiServices`, entity/usecase/repository/
+> migration và view 1.x không còn trong build. Installer và GitHub Release đã đổi tên EduFocus.
+> Xem [legacy-cleanup.md](./legacy-cleanup.md).
 
 ---
 

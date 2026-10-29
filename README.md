@@ -1,7 +1,5 @@
 <div align="center">
 
-<img src="./assets/logo.png" alt="EduFocus Logo" width="180" />
-
 # 🎓 EduFocus
 
 **Giám sát học tập có trách nhiệm — bảo vệ sự tập trung của con trên máy tính.**
@@ -104,7 +102,7 @@ Tắt Protection bằng PIN hoặc hết khung giờ
 
 | Layer | Công nghệ |
 |---|---|
-| **UI** | WPF .NET 10 LTS, MaterialDesignInXAML, CommunityToolkit.Mvvm |
+| **UI** | WPF .NET 10 LTS, CommunityToolkit.Mvvm (lớp UI mới ở Phase 6) |
 | **Architecture** | Clean Architecture + Ports & Adapters |
 | **Database** | SQLite + EF Core 10 |
 | **Blocking** | Windows hosts file (domain exact) + local HTTP block page |
@@ -126,7 +124,7 @@ Khi có bản phát hành, tải tại [Releases](https://github.com/Cong-ty-TNN
 
 ### Chạy từ source
 
-**Yêu cầu hiện tại:** .NET 10 SDK (tests target `net10.0`; WPF sẽ được nâng ở Phase 1), Windows 11 23H2+ 64-bit (Windows 10 22H2 best-effort).
+**Yêu cầu hiện tại:** .NET 10 SDK, Windows 11 23H2+ 64-bit (Windows 10 22H2 best-effort).
 
 ```bash
 git clone https://github.com/Cong-ty-TNNH-Q-Tech/EduFocus.git
@@ -143,6 +141,9 @@ dotnet test src/EduFocus.Domain.Tests/EduFocus.Domain.Tests.csproj
 ```
 
 > Toàn bộ solution target .NET 10 LTS và EF Core 10; Windows 11 23H2+ là nền tảng chính, Windows 10 22H2 chỉ best-effort.
+>
+> Codebase 1.x đã được dọn (issue #7). App hiện khởi động vào shell nền tảng tối thiểu;
+> tính năng MVP sẽ được bổ sung theo từng phase. Xem [legacy-cleanup.md](./docs/legacy-cleanup.md).
 
 ---
 

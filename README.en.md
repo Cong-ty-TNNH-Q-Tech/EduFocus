@@ -1,7 +1,5 @@
 <div align="center">
 
-<img src="./assets/logo.png" alt="EduFocus Logo" width="180" />
-
 # 🎓 EduFocus
 
 **Responsible study monitoring — protecting your child's focus on the computer.**
@@ -104,7 +102,7 @@ Protection turns off with PIN or when the schedule window ends
 
 | Layer | Technology |
 |---|---|
-| **UI** | WPF .NET 10 LTS, MaterialDesignInXAML, CommunityToolkit.Mvvm |
+| **UI** | WPF .NET 10 LTS, CommunityToolkit.Mvvm (new UI in Phase 6) |
 | **Architecture** | Clean Architecture + Ports & Adapters |
 | **Database** | SQLite + EF Core 10 |
 | **Blocking** | Windows hosts file (exact domains) + local HTTP block page |
@@ -126,7 +124,7 @@ Once released, download from [Releases](https://github.com/Cong-ty-TNNH-Q-Tech/E
 
 ### Run from source
 
-**Current requirements:** .NET 10 SDK (tests target `net10.0`; the WPF app is upgraded in Phase 1), Windows 11 23H2+ 64-bit (Windows 10 22H2 best-effort).
+**Current requirements:** .NET 10 SDK, Windows 11 23H2+ 64-bit (Windows 10 22H2 best-effort).
 
 ```bash
 git clone https://github.com/Cong-ty-TNNH-Q-Tech/EduFocus.git
@@ -143,6 +141,9 @@ dotnet test src/EduFocus.Domain.Tests/EduFocus.Domain.Tests.csproj
 ```
 
 > The entire solution targets .NET 10 LTS and EF Core 10; Windows 11 23H2+ is the primary platform, Windows 10 22H2 is best-effort.
+>
+> The 1.x codebase has been removed (issue #7). The app currently starts into a minimal
+> foundation shell; MVP features will land phase by phase. See [legacy-cleanup.md](./docs/legacy-cleanup.md).
 
 ---
 

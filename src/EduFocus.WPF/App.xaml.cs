@@ -1,14 +1,9 @@
-using System.IO;
 using System.Windows;
-using Microsoft.EntityFrameworkCore;
-using Microsoft.Extensions.DependencyInjection;
 using EduFocus.Infrastructure;
-using EduFocus.SqliteDataAccess;
-using EduFocus.UseCases;
+using EduFocus.Ports.Outbound.Services;
 using EduFocus.WPF.Services;
 using EduFocus.WPF.ViewModels;
-using EduFocus.WPF.Views;
-using MaterialDesignThemes.Wpf;
+using Microsoft.Extensions.DependencyInjection;
 
 namespace EduFocus.WPF;
 
@@ -28,7 +23,6 @@ public partial class App : Application
             return;
         }
 
-        // Global Exception Handling
         this.DispatcherUnhandledException += App_DispatcherUnhandledException;
         System.Threading.Tasks.TaskScheduler.UnobservedTaskException += TaskScheduler_UnobservedTaskException;
 
@@ -38,112 +32,22 @@ public partial class App : Application
         ConfigureServices(serviceCollection);
         Services = serviceCollection.BuildServiceProvider();
 
-        // Ensure DB is created and seeded with defaults
-        using (var scope = Services.CreateScope())
-        {
-            var dbContext = scope.ServiceProvider.GetRequiredService<AppDbContext>();
-            try
-            {
-                dbContext.Database.Migrate(); // auto-applies all pending migrations
-            }
-            catch (System.Exception ex) when (ex.Message.Contains("already exists"))
-            {
-                // Self-healing: if the DB was made with EnsureCreated (beta versions), it has no migration history.
-                // Migrate() tries to run InitialCreate and crashes because 'Profiles' already exists.
-                // We manually inject the history record for InitialCreate so Migrate() skips it.
-                var connection = dbContext.Database.GetDbConnection();
-                if (connection.State != System.Data.ConnectionState.Open) connection.Open();
-                
-                using (var cmd = connection.CreateCommand())
-                {
-                    cmd.CommandText = @"
-                        CREATE TABLE IF NOT EXISTS ""__EFMigrationsHistory"" (
-                            ""MigrationId"" TEXT NOT NULL CONSTRAINT ""PK___EFMigrationsHistory"" PRIMARY KEY,
-                            ""ProductVersion"" TEXT NOT NULL
-                        );
-                        INSERT OR IGNORE INTO ""__EFMigrationsHistory"" (""MigrationId"", ""ProductVersion"")
-                        VALUES ('20260416085506_InitialCreate', '9.0.4');
-                    ";
-                    cmd.ExecuteNonQuery();
-                }
-                connection.Close();
-                
-                // Retry migration for any missing schemas (e.g. AddGeminiConfigToSettings)
-                dbContext.Database.Migrate();
-            }
-
-            var settingsRepo = scope.ServiceProvider.GetRequiredService<EduFocus.Ports.Outbound.Repositories.ISystemSettingsRepository>();
-            settingsRepo.EnsureDefaultSettingsAsync().GetAwaiter().GetResult();
-            
-            var profileRepo = scope.ServiceProvider.GetRequiredService<EduFocus.Ports.Outbound.Repositories.IProfileRepository>();
-            profileRepo.EnsureDefaultProfileAsync().GetAwaiter().GetResult();
-
-            // Apply global exact theme from DB on startup
-            var settings = settingsRepo.GetSettingsAsync().GetAwaiter().GetResult();
-            var helper = new MaterialDesignThemes.Wpf.PaletteHelper();
-            var theme = helper.GetTheme();
-            theme.SetBaseTheme(settings.DarkTheme ? MaterialDesignThemes.Wpf.BaseTheme.Dark : MaterialDesignThemes.Wpf.BaseTheme.Light);
-            helper.SetTheme(theme);
-
-            // Apply global strict mode on startup if enabled and no session is being restored yet.
-            // Note: Restoring an incomplete session happens asynchronously later and will override this cleanly.
-            if (settings.GlobalStrictMode)
-            {
-                var processPort = scope.ServiceProvider.GetRequiredService<EduFocus.Ports.Outbound.Services.IStrictEnginePort>();
-                processPort.ApplyProfileAsync(new System.Collections.Generic.List<EduFocus.Domain.Entities.SessionProfileSnapshot>()).GetAwaiter().GetResult();
-            }
-        }
-
         var mainWindow = Services.GetRequiredService<MainWindow>();
-
-        // Set window icon from the .ico file next to the exe
-        var icoPath = Path.Combine(AppContext.BaseDirectory, "app.ico");
-        if (File.Exists(icoPath))
-        {
-            using var stream = File.OpenRead(icoPath);
-            mainWindow.Icon = System.Windows.Media.Imaging.BitmapFrame.Create(
-                stream, System.Windows.Media.Imaging.BitmapCreateOptions.None,
-                System.Windows.Media.Imaging.BitmapCacheOption.OnLoad);
-        }
-
+        MainWindow = mainWindow;
         mainWindow.Show();
 
-        // Log successful startup
-        var logger = Services.GetRequiredService<EduFocus.Ports.Outbound.Services.IAppLogger>();
+        var logger = Services.GetRequiredService<IAppLogger>();
         logger.Info("====== EduFocus started ======");
 
         // Background update check — non-blocking, silent on failure
         _ = Services.GetRequiredService<UpdateViewModel>().CheckForUpdateAsync();
     }
 
-    private void ConfigureServices(IServiceCollection services)
+    private static void ConfigureServices(IServiceCollection services)
     {
-        // Use LocalAppData so MSI installs don't fail due to read-only Program Files
-        var localAppData = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
-        var appFolder = Path.Combine(localAppData, "EduFocus");
-        Directory.CreateDirectory(appFolder);
-        var dbPath = Path.Combine(appFolder, "edufocus.db");
-
-        services.AddSqliteDataAccess($"Data Source={dbPath}");
-        services.AddUseCases();
         services.AddInfrastructureServices();
-
-        // System tray notifications (session completion, etc.)
-        services.AddSingleton<TrayNotificationService>();
-        services.AddSingleton<EduFocus.Ports.Outbound.Services.INotificationPort>(
-            sp => sp.GetRequiredService<TrayNotificationService>());
-
-        // Register ViewModels
-        services.AddSingleton<MainViewModel>();
-        services.AddSingleton<DashboardViewModel>();
-        services.AddSingleton<ProfilesViewModel>();
-        services.AddSingleton<FocusSessionViewModel>();
-        services.AddSingleton<AnalyticsViewModel>();
-        services.AddSingleton<SettingsViewModel>();
         services.AddSingleton<UpdaterService>();
         services.AddSingleton<UpdateViewModel>();
-
-        // Register Views
         services.AddSingleton<MainWindow>();
     }
 
@@ -151,8 +55,7 @@ public partial class App : Application
     {
         try
         {
-            Services?.GetService<EduFocus.Ports.Outbound.Services.IAppLogger>()
-                    ?.Info("====== EduFocus exited ======");
+            Services?.GetService<IAppLogger>()?.Info("====== EduFocus exited ======");
         }
         catch { /* best effort */ }
         Services?.Dispose();
@@ -163,11 +66,9 @@ public partial class App : Application
 
     private void App_DispatcherUnhandledException(object sender, System.Windows.Threading.DispatcherUnhandledExceptionEventArgs e)
     {
-        // Log before swallowing so we have a trace
         try
         {
-            Services?.GetService<EduFocus.Ports.Outbound.Services.IAppLogger>()
-                    ?.Error("[UI] Unhandled Dispatcher exception caught.", e.Exception);
+            Services?.GetService<IAppLogger>()?.Error("[UI] Unhandled Dispatcher exception caught.", e.Exception);
         }
         catch { }
         e.Handled = true;
@@ -175,29 +76,11 @@ public partial class App : Application
 
     private void TaskScheduler_UnobservedTaskException(object? sender, System.Threading.Tasks.UnobservedTaskExceptionEventArgs e)
     {
-        // Log background task exceptions so they're visible in the log file
         try
         {
-            Services?.GetService<EduFocus.Ports.Outbound.Services.IAppLogger>()
-                    ?.Error("[BG] Unobserved task exception caught.", e.Exception);
+            Services?.GetService<IAppLogger>()?.Error("[BG] Unobserved task exception caught.", e.Exception);
         }
         catch { }
         e.SetObserved();
-    }
-
-    public static void SetAutoStart(bool enable)
-    {
-        try
-        {
-            using var key = Microsoft.Win32.Registry.CurrentUser.OpenSubKey(@"Software\Microsoft\Windows\CurrentVersion\Run", true);
-            if (key != null)
-            {
-                if (enable)
-                    key.SetValue("EduFocus", System.Environment.ProcessPath ?? Path.Combine(AppContext.BaseDirectory, "EduFocus.exe"));
-                else
-                    key.DeleteValue("EduFocus", false);
-            }
-        }
-        catch { }
     }
 }
