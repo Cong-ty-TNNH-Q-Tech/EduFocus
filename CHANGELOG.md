@@ -263,6 +263,13 @@ và dự án tuân theo [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 - **Báo cáo & UI:** `SessionAttentionSummary.UnobservedSeconds` = eligible − monitored để báo cáo hiển thị thời gian không quan sát được; Parent Mode có thẻ Camera (trạng thái, hướng dẫn, kiểm tra, chọn camera lưu vào `AppSettings.CameraDeviceId`, dùng camera mặc định); onboarding chạy kiểm tra thật thay cho `CameraPermissionProbe` (đã xóa); cửa sổ chính hiện hướng dẫn khắc phục.
 - **Tests:** +39 test — 20 domain health/guidance (đủ sáng/quá tối/không mặt/không ảnh/problem thắng reading, hướng dẫn theo từng lỗi), 8 mapper, 9 camera check (busy/permission/no-camera/quá tối/analyzer lỗi vẫn nhả camera/refuse khi đang giám sát/validate options), busy không tạo attention, fallback thiết bị và suppress retry `NotFound`; tổng **767 test pass**, build Release 0 warning.
 
+### Added (Phase 6 — Dashboard hôm nay & Student Mode, issue #35)
+- **Tổng hợp ngày từ StudySessions:** `DailyStudySummary` cộng counter của mọi session có `StartLocalDate` bằng ngày local hiện tại, tái dùng quy tắc `SessionAttentionSummary` (coverage < 50% cảnh báo, `CameraUnavailable` ngoài mẫu số, `UnobservedSeconds`) và trả `ActiveSessionStartedAtUtc`; `IStudySessionRepository.GetDailySummaryAsync` chạy một aggregate `GROUP BY` trên StudySessions, không quét ActivitySamples/AttentionEvents. `DashboardService.GetTodayAsync` lấy ngày theo `TimeProvider` local và trả empty summary khi chưa có phiên.
+- **Student Mode:** cửa sổ chính có thẻ "Tổng quan hôm nay" chỉ hiển thị thời gian học và phiên đang hoạt động (kèm empty/loading/error), không lộ counter chặn, cấu hình hay PIN.
+- **Parent dashboard:** thẻ tổng quan trong Parent Mode hiển thị thời gian học/hoạt động, % tập trung, coverage, thời lượng mất tập trung, camera không khả dụng, thời gian không quan sát được, blocked attempts best-effort, số phiên và cảnh báo "Dữ liệu chưa đủ tin cậy"; làm mới mỗi 15 giây khi cửa sổ mở, giữ số liệu cũ nếu query lỗi kèm nút thử lại.
+- **Polling & lỗi DB:** `DashboardViewModel` chặn refresh chồng lấp bằng `SemaphoreSlim`, chỉ hiện loading lần đầu, log lỗi và không crash khi DB trống; MainWindow dừng polling khi ẩn xuống tray.
+- **Tests:** +12 test — 5 domain summary (empty, nhiều session cộng dồn, coverage thấp, active session, camera outage), 4 DashboardService (local date UTC+7, empty, passthrough, lỗi), 3 repository aggregate (ngày trống/null, nhiều session + lọc ngày, coverage thấp); tổng **779 test pass**, build Release 0 warning.
+
 ### Removed (khỏi phạm vi EduFocus)
 - Quản lý task, profile học tập, quote động lực và Gemini AI.
 - Cơ chế "friction" bắt gõ câu xác nhận bỏ cuộc.

@@ -799,6 +799,15 @@ AttentionPercent =
 > làm attention giảm. `ProtectionService` start monitor rồi pipeline khi bật/phục hồi bảo vệ và stop
 > pipeline rồi monitor khi tắt, reconcile hoặc Windows shutdown; mọi lỗi camera/attention chỉ log và không
 > tắt bảo vệ.
+>
+> **Triển khai issue #35:** `DashboardService.GetTodayAsync` lấy ngày local từ `TimeProvider` rồi gọi
+> `IStudySessionRepository.GetDailySummaryAsync`, một aggregate `GROUP BY` trên `StudySessions` (không đọc
+> `ActivitySamples`/`AttentionEvents`). `DailyStudySummary` là projection bất biến dùng lại
+> `SessionAttentionSummary` nên coverage/attention/cảnh báo giống từng phiên; `ActiveSessionStartedAtUtc`
+> được lấy từ session `Active` duy nhất. `DashboardViewModel` polling 15 giây, bỏ qua tick chồng lấp bằng
+> `SemaphoreSlim`, giữ số liệu cũ khi query lỗi và chỉ hiện loading lần đầu; Student Mode chỉ bind thời gian
+> học/phiên đang hoạt động, Parent Mode bind toàn bộ counter nên PIN/cấu hình không xuất hiện ở cửa sổ chính.
+> MainWindow dừng polling khi ẩn xuống tray; Parent Mode tái dùng timer 1 giây và đọc dữ liệu mỗi 15 tick.
 
 ### 8.4. Camera contention
 

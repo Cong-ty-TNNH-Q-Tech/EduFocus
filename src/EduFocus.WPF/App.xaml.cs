@@ -17,6 +17,7 @@ using EduFocus.UseCases.Blocking;
 using EduFocus.UseCases.Lifecycle;
 using EduFocus.UseCases.Onboarding;
 using EduFocus.UseCases.Protection;
+using EduFocus.UseCases.Reports;
 using EduFocus.UseCases.Retention;
 using EduFocus.UseCases.Schedule;
 using EduFocus.UseCases.Sessions;
@@ -171,6 +172,7 @@ public partial class App : Application
         services.AddSingleton<IParentModeUseCase, ParentModeService>();
         services.AddSingleton<IOnboardingUseCase, OnboardingService>();
         services.AddSingleton<IProtectionUseCase, ProtectionService>();
+        services.AddSingleton<IDashboardUseCase, DashboardService>();
         services.AddSingleton<IScheduleUseCase, ScheduleService>();
         services.AddSingleton(new RetentionOptions());
         services.AddSingleton<IRetentionUseCase, RetentionService>();
@@ -181,6 +183,7 @@ public partial class App : Application
         services.AddSingleton<UpdateViewModel>();
         services.AddSingleton<ProtectionStatusViewModel>();
         services.AddSingleton<CameraStatusViewModel>();
+        services.AddSingleton<DashboardViewModel>();
         services.AddSingleton<ScheduleViewModel>();
         services.AddSingleton<BlocklistViewModel>();
         services.AddSingleton<MainWindowViewModel>();

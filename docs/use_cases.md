@@ -718,6 +718,14 @@
 > **Triển khai một phần (issue #33):** `SessionAttentionSummary` cung cấp `MonitoredSeconds`,
 > `AttentionPercent`, `CoveragePercent` và cảnh báo "Dữ liệu chưa đủ tin cậy" khi coverage < 50% để dashboard
 > dùng lại. UI dashboard/báo cáo chi tiết thuộc #35–#38.
+>
+> **Triển khai dashboard hôm nay (issue #35):** `DashboardViewModel` đọc `DailyStudySummary` từ
+> `DashboardService` — ngày local theo `TimeProvider`, tổng hợp một aggregate trên `StudySessions`, không quét
+> sample thô — và polling 15 giây khi cửa sổ hiển thị. Student Mode (cửa sổ chính) chỉ thấy thời gian học và
+> phiên đang hoạt động; Parent Mode thấy đầy đủ study/active/distraction, attention/coverage kèm cảnh báo
+> coverage < 50%, thời gian camera không khả dụng, thời gian không quan sát được, blocked attempts best-effort
+> và số phiên. Empty/loading/error state có retry, không crash khi DB trống. Báo cáo 7/30 ngày, timeline, CSV
+> và xóa dữ liệu thuộc #36–#38.
 
 ---
 

@@ -1,6 +1,7 @@
 using EduFocus.Domain.Attention;
 using EduFocus.Domain.Entities;
 using EduFocus.Domain.Enums;
+using EduFocus.Domain.Reports;
 using EduFocus.Domain.ValueObjects;
 
 namespace EduFocus.Ports.Outbound.Persistence;
@@ -14,6 +15,16 @@ namespace EduFocus.Ports.Outbound.Persistence;
 public interface IStudySessionRepository
 {
     Task<StudySession?> GetActiveAsync(CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Aggregates every session whose local start date equals
+    /// <paramref name="localDate"/> for the today dashboard (database schema
+    /// §13.1). Returns null when no session exists for the day; raw activity
+    /// samples are never read.
+    /// </summary>
+    Task<DailyStudySummary?> GetDailySummaryAsync(
+        DateOnly localDate,
+        CancellationToken cancellationToken = default);
 
     Task AddAsync(StudySession session, CancellationToken cancellationToken = default);
 

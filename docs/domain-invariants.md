@@ -159,6 +159,17 @@
 | Check tối đa 5 khung, không lưu frame, luôn đóng camera và từ chối khi pipeline đang chạy | `CameraCheckService` (issue #34) |
 | Camera outage không vào monitored; `UnobservedSeconds` = eligible − monitored | `SessionAttentionSummary` (issue #34) |
 
+**Tổng quan ngày (`DailyStudySummary`, issue #35):**
+
+| Invariant | Thực thi |
+|---|---|
+| Chỉ tổng hợp session có `StartLocalDate` bằng ngày local hiện tại | `SqliteStudySessionRepository.GetDailySummaryAsync` |
+| Không quét sample/event thô; mọi counter lấy từ session đã tổng hợp | Aggregate `GROUP BY` trên `StudySessions` |
+| Attention/coverage dùng cùng mẫu số và cảnh báo coverage < 50% như một phiên | `SessionAttentionSummary` tái sử dụng |
+| Ngày không có phiên trả empty summary, không bịa số liệu | `DashboardService` + `DailyStudySummary.Empty` |
+| Nhiều session: `MonitoredSeconds` vẫn là tổng bốn counter, `CameraUnavailable` ngoài mẫu số | `DailyStudySummary.Attention` |
+| Chỉ một session `Active`; dashboard trả `ActiveSessionStartedAtUtc` của session đó | Unique partial index + aggregate |
+
 ### 2.8. `BlockedAttempt`
 
 | Invariant | Thực thi |

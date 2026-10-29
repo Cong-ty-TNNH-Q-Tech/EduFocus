@@ -436,6 +436,12 @@ FROM StudySessions
 WHERE StartLocalDate = @today;
 ```
 
+> **Triển khai issue #35:** `SqliteStudySessionRepository.GetDailySummaryAsync` thực thi truy vấn aggregate
+> này bằng EF Core (`GROUP BY` hằng số) và trả `DailyStudySummary`; không đọc `ActivitySamples` hay
+> `AttentionEvents` mỗi lần render dashboard. Ngày local do `DashboardService` lấy từ `TimeProvider`.
+> `ActiveSessionStartedAtUtc` lấy từ session `Active` duy nhất; `MonitoredSeconds` vẫn suy ra từ bốn counter
+> attention (không đọc stored column) để giữ invariant của `SessionAttentionSummary`.
+
 ### 13.2. Timeline theo giờ
 
 ```sql

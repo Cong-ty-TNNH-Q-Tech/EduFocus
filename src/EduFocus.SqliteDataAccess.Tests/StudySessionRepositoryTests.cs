@@ -408,6 +408,146 @@ public sealed class StudySessionRepositoryTests
         reloaded.ConfidenceAvg.Should().BeNull();
     }
 
+    [Fact]
+    public async Task Daily_summary_returns_null_when_the_local_date_has_no_sessions()
+    {
+        await using var db = new TempDatabase();
+        await db.CreateInitializer().InitializeAsync();
+
+        var repository = new SqliteStudySessionRepository(db.Options);
+        var session = StudySession.Start(Now, new DateOnly(2026, 10, 29), SessionTrigger.Manual, true);
+        await repository.AddAsync(session);
+
+        var otherDay = await repository.GetDailySummaryAsync(new DateOnly(2026, 10, 28));
+        otherDay.Should().BeNull();
+
+        var invalid = () => repository.GetDailySummaryAsync(default);
+        await invalid.Should().ThrowAsync<ArgumentException>();
+    }
+
+    [Fact]
+    public async Task Daily_summary_aggregates_sessions_and_ignores_other_local_dates()
+    {
+        await using var db = new TempDatabase();
+        await db.CreateInitializer().InitializeAsync();
+
+        var repository = new SqliteStudySessionRepository(db.Options);
+        var day = new DateOnly(2026, 10, 29);
+
+        var first = BuildSession(
+            startedAtUtc: Now.AddHours(-4),
+            localDate: day,
+            activeSeconds: 600,
+            studySeconds: 500,
+            focusedSeconds: 300,
+            distractedSeconds: 60,
+            eligibleSeconds: 700,
+            blockedAttempts: 2);
+        first.Complete(Now.AddHours(-3));
+        await repository.AddAsync(first);
+
+        var active = BuildSession(
+            startedAtUtc: Now.AddHours(-1),
+            localDate: day,
+            activeSeconds: 300,
+            studySeconds: 0,
+            focusedSeconds: 100,
+            distractedSeconds: 0,
+            eligibleSeconds: 200);
+        await repository.AddAsync(active);
+
+        var otherDay = BuildSession(
+            startedAtUtc: Now.AddDays(-1),
+            localDate: new DateOnly(2026, 10, 28),
+            activeSeconds: 900,
+            studySeconds: 900,
+            focusedSeconds: 900,
+            distractedSeconds: 0,
+            eligibleSeconds: 900);
+        otherDay.Complete(Now.AddDays(-1).AddMinutes(30));
+        await repository.AddAsync(otherDay);
+
+        var summary = await repository.GetDailySummaryAsync(day);
+
+        summary.Should().NotBeNull();
+        summary!.LocalDate.Should().Be(day);
+        summary.SessionCount.Should().Be(2);
+        summary.ActiveSeconds.Should().Be(900);
+        summary.StudySeconds.Should().Be(500);
+        summary.DistractionSeconds.Should().Be(0);
+        summary.BlockedAttemptCount.Should().Be(2);
+        summary.FocusedSeconds.Should().Be(400);
+        summary.DistractedSeconds.Should().Be(60);
+        summary.MonitoringEligibleSeconds.Should().Be(900);
+        summary.CameraUnavailableSeconds.Should().Be(0);
+        summary.Attention.AttentionPercent.Should().BeApproximately(400 * 100.0 / 460, 0.0001);
+        summary.Attention.CoveragePercent.Should().BeApproximately(460 * 100.0 / 900, 0.0001);
+        summary.Attention.IsCoverageLow.Should().BeFalse();
+        summary.HasActiveSession.Should().BeTrue();
+        summary.ActiveSessionStartedAtUtc.Should().Be(active.StartedAtUtc);
+        summary.ActiveSessionStartedAtUtc!.Value.Kind.Should().Be(DateTimeKind.Utc);
+
+        var dayBefore = await repository.GetDailySummaryAsync(new DateOnly(2026, 10, 28));
+        dayBefore!.SessionCount.Should().Be(1);
+        dayBefore.StudySeconds.Should().Be(900);
+    }
+
+    [Fact]
+    public async Task Daily_summary_flags_low_coverage_when_the_camera_was_unavailable()
+    {
+        await using var db = new TempDatabase();
+        await db.CreateInitializer().InitializeAsync();
+
+        var repository = new SqliteStudySessionRepository(db.Options);
+        var day = new DateOnly(2026, 10, 29);
+        var session = StudySession.Start(Now, day, SessionTrigger.Manual, true);
+        session.AddMonitoringEligibleSeconds(1_000, Now.AddSeconds(1));
+        session.AddAttentionSeconds(AttentionState.Focused, 200, Now.AddSeconds(2));
+        session.AddAttentionSeconds(AttentionState.CameraUnavailable, 800, Now.AddSeconds(3));
+        session.Complete(Now.AddSeconds(4));
+        await repository.AddAsync(session);
+
+        var summary = await repository.GetDailySummaryAsync(day);
+
+        summary!.SessionCount.Should().Be(1);
+        summary.CameraUnavailableSeconds.Should().Be(800);
+        summary.Attention.MonitoredSeconds.Should().Be(200);
+        summary.Attention.AttentionPercent.Should().Be(100);
+        summary.Attention.CoveragePercent.Should().Be(20);
+        summary.Attention.Warning.Should().Be(SessionAttentionSummary.LowCoverageWarning);
+        summary.Attention.UnobservedSeconds.Should().Be(800);
+        summary.HasActiveSession.Should().BeFalse();
+    }
+
+    private static StudySession BuildSession(
+        DateTime startedAtUtc,
+        DateOnly localDate,
+        int activeSeconds,
+        int studySeconds,
+        int focusedSeconds,
+        int distractedSeconds,
+        int eligibleSeconds,
+        int blockedAttempts = 0)
+    {
+        var session = StudySession.Start(startedAtUtc, localDate, SessionTrigger.Manual, true);
+        var stamp = startedAtUtc;
+
+        if (activeSeconds > 0)
+            session.AddActiveSeconds(activeSeconds, stamp = stamp.AddSeconds(1));
+        if (studySeconds > 0)
+            session.AddCategorySeconds(ActivityCategory.Study, studySeconds, stamp = stamp.AddSeconds(1));
+        if (focusedSeconds > 0)
+            session.AddAttentionSeconds(AttentionState.Focused, focusedSeconds, stamp = stamp.AddSeconds(1));
+        if (distractedSeconds > 0)
+            session.AddAttentionSeconds(AttentionState.Distracted, distractedSeconds, stamp = stamp.AddSeconds(1));
+        if (eligibleSeconds > 0)
+            session.AddMonitoringEligibleSeconds(eligibleSeconds, stamp = stamp.AddSeconds(1));
+        if (blockedAttempts > 0)
+            session.IncrementBlockedAttempts(stamp.AddSeconds(1), blockedAttempts);
+
+        return session;
+    }
+
     private static async Task<StudySession> ReadSessionAsync(TempDatabase db, Guid id)
     {
         await using var context = db.CreateContext();

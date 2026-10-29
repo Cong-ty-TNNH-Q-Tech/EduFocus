@@ -37,11 +37,15 @@ public partial class ParentModeViewModel : ObservableObject
     private readonly ScheduleViewModel _schedule;
     private readonly BlocklistViewModel _blocklist;
     private readonly CameraStatusViewModel _camera;
+    private readonly DashboardViewModel _dashboard;
     private readonly DatabaseBootstrapper _database;
     private readonly IAppLogger _logger;
     private readonly TimeProvider _timeProvider;
 
+    private const int DashboardRefreshTicks = 15;
+
     private DateTime? _lockoutUntilUtc;
+    private int _ticksSinceDashboardRefresh;
 
     [ObservableProperty] private ParentModeView _view = ParentModeView.Loading;
     [ObservableProperty] private string _statusMessage = string.Empty;
@@ -73,6 +77,8 @@ public partial class ParentModeViewModel : ObservableObject
 
     public CameraStatusViewModel Camera => _camera;
 
+    public DashboardViewModel Dashboard => _dashboard;
+
     public event EventHandler? PasswordBoxesShouldClear;
     public event EventHandler? CloseRequested;
 
@@ -82,6 +88,7 @@ public partial class ParentModeViewModel : ObservableObject
         ScheduleViewModel schedule,
         BlocklistViewModel blocklist,
         CameraStatusViewModel camera,
+        DashboardViewModel dashboard,
         DatabaseBootstrapper database,
         IAppLogger logger,
         TimeProvider timeProvider)
@@ -91,6 +98,7 @@ public partial class ParentModeViewModel : ObservableObject
         _schedule = schedule ?? throw new ArgumentNullException(nameof(schedule));
         _blocklist = blocklist ?? throw new ArgumentNullException(nameof(blocklist));
         _camera = camera ?? throw new ArgumentNullException(nameof(camera));
+        _dashboard = dashboard ?? throw new ArgumentNullException(nameof(dashboard));
         _database = database ?? throw new ArgumentNullException(nameof(database));
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
         _timeProvider = timeProvider ?? throw new ArgumentNullException(nameof(timeProvider));
@@ -133,6 +141,8 @@ public partial class ParentModeViewModel : ObservableObject
                 await _schedule.RefreshAsync();
                 await _blocklist.RefreshAsync();
                 await RefreshCameraAsync();
+                await _dashboard.RefreshAsync();
+                _ticksSinceDashboardRefresh = 0;
                 View = ParentModeView.Management;
                 SetStatus("Parent Mode đang mở. Phiên tự khóa sau 5 phút không hoạt động.", false);
             }
@@ -382,6 +392,7 @@ public partial class ParentModeViewModel : ObservableObject
         {
             var result = await _protection.ToggleAsync();
             await _schedule.RefreshAsync();
+            await _dashboard.RefreshAsync();
             var state = result.Status.IsEnabled ? "bật" : "tắt";
 
             SetStatus(
@@ -437,6 +448,15 @@ public partial class ParentModeViewModel : ObservableObject
 
         if (_lockoutUntilUtc is not null && View == ParentModeView.Login)
             UpdateLockoutStatus();
+
+        // UC10 polling: the dashboard timer ticks every second, the data read
+        // runs every 15 seconds while the management view is visible.
+        if (View == ParentModeView.Management
+            && ++_ticksSinceDashboardRefresh >= DashboardRefreshTicks)
+        {
+            _ticksSinceDashboardRefresh = 0;
+            _ = RefreshLiveAsync();
+        }
     }
 
     public void HandleWindowClosed()
@@ -456,6 +476,8 @@ public partial class ParentModeViewModel : ObservableObject
                 await _schedule.RefreshAsync();
                 await _blocklist.RefreshAsync();
                 await RefreshCameraAsync();
+                await _dashboard.RefreshAsync();
+                _ticksSinceDashboardRefresh = 0;
                 View = ParentModeView.Management;
                 SetStatus("Đã mở Parent Mode. Phiên tự khóa sau 5 phút không hoạt động.", false);
                 break;
@@ -476,6 +498,12 @@ public partial class ParentModeViewModel : ObservableObject
     {
         _camera.Refresh();
         await _camera.LoadDevicesAsync();
+    }
+
+    private async Task RefreshLiveAsync()
+    {
+        await _protection.RefreshAsync();
+        await _dashboard.RefreshAsync();
     }
 
     private void ApplyLockout(DateTime? lockoutUntilUtc)

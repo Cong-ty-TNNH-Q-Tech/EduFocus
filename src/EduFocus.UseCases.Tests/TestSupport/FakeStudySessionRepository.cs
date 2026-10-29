@@ -1,6 +1,7 @@
 using EduFocus.Domain.Attention;
 using EduFocus.Domain.Entities;
 using EduFocus.Domain.Enums;
+using EduFocus.Domain.Reports;
 using EduFocus.Domain.ValueObjects;
 using EduFocus.Ports.Outbound.Persistence;
 
@@ -22,6 +23,12 @@ internal sealed class FakeStudySessionRepository : IStudySessionRepository
 
     public bool ThrowOnAttention { get; set; }
 
+    public bool ThrowOnDailySummary { get; set; }
+
+    public DailyStudySummary? DailySummary { get; set; }
+
+    public List<DateOnly> DailySummaryRequests { get; } = [];
+
     public int IncrementBlockedCalls { get; private set; }
 
     public List<ActivityWriteCall> ActivityWrites { get; } = [];
@@ -32,6 +39,18 @@ internal sealed class FakeStudySessionRepository : IStudySessionRepository
 
     public Task<StudySession?> GetActiveAsync(CancellationToken cancellationToken = default) =>
         Task.FromResult(Active);
+
+    public Task<DailyStudySummary?> GetDailySummaryAsync(
+        DateOnly localDate,
+        CancellationToken cancellationToken = default)
+    {
+        DailySummaryRequests.Add(localDate);
+
+        if (ThrowOnDailySummary)
+            throw new InvalidOperationException("The session store is unavailable.");
+
+        return Task.FromResult(DailySummary);
+    }
 
     public Task AddAsync(StudySession session, CancellationToken cancellationToken = default)
     {

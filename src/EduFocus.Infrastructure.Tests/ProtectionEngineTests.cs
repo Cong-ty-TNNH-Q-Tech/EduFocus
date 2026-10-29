@@ -1,6 +1,7 @@
 using EduFocus.Domain.Attention;
 using EduFocus.Domain.Entities;
 using EduFocus.Domain.Enums;
+using EduFocus.Domain.Reports;
 using EduFocus.Domain.ValueObjects;
 using EduFocus.Infrastructure.Protection;
 using EduFocus.Ports.Outbound.Persistence;
@@ -735,6 +736,11 @@ public sealed class ProtectionEngineTests
 
         public Task<StudySession?> GetActiveAsync(CancellationToken cancellationToken = default) =>
             Task.FromResult(Active);
+
+        public Task<DailyStudySummary?> GetDailySummaryAsync(
+            DateOnly localDate,
+            CancellationToken cancellationToken = default) =>
+            Task.FromResult<DailyStudySummary?>(null);
 
         public Task AddAsync(StudySession session, CancellationToken cancellationToken = default)
         {

@@ -1,6 +1,7 @@
 using EduFocus.Domain.Attention;
 using EduFocus.Domain.Entities;
 using EduFocus.Domain.Enums;
+using EduFocus.Domain.Reports;
 using EduFocus.Domain.ValueObjects;
 using EduFocus.Ports.Outbound.Persistence;
 using EduFocus.SqliteDataAccess.Converters;
@@ -35,6 +36,60 @@ public sealed class SqliteStudySessionRepository : IStudySessionRepository
         return await context.StudySessions
             .AsNoTracking()
             .SingleOrDefaultAsync(x => x.Status == StudySessionStatus.Active, cancellationToken);
+    }
+
+    public async Task<DailyStudySummary?> GetDailySummaryAsync(
+        DateOnly localDate,
+        CancellationToken cancellationToken = default)
+    {
+        if (localDate == default)
+            throw new ArgumentException("Local date is required.", nameof(localDate));
+
+        await using var context = new EduFocusDbContext(_dbContextOptions);
+
+        // One aggregate row from StudySessions only; ActivitySamples and
+        // AttentionEvents are never scanned for the dashboard.
+        var totals = await context.StudySessions
+            .AsNoTracking()
+            .Where(x => x.StartLocalDate == localDate)
+            .GroupBy(_ => 1)
+            .Select(group => new
+            {
+                SessionCount = group.Count(),
+                ActiveSeconds = group.Sum(x => x.ActiveSeconds),
+                StudySeconds = group.Sum(x => x.StudySeconds),
+                DistractionSeconds = group.Sum(x => x.DistractionSeconds),
+                BlockedAttemptCount = group.Sum(x => x.BlockedAttemptCount),
+                FocusedSeconds = group.Sum(x => x.FocusedSeconds),
+                DistractedSeconds = group.Sum(x => x.DistractedSeconds),
+                AbsentSeconds = group.Sum(x => x.AbsentSeconds),
+                DrowsySeconds = group.Sum(x => x.DrowsySeconds),
+                CameraUnavailableSeconds = group.Sum(x => x.CameraUnavailableSeconds),
+                MonitoringEligibleSeconds = group.Sum(x => x.MonitoringEligibleSeconds),
+                ActiveSessionStartedAtUtc = group.Max(x =>
+                    x.Status == StudySessionStatus.Active ? (DateTime?)x.StartedAtUtc : null)
+            })
+            .SingleOrDefaultAsync(cancellationToken);
+
+        if (totals is null)
+            return null;
+
+        return new DailyStudySummary
+        {
+            LocalDate = localDate,
+            SessionCount = totals.SessionCount,
+            ActiveSeconds = totals.ActiveSeconds,
+            StudySeconds = totals.StudySeconds,
+            DistractionSeconds = totals.DistractionSeconds,
+            BlockedAttemptCount = totals.BlockedAttemptCount,
+            ActiveSessionStartedAtUtc = totals.ActiveSessionStartedAtUtc,
+            FocusedSeconds = totals.FocusedSeconds,
+            DistractedSeconds = totals.DistractedSeconds,
+            AbsentSeconds = totals.AbsentSeconds,
+            DrowsySeconds = totals.DrowsySeconds,
+            CameraUnavailableSeconds = totals.CameraUnavailableSeconds,
+            MonitoringEligibleSeconds = totals.MonitoringEligibleSeconds
+        };
     }
 
     public async Task AddAsync(StudySession session, CancellationToken cancellationToken = default)
