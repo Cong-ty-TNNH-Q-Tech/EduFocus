@@ -678,7 +678,7 @@
 5. Ghi audit "unexpected termination".
 
 **Ngoại lệ**
-- Windows shutdown/logoff: app cố gắng gỡ hosts và lưu trạng thái; session đang chạy được đóng với `Interrupted` và `Note = SystemShutdown` nếu kịp, nếu không thì self-heal lần sau. Không đặt `LastCleanShutdownAtUtc` và không xóa `ProtectionEnabled`, để lần đăng nhập sau phục hồi bảo vệ. Đây là đường bypass được chấp nhận và phải ghi rõ trong tài liệu.
+- Windows shutdown/logoff: app không gỡ chặn và không đổi trạng thái bảo vệ; chỉ cố gắng đóng session với `Interrupted`/`Note = SystemShutdown` và ghi audit trong thời gian ngắn (tối đa 2 giây) trước khi tiến trình bị dừng. Không đặt `LastCleanShutdownAtUtc` và không xóa `ProtectionEnabled`, để lần đăng nhập sau phục hồi bảo vệ; nếu không kịp đóng session thì reconcile lúc khởi động self-heal. Đây là đường bypass được chấp nhận và phải ghi rõ trong tài liệu.
 - Học sinh kill từ Task Manager: nếu có quyền admin, có thể kill; watchdog khởi động lại; ghi nhận.
 - Uninstall: yêu cầu PIN/cảnh báo nếu Protection ON ở mức best-effort; admin Windows vẫn có thể gỡ (giới hạn đã biết).
 
@@ -687,6 +687,18 @@
 - Protection state được bảo toàn.
 
 **Business rules:** BR-17, BR-18, BR-19, BR-28, BR-30.
+
+> **Hiện trạng Phase 2 (issue #18):** đóng cửa sổ luôn ẩn xuống tray, kèm balloon nhắc bảo vệ đang
+> chạy; thoát app chỉ từ menu tray và luôn yêu cầu PIN qua `ExitWindow`. `AppLifecycleService`
+> xác thực PIN, gỡ chặn (`DisableForExitAsync`, không tạo `ScheduleOverrideUntilUtc` và xóa override
+> còn sót), kết thúc session `Completed`, ghi `LastCleanShutdownAtUtc`, audit `ProtectionOff` +
+> `CleanExit` và luôn khóa Parent Mode sau mỗi lần thử. Khi bảo vệ ON, dialog hiển thị cảnh báo và
+> bắt buộc xác nhận lần hai; gỡ chặn thất bại giữ app chạy với bảo vệ nguyên vẹn, còn lỗi ghi dấu
+> thoát sạch chỉ tạo cảnh báo vì reconcile lúc khởi động tự dọn. `App.OnSessionEnding` không hủy
+> Windows shutdown, chỉ ghi nhận best-effort trong 2 giây: session `Interrupted` với ghi chú
+> `SystemShutdown`, audit `SessionInterrupted`/`SystemShutdown`, giữ nguyên `ProtectionEnabled` và
+> engine; lần đăng nhập sau `ReconcileAsync` phục hồi bảo vệ với session `Recovery`. Watchdog tự
+> khởi động lại sau kill vẫn thuộc Phase 7.
 
 ---
 

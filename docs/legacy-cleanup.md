@@ -80,5 +80,6 @@ tray icon và logic chặn thoát khi có phiên.
 - Issue #15: onboarding thiết lập PIN, privacy consent và tùy chọn an toàn — đã hoàn tất.
 - Issue #16: bật/tắt bảo vệ, session/audit, tray và reconcile sau restart — đã hoàn tất; engine chặn thật thuộc issue #24.
 - Issue #17: lịch bảo vệ, scheduler 30 giây, override và UI Parent Mode — đã hoàn tất.
+- Issue #18: thoát bằng PIN, ẩn xuống tray khi đóng cửa sổ và xử lý Windows shutdown — đã hoàn tất.
 - Các phase sau: ProtectionEngine/BlockPageServer, session/activity,
   attention monitoring, dashboard/reports, installer hoàn chỉnh.

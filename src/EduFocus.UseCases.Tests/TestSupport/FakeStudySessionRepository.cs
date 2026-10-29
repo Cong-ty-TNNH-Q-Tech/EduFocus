@@ -9,6 +9,8 @@ internal sealed class FakeStudySessionRepository : IStudySessionRepository
 
     public bool ThrowOnAdd { get; set; }
 
+    public bool ThrowOnUpdate { get; set; }
+
     public StudySession? Active => Sessions.SingleOrDefault(session => session.IsActive);
 
     public Task<StudySession?> GetActiveAsync(CancellationToken cancellationToken = default) =>
@@ -28,6 +30,9 @@ internal sealed class FakeStudySessionRepository : IStudySessionRepository
 
     public Task UpdateAsync(StudySession session, CancellationToken cancellationToken = default)
     {
+        if (ThrowOnUpdate)
+            throw new InvalidOperationException("The session store is unavailable.");
+
         if (!Sessions.Contains(session))
             Sessions.Add(session);
 

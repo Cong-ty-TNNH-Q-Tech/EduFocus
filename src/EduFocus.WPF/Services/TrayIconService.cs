@@ -7,21 +7,26 @@ namespace EduFocus.WPF.Services;
 
 /// <summary>
 /// System tray presence. The icon and tooltip mirror the persisted protection
-/// state. Exit is intentionally absent: quitting requires a parent PIN and is
-/// handled by the exit flow (issue #18).
+/// state. Exit opens the PIN-gated exit dialog (UC12) instead of closing the app
+/// directly, even when protection is OFF.
 /// </summary>
 public sealed class TrayIconService : IDisposable
 {
     private readonly ProtectionStatusViewModel _protection;
     private readonly IAppLogger _logger;
+    private readonly Func<ExitWindow> _exitWindowFactory;
 
     private NotifyIcon? _icon;
     private ToolStripMenuItem? _statusItem;
 
-    public TrayIconService(ProtectionStatusViewModel protection, IAppLogger logger)
+    public TrayIconService(
+        ProtectionStatusViewModel protection,
+        IAppLogger logger,
+        Func<ExitWindow> exitWindowFactory)
     {
         _protection = protection ?? throw new ArgumentNullException(nameof(protection));
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
+        _exitWindowFactory = exitWindowFactory ?? throw new ArgumentNullException(nameof(exitWindowFactory));
     }
 
     public void Start()
@@ -37,6 +42,7 @@ public sealed class TrayIconService : IDisposable
             menu.Items.Add(_statusItem);
             menu.Items.Add(new ToolStripSeparator());
             menu.Items.Add("Mở EduFocus", null, (_, _) => ShowMainWindow());
+            menu.Items.Add("Thoát EduFocus...", null, (_, _) => ShowExitDialog());
 
             _icon = new NotifyIcon
             {
@@ -52,6 +58,27 @@ public sealed class TrayIconService : IDisposable
         {
             // A tray icon is best effort: missing shell support must not block startup.
             _logger.Error(LogCategories.UI, "Could not create the tray icon.", ex);
+        }
+    }
+
+    public void NotifyHiddenToTray(bool protectionEnabled)
+    {
+        if (_icon is null)
+            return;
+
+        try
+        {
+            _icon.ShowBalloonTip(
+                4000,
+                "EduFocus vẫn đang chạy",
+                protectionEnabled
+                    ? "Ứng dụng vẫn đang bảo vệ. Chọn \"Thoát EduFocus\" trong tray và nhập PIN để thoát."
+                    : "Ứng dụng vẫn chạy nền. Chọn \"Thoát EduFocus\" trong tray nếu muốn đóng ứng dụng.",
+                ToolTipIcon.Info);
+        }
+        catch (Exception ex)
+        {
+            _logger.Error(LogCategories.UI, "Could not show the tray notification.", ex);
         }
     }
 
@@ -84,6 +111,20 @@ public sealed class TrayIconService : IDisposable
             _statusItem.Text = _protection.IsEnabled
                 ? "Trạng thái: Đang bảo vệ"
                 : "Trạng thái: Chưa bảo vệ";
+        }
+    }
+
+    private void ShowExitDialog()
+    {
+        try
+        {
+            var window = _exitWindowFactory();
+            if (window.ShowDialog() == true)
+                System.Windows.Application.Current?.Shutdown();
+        }
+        catch (Exception ex)
+        {
+            _logger.Error(LogCategories.UI, "Could not open the exit dialog.", ex);
         }
     }
 

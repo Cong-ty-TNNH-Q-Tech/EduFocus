@@ -165,6 +165,20 @@ public sealed class ProtectionService : IProtectionUseCase
             "Parent disabled protection.",
             createScheduleOverride: true,
             scheduleOwnedOnly: false,
+            clearScheduleOverride: false,
+            cancellationToken);
+    }
+
+    public async Task<ProtectionOperationResult> DisableForExitAsync(CancellationToken cancellationToken = default)
+    {
+        _authorizer.EnsureAuthorized("exit EduFocus");
+
+        return await DisableCoreAsync(
+            AuditActor.Parent,
+            "Parent exited EduFocus and disabled protection.",
+            createScheduleOverride: false,
+            scheduleOwnedOnly: false,
+            clearScheduleOverride: true,
             cancellationToken);
     }
 
@@ -174,6 +188,7 @@ public sealed class ProtectionService : IProtectionUseCase
             "Protection disabled at the end of the scheduled window.",
             createScheduleOverride: false,
             scheduleOwnedOnly: true,
+            clearScheduleOverride: false,
             cancellationToken);
 
     private async Task<ProtectionOperationResult> DisableCoreAsync(
@@ -181,6 +196,7 @@ public sealed class ProtectionService : IProtectionUseCase
         string description,
         bool createScheduleOverride,
         bool scheduleOwnedOnly,
+        bool clearScheduleOverride,
         CancellationToken cancellationToken)
     {
         var now = UtcNow();
@@ -189,6 +205,7 @@ public sealed class ProtectionService : IProtectionUseCase
             ?? throw new InvalidOperationException(SettingsMissing);
 
         var active = await _sessions.GetActiveAsync(cancellationToken);
+        var overrideToClear = clearScheduleOverride && settings.ScheduleOverrideUntilUtc is not null;
 
         if (scheduleOwnedOnly
             && (!settings.ProtectionEnabled || settings.ProtectionSource != ProtectionSource.Schedule))
@@ -197,7 +214,15 @@ public sealed class ProtectionService : IProtectionUseCase
         }
 
         if (!settings.ProtectionEnabled && active is null)
-            return new ProtectionOperationResult(CreateStatus(settings, null), Changed: false, []);
+        {
+            if (!overrideToClear)
+                return new ProtectionOperationResult(CreateStatus(settings, null), Changed: false, []);
+
+            settings.ClearScheduleOverride(now);
+            await _settings.UpdateAsync(settings, cancellationToken);
+
+            return new ProtectionOperationResult(CreateStatus(settings, null), Changed: true, []);
+        }
 
         var overrideUntil = createScheduleOverride
             ? await ResolveScheduleOverrideEndAsync(settings, now, cancellationToken)
@@ -228,6 +253,11 @@ public sealed class ProtectionService : IProtectionUseCase
 
                 await _settings.UpdateAsync(settings, cancellationToken);
                 await WriteAuditAsync(actor, AuditEventType.ProtectionOff, description, now, cancellationToken);
+            }
+            else if (overrideToClear)
+            {
+                settings.ClearScheduleOverride(now);
+                await _settings.UpdateAsync(settings, cancellationToken);
             }
         }
         catch

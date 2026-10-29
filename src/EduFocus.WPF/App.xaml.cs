@@ -6,6 +6,7 @@ using EduFocus.Ports.Outbound.Services;
 using EduFocus.SqliteDataAccess.Persistence;
 using EduFocus.SqliteDataAccess.Repositories;
 using EduFocus.UseCases.Auth;
+using EduFocus.UseCases.Lifecycle;
 using EduFocus.UseCases.Onboarding;
 using EduFocus.UseCases.Protection;
 using EduFocus.UseCases.Schedule;
@@ -105,6 +106,7 @@ public partial class App : Application
         services.AddSingleton<IOnboardingUseCase, OnboardingService>();
         services.AddSingleton<IProtectionUseCase, ProtectionService>();
         services.AddSingleton<IScheduleUseCase, ScheduleService>();
+        services.AddSingleton<IAppLifecycleUseCase, AppLifecycleService>();
         services.AddSingleton<DatabaseBootstrapper>();
 
         services.AddSingleton<UpdaterService>();
@@ -114,13 +116,41 @@ public partial class App : Application
         services.AddSingleton<MainWindowViewModel>();
         services.AddSingleton<TrayIconService>();
         services.AddSingleton<ScheduleSchedulerService>();
+        services.AddSingleton<AppExitState>();
         services.AddSingleton<MainWindow>();
         services.AddTransient<ParentModeViewModel>();
         services.AddTransient<ParentModeWindow>();
         services.AddTransient<OnboardingViewModel>();
         services.AddTransient<OnboardingWindow>();
+        services.AddTransient<ExitViewModel>();
+        services.AddTransient<ExitWindow>();
         services.AddSingleton<Func<ParentModeWindow>>(provider =>
             () => provider.GetRequiredService<ParentModeWindow>());
+        services.AddSingleton<Func<ExitWindow>>(provider =>
+            () => provider.GetRequiredService<ExitWindow>());
+    }
+
+    protected override void OnSessionEnding(SessionEndingCancelEventArgs e)
+    {
+        var logger = Services?.GetService<IAppLogger>();
+
+        try
+        {
+            // Best effort with a bounded wait so Windows is never blocked; a
+            // cancelled write is healed by ReconcileAsync at the next startup.
+            if (Services?.GetService<IAppLifecycleUseCase>() is { } lifecycle)
+            {
+                var recording = Task.Run(() => lifecycle.NotifySystemShutdownAsync());
+                if (!recording.Wait(TimeSpan.FromSeconds(2)))
+                    logger?.Warning(LogCategories.App, "Windows shutdown recording timed out.");
+            }
+        }
+        catch (Exception ex)
+        {
+            logger?.Error(LogCategories.App, "Windows shutdown recording failed.", ex);
+        }
+
+        base.OnSessionEnding(e);
     }
 
     protected override void OnExit(ExitEventArgs e)

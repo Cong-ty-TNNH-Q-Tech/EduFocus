@@ -128,6 +128,13 @@ và dự án tuân theo [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 - **UI:** thẻ "Lịch bảo vệ" trong Parent Mode — danh sách khung giờ, trạng thái khung đang hoạt động/override, bật/tắt lịch và editor 7 ngày + `HH:mm` (hỗ trợ `24:00`), nhãn, khung đang bật/tắt. `ScheduleSchedulerService` dùng `DispatcherTimer` 30 giây, đánh giá ngay trước khi mở cửa sổ chính; lỗi engine/đánh giá hiển thị cảnh báo thay vì làm sập app.
 - **Tests:** thêm test domain `ScheduleClock`/`AppSettings`, 4 test repository `ScheduleWindows`, 17 test `ScheduleService` (override, clock jump, DST, biên 24:00, lỗi engine) và 5 test schedule trong `ProtectionService`; cập nhật test migration/schema. Tổng **379 test pass**, build Release 0 warning.
 
+### Added (Phase 2 — Exit & Windows shutdown, issue #18)
+- **Thoát bằng PIN (UC12):** `IAppLifecycleUseCase`/`AppLifecycleService` — `ExitWithPinAsync` xác thực PIN qua `ParentModeService` (dùng chung lockout), gọi `IProtectionUseCase.DisableForExitAsync` để gỡ chặn, kết thúc session `Completed`, ghi `LastCleanShutdownAtUtc`, audit `ProtectionOff` + `CleanExit` và luôn khóa Parent Mode sau mỗi lần thử. PIN bắt buộc kể cả khi bảo vệ OFF; gỡ chặn thất bại giữ app chạy với bảo vệ nguyên vẹn; lỗi ghi dấu thoát sạch chỉ cảnh báo vì reconcile lúc khởi động tự dọn.
+- **Không tạo override khi thoát:** `DisableForExitAsync` tắt bảo vệ mà không tạo `ScheduleOverrideUntilUtc` (nếu không lần khởi động sau scheduler sẽ tưởng phụ huynh từ chối bảo vệ) và xóa override còn sót, kể cả khi bảo vệ đang OFF.
+- **Windows shutdown/logoff:** `NotifySystemShutdownAsync` không gỡ chặn và không đổi `ProtectionEnabled`/`ProtectionSource`; chỉ đóng session đang chạy với `Interrupted` + `Note = SystemShutdown`, audit `SessionInterrupted`/`SystemShutdown`; mỗi bước best-effort, lỗi DB bị nuốt kèm log thay vì chặn OS.
+- **UI:** đóng cửa sổ luôn ẩn xuống tray kèm balloon nhắc bảo vệ đang chạy; menu tray thêm "Thoát EduFocus..." mở `ExitWindow` — cảnh báo đỏ và checkbox xác nhận lần hai khi bảo vệ ON, hiển thị lockout/số lần thử còn lại, xóa ô PIN sau mỗi lần gửi, chặn đóng dialog khi đang xử lý. `AppExitState` chỉ cho phép thoát thật sau khi use case đồng ý; `App.OnSessionEnding` ghi nhận tối đa 2 giây và không bao giờ hủy shutdown.
+- **Tests:** 11 test `AppLifecycleService` (sai PIN/lockout, thoát sạch, thoát khi OFF, xóa override, lỗi gỡ engine, lỗi ghi marker, shutdown có/không session, phục hồi sau shutdown, lỗi DB khi shutdown) và 2 test `ProtectionService` cho `DisableForExitAsync`; tổng **392 test pass**, build Release 0 warning.
+
 ### Removed (khỏi phạm vi EduFocus)
 - Quản lý task, profile học tập, quote động lực và Gemini AI.
 - Cơ chế "friction" bắt gõ câu xác nhận bỏ cuộc.

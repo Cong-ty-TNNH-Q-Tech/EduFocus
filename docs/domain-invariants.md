@@ -146,6 +146,7 @@
 | Xóa theo retention | Không | — | Retention use case |
 | Khôi phục Protection sau crash | Cờ `ProtectionEnabled` | Bảng `AppSettings` | Startup/recovery use case |
 | PIN gate cho thao tác nhạy cảm | Không (domain thuần) | — | `IParentAuthorizer` |
+| Clean shutdown (BR-30) | Chỉ `RecordCleanShutdown` đặt `LastCleanShutdownAtUtc`; timestamp UTC và không lùi | Bảng `AppSettings` | `AppLifecycleService` sau khi gỡ chặn thành công; Windows shutdown chỉ interrupt session, không đặt cờ |
 
 ---
 

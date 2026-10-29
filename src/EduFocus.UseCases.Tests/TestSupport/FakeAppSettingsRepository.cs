@@ -11,6 +11,8 @@ internal sealed class FakeAppSettingsRepository : IAppSettingsRepository
 
     public int UpdateCount { get; private set; }
 
+    public bool ThrowOnUpdate { get; set; }
+
     public Task<AppSettings?> GetAsync(CancellationToken cancellationToken = default) =>
         Task.FromResult(Stored);
 
@@ -23,6 +25,9 @@ internal sealed class FakeAppSettingsRepository : IAppSettingsRepository
 
     public Task UpdateAsync(AppSettings settings, CancellationToken cancellationToken = default)
     {
+        if (ThrowOnUpdate)
+            throw new InvalidOperationException("The settings store is unavailable.");
+
         UpdateCount++;
         Stored = settings;
         return Task.CompletedTask;

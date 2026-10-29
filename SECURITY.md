@@ -42,6 +42,8 @@ EduFocus là ứng dụng desktop **local-first** dành cho phụ huynh giám s�
 - Khi app khởi động, phiên `Active` còn sót được đóng tại heartbeat và một phiên `Recovery` được tạo nếu bảo vệ đang ON; trạng thái tray/UI đọc từ DB sau bước reconcile nên không hiển thị ON khi DB đang OFF.
 - Lịch bảo vệ tự bật/tắt với actor `System`, không cần PIN. Scheduler chỉ tự tắt bảo vệ có `ProtectionSource = Schedule`; bảo vệ phụ huynh bật thủ công (`Manual`) tồn tại ngoài khung giờ. Tắt thủ công trong khung giờ tạo override đến hết khung; bật thủ công xóa override. Mọi thay đổi lịch ghi audit `ScheduleChanged`, không chứa secret.
 - Khi wall clock lệch hơn 2 phút so với monotonic clock, app ghi audit `TamperDetected` và bỏ qua auto-disable trong tick đó; auto-enable vẫn được phép.
+- Đóng cửa sổ không thoát app mà ẩn xuống tray. Thoát app chỉ thực hiện từ menu tray và **luôn** yêu cầu PIN, kể cả khi bảo vệ OFF; khi bảo vệ ON, dialog hiển thị cảnh báo và bắt buộc xác nhận lần hai. `AppLifecycleService` xác thực PIN qua `ParentModeService` (dùng chung lockout 5 lần/15 phút), luôn khóa phiên Parent Mode sau mỗi lần thử, gỡ chặn, kết thúc session `Completed`, ghi `LastCleanShutdownAtUtc` và audit `ProtectionOff` + `CleanExit` (không chứa PIN). Nếu gỡ chặn thất bại, app **không thoát** và bảo vệ giữ nguyên. Thoát bằng PIN không tạo `ScheduleOverrideUntilUtc` và xóa override còn sót.
+- Windows shutdown/logoff không bị app chặn: `App.OnSessionEnding` chỉ ghi nhận best-effort trong tối đa 2 giây (session `Interrupted` + `Note = SystemShutdown`, audit `SessionInterrupted`/`SystemShutdown`) rồi để Windows tiếp tục. App không gỡ chặn, không đổi `ProtectionEnabled`/`ProtectionSource` và **không** đặt `LastCleanShutdownAtUtc`, nên lần đăng nhập sau reconcile tự bật lại bảo vệ với session `Recovery`. Lỗi DB trong lúc shutdown bị nuốt kèm log thay vì chặn OS.
 - Retention mặc định: sample 30 ngày, event/blocked attempt 90 ngày, session summary/audit 365 ngày.
 
 ### Giới hạn đã biết (không phải lỗ hổng)
@@ -52,7 +54,7 @@ Các điểm sau **không được coi là lỗ hổng bảo mật** vì đã đ
 - File `hosts` có thể bị bypass bằng DoH/DoT, VPN, proxy hoặc sửa registry.
 - Hosts không tạo log truy cập HTTPS; `BlockedAttempt` là best-effort, không phải tổng tuyệt đối.
 - Trang chặn chỉ hiển thị với HTTP; HTTPS thường báo lỗi kết nối/SSL.
-- Windows shutdown/logoff vẫn là đường bypass; watchdog scheduled task có độ trễ tới khoảng 60 giây.
+- Windows shutdown/logoff vẫn là đường bypass được chấp nhận: app không chặn OS và không gỡ chặn trong lúc shutdown, nhưng bảo vệ được phục hồi ở lần đăng nhập kế tiếp; watchdog scheduled task có độ trễ tới khoảng 60 giây.
 - Đổi giờ hệ thống có thể làm lịch bảo vệ lệch: app phát hiện nhảy giờ, ghi audit và không tự tắt bảo vệ ở tick phát hiện, nhưng không khôi phục được giờ đúng; các tick sau vẫn đánh giá theo wall clock mới.
 - Watchdog scheduled task không tự phục hồi nếu task bị disable/xóa hoặc máy chưa đăng nhập lại; nếu có thêm watchdog process, kill cả app lẫn watchdog trong cùng phiên cũng không được phục hồi cho tới lần đăng nhập sau.
 - Watchdog giới hạn restart (mặc định 5 lần/10 phút) để tránh vòng lặp vô hạn; sau ngưỡng đó app không tự phục hồi cho tới lần đăng nhập sau hoặc khi phụ huynh mở lại.

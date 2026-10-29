@@ -103,6 +103,7 @@ IOnboardingUseCase
 IParentAuthUseCase
 IParentModeUseCase
 IProtectionUseCase
+IAppLifecycleUseCase
 IStudySessionUseCase
 IActivityUseCase
 IAttentionUseCase
@@ -147,6 +148,7 @@ IProcessWatchdogPort
 | `ParentModeService` | Parent session: login mở phiên, đổi PIN/reset kết thúc phiên |
 | `OnboardingService` | First-run: consent, tuỳ chọn an toàn, PIN, resume và hoàn tất UC01 |
 | `ProtectionService` | Bật/tắt bảo vệ, đồng bộ phiên học và engine, phục hồi trạng thái sau restart |
+| `AppLifecycleService` | Thoát bằng PIN (clean exit) và ghi nhận Windows shutdown/logoff (UC12) |
 | `StudySessionUseCase` | Bắt đầu/kết thúc session, tổng hợp thời gian |
 | `ActivityUseCase` | Ghi sample, phân loại app/URL, phát hiện lớp online |
 | `AttentionUseCase` | Nhận trạng thái từ camera, tạo event, tính score |
@@ -174,6 +176,16 @@ parent auth cho CRUD, chống chồng lấn qua `ScheduleValidator`, ghi audit `
 `EvaluateAsync` mỗi 30 giây lẫn lúc khởi động. Khi phát hiện lệch wall clock > 2 phút so với monotonic,
 service ghi `TamperDetected` và bỏ qua auto-disable trong tick đó. Lỗi engine được chuyển thành cảnh báo
 thay vì làm hỏng vòng đánh giá.
+
+**Hiện trạng issue #18:** `IAppLifecycleUseCase`/`AppLifecycleService` tách hai đường thoát. Thoát bằng
+PIN luôn xác thực qua `IParentModeUseCase` (kể cả khi bảo vệ OFF), sau đó gọi
+`IProtectionUseCase.DisableForExitAsync` — biến thể không tạo `ScheduleOverrideUntilUtc` — để gỡ engine,
+kết thúc phiên `Completed`, đặt `ProtectionEnabled = false` và ghi audit `ProtectionOff`/`CleanExit`.
+Sau đó service ghi `LastCleanShutdownAtUtc`; lỗi ghi dấu này chỉ tạo cảnh báo vì startup reconcile tự dọn
+theo trạng thái đã lưu. Windows shutdown/logoff chỉ đóng phiên đang chạy với `Interrupted` +
+`Note = SystemShutdown`, ghi audit `SessionInterrupted`/`SystemShutdown`, giữ nguyên
+`ProtectionEnabled` và `LastCleanShutdownAtUtc`; mọi lỗi DB được log và nuốt để không chặn hệ điều hành.
+`ParentSessionState` luôn bị khóa sau khi luồng thoát kết thúc, kể cả khi PIN sai.
 
 ### 3.4. Infrastructure (`EduFocus.Infrastructure`)
 
@@ -249,8 +261,8 @@ Triển khai (issue #16): `ProtectionStatusViewModel` là nguồn hiển thị d
 `ParentModeWindow` và tray. Parent Mode có nút Bật/Tắt bảo vệ (gọi `IProtectionUseCase`, hiển thị cảnh báo
 engine); cửa sổ chính chỉ hiển thị trạng thái và cảnh báo. Trước khi mở cửa sổ chính, `App` gọi
 `IProtectionUseCase.ReconcileAsync()` để đồng bộ DB, phiên học, engine và tray; lỗi reconcile được log và
-hiển thị trên UI. `TrayIconService` dùng `NotifyIcon` (WinForms) với icon/tooltip theo trạng thái và không
-có mục thoát — luồng thoát cần PIN thuộc issue #18.
+hiển thị trên UI. `TrayIconService` dùng `NotifyIcon` (WinForms) với icon/tooltip theo trạng thái; luồng
+thoát bằng PIN được bổ sung ở issue #18.
 
 Triển khai (issue #17): thẻ "Lịch bảo vệ" trong màn hình quản lý của `ParentModeWindow` hiển thị trạng thái
 lịch, khung giờ đang hoạt động và override; phụ huynh thêm/sửa/xóa khung giờ (7 ngày, `HH:mm`, hỗ trợ
@@ -259,6 +271,13 @@ không giữ secret. `ScheduleSchedulerService` dùng `DispatcherTimer` 30 giây
 trước khi mở cửa sổ chính rồi khởi động timer; lỗi được log và hiển thị cảnh báo, không làm sập app.
 `ScheduleViewModel.ApplyEvaluationAsync` chỉ thay danh sách khi dữ liệu đổi nên không ghi đè editor khi
 tick 30 giây.
+
+Triển khai (issue #18): `MainWindow.OnClosing` luôn hủy đóng và ẩn xuống tray trừ khi `AppExitState`
+đã được duyệt bởi luồng thoát; tray balloon nhắc "ứng dụng vẫn đang bảo vệ" khi bảo vệ ON. Menu tray có
+"Thoát EduFocus..." mở `ExitWindow`/`ExitViewModel` — nhập PIN và, khi bảo vệ ON, tick xác nhận tắt bảo vệ
+lần hai. Thành công đặt `AppExitState.ApproveExit()` rồi `Application.Shutdown()`; lỗi hiển thị tại chỗ và
+app tiếp tục chạy. `App.OnSessionEnding` chạy `NotifySystemShutdownAsync()` trên background với chờ tối đa
+2 giây và không bao giờ gán `e.Cancel`, nên Windows shutdown không bị app chặn.
 
 ---
 
@@ -335,6 +354,43 @@ khung đang hoạt động, override được clamp lại theo giờ kết thúc
 chống chồng lấn và ghi audit `ScheduleChanged`.
 
 Schedule dùng **wall clock/local time** để xác định khung giờ. Monotonic clock chỉ dùng đo elapsed trong một process và phát hiện nhảy giờ; không dùng monotonic xuyên reboot. Khi phát hiện nhảy giờ, ghi audit `TamperDetected` và không tự tắt protection chỉ vì thay đổi giờ.
+
+### 4.5. Thoát ứng dụng & Windows shutdown
+
+```text
+Đóng cửa sổ (X / Alt+F4)
+  → MainWindow.OnClosing: chưa có exit được duyệt → e.Cancel = true, ẩn xuống tray
+  → tray balloon "EduFocus vẫn đang chạy" (nhắc PIN nếu bảo vệ ON)
+
+Tray → "Thoát EduFocus..."
+  → ExitWindow (modal): nhập PIN, bắt buộc tick xác nhận nếu bảo vệ ON
+  → IAppLifecycleUseCase.ExitWithPinAsync(pin)
+       → IParentModeUseCase.LoginAsync(pin)  (PIN luôn bắt buộc)
+       → ProtectionService.DisableForExitAsync()  (không tạo override)
+            → ProtectionEngine.RemoveAsync()
+            → session Completed (nếu có)
+            → ProtectionEnabled = false, ScheduleOverrideUntilUtc = null
+            → audit ProtectionOff
+       → AppSettings.RecordCleanShutdown()
+       → audit CleanExit
+       → Parent Mode luôn bị khóa
+  → AppExitState.ApproveExit() → Application.Shutdown()
+
+Windows shutdown / logoff
+  → Application.OnSessionEnding (không bao giờ e.Cancel)
+  → best-effort NotifySystemShutdownAsync() trong tối đa 2 giây
+       → session Note = "SystemShutdown" + Interrupted
+       → audit SessionInterrupted, SystemShutdown
+       → giữ ProtectionEnabled, không đặt LastCleanShutdownAtUtc
+  → lần đăng nhập sau: ReconcileAsync interrupts orphan (nếu kịp lỡ) rồi phục hồi engine + phiên Recovery
+```
+
+Nếu gỡ engine thất bại, `DisableForExitAsync` giữ nguyên trạng thái ON và `ExitWithPinAsync` trả
+`CanExit = false`; app tiếp tục chạy để tránh thoát khỏi trạng thái chặn dở dang. Lỗi ghi
+`LastCleanShutdownAtUtc` không chặn thoát: phiên và bảo vệ đã về trạng thái sạch, lần khởi động sau chỉ
+reconcile theo `ProtectionEnabled = false`. Trong `SessionEnding`, app không gỡ hosts hay đổi settings vì
+Windows có thể kết thúc tiến trình trước khi hoàn tất và shutdown có thể bị hủy bởi ứng dụng khác; giữ
+`ProtectionEnabled` để reconcile phục hồi, đúng đường bypass đã ghi trong UC12/SECURITY.
 
 ---
 
@@ -719,6 +775,12 @@ AddViews()
 > `IScheduleUseCase`/`ScheduleService`, `ScheduleViewModel` (singleton) và `ScheduleSchedulerService`.
 > `App` chạy `ScheduleSchedulerService.EvaluateNowAsync()` sau reconcile protection và trước khi hiện
 > cửa sổ chính, sau đó gọi `Start()` để timer 30 giây hoạt động; `ServiceProvider.Dispose()` dừng timer.
+
+> **Bổ sung sau issue #18:** composition root đăng ký `IAppLifecycleUseCase`/`AppLifecycleService`,
+> `AppExitState` (singleton), `ExitViewModel`/`ExitWindow` (transient) và `Func<ExitWindow>` cho tray.
+> `MainWindow` nhận `TrayIconService` + `AppExitState` để chặn đóng cửa sổ; `App.OnSessionEnding` gọi
+> lifecycle với timeout 2 giây. Việc thoát sạch đi qua `Application.Shutdown()` sau khi được duyệt, nên
+> `ShutdownMode=OnMainWindowClose` không thể vô tình đóng app khi người dùng bấm X.
 
 ---
 

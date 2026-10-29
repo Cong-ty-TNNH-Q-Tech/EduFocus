@@ -337,4 +337,38 @@ public sealed class ProtectionServiceTests
 
         harness.SettingsRow.ScheduleOverrideUntilUtc.Should().BeNull();
     }
+
+    [Fact]
+    public async Task Exit_disable_requires_an_authenticated_parent()
+    {
+        var harness = new ProtectionHarness();
+        harness.Session.Authenticate();
+        await harness.Service.EnableAsync();
+        harness.Session.Lock();
+
+        var act = () => harness.Service.DisableForExitAsync();
+
+        await act.Should().ThrowAsync<ParentAuthorizationException>();
+        harness.SettingsRow.ProtectionEnabled.Should().BeTrue();
+        harness.Sessions.Active.Should().NotBeNull();
+        harness.Engine.RemoveCount.Should().Be(0);
+    }
+
+    [Fact]
+    public async Task Exit_disable_inside_an_active_window_does_not_create_an_override()
+    {
+        var harness = new ProtectionHarness();
+        harness.SettingsRow.SetScheduleEnabled(true, ProtectionHarness.Start.UtcDateTime);
+        harness.ScheduleWindows.Windows.Add(
+            ScheduleWindow.Create(ScheduleDays.Thursday, 480, 540, "Giờ học", ProtectionHarness.Start.UtcDateTime));
+        harness.Session.Authenticate();
+        await harness.Service.EnableAsync();
+
+        var result = await harness.Service.DisableForExitAsync();
+
+        result.Status.IsEnabled.Should().BeFalse();
+        harness.SettingsRow.ProtectionEnabled.Should().BeFalse();
+        harness.SettingsRow.ScheduleOverrideUntilUtc.Should().BeNull();
+        harness.Sessions.Active.Should().BeNull();
+    }
 }

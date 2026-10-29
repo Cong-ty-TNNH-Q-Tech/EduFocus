@@ -16,6 +16,12 @@ public interface IProtectionUseCase
 
     Task<ProtectionOperationResult> DisableAsync(CancellationToken cancellationToken = default);
 
+    /// <summary>
+    /// Parent-authorized exit path (UC12): turns protection off without creating a
+    /// schedule override so the clean exit is not re-enforced on the next start.
+    /// </summary>
+    Task<ProtectionOperationResult> DisableForExitAsync(CancellationToken cancellationToken = default);
+
     Task<ProtectionOperationResult> ReconcileAsync(CancellationToken cancellationToken = default);
 
     /// <summary>System actor: turns protection on for an active schedule window.</summary>
