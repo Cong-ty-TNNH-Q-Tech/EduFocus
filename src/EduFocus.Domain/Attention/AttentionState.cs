@@ -16,5 +16,6 @@ public enum RawAttentionState
     Distracted,
     Absent,
     LowLight,
+    Drowsy,
     CameraUnavailable
 }

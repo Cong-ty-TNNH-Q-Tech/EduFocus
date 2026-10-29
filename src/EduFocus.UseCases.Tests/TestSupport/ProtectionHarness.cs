@@ -24,6 +24,8 @@ internal sealed class ProtectionHarness
 
     public FakeScheduleWindowRepository ScheduleWindows { get; } = new();
 
+    public FakeAttentionEventRepository AttentionEvents { get; } = new();
+
     public FakeProtectionEngine Engine { get; } = new();
 
     public FakeStudySessionHeartbeatUseCase Heartbeat { get; } = new();
@@ -49,6 +51,7 @@ internal sealed class ProtectionHarness
             Settings,
             Sessions,
             ScheduleWindows,
+            AttentionEvents,
             Engine,
             Heartbeat,
             Activity,

@@ -1,3 +1,4 @@
+using EduFocus.Domain.Attention;
 using EduFocus.Domain.Entities;
 using EduFocus.Domain.Enums;
 using EduFocus.Ports.Protection;
@@ -209,6 +210,57 @@ public sealed class ProtectionServiceTests
         harness.Audits.Entries.Select(x => x.EventType).Should().Equal(
             AuditEventType.SessionInterrupted,
             AuditEventType.SessionRecovered);
+    }
+
+    [Fact]
+    public async Task Reconcile_closes_open_attention_events_at_the_last_heartbeat()
+    {
+        var harness = new ProtectionHarness();
+        harness.SettingsRow.EnableProtection(ProtectionHarness.Start.UtcDateTime);
+        var stale = StudySession.Start(
+            ProtectionHarness.Start.UtcDateTime,
+            new DateOnly(2026, 10, 29),
+            SessionTrigger.Manual,
+            monitoringEnabled: true);
+        stale.Heartbeat(ProtectionHarness.Start.UtcDateTime.AddMinutes(5));
+        harness.Sessions.Sessions.Add(stale);
+
+        var open = AttentionEvent.Open(
+            stale.Id,
+            AttentionState.Focused,
+            ProtectionHarness.Start.UtcDateTime);
+        harness.AttentionEvents.Events.Add(open);
+        harness.Clock.Advance(TimeSpan.FromMinutes(10));
+
+        await harness.Service.ReconcileAsync();
+
+        harness.AttentionEvents.CloseOpenCalls.Should().ContainSingle().Which
+            .Should().Be(ProtectionHarness.Start.UtcDateTime.AddMinutes(5));
+        open.IsOpen.Should().BeFalse();
+        open.EndedAtUtc.Should().Be(ProtectionHarness.Start.UtcDateTime.AddMinutes(5));
+        open.DurationSeconds.Should().Be(300);
+    }
+
+    [Fact]
+    public async Task Reconcile_warns_when_open_attention_events_cannot_be_closed()
+    {
+        var harness = new ProtectionHarness();
+        harness.SettingsRow.EnableProtection(ProtectionHarness.Start.UtcDateTime);
+        var stale = StudySession.Start(
+            ProtectionHarness.Start.UtcDateTime,
+            new DateOnly(2026, 10, 29),
+            SessionTrigger.Manual,
+            monitoringEnabled: true);
+        harness.Sessions.Sessions.Add(stale);
+        harness.AttentionEvents.Events.Add(
+            AttentionEvent.Open(stale.Id, AttentionState.Focused, ProtectionHarness.Start.UtcDateTime));
+        harness.AttentionEvents.ThrowOnCloseOpen = true;
+
+        var result = await harness.Service.ReconcileAsync();
+
+        result.Changed.Should().BeTrue();
+        result.Warnings.Should().Contain("Không thể đóng attention event còn mở của phiên bị gián đoạn.");
+        harness.Sessions.Active.Should().NotBeNull();
     }
 
     [Fact]

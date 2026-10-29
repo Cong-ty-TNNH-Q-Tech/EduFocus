@@ -27,9 +27,13 @@ public sealed class ProtectionService : IProtectionUseCase
     private const string EngineCleanupWarning =
         "Không thể dọn tài nguyên bảo vệ còn sót. Hãy kiểm tra hosts file và tiến trình EduFocus.";
 
+    private const string AttentionEventWarning =
+        "Không thể đóng attention event còn mở của phiên bị gián đoạn.";
+
     private readonly IAppSettingsRepository _settings;
     private readonly IStudySessionRepository _sessions;
     private readonly IScheduleWindowRepository _scheduleWindows;
+    private readonly IAttentionEventRepository _attentionEvents;
     private readonly IProtectionEnginePort _engine;
     private readonly IStudySessionHeartbeatUseCase _heartbeat;
     private readonly IActivityUseCase _activity;
@@ -44,6 +48,7 @@ public sealed class ProtectionService : IProtectionUseCase
         IAppSettingsRepository settings,
         IStudySessionRepository sessions,
         IScheduleWindowRepository scheduleWindows,
+        IAttentionEventRepository attentionEvents,
         IProtectionEnginePort engine,
         IStudySessionHeartbeatUseCase heartbeat,
         IActivityUseCase activity,
@@ -56,6 +61,7 @@ public sealed class ProtectionService : IProtectionUseCase
         _settings = settings ?? throw new ArgumentNullException(nameof(settings));
         _sessions = sessions ?? throw new ArgumentNullException(nameof(sessions));
         _scheduleWindows = scheduleWindows ?? throw new ArgumentNullException(nameof(scheduleWindows));
+        _attentionEvents = attentionEvents ?? throw new ArgumentNullException(nameof(attentionEvents));
         _engine = engine ?? throw new ArgumentNullException(nameof(engine));
         _heartbeat = heartbeat ?? throw new ArgumentNullException(nameof(heartbeat));
         _activity = activity ?? throw new ArgumentNullException(nameof(activity));
@@ -367,6 +373,34 @@ public sealed class ProtectionService : IProtectionUseCase
         {
             active.Interrupt();
             await _sessions.UpdateAsync(active, cancellationToken);
+
+            try
+            {
+                var closed = await _attentionEvents.CloseOpenAsync(
+                    active.Id,
+                    active.LastHeartbeatAtUtc,
+                    cancellationToken);
+
+                if (closed > 0)
+                {
+                    _logger.Info(
+                        LogCategories.Attention,
+                        $"Closed {closed} open attention event(s) at the last heartbeat.");
+                }
+            }
+            catch (OperationCanceledException)
+            {
+                throw;
+            }
+            catch (Exception ex)
+            {
+                _logger.Error(
+                    LogCategories.Protection,
+                    "Could not close open attention events after a restart.",
+                    ex);
+                warnings.Add(AttentionEventWarning);
+            }
+
             await WriteAuditAsync(
                 AuditActor.System,
                 AuditEventType.SessionInterrupted,

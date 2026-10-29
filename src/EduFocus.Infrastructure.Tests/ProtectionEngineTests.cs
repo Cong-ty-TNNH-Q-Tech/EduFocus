@@ -1,3 +1,4 @@
+using EduFocus.Domain.Attention;
 using EduFocus.Domain.Entities;
 using EduFocus.Domain.Enums;
 using EduFocus.Domain.ValueObjects;
@@ -817,6 +818,31 @@ public sealed class ProtectionEngineTests
                     session.AddIdleSeconds(idleSeconds, stamp);
                 if (onlineClassSeconds > 0)
                     session.AddOnlineClassSeconds(onlineClassSeconds, stamp);
+
+                return Task.FromResult(true);
+            }
+        }
+
+        public Task<bool> AddAttentionSecondsAsync(
+            StudySessionId sessionId,
+            AttentionState state,
+            int seconds,
+            double? confidence,
+            DateTime nowUtc,
+            CancellationToken cancellationToken = default)
+        {
+            lock (_lock)
+            {
+                var session = Active;
+
+                if (session is null || session.Id != sessionId || !session.IsActive)
+                    return Task.FromResult(false);
+
+                var stamp = nowUtc < session.UpdatedAtUtc ? session.UpdatedAtUtc : nowUtc;
+                session.AddAttentionSeconds(state, seconds, stamp);
+
+                if (confidence is not null && state != AttentionState.CameraUnavailable)
+                    session.SetAttentionConfidence(confidence.Value, stamp);
 
                 return Task.FromResult(true);
             }

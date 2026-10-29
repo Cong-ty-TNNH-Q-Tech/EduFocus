@@ -20,6 +20,7 @@ internal sealed class ScheduleHarness
             Settings,
             Sessions,
             ScheduleWindows,
+            AttentionEvents,
             Engine,
             Heartbeat,
             Activity,
@@ -45,6 +46,8 @@ internal sealed class ScheduleHarness
     public FakeStudySessionRepository Sessions { get; } = new();
 
     public FakeScheduleWindowRepository ScheduleWindows { get; } = new();
+
+    public FakeAttentionEventRepository AttentionEvents { get; } = new();
 
     public FakeProtectionEngine Engine { get; } = new();
 

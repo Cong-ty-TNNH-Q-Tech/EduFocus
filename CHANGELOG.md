@@ -241,6 +241,15 @@ và dự án tuân theo [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 - **Spike harness:** `tools/AttentionPipelineSpike` chuyển sang `OpenCvCameraPort` + analyzer mới, giữ nguyên cách đo capture/detect; cập nhật README.
 - **Tests:** 22 test `AttentionPipelineService` (frame dispose trước event, camera/inference failure, timestamp, loop nhiều tick, loop tiếp tục sau lỗi, start idempotent/stop trước start, camera unavailable, log một lần, subscriber lỗi, serialize sample, cancel khi mở camera, validate options); tổng **669 test pass**, build Release 0 warning.
 
+### Added (Phase 5 — Attention state machine & events, issue #32)
+- **State machine ổn định:** `AttentionStateWindow` làm mượt trong cửa sổ trượt 5–10 giây (mặc định 6 giây, tối thiểu 3 mẫu, majority ≥ 60%, confidence trung bình) và `AttentionStateMachine` giữ debounce: Focused ngay, Distracted > 20 giây, Absent > 30 giây, Drowsy > 2 giây, LowLight → CameraUnavailable sau 30 giây. `CameraUnavailable` bỏ qua cửa sổ và reset mẫu để ghi nhận tức thì; lỗi inference (`Observation = null`) không bị tính thành `Absent`.
+- **AttentionEvent chỉ khi state đổi:** `AttentionMonitorService` nhận `AttentionSample` qua channel tuần tự, đóng event cũ tại mốc chuyển (clamp `EndedAtUtc ≥ StartedAtUtc`), mở event mới với state/confidence/note; `CameraUnavailable` có confidence `null`; gap > 5 giây bị bỏ khỏi thời gian cộng.
+- **Cộng giây attention:** `IStudySessionRepository.AddAttentionSecondsAsync` cập nhật counter và `ConfidenceAvg` trọng số trong một câu raw `UPDATE` (vì `MonitoredSeconds` là stored generated column), `UpdatedAtUtc` không lùi, chỉ trên session `Active`; `CameraUnavailable` nằm ngoài mẫu số attention và confidence.
+- **Drowsy có điều kiện:** `FaceObservation.EyesClosed` nullable; YuNet hiện không đo EAR nên production chưa phát `Drowsy`, classifier/state machine đã sẵn và được test bằng observation tổng hợp; `null` nghĩa là "không đoán".
+- **Recovery sau crash:** `ProtectionService.ReconcileAsync` đóng mọi `AttentionEvent` còn mở tại `LastHeartbeatAtUtc`; lỗi đóng event chỉ cảnh báo, không chặn phục hồi phiên.
+- **DI & stop:** composition root đăng ký `IAttentionEventRepository`/`SqliteAttentionEventRepository`, `AttentionThresholds`, `AttentionMonitoringOptions.Default`, `IAttentionMonitorUseCase`/`AttentionMonitorService`; monitor chưa start ở startup (thuộc #33).
+- **Tests:** +40 test — sliding window, classifier/state machine/Drowsy, 16 hành vi monitor (event đầu tiên, không event trùng, noise, Drowsy, camera, inference lỗi, confidence trọng số, lỗi DB/event retry, session kết thúc, restart/stop, options), repository attention event và counter/weighted confidence; tổng **709 test pass**, build Release 0 warning.
+
 ### Removed (khỏi phạm vi EduFocus)
 - Quản lý task, profile học tập, quote động lực và Gemini AI.
 - Cơ chế "friction" bắt gõ câu xác nhận bỏ cuộc.

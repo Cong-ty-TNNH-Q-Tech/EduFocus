@@ -133,6 +133,19 @@
 | Duration làm tròn giây | `Close` |
 | Note ≤ 256, app name ≤ 128 | `TextSanitizer` |
 | Không lưu frame/landmark (BR-13) | Domain không có field tương ứng |
+| Event chỉ mở khi state đổi; event cũ đóng trước khi mở event mới | `AttentionMonitorService` (issue #32) |
+| `CameraUnavailable` confidence NULL và không vào monitored/confidence trọng số | `ConfidenceFor`, repository (issue #32) |
+
+**Phân loại và ổn định trạng thái (`AttentionClassifier`, `AttentionStateWindow`, `AttentionStateMachine`):**
+
+| Invariant | Thực thi |
+|---|---|
+| Focused commit ngay; Distracted/Absent/Drowsy cần đủ 20/30/2 giây | `AttentionStateMachine` |
+| LowLight commit `CameraUnavailable` sau 30 giây | `AttentionStateMachine` |
+| Cửa sổ 5–10 giây: tối thiểu 3 mẫu, majority ≥ 60%, confidence trung bình | `AttentionStateWindow` |
+| `CameraUnavailable` bỏ qua window và reset mẫu | `AttentionStateWindow.Observe` |
+| `EyesClosed = null` không suy đoán Drowsy | `AttentionClassifier` |
+| Mỗi tick chỉ cộng thời gian khi state đã xác định; gap > `MaxSampleGap` bị bỏ | `AttentionMonitorService` (issue #32) |
 
 ### 2.8. `BlockedAttempt`
 
@@ -212,6 +225,7 @@ Các rule cần quyền phụ huynh (BR-05), watchdog (BR-28), block page (BR-26
 | `BlockedAttemptTests` | Observation channel, normalization |
 | `ActivityClassifierTests`, `OnlineClassDetectorTests` | Rule snapshot, online class overlay, block/allow precedence, Unknown/Neutral, nhận diện Meet/Teams/Zoom và âm bản chat |
 | `MonitoringEligibilityTests` | Truth table monitoring/only-class/online-class và mẫu số coverage |
+| `AttentionClassifierTests`, `AttentionStateMachineTests`, `AttentionStateWindowTests` | Phân loại Drowsy/eyes-closed, debounce 20/30/2 giây, majority/prune/camera bypass |
 | `AuditLogTests` | Kích thước, correlation, timestamp |
 | `DomainNameTests`, `PrivacySanitizerTests` | Normalization và privacy helper |
 

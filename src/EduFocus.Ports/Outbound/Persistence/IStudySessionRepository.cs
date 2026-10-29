@@ -1,3 +1,4 @@
+using EduFocus.Domain.Attention;
 using EduFocus.Domain.Entities;
 using EduFocus.Domain.Enums;
 using EduFocus.Domain.ValueObjects;
@@ -51,6 +52,20 @@ public interface IStudySessionRepository
         int categorySeconds,
         int idleSeconds,
         int onlineClassSeconds,
+        DateTime nowUtc,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Adds attention seconds to an Active session with a targeted increment.
+    /// <paramref name="confidence"/> updates the session's duration-weighted
+    /// average and must be null for CameraUnavailable, which never enters the
+    /// attention denominator. Returns false when the session already ended.
+    /// </summary>
+    Task<bool> AddAttentionSecondsAsync(
+        StudySessionId sessionId,
+        AttentionState state,
+        int seconds,
+        double? confidence,
         DateTime nowUtc,
         CancellationToken cancellationToken = default);
 }

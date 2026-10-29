@@ -75,6 +75,46 @@ public class AttentionClassifierTests
     }
 
     [Fact]
+    public void Classify_EyesClosed_ReturnsDrowsy()
+    {
+        var drowsy = Frontal with { EyesClosed = true };
+
+        var result = AttentionClassifier.Classify(drowsy, luminance: 120, Thresholds);
+
+        result.State.Should().Be(RawAttentionState.Drowsy);
+        result.Reason.Should().Be("eyes-closed");
+        result.Confidence.Should().Be(0.92f);
+    }
+
+    [Fact]
+    public void Classify_EyesOpen_ReturnsFocused()
+    {
+        var result = AttentionClassifier.Classify(Frontal with { EyesClosed = false }, 120, Thresholds);
+
+        result.State.Should().Be(RawAttentionState.Focused);
+    }
+
+    [Fact]
+    public void Classify_UnknownEyeState_DoesNotGuessDrowsy()
+    {
+        var result = AttentionClassifier.Classify(Frontal with { EyesClosed = null }, 120, Thresholds);
+
+        result.State.Should().Be(RawAttentionState.Focused);
+        result.Reason.Should().Be("frontal");
+    }
+
+    [Fact]
+    public void Classify_NoFace_IgnoresEyeState()
+    {
+        var result = AttentionClassifier.Classify(
+            FaceObservation.NoFace with { EyesClosed = true },
+            luminance: 120,
+            Thresholds);
+
+        result.State.Should().Be(RawAttentionState.Absent);
+    }
+
+    [Fact]
     public void Classify_NoLandmarks_UsesWiderCenteringThreshold()
     {
         var centered = Frontal with

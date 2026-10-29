@@ -24,6 +24,7 @@ internal sealed class LifecycleHarness
             Settings,
             Sessions,
             ScheduleWindows,
+            AttentionEvents,
             Engine,
             Heartbeat,
             Activity,
@@ -50,6 +51,8 @@ internal sealed class LifecycleHarness
     public FakeStudySessionRepository Sessions { get; } = new();
 
     public FakeScheduleWindowRepository ScheduleWindows { get; } = new();
+
+    public FakeAttentionEventRepository AttentionEvents { get; } = new();
 
     public FakeProtectionEngine Engine { get; } = new();
 

@@ -1,3 +1,4 @@
+using EduFocus.Domain.Attention;
 using EduFocus.Domain.Entities;
 using EduFocus.Domain.Enums;
 using EduFocus.Domain.ValueObjects;
@@ -19,9 +20,13 @@ internal sealed class FakeStudySessionRepository : IStudySessionRepository
 
     public bool ThrowOnActivity { get; set; }
 
+    public bool ThrowOnAttention { get; set; }
+
     public int IncrementBlockedCalls { get; private set; }
 
     public List<ActivityWriteCall> ActivityWrites { get; } = [];
+
+    public List<AttentionWriteCall> AttentionWrites { get; } = [];
 
     public StudySession? Active => Sessions.SingleOrDefault(session => session.IsActive);
 
@@ -127,6 +132,42 @@ internal sealed class FakeStudySessionRepository : IStudySessionRepository
         return Task.FromResult(true);
     }
 
+    public Task<bool> AddAttentionSecondsAsync(
+        StudySessionId sessionId,
+        AttentionState state,
+        int seconds,
+        double? confidence,
+        DateTime nowUtc,
+        CancellationToken cancellationToken = default)
+    {
+        if (ThrowOnAttention)
+            throw new InvalidOperationException("The session store is unavailable.");
+
+        var session = Sessions.SingleOrDefault(x => x.Id == sessionId && x.IsActive);
+
+        if (session is null)
+            return Task.FromResult(false);
+
+        var stamp = nowUtc < session.UpdatedAtUtc ? session.UpdatedAtUtc : nowUtc;
+        var monitoredBefore = session.MonitoredSeconds -
+            (state == AttentionState.CameraUnavailable ? 0 : seconds);
+
+        session.AddAttentionSeconds(state, seconds, stamp);
+
+        if (confidence is not null && state != AttentionState.CameraUnavailable)
+        {
+            var weighted = monitoredBefore <= 0 || session.ConfidenceAvg is null
+                ? confidence.Value
+                : (session.ConfidenceAvg.Value * monitoredBefore + confidence.Value * seconds)
+                    / (monitoredBefore + seconds);
+
+            session.SetAttentionConfidence(weighted, stamp);
+        }
+
+        AttentionWrites.Add(new AttentionWriteCall(sessionId, state, seconds, confidence, nowUtc));
+        return Task.FromResult(true);
+    }
+
     public readonly record struct HeartbeatCall(
         StudySessionId SessionId,
         DateTime HeartbeatAtUtc,
@@ -138,5 +179,12 @@ internal sealed class FakeStudySessionRepository : IStudySessionRepository
         int CategorySeconds,
         int IdleSeconds,
         int OnlineClassSeconds,
+        DateTime NowUtc);
+
+    public readonly record struct AttentionWriteCall(
+        StudySessionId SessionId,
+        AttentionState State,
+        int Seconds,
+        double? Confidence,
         DateTime NowUtc);
 }

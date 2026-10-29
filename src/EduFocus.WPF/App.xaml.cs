@@ -1,5 +1,6 @@
 using System.IO;
 using System.Windows;
+using EduFocus.Domain.Attention;
 using EduFocus.Domain.Protection;
 using EduFocus.Infrastructure;
 using EduFocus.Infrastructure.Attention;
@@ -126,6 +127,7 @@ public partial class App : Application
         services.AddSingleton<IParentCredentialRepository, SqliteParentCredentialRepository>();
         services.AddSingleton<IAuditLogRepository, SqliteAuditLogRepository>();
         services.AddSingleton<IStudySessionRepository, SqliteStudySessionRepository>();
+        services.AddSingleton<IAttentionEventRepository, SqliteAttentionEventRepository>();
         services.AddSingleton<IScheduleWindowRepository, SqliteScheduleWindowRepository>();
         services.AddSingleton<IBlockRuleRepository, SqliteBlockRuleRepository>();
         services.AddSingleton<IBlockedAttemptRepository, SqliteBlockedAttemptRepository>();
@@ -150,6 +152,9 @@ public partial class App : Application
                 provider.GetRequiredService<AttentionAnalyzerOptions>(),
                 Path.Combine(AppContext.BaseDirectory, "models")));
         services.AddSingleton<IAttentionPipelineUseCase, AttentionPipelineService>();
+        services.AddSingleton(new AttentionThresholds());
+        services.AddSingleton(AttentionMonitoringOptions.Default);
+        services.AddSingleton<IAttentionMonitorUseCase, AttentionMonitorService>();
         services.AddSingleton(BuiltInRuleCatalog.Default);
         services.AddSingleton<IBlockRuleSeedUseCase, BlockRuleSeedService>();
         services.AddSingleton<IBlockRuleUseCase, BlockRuleService>();

@@ -340,6 +340,14 @@ Singleton.
 - Khi session/monitoring dừng, event đang mở được đóng tại thời điểm dừng; khi crash, đóng tại `LastHeartbeatAtUtc`.
 - `Confidence` của session là trung bình có trọng số theo `DurationSeconds`, không phải trung bình cộng đơn giản.
 - Không lưu frame, landmark hay embedding.
+- **Triển khai issue #32:** `SqliteAttentionEventRepository` thêm/đóng event; `GetOpenAsync` lấy event mở mới
+  nhất của session; `CloseOpenAsync` đóng mọi event mở tại mốc cho trước và clamp về `StartedAtUtc` nếu mốc
+  sớm hơn — dùng khi reconcile sau crash với `LastHeartbeatAtUtc`. `AttentionMonitorService` chỉ mở event khi
+  state đổi nên không có event trùng lặp; event `CameraUnavailable` có `Confidence = NULL`.
+- **Cộng counter attention:** `FocusedSeconds`/`DistractedSeconds`/`AbsentSeconds`/`DrowsySeconds`/
+  `CameraUnavailableSeconds` và `ConfidenceAvg` trọng số được cộng trong một câu raw `UPDATE` (SQLite dùng
+  giá trị dòng cũ cho mọi biểu thức SET); `MonitoredSeconds`/`AttentionPercent`/`CoveragePercent` vẫn do
+  stored generated column tính. `CameraUnavailableSeconds` cộng riêng và không vào confidence.
 
 ---
 

@@ -20,6 +20,11 @@ public static class AttentionClassifier
             return new AttentionClassification(RawAttentionState.Absent, 0.5f, "no-face");
         }
 
+        // Eye closure is only available when the model supplies an EAR-like
+        // signal; a null value means "unknown, do not guess".
+        if (observation.EyesClosed == true)
+            return new AttentionClassification(RawAttentionState.Drowsy, observation.Confidence, "eyes-closed");
+
         var frontal = observation.LandmarksAvailable
             ? observation.HeadYawRatio <= thresholds.YawRatio && observation.HeadPitchRatio <= thresholds.PitchRatio
             : observation.HeadYawRatio <= thresholds.NoLandmarkYawRatio &&

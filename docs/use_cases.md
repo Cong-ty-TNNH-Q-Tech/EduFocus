@@ -538,12 +538,20 @@
 > thiết bị. `CameraStatusViewModel` hiển thị trạng thái và hướng dẫn quyền trong cửa sổ chính/tray. Việc
 > phân tích frame, ghi `AttentionEvent`/`CameraUnavailable` và cộng thời gian monitored thuộc #31–#33.
 
+> **Triển khai (issue #32):** `AttentionMonitorService` biến `AttentionSample` thành state ổn định qua
+> `AttentionStateWindow` (cửa sổ 6 giây, tối thiểu 3 mẫu, majority ≥ 60%) rồi `AttentionStateMachine`
+> (Focused ngay, Distracted > 20 giây, Absent > 30 giây, Drowsy > 2 giây). `AttentionEvent` chỉ mở/đóng khi
+> state đổi; `CameraUnavailable` ghi nhận ngay và không vào mẫu số attention; inference lỗi không bị tính là
+> `Absent`; gap > 5 giây không cộng thời gian. `ConfidenceAvg` được cập nhật trọng số trong cùng `UPDATE`
+> với counter. Crash đóng event đang mở tại `LastHeartbeatAtUtc`. Việc start/stop monitor theo phiên học,
+> cộng `MonitoringEligibleSeconds` và tính coverage thuộc #33.
+
 > **Triển khai (issue #31):** `AttentionPipelineService` chạy vòng sampling 1 FPS qua `ICameraSessionUseCase`,
 > gọi `IAttentionFrameAnalyzer` trên từng `CameraFrame` và phát `AttentionSample` sau khi đã dispose frame.
 > Sample camera lỗi có `CameraFailure` + `Observation = null`; sample inference lỗi có `Error` nhưng giữ
-> `CameraFailure = None`, để #32/#33 không biến lỗi kỹ thuật thành `Absent`. `OpenCvAttentionFrameAnalyzer`
+> `CameraFailure = None`, để monitor (#32) không biến lỗi kỹ thuật thành `Absent`. `OpenCvAttentionFrameAnalyzer`
 > không còn mở camera; nó chỉ nhận frame BGR24 managed, tính luminance và chạy YuNet/Haar. Classifier,
-> state machine, `AttentionEvent` và coverage thuộc #32–#33.
+> state machine và `AttentionEvent` đã có ở #32; coverage/eligibility thuộc #33.
 
 ---
 

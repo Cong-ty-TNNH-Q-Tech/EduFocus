@@ -319,6 +319,90 @@ public sealed class StudySessionRepositoryTests
         summary.MonitoringEnabled.Should().BeTrue();
     }
 
+    [Fact]
+    public async Task Attention_seconds_update_counters_and_weighted_confidence()
+    {
+        await using var db = new TempDatabase();
+        await db.CreateInitializer().InitializeAsync();
+
+        var repository = new SqliteStudySessionRepository(db.Options);
+        var session = StudySession.Start(Now, new DateOnly(2026, 10, 29), SessionTrigger.Manual, true);
+        await repository.AddAsync(session);
+
+        (await repository.AddAttentionSecondsAsync(
+            session.Id, AttentionState.Focused, 10, 0.8, Now.AddSeconds(10)))
+            .Should().BeTrue();
+        (await repository.AddAttentionSecondsAsync(
+            session.Id, AttentionState.Distracted, 20, 0.5, Now.AddSeconds(30)))
+            .Should().BeTrue();
+        (await repository.AddAttentionSecondsAsync(
+            session.Id, AttentionState.Absent, 5, 0.4, Now.AddSeconds(40)))
+            .Should().BeTrue();
+        (await repository.AddAttentionSecondsAsync(
+            session.Id, AttentionState.Drowsy, 5, 0.2, Now.AddSeconds(45)))
+            .Should().BeTrue();
+        (await repository.AddAttentionSecondsAsync(
+            session.Id, AttentionState.CameraUnavailable, 30, null, Now.AddSeconds(75)))
+            .Should().BeTrue();
+
+        var reloaded = await ReadSessionAsync(db, session.Id.Value);
+        reloaded.FocusedSeconds.Should().Be(10);
+        reloaded.DistractedSeconds.Should().Be(20);
+        reloaded.AbsentSeconds.Should().Be(5);
+        reloaded.DrowsySeconds.Should().Be(5);
+        reloaded.CameraUnavailableSeconds.Should().Be(30);
+        reloaded.MonitoredSeconds.Should().Be(40);
+        reloaded.ConfidenceAvg.Should().BeApproximately(0.525, 0.0001);
+        reloaded.AttentionPercent.Should().BeApproximately(25, 0.0001);
+        reloaded.UpdatedAtUtc.Should().Be(Now.AddSeconds(75));
+    }
+
+    [Fact]
+    public async Task Attention_seconds_reject_invalid_input_and_inactive_sessions()
+    {
+        await using var db = new TempDatabase();
+        await db.CreateInitializer().InitializeAsync();
+
+        var repository = new SqliteStudySessionRepository(db.Options);
+        var session = StudySession.Start(Now, new DateOnly(2026, 10, 29), SessionTrigger.Manual, true);
+        await repository.AddAsync(session);
+
+        var negative = () => repository.AddAttentionSecondsAsync(
+            session.Id, AttentionState.Focused, -1, 0.5, Now);
+        await negative.Should().ThrowAsync<ArgumentOutOfRangeException>();
+
+        var confidence = () => repository.AddAttentionSecondsAsync(
+            session.Id, AttentionState.Focused, 1, 1.5, Now);
+        await confidence.Should().ThrowAsync<ArgumentOutOfRangeException>();
+
+        var undefined = () => repository.AddAttentionSecondsAsync(
+            session.Id, (AttentionState)99, 1, 0.5, Now);
+        await undefined.Should().ThrowAsync<ArgumentOutOfRangeException>();
+
+        var localTime = () => repository.AddAttentionSecondsAsync(
+            session.Id,
+            AttentionState.Focused,
+            1,
+            0.5,
+            DateTime.SpecifyKind(Now, DateTimeKind.Unspecified));
+        await localTime.Should().ThrowAsync<ArgumentException>();
+
+        (await repository.AddAttentionSecondsAsync(
+            session.Id, AttentionState.Focused, 0, null, Now))
+            .Should().BeTrue();
+
+        session.Complete(Now.AddMinutes(30));
+        await repository.UpdateAsync(session);
+
+        (await repository.AddAttentionSecondsAsync(
+            session.Id, AttentionState.Focused, 5, 0.5, Now.AddMinutes(31)))
+            .Should().BeFalse();
+
+        var reloaded = await ReadSessionAsync(db, session.Id.Value);
+        reloaded.FocusedSeconds.Should().Be(0);
+        reloaded.ConfidenceAvg.Should().BeNull();
+    }
+
     private static async Task<StudySession> ReadSessionAsync(TempDatabase db, Guid id)
     {
         await using var context = db.CreateContext();

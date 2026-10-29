@@ -119,6 +119,47 @@ public class AttentionStateMachineTests
     }
 
     [Fact]
+    public void Update_DrowsyForThreshold_CommitsDrowsy()
+    {
+        var drowsy = Classify(Frontal with { EyesClosed = true }, 120);
+        var machine = new AttentionStateMachine(Thresholds);
+        machine.Update(Focused, Start);
+
+        machine.Update(drowsy, Start.AddSeconds(1));
+        machine.CurrentState.Should().Be(AttentionState.Focused);
+
+        machine.Update(drowsy, Start.AddSeconds(3));
+        machine.CurrentState.Should().Be(AttentionState.Drowsy);
+    }
+
+    [Fact]
+    public void Update_DrowsyShorterThanThreshold_StaysFocused()
+    {
+        var drowsy = Classify(Frontal with { EyesClosed = true }, 120);
+        var machine = new AttentionStateMachine(Thresholds);
+        machine.Update(Focused, Start);
+
+        machine.Update(drowsy, Start.AddSeconds(1));
+        machine.Update(drowsy, Start.AddSeconds(2));
+
+        machine.CurrentState.Should().Be(AttentionState.Focused);
+    }
+
+    [Fact]
+    public void Update_EyesReopen_LeavesDrowsyImmediately()
+    {
+        var drowsy = Classify(Frontal with { EyesClosed = true }, 120);
+        var machine = new AttentionStateMachine(Thresholds);
+        machine.Update(Focused, Start);
+        machine.Update(drowsy, Start.AddSeconds(1));
+        machine.Update(drowsy, Start.AddSeconds(3));
+
+        machine.Update(Focused, Start.AddSeconds(4));
+
+        machine.CurrentState.Should().Be(AttentionState.Focused);
+    }
+
+    [Fact]
     public void Update_CandidateChanges_ResetsDebounce()
     {
         var machine = new AttentionStateMachine(Thresholds);

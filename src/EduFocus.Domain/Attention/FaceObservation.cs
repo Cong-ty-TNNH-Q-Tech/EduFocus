@@ -19,7 +19,8 @@ public sealed record FaceObservation(
     int EyeCount,
     double HeadYawRatio,
     double HeadPitchRatio,
-    bool LandmarksAvailable)
+    bool LandmarksAvailable,
+    bool? EyesClosed = null)
 {
     public static FaceObservation CameraUnavailable { get; } = new(
         CameraAvailable: false,

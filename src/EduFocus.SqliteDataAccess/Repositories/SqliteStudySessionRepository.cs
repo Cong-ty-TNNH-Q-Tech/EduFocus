@@ -1,7 +1,9 @@
+using EduFocus.Domain.Attention;
 using EduFocus.Domain.Entities;
 using EduFocus.Domain.Enums;
 using EduFocus.Domain.ValueObjects;
 using EduFocus.Ports.Outbound.Persistence;
+using EduFocus.SqliteDataAccess.Converters;
 using EduFocus.SqliteDataAccess.Persistence;
 using Microsoft.EntityFrameworkCore;
 
@@ -163,6 +165,78 @@ public sealed class SqliteStudySessionRepository : IStudySessionRepository
                         x => x.UpdatedAtUtc < nowUtc ? nowUtc : x.UpdatedAtUtc),
                 cancellationToken)
         };
+
+        return affected > 0;
+    }
+
+    public async Task<bool> AddAttentionSecondsAsync(
+        StudySessionId sessionId,
+        AttentionState state,
+        int seconds,
+        double? confidence,
+        DateTime nowUtc,
+        CancellationToken cancellationToken = default)
+    {
+        if (!Enum.IsDefined(state))
+            throw new ArgumentOutOfRangeException(nameof(state), state, "Unknown attention state.");
+        if (seconds < 0)
+            throw new ArgumentOutOfRangeException(nameof(seconds), seconds, "Seconds cannot be negative.");
+        if (confidence is < 0 or > 1)
+            throw new ArgumentOutOfRangeException(nameof(confidence), confidence, "Confidence must be between 0 and 1.");
+        if (nowUtc.Kind != DateTimeKind.Utc)
+            throw new ArgumentException("The timestamp must be UTC.", nameof(nowUtc));
+
+        if (seconds == 0)
+            return true;
+
+        var column = state switch
+        {
+            AttentionState.Focused => "FocusedSeconds",
+            AttentionState.Distracted => "DistractedSeconds",
+            AttentionState.Absent => "AbsentSeconds",
+            AttentionState.Drowsy => "DrowsySeconds",
+            AttentionState.CameraUnavailable => "CameraUnavailableSeconds",
+            _ => throw new ArgumentOutOfRangeException(nameof(state), state, "Unknown attention state.")
+        };
+
+        // The generated MonitoredSeconds column is not updatable, so the
+        // weighted confidence is computed inline from the four monitored
+        // counters. SQLite evaluates every SET expression against the old row,
+        // which is exactly what the weight formula needs. A null confidence
+        // (camera unavailable) leaves ConfidenceAvg untouched and stays
+        // outside the denominator.
+        var sql = confidence is null
+            ? $$"""
+                UPDATE "StudySessions"
+                SET "{{column}}" = "{{column}}" + {0},
+                    "UpdatedAtUtc" = CASE WHEN "UpdatedAtUtc" < {1} THEN {1} ELSE "UpdatedAtUtc" END
+                WHERE "Id" = {2} AND "Status" = 'Active';
+                """
+            : $$"""
+                UPDATE "StudySessions"
+                SET "{{column}}" = "{{column}}" + {0},
+                    "ConfidenceAvg" = CASE
+                        WHEN ("FocusedSeconds" + "DistractedSeconds" + "AbsentSeconds" + "DrowsySeconds") <= 0
+                            THEN {1}
+                        ELSE (
+                            COALESCE("ConfidenceAvg", 0) * ("FocusedSeconds" + "DistractedSeconds" + "AbsentSeconds" + "DrowsySeconds")
+                            + {1} * {0})
+                            / (("FocusedSeconds" + "DistractedSeconds" + "AbsentSeconds" + "DrowsySeconds") + {0})
+                    END,
+                    "UpdatedAtUtc" = CASE WHEN "UpdatedAtUtc" < {2} THEN {2} ELSE "UpdatedAtUtc" END
+                WHERE "Id" = {3} AND "Status" = 'Active';
+                """;
+
+        // Raw SQL bypasses the UTC value converter, so the timestamp must use
+        // the same storage format for the lexicographic comparison to work.
+        var storedNow = UtcDateTimeConverter.ToStorage(nowUtc);
+        var parameters = confidence is null
+            ? new object[] { seconds, storedNow, sessionId.Value }
+            : new object[] { seconds, confidence.Value, storedNow, sessionId.Value };
+
+        await using var context = new EduFocusDbContext(_dbContextOptions);
+
+        var affected = await context.Database.ExecuteSqlRawAsync(sql, parameters, cancellationToken);
 
         return affected > 0;
     }
