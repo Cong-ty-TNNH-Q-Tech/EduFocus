@@ -15,7 +15,7 @@ public class ProfileTests
     [InlineData(null)]
     public void Constructor_WithEmptyName_ShouldThrowArgumentException(string? invalidName)
     {
-        Action act = () => new Profile(invalidName, false);
+        Action act = () => new Profile(invalidName!, false);
         act.Should().Throw<ArgumentException>();
     }
 

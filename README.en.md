@@ -104,9 +104,9 @@ Protection turns off with PIN or when the schedule window ends
 
 | Layer | Technology |
 |---|---|
-| **UI** | WPF .NET 10 LTS (target; code still targets `net9.0` and must be upgraded), MaterialDesignInXAML, CommunityToolkit.Mvvm |
+| **UI** | WPF .NET 10 LTS, MaterialDesignInXAML, CommunityToolkit.Mvvm |
 | **Architecture** | Clean Architecture + Ports & Adapters |
-| **Database** | SQLite + EF Core 10 (target; currently EF Core 9) |
+| **Database** | SQLite + EF Core 10 |
 | **Blocking** | Windows hosts file (exact domains) + local HTTP block page |
 | **Activity** | Win32 foreground window, WMI, UI Automation |
 | **Attention** | OpenCvSharp4 + ONNX Runtime (MediaPipe Face/Iris) |
@@ -142,7 +142,7 @@ Run tests:
 dotnet test src/EduFocus.Domain.Tests/EduFocus.Domain.Tests.csproj
 ```
 
-> The WPF app still targets `net9.0` (support ends November 10, 2026) while tests target `net10.0`; Phase 1 will move the entire solution to .NET 10 LTS and EF Core 10 before release.
+> The entire solution targets .NET 10 LTS and EF Core 10; Windows 11 23H2+ is the primary platform, Windows 10 22H2 is best-effort.
 
 ---
 

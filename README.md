@@ -104,9 +104,9 @@ Tắt Protection bằng PIN hoặc hết khung giờ
 
 | Layer | Công nghệ |
 |---|---|
-| **UI** | WPF .NET 10 LTS (mục tiêu; code hiện tại vẫn `net9.0` và cần nâng cấp), MaterialDesignInXAML, CommunityToolkit.Mvvm |
+| **UI** | WPF .NET 10 LTS, MaterialDesignInXAML, CommunityToolkit.Mvvm |
 | **Architecture** | Clean Architecture + Ports & Adapters |
-| **Database** | SQLite + EF Core 10 (mục tiêu; code hiện tại EF Core 9) |
+| **Database** | SQLite + EF Core 10 |
 | **Blocking** | Windows hosts file (domain exact) + local HTTP block page |
 | **Activity** | Win32 foreground window, WMI, UI Automation |
 | **Attention** | OpenCvSharp4 + ONNX Runtime (MediaPipe Face/Iris) |
@@ -142,7 +142,7 @@ Chạy test:
 dotnet test src/EduFocus.Domain.Tests/EduFocus.Domain.Tests.csproj
 ```
 
-> WPF hiện target `net9.0` (hết hỗ trợ 10/11/2026) trong khi tests target `net10.0`; Phase 1 sẽ nâng toàn bộ solution lên .NET 10 LTS và EF Core 10 trước release.
+> Toàn bộ solution target .NET 10 LTS và EF Core 10; Windows 11 23H2+ là nền tảng chính, Windows 10 22H2 chỉ best-effort.
 
 ---
 

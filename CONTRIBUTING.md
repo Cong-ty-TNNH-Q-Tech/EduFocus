@@ -38,7 +38,7 @@ git checkout -b fix/mo-ta-loi
 **Yêu cầu**
 
 - Windows 11 23H2+ (64-bit) — chính; Windows 10 22H2 chỉ best-effort
-- .NET 10 SDK (tests target `net10.0`; WPF hiện vẫn `net9.0` và cần nâng cấp ở Phase 1)
+- .NET 10 SDK (toàn bộ project target `net10.0`/`net10.0-windows`)
 - Visual Studio 2022 (hoặc Rider) với workload **.NET desktop development**
 - SQLite tooling (tùy chọn, để xem DB)
 
@@ -61,7 +61,7 @@ Chạy test:
 dotnet test src/EduFocus.Domain.Tests/EduFocus.Domain.Tests.csproj
 ```
 
-> WPF hiện target `net9.0` (hết hỗ trợ 10/11/2026) trong khi `Domain.Tests` target `net10.0`. Phase 1 sẽ nâng toàn bộ solution lên .NET 10 LTS và EF Core 10; không tự đổi target trong PR tính năng.
+> Toàn bộ solution target .NET 10 LTS và EF Core 10. Chạy `dotnet tool restore` để cài đúng `dotnet-ef` 10.0.14 trước khi làm việc với migration.
 
 ### 4. Commit
 

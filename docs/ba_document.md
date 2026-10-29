@@ -418,9 +418,9 @@ EduFocus cung cấp một lớp bảo vệ và quan sát **tối thiểu, minh b
 
 | Thành phần | Công nghệ |
 |---|---|
-| UI | WPF .NET 10 LTS (mục tiêu; code hiện tại vẫn `net9.0`, hết hỗ trợ 10/11/2026, cần nâng cấp), MaterialDesignInXAML, CommunityToolkit.Mvvm |
+| UI | WPF .NET 10 LTS, MaterialDesignInXAML, CommunityToolkit.Mvvm |
 | Architecture | Clean Architecture + Ports & Adapters |
-| Database | SQLite + EF Core 10 (mục tiêu; code hiện tại EF Core 9) |
+| Database | SQLite + EF Core 10 |
 | Chặn web | Windows hosts file + local HTTP block page (MVP, domain-level) |
 | Chặn URL/path | Browser extension (Post-MVP) |
 | Process / foreground window | Win32 API (`GetForegroundWindow`, WMI, `Process`) |
@@ -431,7 +431,7 @@ EduFocus cung cấp một lớp bảo vệ và quan sát **tối thiểu, minh b
 | CI/CD | GitHub Actions |
 | Logging | File logger xoay vòng theo ngày, không ghi dữ liệu nhạy cảm |
 
-> Spike #4 (2026-10-29) đã xác nhận build/test/publish và MSI trên .NET 10 + EF Core 10; danh sách thay đổi bắt buộc, rollback và checklist DPIA ở [`docs/spikes/net10-ef10-dpia-evaluation.md`](./spikes/net10-ef10-dpia-evaluation.md).
+> Spike #4 (2026-10-29) đã xác nhận build/test/publish và MSI trên .NET 10 + EF Core 10; các thay đổi bắt buộc đã áp dụng ở issue #6. Danh sách thay đổi, rollback và checklist DPIA ở [`docs/spikes/net10-ef10-dpia-evaluation.md`](./spikes/net10-ef10-dpia-evaluation.md).
 
 ---
 

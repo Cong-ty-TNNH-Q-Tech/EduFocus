@@ -1,4 +1,5 @@
 using System.Net.Http;
+using System.Runtime.Versioning;
 using EduFocus.Ports.Outbound.Services;
 using EduFocus.Infrastructure.Services;
 using EduFocus.Infrastructure.Logging;
@@ -8,6 +9,7 @@ namespace EduFocus.Infrastructure;
 
 public static class InfrastructureServiceCollectionExtensions
 {
+    [SupportedOSPlatform("windows")]
     public static IServiceCollection AddInfrastructureServices(this IServiceCollection services)
     {
         services.AddSingleton<IMonotonicClockPort, MonotonicClockAdapter>();

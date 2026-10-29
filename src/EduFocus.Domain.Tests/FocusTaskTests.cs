@@ -27,7 +27,7 @@ public class FocusTaskTests
     [InlineData(null)]
     public void Constructor_WithEmptyName_ShouldThrowArgumentException(string? invalidName)
     {
-        Action act = () => new FocusTask(invalidName, 60);
+        Action act = () => new FocusTask(invalidName!, 60);
         act.Should().Throw<ArgumentException>().WithMessage("*Task name must be between 1 and 200 characters.*");
     }
 
@@ -92,7 +92,7 @@ public class FocusTaskTests
     public void SetRecurring_ValidConfig_ShouldUpdate()
     {
         var task = new FocusTask("Valid Name", 60);
-        task.SetRecurring(RecurringType.Daily, null);
+        task.SetRecurring(RecurringType.Daily, null!);
 
         task.TaskType.Should().Be(TaskType.Recurring);
         task.RecurringType.Should().Be(RecurringType.Daily);

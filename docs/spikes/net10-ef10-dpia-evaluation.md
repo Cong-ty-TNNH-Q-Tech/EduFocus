@@ -2,7 +2,7 @@
 
 - **Issue:** [#4 - Spike: Xác nhận .NET 10/EF Core 10 và DPIA sơ bộ](https://github.com/Cong-ty-TNNH-Q-Tech/EduFocus/issues/4)
 - **Ngày đo:** 2026-10-29
-- **Trạng thái:** Spike hoàn tất; các thay đổi Phase 1 chờ review trước khi triển khai
+- **Trạng thái:** Spike hoàn tất; các thay đổi bắt buộc đã được áp dụng ở issue #6 (2026-10-29)
 - **Phạm vi:** kiểm tra .NET 10 SDK, WPF `net10.0-windows`, EF Core 10, WiX và các package hiện dùng; xác định điểm vỡ, thứ tự migration, rollback; lập data map và checklist DPIA sơ bộ theo Luật BVDLCN 91/2025/QH15 và Nghị định 356/2025/NĐ-CP.
 
 > **Ghi chú lịch sử:** spike được đo trước issue #5, nên lệnh, đường dẫn và tên artifact trong tài liệu giữ tên cũ `DontBeLazy.*`. Sau đổi tên, thay bằng `EduFocus.*` (ví dụ `EduFocus.slnx`, `src/EduFocus.WPF`, `edufocus.db`).

@@ -193,7 +193,7 @@ public partial class App : Application
             if (key != null)
             {
                 if (enable)
-                    key.SetValue("EduFocus", System.Environment.ProcessPath ?? System.Reflection.Assembly.GetExecutingAssembly().Location);
+                    key.SetValue("EduFocus", System.Environment.ProcessPath ?? Path.Combine(AppContext.BaseDirectory, "EduFocus.exe"));
                 else
                     key.DeleteValue("EduFocus", false);
             }
