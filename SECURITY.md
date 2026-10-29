@@ -17,7 +17,8 @@ EduFocus đang ở giai đoạn **Pre-release / đang chuyển đổi**. Bảng 
 EduFocus là ứng dụng desktop **local-first** dành cho phụ huynh giám sát hoạt động học tập trên máy tính của con. Ứng dụng can thiệp vào hệ thống ở mức trung bình:
 
 - Ghi file `hosts` để chặn domain (yêu cầu quyền Administrator).
-- Chạy local HTTP block page bind loopback `127.0.0.1:80`, chỉ phục vụ HTML tĩnh; port 80 có thể bị ứng dụng khác chiếm.
+- Chạy local HTTP block page bind loopback `127.0.0.1:80`, chỉ phục vụ GET/HEAD và HTML tĩnh; port 80 có thể bị ứng dụng khác chiếm.
+- Block page chỉ trả trang khi Host header khớp domain exact đang bị chặn; input không được echo, output escape, CSP chặn tài nguyên ngoài.
 - Theo dõi foreground window/process.
 - Có thể kill process nằm trong blocklist.
 - Truy cập webcam để ước lượng trạng thái tập trung (nếu bật).
@@ -45,6 +46,7 @@ EduFocus là ứng dụng desktop **local-first** dành cho phụ huynh giám s�
 - Đóng cửa sổ không thoát app mà ẩn xuống tray. Thoát app chỉ thực hiện từ menu tray và **luôn** yêu cầu PIN, kể cả khi bảo vệ OFF; khi bảo vệ ON, dialog hiển thị cảnh báo và bắt buộc xác nhận lần hai. `AppLifecycleService` xác thực PIN qua `ParentModeService` (dùng chung lockout 5 lần/15 phút), luôn khóa phiên Parent Mode sau mỗi lần thử, gỡ chặn, kết thúc session `Completed`, ghi `LastCleanShutdownAtUtc` và audit `ProtectionOff` + `CleanExit` (không chứa PIN). Nếu gỡ chặn thất bại, app **không thoát** và bảo vệ giữ nguyên. Thoát bằng PIN không tạo `ScheduleOverrideUntilUtc` và xóa override còn sót.
 - Windows shutdown/logoff không bị app chặn: `App.OnSessionEnding` chỉ ghi nhận best-effort trong tối đa 2 giây (session `Interrupted` + `Note = SystemShutdown`, audit `SessionInterrupted`/`SystemShutdown`) rồi để Windows tiếp tục. App không gỡ chặn, không đổi `ProtectionEnabled`/`ProtectionSource` và **không** đặt `LastCleanShutdownAtUtc`, nên lần đăng nhập sau reconcile tự bật lại bảo vệ với session `Recovery`. Lỗi DB trong lúc shutdown bị nuốt kèm log thay vì chặn OS.
 - Adapter hosts file (`HostsFileBlocker`) chỉ sửa khối giữa marker `### EDUFOCUS BLOCK START/END ###`, ghi cả `127.0.0.1` và `::1` cho domain exact và không tự thêm `www.`. Trước lần ghi đầu, hosts được backup vào `%ProgramData%\EduFocus\hosts-backup` kèm `journal.json`; restore trả lại đúng byte gốc nếu ngoài marker không bị sửa, ngược lại chỉ gỡ marker để không đè chỉnh sửa của người dùng. Lỗi quyền/khóa file ném `HostsFileException` để bảo vệ không bị coi là đã tắt; log chỉ ghi số domain, không ghi nội dung hosts.
+- Block page chỉ ghi nhận domain + thời điểm qua `BlockPageHit` (engine debounce rồi ghi `BlockedAttempt`); không ghi path/query/User-Agent hay nội dung trang. Log kỹ thuật chỉ ghi cổng/trạng thái listener, không ghi domain; cổng 80 bận trả warning và không làm tắt bảo vệ.
 - Retention mặc định: sample 30 ngày, event/blocked attempt 90 ngày, session summary/audit 365 ngày.
 
 ### Giới hạn đã biết (không phải lỗ hổng)
@@ -56,6 +58,7 @@ Các điểm sau **không được coi là lỗ hổng bảo mật** vì đã đ
 - File `hosts` có thể bị antivirus hoặc ứng dụng khác khóa: adapter thử lại 3 lần rồi báo `Locked`/`AccessDenied` và giữ nguyên trạng thái bảo vệ; phụ huynh cần đóng ứng dụng đang giữ file rồi bật lại bảo vệ.
 - Hosts không tạo log truy cập HTTPS; `BlockedAttempt` là best-effort, không phải tổng tuyệt đối.
 - Trang chặn chỉ hiển thị với HTTP; HTTPS thường báo lỗi kết nối/SSL.
+- Block page chỉ bind IPv4 `127.0.0.1`; hosts có thêm bản ghi `::1`, nên kết nối IPv6 thuần có thể báo lỗi kết nối thay vì thấy trang chặn, nhưng domain vẫn bị chặn.
 - Windows shutdown/logoff vẫn là đường bypass được chấp nhận: app không chặn OS và không gỡ chặn trong lúc shutdown, nhưng bảo vệ được phục hồi ở lần đăng nhập kế tiếp; watchdog scheduled task có độ trễ tới khoảng 60 giây.
 - Đổi giờ hệ thống có thể làm lịch bảo vệ lệch: app phát hiện nhảy giờ, ghi audit và không tự tắt bảo vệ ở tick phát hiện, nhưng không khôi phục được giờ đúng; các tick sau vẫn đánh giá theo wall clock mới.
 - Watchdog scheduled task không tự phục hồi nếu task bị disable/xóa hoặc máy chưa đăng nhập lại; nếu có thêm watchdog process, kill cả app lẫn watchdog trong cùng phiên cũng không được phục hồi cho tới lần đăng nhập sau.
@@ -69,7 +72,7 @@ Các điểm sau **không được coi là lỗ hổng bảo mật** vì đã đ
 - Không phát hiện được mọi chatbot mới hoặc chatbot nhúng trong ứng dụng khác.
 - Process watcher dựa trên tên/đường dẫn process; app đổi tên hoặc chạy portable có thể không bị phát hiện.
 - URL/path, wildcard subdomain và AI sidebar chưa được enforce trong MVP.
-- Trong bản dựng hiện tại, adapter hosts file đã có (issue #21) nhưng engine chặn web/app thật chưa được nối (issue #22–#24). Bật bảo vệ ghi trạng thái, phiên và audit nhưng chưa chặn domain/app; UI hiển thị cảnh báo "engine sẽ được bật trong Phase 3".
+- Trong bản dựng hiện tại, adapter hosts file (issue #21) và block page loopback (issue #22) đã có nhưng engine chưa nối chúng (issue #23–#24). Bật bảo vệ ghi trạng thái, phiên và audit nhưng chưa chặn domain/app; UI hiển thị cảnh báo "engine sẽ được bật trong Phase 3".
 
 Nếu bạn phát hiện cách vượt qua các giới hạn trên **trong điều kiện người dùng standard user**, hãy báo cáo — đó có thể là lỗ hổng thực sự.
 

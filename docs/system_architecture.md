@@ -492,7 +492,7 @@ Thứ tự:
 - Không sửa các dòng khác của hosts; chỉ xóa block trong marker EduFocus.
 - Flush DNS sau khi thay đổi.
 - Self-heal: xóa block mồ côi của EduFocus khi khởi động.
-- `BlockPageServer` bind `127.0.0.1:80`, chỉ phục vụ HTTP, trả HTML tĩnh; kiểm tra Host header thuộc domain bị chặn, escape output, không tải tài nguyên ngoài. Nếu port 80 bị chiếm, protection vẫn ON nhưng block page không khả dụng.
+- `BlockPageServer` bind `127.0.0.1:80` bằng TCP listener loopback (không cần URL ACL), chỉ phục vụ GET/HEAD, trả HTML tĩnh; kiểm tra Host header thuộc domain bị chặn, escape output, không tải tài nguyên ngoài. Nếu port 80 bị chiếm, protection vẫn ON nhưng block page không khả dụng.
 - Retry khi file bị antivirus khóa; báo lỗi rõ nếu thất bại.
 
 > **Triển khai hosts file (issue #21):** `IHostsFileBlocker`/`HostsFileBlocker` sở hữu khối marker,
@@ -504,7 +504,18 @@ Thứ tự:
 > marker chưa bị sửa, ngược lại chỉ gỡ marker để giữ chỉnh sửa của người dùng. `SelfHealAsync` xử lý
 > journal sau crash và marker mồ côi. `IpconfigDnsFlusher` flush DNS best-effort (timeout 5 giây);
 > log chỉ ghi số domain, không ghi nội dung hosts. Engine nối hosts + block page + process watcher
-> thuộc issue #22–#24.
+> thuộc issue #23–#24.
+>
+> **Triển khai block page (issue #22):** `IBlockPageServer`/`BlockPageServer` dùng `TcpListener`
+> loopback thay vì `HttpListener` (không cần URL ACL), mặc định cổng 80 và nhận cổng 0 cho test.
+> Chỉ GET/HEAD; Host header phải là domain exact trong danh sách, input không được echo. Trang chặn
+> escape domain, không tài nguyên ngoài, kèm `Content-Security-Policy: default-src 'none';
+> style-src 'unsafe-inline'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'`,
+> `Cache-Control: no-store`, `X-Content-Type-Options: nosniff`, `X-Frame-Options: DENY` và
+> `Referrer-Policy: no-referrer`. Cổng bận/thiếu quyền trả `BlockPageStartResult.Warning` thay vì
+> ném lỗi, để engine giữ Protection ON và UI cảnh báo. Mỗi request bị chặn phát `BlockPageHit`
+> (domain + UTC) để engine debounce và ghi `BlockedAttempt` với `ObservedVia = BlockPage` (issue
+> #24); adapter không tự ghi DB hoặc log domain.
 
 ### 6.3. App blocking (MVP)
 

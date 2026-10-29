@@ -155,6 +155,15 @@ và dự án tuân theo [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 - **Chưa nối vào engine:** DI đăng ký adapter nhưng `IProtectionEnginePort` vẫn là `DeferredProtectionEngine`; engine thật thuộc issue #24 để block page được bind trước khi hosts trỏ domain về loopback.
 - **Tests:** 24 test `HostsFileBlockerTests` chạy trong sandbox (thư mục tạm, không cần elevation) — marker IPv4/IPv6, chuẩn hóa/sắp xếp, idempotent, backup, restore exact và khi có chỉnh sửa ngoài, self-heal marker mồ côi/journal sau crash, từ chối domain sai, hosts thiếu/khóa/chỉ đọc, lỗi flush không fatal và log không chứa domain; tổng **444 test pass**, build Release 0 warning.
 
+### Added (Phase 3 — Block page HTTP loopback, issue #22)
+- **Block page cục bộ:** port `IBlockPageServer` + `BlockPageServer` dùng `TcpListener` bind `127.0.0.1` (mặc định cổng 80; cổng 0 cho test) thay vì `HttpListener` nên không cần URL ACL. Chỉ phục vụ GET/HEAD; Host header phải khớp domain exact đang bị chặn, request còn lại nhận 404/405 chung và không echo input.
+- **Trang chặn tĩnh:** HTML/CSS nhúng, domain được HTML-escape, hướng dẫn nhờ phụ huynh, không tải font/ảnh/script ngoài. Response đặt `Content-Type: text/html; charset=utf-8`, `Content-Security-Policy: default-src 'none'; style-src 'unsafe-inline'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'`, `Cache-Control: no-store`, `X-Content-Type-Options: nosniff`, `X-Frame-Options: DENY` và `Referrer-Policy: no-referrer`.
+- **Cổng 80 bận:** `StartAsync` trả `BlockPageStartResult.Warning` (không ném lỗi) và vẫn giữ `IsRunning = false`; engine ở issue #24 sẽ giữ Protection ON và hiển thị cảnh báo trên UI.
+- **Hit quan sát được:** mỗi request bị chặn phát `BlockPageHit` chỉ gồm domain chuẩn hóa + thời điểm UTC; không chứa path/query/User-Agent và không ghi log domain. Engine #24 debounce 30 giây rồi ghi `BlockedAttempt` với `ObservedVia = BlockPage`.
+- **Giới hạn tài nguyên:** header tối đa 16 KB, timeout đọc header 5 giây, tối đa 16 kết nối đồng thời; stop idempotent và khởi động lại được.
+- **Chưa nối vào engine:** DI đăng ký adapter; `IProtectionEnginePort` vẫn là `DeferredProtectionEngine` cho tới issue #24.
+- **Tests:** 18 test `BlockPageServerTests` sandbox (cổng ephemeral, không cần elevation) — start/stop/restart, idempotent + cập nhật domain, cổng bận, trang chặn + security header, không tài nguyên ngoài, XSS qua Host/path/query, HEAD/POST, header quá lớn/thiếu Host, hit và log không chứa domain; tổng **462 test pass**, build Release 0 warning.
+
 ### Removed (khỏi phạm vi EduFocus)
 - Quản lý task, profile học tập, quote động lực và Gemini AI.
 - Cơ chế "friction" bắt gõ câu xác nhận bỏ cuộc.

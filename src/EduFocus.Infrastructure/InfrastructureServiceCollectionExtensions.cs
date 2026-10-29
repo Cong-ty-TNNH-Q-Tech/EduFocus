@@ -27,6 +27,8 @@ public static class InfrastructureServiceCollectionExtensions
         services.AddSingleton(new HostsFileOptions());
         services.AddSingleton<IDnsFlusher, IpconfigDnsFlusher>();
         services.AddSingleton<IHostsFileBlocker, HostsFileBlocker>();
+        services.AddSingleton(new BlockPageOptions());
+        services.AddSingleton<IBlockPageServer, BlockPageServer>();
 
         return services;
     }

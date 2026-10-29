@@ -509,7 +509,7 @@
 
 **Luồng chính**
 1. Hosts file trỏ domain về `127.0.0.1` và `::1`; chỉ áp domain exact của rule đang bật — không tự thêm biến thể `www.`.
-2. `BlockPageServer` bind `127.0.0.1:80`, chỉ nhận request HTTP và trả HTML tĩnh.
+2. `BlockPageServer` bind `127.0.0.1:80` bằng TCP listener loopback, chỉ nhận GET/HEAD và trả HTML tĩnh; request khác hoặc Host header lạ bị từ chối.
 3. Trang chặn hiển thị:
    - "Trang này không nằm trong môi trường học tập."
    - Tên miền bị chặn (đã HTML-escape).
@@ -558,9 +558,16 @@
 > domain exact và ghi cả IPv4 `127.0.0.1` lẫn IPv6 `::1`, không tự sinh biến thể `www.`. Backup +
 > `journal.json` nằm trong `%ProgramData%\EduFocus\hosts-backup`; restore khôi phục exact khi ngoài
 > marker chưa bị sửa, ngược lại chỉ gỡ marker để giữ chỉnh sửa của người dùng. Lỗi quyền/khóa file
-> được báo bằng `HostsFileException` để use case không coi là đã tắt; log chỉ ghi số domain. Block
-> page (issue #22), process watcher (issue #23) và engine nối các thành phần (issue #24) chưa có
-> trong bản dựng này.
+> được báo bằng `HostsFileException` để use case không coi là đã tắt; log chỉ ghi số domain. Process
+> watcher (issue #23) và engine nối các thành phần (issue #24) chưa có trong bản dựng này.
+>
+> **Triển khai block page (issue #22):** `BlockPageServer` dùng `TcpListener` bind `127.0.0.1:80`
+> (cổng 0 cho test) thay vì `HttpListener` nên không cần URL ACL; chỉ phục vụ GET/HEAD và chỉ trả
+> trang khi Host header khớp domain exact đang chặn. Trang tĩnh escape domain, không tài nguyên
+> ngoài, kèm CSP `default-src 'none'`, `no-store`, `nosniff`, `X-Frame-Options: DENY`,
+> `Referrer-Policy: no-referrer`. Cổng bận/thiếu quyền trả warning để engine giữ Protection ON và UI
+> cảnh báo. Mỗi request bị chặn phát `BlockPageHit` (domain + UTC) để engine debounce và ghi
+> `BlockedAttempt` với `ObservedVia = BlockPage` ở issue #24.
 
 ---
 
