@@ -43,7 +43,7 @@ Students open their computers for online classes but easily get pulled into AI c
 | 👁️ **Attention estimate** | Uses the webcam to detect presence, screen-facing gaze, absence, or drowsiness |
 | 🖥️ **Online class detection** | Separate tracking for Google Meet, Microsoft Teams, and Zoom |
 | 🔒 **Local-first** | No cloud, no account, data stays on the device |
-| 🛡️ **Basic tamper resistance** | Tray hiding, PIN-protected exit, auto-restart (30–60s), crash recovery |
+| 🛡️ **Basic tamper resistance** | Tray hiding, PIN-protected exit, auto-restart (~60s), crash recovery |
 | 📈 **Parent reports** | Daily/weekly dashboard, timeline, distractions, blocked attempts, CSV export |
 
 ---
@@ -189,7 +189,7 @@ dotnet test src/DontBeLazy.Domain.Tests/DontBeLazy.Domain.Tests.csproj
 - New or embedded chatbots cannot all be detected.
 - The process watcher relies on process name/path; renamed or portable apps may evade detection.
 - The app cannot resist a user with SYSTEM/admin privileges; Windows shutdown/logoff remains a bypass.
-- A scheduled-task watchdog may take 30–60 seconds to restart; uninstall PIN is best-effort.
+- A scheduled-task watchdog checks every 60 seconds, so a restart may take up to about 60 seconds; uninstall PIN is best-effort.
 
 EduFocus aims to **support study habits**, not to enable covert surveillance or exam cheating.
 

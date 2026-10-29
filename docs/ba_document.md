@@ -192,7 +192,7 @@ EduFocus cung cấp một lớp bảo vệ và quan sát **tối thiểu, minh b
 - Thoát app luôn cần PIN (trừ Windows shutdown/logoff).
 - Tự khởi động cùng Windows bằng Scheduled Task khi Protection ON hoặc ScheduleEnabled.
 - Tự phục hồi trạng thái chặn/session sau crash hoặc restart.
-- Watchdog kiểm tra và khởi động lại app nếu bị kill khi Protection ON (MVP: scheduled task, kiểm tra mỗi 30–60 giây; Production: Windows Service). Không restart sau exit sạch.
+- Watchdog kiểm tra và khởi động lại app nếu bị kill khi Protection ON (MVP: scheduled task, kiểm tra mỗi 60 giây; Production: Windows Service). Không restart sau exit sạch.
 - Uninstall có cảnh báo/PIN ở mức best-effort; admin Windows vẫn có thể gỡ.
 - Ghi audit log khi có nỗ lực tắt/sửa.
 
@@ -406,7 +406,7 @@ EduFocus cung cấp một lớp bảo vệ và quan sát **tối thiểu, minh b
 - Hosts không tạo log truy cập HTTPS; blocked attempts chỉ là best-effort.
 - Trang chặn chỉ hiển thị với HTTP; HTTPS thường báo lỗi kết nối/SSL.
 - URL/path, wildcard subdomain và AI sidebar chưa được enforce trong MVP.
-- Windows shutdown/logoff vẫn là đường bypass; watchdog scheduled task có độ trễ 30–60 giây.
+- Windows shutdown/logoff vẫn là đường bypass; watchdog scheduled task có độ trễ tới khoảng 60 giây.
 - Webcam không phải eye tracker hồng ngoại; attention chỉ là ước lượng.
 - Meet/Teams có thể chiếm camera trên máy chưa hỗ trợ Multi-App Camera.
 - Không thể đảm bảo phát hiện mọi chatbot mới hoặc chatbot chạy trong app khác.

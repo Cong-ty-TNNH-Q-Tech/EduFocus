@@ -43,7 +43,7 @@ Học sinh mở máy tính để học online nhưng rất dễ bị cuốn vào
 | 👁️ **Ước lượng tập trung** | Dùng webcam để nhận biết có mặt, nhìn màn hình, rời màn hình hoặc buồn ngủ |
 | 🖥️ **Nhận diện lớp online** | Theo dõi riêng Google Meet, Microsoft Teams, Zoom |
 | 🔒 **Local-first** | Không cloud, không tài khoản, dữ liệu chỉ nằm trên máy |
-| 🛡️ **Chống tắt cơ bản** | Ẩn xuống tray, thoát cần PIN, tự khởi động lại (30–60 giây), tự phục hồi sau crash |
+| 🛡️ **Chống tắt cơ bản** | Ẩn xuống tray, thoát cần PIN, tự khởi động lại (khoảng 60 giây), tự phục hồi sau crash |
 | 📈 **Báo cáo phụ huynh** | Dashboard ngày/tuần, timeline, mất tập trung, blocked attempts, xuất CSV |
 
 ---
@@ -189,7 +189,7 @@ dotnet test src/DontBeLazy.Domain.Tests/DontBeLazy.Domain.Tests.csproj
 - Không thể phát hiện mọi chatbot mới hoặc chatbot chạy trong ứng dụng khác.
 - Process watcher dựa trên tên/đường dẫn process; app đổi tên hoặc chạy portable có thể không bị phát hiện.
 - Ứng dụng không chống được người dùng có quyền SYSTEM/admin; Windows shutdown/logoff vẫn là đường bypass.
-- Watchdog dạng scheduled task có thể mất 30–60 giây để khởi động lại; uninstall PIN chỉ là best-effort.
+- Watchdog dạng scheduled task kiểm tra mỗi 60 giây, nên có thể mất tới khoảng 60 giây để khởi động lại; uninstall PIN chỉ là best-effort.
 
 EduFocus hướng tới **hỗ trợ thói quen học tập**, không phải giám sát bí mật hay chống gian lận thi cử.
 

@@ -163,7 +163,7 @@ Triển khai outbound ports, tương tác Windows.
 | `CameraAvailabilityProbe` | Kiểm tra camera bận/không có quyền |
 | `ParentAuthService` | PBKDF2, constant-time compare, recovery code, shared lockout |
 | `ParentAuthorizer` | Kiểm tra Parent Mode cho use case nhạy cảm; chặn exit khi chưa PIN |
-| `WatchdogService` | Scheduled task (MVP, poll 30–60 giây) / Windows Service (post-MVP) |
+| `WatchdogService` | Scheduled task (MVP, poll 60 giây) / Windows Service (post-MVP) |
 | `FileLogger` | Log xoay vòng theo ngày, redact dữ liệu nhạy cảm |
 | `MonotonicClockAdapter` | Giữ từ dự án cũ |
 
@@ -282,7 +282,9 @@ EduFocus.App (WPF, elevated)
 **Ưu điểm:** đơn giản, nhanh.
 **Nhược điểm:** học sinh có admin có thể kill; watchdog chỉ ở mức scheduled task.
 
-Watchdog MVP kiểm tra mỗi 30–60 giây và chỉ restart khi `ProtectionEnabled = true` và lần thoát trước không phải clean exit. Exit hợp lệ bằng PIN đặt `ProtectionEnabled = false`, ghi `LastCleanShutdownAtUtc` và không tự bật lại. Windows shutdown giữ nguyên `ProtectionEnabled` và không ghi clean exit để lần đăng nhập sau phục hồi bảo vệ.
+Watchdog MVP kiểm tra mỗi 60 giây và chỉ restart khi `ProtectionEnabled = true` và lần thoát trước không phải clean exit. Exit hợp lệ bằng PIN đặt `ProtectionEnabled = false`, ghi `LastCleanShutdownAtUtc` và không tự bật lại. Windows shutdown giữ nguyên `ProtectionEnabled` và không ghi clean exit để lần đăng nhập sau phục hồi bảo vệ.
+
+Spike #3 xác nhận mô hình task-only: mô phỏng chu kỳ 60 giây restart target trong một chu kỳ, trong khi watchdog process riêng bị kill thì không có lớp ngoài phục hồi. Phase 7 cần lưu restart budget bền vững và ghi audit `WatchdogRestart`/`WatchdogGaveUp`; chi tiết ở `docs/spikes/watchdog-evaluation.md`.
 
 ### 5.2. Production — Service + Session Agent
 
@@ -531,14 +533,14 @@ Trạng thái lưu trong `AppSettings.ProtectionEnabled`; session active lưu tr
 | Ẩn xuống tray khi đóng | ✅ | ✅ |
 | Thoát cần PIN | ✅ (kể cả OFF) | ✅ |
 | Auto-start | Scheduled Task | Service |
-| Watchdog | Scheduled Task restart khi Protection ON, poll 30–60 giây; không restart sau exit sạch | Windows Service |
+| Watchdog | Scheduled Task restart khi Protection ON, poll 60 giây; không restart sau exit sạch | Windows Service |
 | Chặn kill process | Hạn chế | Process ACL + SYSTEM |
 | Chống sửa hosts | Self-heal | Service + ACL |
 | Chống uninstall | Best-effort PIN prompt | Service + policy |
 | Phát hiện đổi giờ | Ghi audit | Ghi audit + policy |
 | Chống admin | ❌ (giới hạn đã biết) | Một phần |
 
-**Tuyên bố đúng:** EduFocus chống tắt **ở mức hợp lý**, không chống được admin/SYSTEM, không chặn Windows shutdown, và scheduled-task watchdog có độ trễ 30–60 giây. Không quảng cáo "không thể tắt".
+**Tuyên bố đúng:** EduFocus chống tắt **ở mức hợp lý**, không chống được admin/SYSTEM, không chặn Windows shutdown, và scheduled-task watchdog có độ trễ tới khoảng 60 giây. Không quảng cáo "không thể tắt".
 
 ---
 

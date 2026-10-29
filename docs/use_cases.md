@@ -651,7 +651,7 @@
 **Luồng thay thế — App bị kill**
 1. Watchdog (scheduled task/service) phát hiện process chết.
 2. Chỉ khởi động lại khi `ProtectionEnabled = true` và lần thoát trước không phải clean exit.
-3. Khởi động lại app trong vòng 30–60 giây (scheduled task không đảm bảo chính xác 30 giây).
+3. Khởi động lại app trong vòng khoảng 60 giây (Task Scheduler repetition tối thiểu 1 phút; có thể trễ khi máy tải cao hoặc sleep).
 4. Áp dụng lại protection nếu trạng thái trước đó là ON.
 5. Ghi audit "unexpected termination".
 

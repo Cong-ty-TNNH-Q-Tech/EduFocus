@@ -21,7 +21,7 @@ EduFocus là ứng dụng desktop **local-first** dành cho phụ huynh giám s�
 - Theo dõi foreground window/process.
 - Có thể kill process nằm trong blocklist.
 - Truy cập webcam để ước lượng trạng thái tập trung (nếu bật).
-- Tự khởi động và tự phục hồi sau crash; watchdog scheduled task có thể mất 30–60 giây.
+- Tự khởi động và tự phục hồi sau crash; watchdog scheduled task kiểm tra mỗi 60 giây.
 
 ### Cam kết dữ liệu
 
@@ -41,7 +41,10 @@ Các điểm sau **không được coi là lỗ hổng bảo mật** vì đã đ
 - File `hosts` có thể bị bypass bằng DoH/DoT, VPN, proxy hoặc sửa registry.
 - Hosts không tạo log truy cập HTTPS; `BlockedAttempt` là best-effort, không phải tổng tuyệt đối.
 - Trang chặn chỉ hiển thị với HTTP; HTTPS thường báo lỗi kết nối/SSL.
-- Windows shutdown/logoff vẫn là đường bypass; watchdog scheduled task có độ trễ 30–60 giây.
+- Windows shutdown/logoff vẫn là đường bypass; watchdog scheduled task có độ trễ tới khoảng 60 giây.
+- Watchdog scheduled task không tự phục hồi nếu task bị disable/xóa hoặc máy chưa đăng nhập lại; nếu có thêm watchdog process, kill cả app lẫn watchdog trong cùng phiên cũng không được phục hồi cho tới lần đăng nhập sau.
+- Watchdog giới hạn restart (mặc định 5 lần/10 phút) để tránh vòng lặp vô hạn; sau ngưỡng đó app không tự phục hồi cho tới lần đăng nhập sau hoặc khi phụ huynh mở lại.
+- Phát hiện treo dựa trên heartbeat; nếu file heartbeat/state bị khóa, hỏng hoặc ổ đĩa đầy, watchdog có thể phát hiện sai hoặc trễ.
 - Uninstall PIN chỉ là best-effort; admin Windows vẫn gỡ được.
 - Chặn app có thể đóng/kill process và làm mất dữ liệu chưa lưu; EduFocus ưu tiên `WM_CLOSE` trước khi kill.
 - PIN không bảo vệ file DB nếu phụ huynh và học sinh dùng chung tài khoản Windows.
