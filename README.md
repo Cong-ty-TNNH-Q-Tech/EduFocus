@@ -121,7 +121,7 @@ Tắt Protection bằng PIN hoặc hết khung giờ
 
 > EduFocus đang trong quá trình chuyển đổi từ dự án tiền nhiệm **Don't Be Lazy**. Bản phát hành MVP dự kiến sau Phase 7; các tính năng trong README chưa phải bản đã phát hành.
 
-Khi có bản phát hành, tải tại [Releases](https://github.com/Cong-ty-TNNH-Q-Tech/EduFocus/releases).
+Khi có bản phát hành, tải tại [Releases](https://github.com/Cong-ty-TNNH-Q-Tech/EduFocus/releases). Mỗi release đính kèm MSI, bản portable ZIP, hướng dẫn cài và `SHA256SUMS.txt`; hãy kiểm tra SHA-256 (và chữ ký số nếu có) trước khi cài. Yêu cầu: Windows 10 22H2/Windows 11 x64; bản MVP cần quyền Administrator. Chi tiết ở [docs/installer.md](./docs/installer.md) và [docs/release-process.md](./docs/release-process.md).
 
 ### Chạy từ source
 

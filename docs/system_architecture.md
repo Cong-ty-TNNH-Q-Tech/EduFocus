@@ -1188,7 +1188,9 @@ EduFocus/
 │   └── EduFocus.Domain.Tests/
 ├── installer/
 │   ├── Product.wxs
-│   └── Build-Installer.ps1
+│   ├── Build-Installer.ps1
+│   ├── Sign-Artifacts.ps1
+│   └── Get-ReleaseNotes.ps1
 ├── docs/
 │   ├── ba_document.md
 │   ├── use_cases.md
@@ -1196,6 +1198,7 @@ EduFocus/
 │   ├── database_schema.md
 │   ├── domain-invariants.md
 │   ├── installer.md
+│   ├── release-process.md
 │   └── legacy-cleanup.md
 └── .github/workflows/
 ```
@@ -1220,6 +1223,11 @@ EduFocus/
 > hộp thoại gỡ cài đặt hỏi giữ/xóa dữ liệu và CLI `--uninstall-watchdog --delete-user-data`
 > gỡ hosts marker/listener + runtime. Chi tiết và checklist máy sạch ở
 > [installer.md](./installer.md).
+> Issue #41 hoàn thiện release CI: workflow theo tag + dry run, chạy test trước publish,
+> version từ tag được kiểm tra trên exe/MSI, ký số tùy chọn qua GitHub Secrets với
+> `signtool verify`, checksum SHA-256, release notes bắt buộc `### Breaking changes`,
+> tách job build (`contents: read`) và job công bố (`contents: write`). Chi tiết:
+> [release-process.md](./release-process.md).
 > Inventory 1.x ở [legacy-cleanup.md](./legacy-cleanup.md), invariant domain ở
 > [domain-invariants.md](./domain-invariants.md).
 

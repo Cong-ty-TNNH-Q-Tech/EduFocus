@@ -80,6 +80,15 @@ dotnet publish src/EduFocus.WPF/EduFocus.WPF.csproj --configuration Release --ou
 - Repo **chưa bật branch protection** cho `master`. Maintainer nên bật required status check **EduFocus — Build & Test** (Settings → Branches) để PR fail CI không merge được.
 - Log CI chỉ chứa thông tin build/test; không đặt token, PIN hay connection string trong workflow.
 
+Release chạy bằng [`.github/workflows/release.yml`](./.github/workflows/release.yml) khi push tag `v*.*.*`:
+build Release, chạy toàn bộ test, publish self-contained, ký exe/MSI bằng chứng chỉ trong
+GitHub Secrets (nếu có), tạo MSI/ZIP + `SHA256SUMS.txt`, rồi công bố GitHub Release với
+release notes lấy từ `CHANGELOG.md`. Có thể chạy **dry run** trên branch thử nghiệm bằng
+`workflow_dispatch` với `dry_run = true` — artifact được upload nhưng không tạo release.
+Secret chỉ được truyền vào step ký số, không được echo hay đính kèm artifact; job build chạy
+với `contents: read`, chỉ job công bố có `contents: write`. Chi tiết versioning, ký số và
+checklist phát hành: [docs/release-process.md](./docs/release-process.md).
+
 ### 4. Commit
 
 Tuân thủ **Conventional Commits**:

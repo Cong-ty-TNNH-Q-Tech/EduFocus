@@ -4,7 +4,8 @@ Tài liệu này mô tả gói cài đặt MSI (WiX v4), cách nâng cấp giữ
 hỏi rõ về dữ liệu người dùng, và checklist kiểm thử trên máy Windows sạch.
 
 Tham chiếu: [system_architecture.md](./system_architecture.md) §14,
-[database_schema.md](./database_schema.md) §16–§17, [SECURITY.md](../SECURITY.md).
+[database_schema.md](./database_schema.md) §16–§17, [release-process.md](./release-process.md),
+[SECURITY.md](../SECURITY.md).
 
 ---
 
@@ -183,8 +184,11 @@ Chưa thể chạy tự động trong CI (cần VM Windows). Checklist bắt bu�
    DB cũ và backup còn; restore backup thành công.
 7. Kiểm tra gói: `Get-ChildItem` payload không có `.pfx/.pem/.snk/.key`, không có `.db/.log`;
    không có chứng chỉ/private key trong MSI.
+8. Với bản tải từ GitHub Release: đối chiếu SHA-256 với `SHA256SUMS.txt` và chạy
+   `Get-AuthenticodeSignature` trên MSI (khi bản phát hành được ký) trước khi cài.
 
-Kết quả từng lần chạy ghi vào release checklist (issue #43).
+Kết quả từng lần chạy ghi vào release checklist (issue #43). Quy trình tag, ký số,
+checksum và dry run nằm ở [release-process.md](./release-process.md).
 
 ---
 
@@ -204,9 +208,13 @@ kill process bị chặn và quản lý scheduled task.
 
 ## 9. Build cục bộ và CI
 
-- CI release (`.github/workflows/release.yml`) publish self-contained, xóa `*.pdb/*.lib`,
-  cài WiX 4.0.6 + `WixToolset.UI.wixext` + `WixToolset.Util.wixext`, rồi gọi
-  `installer/Build-Installer.ps1` với version lấy từ tag.
+- CI release (`.github/workflows/release.yml`) chạy test trước khi publish self-contained,
+  xóa `*.pdb/*.lib`, ký exe/MSI nếu có chứng chỉ trong GitHub Secrets, cài WiX 4.0.6 +
+  `WixToolset.UI.wixext` + `WixToolset.Util.wixext`, gọi `installer/Build-Installer.ps1`
+  với version lấy từ tag, tạo `SHA256SUMS.txt` và release notes từ CHANGELOG.
+- Workflow hỗ trợ `workflow_dispatch` với `dry_run = true` để chạy đầy đủ trên branch thử
+  nghiệm mà không tạo release. Chi tiết signing, secret và checklist:
+  [release-process.md](./release-process.md).
 - Build thủ công cần WiX 4.0.6 và hai extension (global hoặc local):
 
 ```powershell

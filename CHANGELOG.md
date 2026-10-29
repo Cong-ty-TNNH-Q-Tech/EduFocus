@@ -306,6 +306,19 @@ và dự án tuân theo [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 - **Tài liệu:** [docs/installer.md](docs/installer.md) — quyết định self-contained/per-machine, layout, ACL, quy trình cài/nâng cấp/gỡ, silent commands, checklist clean VM Windows 10/11, build/secret scan và độ lệch elevation (app vẫn cần admin trong MVP, chuyển sang Windows Service ở #46); cập nhật `SECURITY.md` và architecture §14.
 - **Tests:** +5 test — 3 CLI parser (`--prepare-data-directory`, `--delete-user-data` chỉ có hiệu lực khi uninstall), 1 `EnsureSecure` tạo thư mục + ACL, 1 rollback migration/restore; tổng **930 test pass**, build Debug/Release 0 warning.
 
+### Added (Phase 7 — Release CI, versioning & signing, issue #41)
+- **Workflow theo tag + dry run:** `.github/workflows/release.yml` chạy khi push tag `v*.*.*`; `workflow_dispatch` nhận `version` và `dry_run` (mặc định `true`) để chạy đầy đủ build/test/ký/đóng gói trên branch thử nghiệm mà không tạo release/tag. SemVer được validate; tag là nguồn sự thật; tag có hậu tố prerelease tạo GitHub prerelease.
+- **Versioning & kiểm tra:** publish nhận full SemVer (`Version`, `FileVersion` dạng số, tắt hậu tố source revision trong ProductVersion); workflow kiểm tra `ProductVersion`/`FileVersion` của `EduFocus.exe` và `ProductVersion` của MSI qua Windows Installer COM trước khi phát hành.
+- **Ký số tùy chọn:** `installer/Sign-Artifacts.ps1` nhận PFX base64 + password từ GitHub Secrets, import vào `CurrentUser\My`, ký exe/MSI bằng `signtool /fd SHA256 /td SHA256 /tr` (mật khẩu không nằm trên command line), verify `/pa` và fail nếu chữ ký không hợp lệ; luôn xóa PFX tạm + certificate đã import trong `finally`. `REQUIRE_CODE_SIGNING=true` biến việc thiếu chứng chỉ thành lỗi; nếu chưa cấu hình, workflow cảnh báo và summary ghi `Code signed: false`.
+- **Checksum & release notes:** `installer/Get-ReleaseNotes.ps1` lấy section CHANGELOG khớp version (kể cả heading Unreleased có tên version), bắt buộc `### Breaking changes`, ghép yêu cầu hệ thống/hướng dẫn xác minh; `SHA256SUMS.txt` (ASCII/LF) cho MSI, ZIP và install guide được tạo rồi đọc lại để verify. Release đính kèm MSI, portable ZIP, install guide và checksum.
+- **Quyền tối thiểu & chống lộ secret:** job build dùng `contents: read` với checkout `persist-credentials: false`; chỉ job công bố có `contents: write`; secret chỉ truyền vào step ký; workflow quét workspace và fail nếu còn `.pfx/.p12/.snk/.pem/.key` hoặc dữ liệu runtime `.db/.log/.bak/.tmp`.
+- **Tài liệu & kiểm thử:** thêm [docs/release-process.md](docs/release-process.md) (versioning, kích hoạt, ký số, checksum, dry run, checklist máy sạch); cập nhật `docs/installer.md`, CONTRIBUTING, README/README.en, architecture §14 và SECURITY. Kiểm thử cục bộ: parse YAML + 18 run block PowerShell, `Get-ReleaseNotes` thành công cho 2.0.0 và fail đúng khi thiếu section/`Breaking changes`, `Sign-Artifacts` no-cert/required/self-signed sign + cleanup, verify `ProductVersion` MSI; không đổi mã C#, **930 test pass**, build Release 0 warning.
+
+### Breaking changes
+- **Không migrate dữ liệu 1.x:** 2.0.0 dùng schema mới tại `%ProgramData%\EduFocus\edufocus.db`; DB của Don't Be Lazy (1.x) không được đọc hoặc nâng cấp tự động. Người dùng chuyển từ 1.x bắt đầu lại onboarding và dữ liệu 2.0.
+- **Mô hình bảo vệ và dữ liệu mới:** không còn phiên tập trung 1.x; quyền điều khiển thuộc Parent Mode + PIN, dữ liệu nằm trong `%ProgramData%` với ACL Administrators/SYSTEM.
+- **Yêu cầu hệ thống:** Windows 10 22H2+/Windows 11 x64; bản MVP yêu cầu quyền Administrator khi cài và chạy (xem [docs/installer.md](docs/installer.md) §8).
+
 ### Removed (khỏi phạm vi EduFocus)
 - Quản lý task, profile học tập, quote động lực và Gemini AI.
 - Cơ chế "friction" bắt gõ câu xác nhận bỏ cuộc.

@@ -121,7 +121,7 @@ Protection turns off with PIN or when the schedule window ends
 
 > EduFocus is being migrated from the predecessor project **Don't Be Lazy**. The MVP release is planned after Phase 7; features described here are not released yet.
 
-Once released, download from [Releases](https://github.com/Cong-ty-TNNH-Q-Tech/EduFocus/releases).
+Once released, download from [Releases](https://github.com/Cong-ty-TNNH-Q-Tech/EduFocus/releases). Each release ships an MSI, a portable ZIP, an install guide and `SHA256SUMS.txt`; verify SHA-256 (and the code signature when present) before installing. Requirements: Windows 10 22H2/Windows 11 x64; the MVP requires Administrator. See [docs/installer.md](./docs/installer.md) and [docs/release-process.md](./docs/release-process.md) for details.
 
 ### Run from source
 
