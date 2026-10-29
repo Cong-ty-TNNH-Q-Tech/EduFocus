@@ -339,7 +339,7 @@ public sealed class ActivityTrackingServiceTests
     }
 
     [Fact]
-    public async Task Suspension_gap_is_capped_per_sample()
+    public async Task Suspension_gap_is_discarded_and_sampling_resumes()
     {
         await using var harness = new ActivityHarness();
         await harness.StartAsync();
@@ -347,11 +347,59 @@ public sealed class ActivityTrackingServiceTests
         harness.Foreground = harness.Snapshot("chrome", "Docs");
 
         (await harness.SampleAfterAsync(TimeSpan.FromMinutes(30))).Should().BeFalse();
-        (await harness.SampleAfterAsync(TimeSpan.FromSeconds(2))).Should().BeTrue();
+        harness.Samples.Samples.Should().BeEmpty();
+        harness.Session.NeutralSeconds.Should().Be(0);
+
+        (await harness.SampleAfterAsync(TimeSpan.FromSeconds(15))).Should().BeTrue();
 
         harness.Samples.Samples.Should().ContainSingle()
-            .Which.DurationSeconds.Should().Be(60);
-        harness.Session.NeutralSeconds.Should().Be(60);
+            .Which.DurationSeconds.Should().Be(15);
+        harness.Session.NeutralSeconds.Should().Be(15);
+    }
+
+    [Fact]
+    public async Task Suspend_and_resume_restart_the_sample_window()
+    {
+        await using var harness = new ActivityHarness();
+        await harness.StartAsync();
+
+        harness.Foreground = harness.Snapshot("chrome", "Docs");
+        await harness.WriteSampleAsync();
+
+        harness.Power.RaiseSuspended();
+        harness.Clock.Advance(TimeSpan.FromMinutes(10));
+        harness.Monotonic.Ticks += TimeSpan.FromMinutes(10);
+        harness.Power.RaiseResumed();
+
+        (await harness.SampleOnceAsync()).Should().BeFalse();
+        harness.Samples.Samples.Should().ContainSingle();
+        harness.Session.NeutralSeconds.Should().Be(17);
+
+        (await harness.SampleAfterAsync(TimeSpan.FromSeconds(15))).Should().BeFalse();
+        (await harness.SampleAfterAsync(TimeSpan.FromSeconds(2))).Should().BeTrue();
+
+        harness.Samples.Samples.Should().HaveCount(2);
+        harness.Samples.Samples[1].DurationSeconds.Should().Be(17);
+        harness.Session.NeutralSeconds.Should().Be(34);
+    }
+
+    [Fact]
+    public async Task Forward_wall_clock_jump_does_not_inflate_sample_duration()
+    {
+        await using var harness = new ActivityHarness();
+        await harness.StartAsync();
+
+        harness.Foreground = harness.Snapshot("chrome", "Docs");
+        harness.Clock.Advance(TimeSpan.FromHours(2));
+        harness.Monotonic.Ticks += TimeSpan.FromSeconds(15);
+
+        (await harness.SampleOnceAsync()).Should().BeFalse();
+        (await harness.SampleAfterAsync(TimeSpan.FromSeconds(2))).Should().BeTrue();
+
+        var sample = harness.Samples.Samples.Should().ContainSingle().Subject;
+        sample.DurationSeconds.Should().Be(17);
+        sample.SampledAtUtc.Should().Be(Now.AddHours(2).AddSeconds(2));
+        harness.Session.NeutralSeconds.Should().Be(17);
     }
 
     [Fact]
@@ -406,6 +454,7 @@ public sealed class ActivityTrackingServiceTests
                 ForegroundPort,
                 Urls,
                 Monotonic,
+                Power,
                 Logger,
                 Clock,
                 new ActivityTrackingOptions
@@ -418,6 +467,8 @@ public sealed class ActivityTrackingServiceTests
         public ManualTimeProvider Clock { get; } = new(new DateTimeOffset(Now), TimeZoneInfo.Utc);
 
         public FakeMonotonicClock Monotonic { get; } = new();
+
+        public FakeSystemPowerEventPort Power { get; } = new();
 
         public FakeStudySessionRepository Sessions { get; } = new();
 

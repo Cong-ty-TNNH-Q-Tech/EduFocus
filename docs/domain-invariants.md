@@ -91,6 +91,9 @@
 | `MonitoringEligibleSeconds` chỉ tăng khi monitoring bật; nếu `MonitorOnlyDuringClasses` thì chỉ khi đang trong lớp online | `MonitoringEligibility.IsEligible` (issue #27); attention cộng theo tick (#33) |
 | `Unknown` và `Neutral` cộng vào `NeutralSeconds` | `AddCategorySeconds` |
 | `OnlineClassSeconds` là overlay, không cộng trùng category | `AddOnlineClassSeconds` |
+| Thời gian sleep/lock không cộng vào `ActiveSeconds`; resume chỉ cộng phần trước suspend | Use case (issue #28), không thuộc domain |
+| Gap vượt `MaxActiveDelta` khi thiếu sự kiện power bị bỏ, không cộng dồn | Use case (issue #28), không thuộc domain |
+| Giây chờ khi ghi heartbeat lỗi được cộng ở beat sau và vẫn clamp `MaxActiveDelta` | Use case (issue #28), không thuộc domain |
 | Complete/Abort yêu cầu end ≥ heartbeat cuối | `End` |
 | Interrupt kết thúc tại heartbeat cuối, không cộng downtime | `Interrupt` |
 | Confidence ∈ [0, 1]; note ≤ 512 | `SetAttentionConfidence`, `SetNote` |
@@ -107,6 +110,8 @@
 | URL http/https, đã bỏ query/fragment/credentials | `UrlSanitizer` |
 | `Domain` suy ra từ URL đã sanitize | `DeriveDomain` |
 | Title ≤ 512, app/process ≤ 128, control character bị thay bằng space | `TextSanitizer` |
+| Gap > `MaxSampleGap` (sleep/treo) không vào `DurationSeconds`; window đếm khởi động lại | Use case (issue #28) |
+| Timestamp sample monotonic khi wall clock lùi; forward jump không làm phồng duration | Use case (issues #26/#28) |
 
 **Phân loại activity (`ActivityClassifier`, dùng chung `BlockRuleSet` snapshot):**
 
@@ -218,9 +223,10 @@ ephemeral/process và adapter giả, không cần elevation):
 `dotnet test src/EduFocus.Infrastructure.Tests/EduFocus.Infrastructure.Tests.csproj -c Release`.
 
 Use case tests trong `EduFocus.UseCases.Tests` phủ heartbeat (monotonic, clamp đồng hồ, biên 60 giây,
-lỗi DB retry), serialize enable/disable/reconcile, rollback và phục hồi `Recovery`; `ActivityTrackingServiceTests`
+lỗi DB retry, suspend/resume, dừng khi suspended, DST), serialize enable/disable/reconcile, rollback và phục hồi `Recovery`; `ActivityTrackingServiceTests`
 phủ debounce foreground, cadence 15 giây, một sample idle/chuỗi, sanitize URL, phân loại, Teams/title Meet
-đa ngôn ngữ/chat/idle cho overlay lớp online, lỗi port/DB và dừng khi session kết thúc.
+đa ngôn ngữ/chat/idle cho overlay lớp online, bỏ gap suspend, reset cửa sổ sau resume, forward/backward clock,
+lỗi port/DB và dừng khi session kết thúc.
 `EduFocus.SqliteDataAccess.Tests` phủ heartbeat có điều kiện, chống hồi sinh session, unique active,
 retention giữ session summary, round-trip `ActivitySample` (kể cả `IsOnlineClass`) và
 `AddActivitySecondsAsync` (targeted, chỉ session `Active`).

@@ -65,7 +65,7 @@ public sealed class StudySessionHeartbeatServiceTests
     }
 
     [Fact]
-    public async Task Beat_caps_a_long_suspended_gap()
+    public async Task Long_gap_without_power_events_is_not_counted()
     {
         await using var harness = new HeartbeatHarness();
         await harness.StartAsync();
@@ -75,7 +75,167 @@ public sealed class StudySessionHeartbeatServiceTests
 
         await harness.Service.BeatOnceAsync();
 
-        harness.Session.ActiveSeconds.Should().Be(60);
+        harness.Session.ActiveSeconds.Should().Be(0);
+
+        harness.Monotonic.Ticks += TimeSpan.FromSeconds(10);
+        harness.Clock.Advance(TimeSpan.FromSeconds(10));
+
+        await harness.Service.BeatOnceAsync();
+
+        harness.Session.ActiveSeconds.Should().Be(10);
+    }
+
+    [Fact]
+    public async Task Suspend_and_resume_exclude_sleep_from_active_seconds()
+    {
+        await using var harness = new HeartbeatHarness();
+        await harness.StartAsync();
+
+        harness.Monotonic.Ticks += TimeSpan.FromSeconds(5);
+        harness.Power.RaiseSuspended();
+
+        harness.Monotonic.Ticks += TimeSpan.FromMinutes(10);
+        harness.Clock.Advance(TimeSpan.FromMinutes(10));
+        harness.Power.RaiseResumed();
+
+        (await harness.Service.BeatOnceAsync()).Should().BeTrue();
+
+        harness.Session.ActiveSeconds.Should().Be(5);
+        harness.Session.LastHeartbeatAtUtc.Should().Be(Now.AddMinutes(10));
+
+        harness.Monotonic.Ticks += TimeSpan.FromSeconds(10);
+        harness.Clock.Advance(TimeSpan.FromSeconds(10));
+
+        await harness.Service.BeatOnceAsync();
+
+        harness.Session.ActiveSeconds.Should().Be(15);
+    }
+
+    [Fact]
+    public async Task Stopping_while_suspended_writes_only_the_pre_suspend_slice()
+    {
+        await using var harness = new HeartbeatHarness();
+        await harness.StartAsync();
+
+        harness.Monotonic.Ticks += TimeSpan.FromSeconds(5);
+        harness.Power.RaiseSuspended();
+        harness.Monotonic.Ticks += TimeSpan.FromMinutes(10);
+        harness.Clock.Advance(TimeSpan.FromMinutes(10));
+
+        await harness.Service.StopAsync();
+
+        harness.Session.ActiveSeconds.Should().Be(5);
+        harness.Sessions.Heartbeats.Should().ContainSingle()
+            .Which.ActiveSeconds.Should().Be(5);
+    }
+
+    [Fact]
+    public async Task Repeated_suspend_events_keep_the_earliest_boundary()
+    {
+        await using var harness = new HeartbeatHarness();
+        await harness.StartAsync();
+
+        harness.Monotonic.Ticks += TimeSpan.FromSeconds(5);
+        harness.Power.RaiseSuspended();
+
+        harness.Monotonic.Ticks += TimeSpan.FromSeconds(10);
+        harness.Power.RaiseSuspended();
+
+        harness.Monotonic.Ticks += TimeSpan.FromMinutes(10);
+        harness.Clock.Advance(TimeSpan.FromMinutes(10));
+        harness.Power.RaiseResumed();
+
+        await harness.Service.BeatOnceAsync();
+
+        harness.Session.ActiveSeconds.Should().Be(5);
+    }
+
+    [Fact]
+    public async Task Multiple_suspend_cycles_before_a_beat_add_only_active_slices()
+    {
+        await using var harness = new HeartbeatHarness();
+        await harness.StartAsync();
+
+        harness.Monotonic.Ticks += TimeSpan.FromSeconds(5);
+        harness.Power.RaiseSuspended();
+        harness.Monotonic.Ticks += TimeSpan.FromMinutes(10);
+        harness.Clock.Advance(TimeSpan.FromMinutes(10));
+        harness.Power.RaiseResumed();
+
+        harness.Monotonic.Ticks += TimeSpan.FromSeconds(5);
+        harness.Power.RaiseSuspended();
+        harness.Monotonic.Ticks += TimeSpan.FromMinutes(10);
+        harness.Clock.Advance(TimeSpan.FromMinutes(10));
+        harness.Power.RaiseResumed();
+
+        await harness.Service.BeatOnceAsync();
+
+        harness.Session.ActiveSeconds.Should().Be(10);
+    }
+
+    [Fact]
+    public async Task Suspended_beats_keep_waiting_for_resume_without_counting_locked_time()
+    {
+        await using var harness = new HeartbeatHarness();
+        await harness.StartAsync();
+
+        harness.Monotonic.Ticks += TimeSpan.FromSeconds(5);
+        harness.Power.RaiseSuspended();
+
+        for (var i = 0; i < 12; i++)
+        {
+            harness.Monotonic.Ticks += TimeSpan.FromSeconds(10);
+            harness.Clock.Advance(TimeSpan.FromSeconds(10));
+            await harness.Service.BeatOnceAsync();
+        }
+
+        harness.Session.ActiveSeconds.Should().Be(5);
+
+        harness.Power.RaiseResumed();
+        harness.Monotonic.Ticks += TimeSpan.FromSeconds(10);
+        harness.Clock.Advance(TimeSpan.FromSeconds(10));
+        await harness.Service.BeatOnceAsync();
+
+        harness.Session.ActiveSeconds.Should().Be(15);
+    }
+
+    [Fact]
+    public async Task Missing_resume_event_after_a_long_gap_restarts_counting()
+    {
+        await using var harness = new HeartbeatHarness();
+        await harness.StartAsync();
+
+        harness.Monotonic.Ticks += TimeSpan.FromSeconds(5);
+        harness.Power.RaiseSuspended();
+
+        harness.Monotonic.Ticks += TimeSpan.FromMinutes(10);
+        harness.Clock.Advance(TimeSpan.FromMinutes(10));
+
+        await harness.Service.BeatOnceAsync();
+
+        harness.Session.ActiveSeconds.Should().Be(5);
+
+        harness.Monotonic.Ticks += TimeSpan.FromSeconds(10);
+        harness.Clock.Advance(TimeSpan.FromSeconds(10));
+        await harness.Service.BeatOnceAsync();
+
+        harness.Session.ActiveSeconds.Should().Be(15);
+    }
+
+    [Fact]
+    public async Task Dst_wall_clock_transition_does_not_change_active_seconds()
+    {
+        await using var harness = new HeartbeatHarness(
+            timeZone: TimeZoneInfo.FindSystemTimeZoneById("Pacific Standard Time"));
+        await harness.StartAsync();
+
+        harness.Monotonic.Ticks += TimeSpan.FromSeconds(10);
+        harness.Clock.Advance(TimeSpan.FromDays(120));
+
+        await harness.Service.BeatOnceAsync();
+
+        harness.Session.ActiveSeconds.Should().Be(10);
+        harness.Session.LastHeartbeatAtUtc.Should().Be(Now.AddDays(120));
     }
 
     [Fact]
@@ -175,8 +335,10 @@ public sealed class StudySessionHeartbeatServiceTests
 
     private sealed class HeartbeatHarness : IAsyncDisposable
     {
-        public HeartbeatHarness(TimeSpan? interval = null)
+        public HeartbeatHarness(TimeSpan? interval = null, TimeZoneInfo? timeZone = null)
         {
+            Clock = new ManualTimeProvider(new DateTimeOffset(Now), timeZone ?? TimeZoneInfo.Utc);
+
             Session = StudySession.Start(
                 Now,
                 new DateOnly(2026, 10, 30),
@@ -187,6 +349,7 @@ public sealed class StudySessionHeartbeatServiceTests
             Service = new StudySessionHeartbeatService(
                 Sessions,
                 Monotonic,
+                Power,
                 Logger,
                 Clock,
                 new StudySessionHeartbeatOptions
@@ -195,9 +358,11 @@ public sealed class StudySessionHeartbeatServiceTests
                 });
         }
 
-        public ManualTimeProvider Clock { get; } = new(new DateTimeOffset(Now), TimeZoneInfo.Utc);
+        public ManualTimeProvider Clock { get; }
 
         public FakeMonotonicClock Monotonic { get; } = new();
+
+        public FakeSystemPowerEventPort Power { get; } = new();
 
         public FakeStudySessionRepository Sessions { get; } = new();
 

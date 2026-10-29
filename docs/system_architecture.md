@@ -130,6 +130,7 @@ IBlockRuleRepository
 IScheduleWindowRepository
 IStudySessionRepository
 IActivitySampleRepository
+ISystemPowerEventPort
 IAttentionEventRepository
 IBlockedAttemptRepository
 IAuditLogRepository
@@ -217,6 +218,17 @@ Slack, Messenger, Zalo không bị nhận nhầm. Sample idle luôn có `IsOnlin
 attention pipeline (#33): khi `MonitorOnlyDuringClasses` bật, chỉ thời gian phát hiện lớp online mới vào
 `MonitoringEligibleSeconds`, nên coverage không bị chia cho thời gian ngoài lớp.
 
+**Hiện trạng issue #28:** `ISystemPowerEventPort` phát `Suspended`/`Resumed`; adapter WPF nghe
+`SystemEvents.PowerModeChanged` và `SessionSwitch` (lock/disconnect/unlock/connect). Heartbeat và activity
+subscribe trong `StartAsync` và unsubscribe trong `StopCore`, nên handler không sống qua stop. Heartbeat
+cộng dồn phần hoạt động vào lúc suspend rồi neo lại monotonic tick, nên resume chỉ cộng tiếp từ mốc thức;
+suspend lặp lại giữ mốc sớm nhất và nhiều chu kỳ trước một beat chỉ cộng các slice active. Beat định kỳ
+trong lúc lock/disconnect chờ resume mà không cộng thời gian; nếu timer bị pause (sleep) và resume event mất,
+gap vượt `MaxActiveDelta` bị bỏ rồi đếm lại. Activity reset `_lastSampleTick` khi resume, bỏ gap vượt
+`MaxSampleGap` và khởi động lại cửa sổ 15 giây; cả hai dùng monotonic clock nên forward wall clock không
+làm phồng thời lượng, còn backward wall clock vẫn clamp timestamp. Khi ghi heartbeat lỗi, `_pendingSeconds`
+được cộng vào beat sau và clamp `MaxActiveDelta`.
+
 ### 3.4. Infrastructure (`EduFocus.Infrastructure`)
 
 Triển khai outbound ports, tương tác Windows.
@@ -228,6 +240,7 @@ Triển khai outbound ports, tương tác Windows.
 | `ChatbotBlocklist` | Danh sách domain chatbot mặc định, có version |
 | `WindowsForegroundActivityPort` | Win32 foreground window + process + idle time (`GetLastInputInfo`) |
 | `UiAutomationBrowserUrlProvider` | UI Automation đọc address bar (MVP); browser extension native messaging (post-MVP) |
+| `WindowsSystemPowerEventPort` | `SystemEvents.PowerModeChanged` + `SessionSwitch` → `Suspended`/`Resumed` |
 | `WebcamAttentionMonitor` | OpenCV + ONNX; face/head/iris/EAR; không lưu frame |
 | `CameraAvailabilityProbe` | Kiểm tra camera bận/không có quyền |
 | `Pbkdf2PasswordHasher` | PBKDF2-SHA256 600.000 iterations, salt 16 byte, hash 32 byte, constant-time compare |
@@ -650,6 +663,11 @@ Không lưu query string/fragment trong `ActivitySamples`; chỉ lưu domain và
 > targeted trước khi insert `ActivitySample` (lỗi insert chỉ log và thử lại ở sample sau). `StopAsync`
 > không flush sample cuối; vòng lặp dừng khi session kết thúc.
 
+> **Triển khai issue #28:** `ISystemPowerEventPort` (adapter WPF `WindowsSystemPowerEventPort`) báo
+> suspend/resume. Heartbeat chỉ cộng phần trước sleep khi resume; activity bỏ gap và reset cửa sổ sample.
+> Forward wall clock không đổi `DurationSeconds`/`ActiveSeconds` vì cả hai tính bằng monotonic clock; wall
+> clock lùi vẫn clamp timestamp. Gap không có sự kiện và vượt ngưỡng bị bỏ thay vì cộng dồn.
+
 ---
 
 ## 8. Attention Monitor
@@ -911,6 +929,11 @@ AddViews()
 > `IForegroundActivityPort`/`WindowsForegroundActivityPort`. `ProtectionService` và `AppLifecycleService`
 > nhận `IActivityUseCase` qua DI; enable start activity sau heartbeat, disable/exit/shutdown stop trước khi
 > kết thúc phiên, và lỗi start/stop activity chỉ được log để không chặn Protection.
+
+> **Bổ sung sau issue #28:** composition root đăng ký singleton `ISystemPowerEventPort`/
+> `WindowsSystemPowerEventPort`; `ActivityTrackingService` và `StudySessionHeartbeatService` nhận port này
+> qua constructor, subscribe khi start và unsubscribe khi stop. Adapter giữ `SystemEvents` subscription
+> trong suốt vòng đời singleton và dispose cùng `ServiceProvider`.
 
 ---
 

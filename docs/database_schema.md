@@ -244,6 +244,7 @@ Singleton.
 **Quy tắc**
 - Chỉ có tối đa **một** session `Active` tại một thời điểm (unique partial index).
 - `ActiveSeconds` là thời gian app chạy thực tế; không dùng `EndedAtUtc - StartedAtUtc` vì có thể gồm sleep/tắt máy.
+- Thời gian sleep/lock không vào `ActiveSeconds`; heartbeat chỉ cộng phần trước suspend và bỏ gap vượt biên (issue #28).
 - `Status`: `Completed` khi kết thúc bình thường; `Aborted` khi lỗi/tamper nghiêm trọng; `Interrupted` khi crash/shutdown và được phục hồi.
 - Khi kết thúc bình thường, `LastHeartbeatAtUtc = EndedAtUtc`; khi crash, giữ heartbeat cuối cùng.
 - Khi crash, `EndedAtUtc = LastHeartbeatAtUtc`; mọi `AttentionEvent` đang mở cũng đóng tại mốc này.

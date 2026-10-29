@@ -124,6 +124,7 @@ public partial class App : Application
         services.AddSingleton<IBlockRuleRepository, SqliteBlockRuleRepository>();
         services.AddSingleton<IBlockedAttemptRepository, SqliteBlockedAttemptRepository>();
         services.AddSingleton<IActivitySampleRepository, SqliteActivitySampleRepository>();
+        services.AddSingleton<ISystemPowerEventPort, WindowsSystemPowerEventPort>();
         services.AddSingleton(new StudySessionHeartbeatOptions());
         services.AddSingleton<IStudySessionHeartbeatUseCase, StudySessionHeartbeatService>();
         services.AddSingleton(new ActivityTrackingOptions());

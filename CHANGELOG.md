@@ -207,6 +207,14 @@ và dự án tuân theo [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 - **MonitorOnlyDuringClasses:** thêm policy domain `MonitoringEligibility.IsEligible(monitoringEnabled, monitorOnlyDuringClasses, isOnlineClass)` để attention pipeline (#33) chỉ cộng `MonitoringEligibleSeconds` khi monitoring bật và, nếu chọn chỉ-trong-lớp, khi đang phát hiện lớp online; test chứng minh mẫu số coverage đổi từ 200 giây (mọi lúc) xuống 50 giây (chỉ trong lớp) trên cùng 40 giây monitored.
 - **Tests:** 6 test domain detector theo nền tảng/âm bản, 3 test `MonitoringEligibility`, 4 test `ActivityTrackingService` (Teams, title Meet đa ngôn ngữ, chat, idle) và 1 test SQLite `IsOnlineClass` round-trip; tổng **594 test pass**, build Release 0 warning.
 
+### Added (Phase 4 — Sleep, clock jump & power events, issue #28)
+- **Port sự kiện nguồn:** `ISystemPowerEventPort` phát `Suspended`/`Resumed`; adapter WPF `WindowsSystemPowerEventPort` lắng nghe `SystemEvents.PowerModeChanged` (Suspend/Resume) và `SessionSwitch` (lock/disconnect → suspended, unlock/connect → resumed), hủy đăng ký khi dispose. Handler chạy trên thread sự kiện OS nên service chỉ ghi cờ/tick dưới lock.
+- **Heartbeat:** `StudySessionHeartbeatService` cộng dồn phần hoạt động vào lúc nhận suspend rồi neo lại monotonic tick, nên resume chỉ tiếp tục từ mốc thức và thời gian sleep không vào `ActiveSeconds`. Suspend lặp lại (lock rồi disconnect) giữ mốc sớm nhất, còn nhiều chu kỳ suspend/resume trước một beat vẫn chỉ cộng các slice hoạt động. Beat định kỳ trong lúc lock/disconnect tiếp tục chờ resume mà không cộng thời gian; nếu timer bị pause (sleep) và resume event mất, gap vượt `MaxActiveDelta` bị bỏ rồi đếm lại. Dừng giữa lúc suspended chỉ ghi phần trước suspend. Forward wall clock không làm phồng thời lượng (monotonic), backward wall clock vẫn clamp `LastHeartbeatAtUtc`; chuyển DST không đổi `ActiveSeconds`.
+- **Activity:** `ActivityTrackingService` nhận suspend/resume để reset cửa sổ sample — không tính gap vào `DurationSeconds`, không ghi sample cho khoảng sleep và khởi động lại cadence 15 giây sau resume. Gap vượt `MaxSampleGap` cũng bị bỏ tương tự; timestamp sample vẫn monotonic khi wall clock lùi.
+- **Retry DB:** giữ `_pendingSeconds` khi ghi heartbeat thất bại, cộng vào beat kế tiếp nhưng vẫn clamp `MaxActiveDelta` để không vượt biên.
+- **DI:** đăng ký singleton `ISystemPowerEventPort`/`WindowsSystemPowerEventPort`; activity và heartbeat nhận port này qua constructor.
+- **Tests:** 7 test heartbeat (suspend/resume, dừng khi suspended, suspend lặp, nhiều chu kỳ trước beat, lock dài không resume, mất resume sau gap, DST), cập nhật test gap dài và clamp; 3 test activity (bỏ gap suspend, reset cửa sổ sau resume, forward clock), cập nhật test gap; tổng **603 test pass**, build Release 0 warning.
+
 ### Removed (khỏi phạm vi EduFocus)
 - Quản lý task, profile học tập, quote động lực và Gemini AI.
 - Cơ chế "friction" bắt gõ câu xác nhận bỏ cuộc.

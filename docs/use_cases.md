@@ -458,6 +458,13 @@
 > `MonitorOnlyDuringClasses` bật, chỉ thời gian phát hiện lớp online mới được cộng vào
 > `MonitoringEligibleSeconds`.
 
+> **Triển khai (issue #28):** khi máy sleep hoặc phiên bị lock/disconnect, `ISystemPowerEventPort` báo
+> suspend cho heartbeat và activity. Heartbeat chỉ cộng phần trước sleep vào `ActiveSeconds`; activity bỏ
+> khoảng sleep và reset cửa sổ sample, nên không ghi sample cho thời gian máy ngủ và không cộng gap vào
+> sample kế tiếp. Gap vượt `MaxActiveDelta`/`MaxSampleGap` mà không có sự kiện cũng bị bỏ. Thời lượng vẫn
+> tính bằng monotonic clock, nên chỉnh đồng hồ tiến không làm phồng `ActiveSeconds`/`DurationSeconds`;
+> đồng hồ lùi được clamp để timestamp không đảo.
+
 ---
 
 ### UC08 — Ước lượng mức độ tập trung
@@ -873,6 +880,11 @@
 > (`Interrupted`) rồi tạo phiên `Recovery` từ thời điểm hiện tại và khởi động lại heartbeat. Mọi thao tác
 > enable/disable/reconcile được serialize bằng semaphore để hai luồng không tạo hai session hoặc hai
 > heartbeat; unique partial index vẫn là chốt cuối ở tầng DB.
+
+> **Triển khai (issue #28):** resume từ sleep không tạo session mới khi app vẫn chạy: heartbeat và activity
+> nhận `Resumed`, bỏ khoảng sleep và tiếp tục trên session `Active` hiện tại. Thời gian sleep không vào
+> `ActiveSeconds` và không sinh sample; nếu app bị tắt trong lúc sleep thì lần khởi động sau đi theo luồng
+> crash/recovery ở trên, đóng session tại `LastHeartbeatAtUtc`.
 
 ---
 

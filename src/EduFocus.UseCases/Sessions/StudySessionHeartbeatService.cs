@@ -22,29 +22,38 @@ public sealed class StudySessionHeartbeatService : IStudySessionHeartbeatUseCase
 
     private readonly IStudySessionRepository _sessions;
     private readonly IMonotonicClockPort _clock;
+    private readonly ISystemPowerEventPort _powerEvents;
     private readonly IAppLogger _logger;
     private readonly TimeProvider _timeProvider;
     private readonly StudySessionHeartbeatOptions _options;
     private readonly SemaphoreSlim _lifecycleGate = new(1, 1);
     private readonly SemaphoreSlim _beatGate = new(1, 1);
+    private readonly object _powerLock = new();
 
     private CancellationTokenSource? _loopCts;
     private Task? _loop;
     private StudySessionId? _sessionId;
     private DateTime _lastHeartbeatUtc;
     private TimeSpan _lastTick;
+    private TimeSpan _lastBeatTick;
+    private TimeSpan _unbeatedElapsed;
+    private int _pendingSeconds;
     private bool _hasAnchor;
+    private bool _powerSubscribed;
+    private bool _suspended;
     private volatile bool _running;
 
     public StudySessionHeartbeatService(
         IStudySessionRepository sessions,
         IMonotonicClockPort clock,
+        ISystemPowerEventPort powerEvents,
         IAppLogger logger,
         TimeProvider timeProvider,
         StudySessionHeartbeatOptions options)
     {
         _sessions = sessions ?? throw new ArgumentNullException(nameof(sessions));
         _clock = clock ?? throw new ArgumentNullException(nameof(clock));
+        _powerEvents = powerEvents ?? throw new ArgumentNullException(nameof(powerEvents));
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
         _timeProvider = timeProvider ?? throw new ArgumentNullException(nameof(timeProvider));
 
@@ -80,8 +89,18 @@ public sealed class StudySessionHeartbeatService : IStudySessionHeartbeatUseCase
             _sessionId = sessionId;
             _lastHeartbeatUtc = lastHeartbeatAtUtc;
             _lastTick = _clock.GetTickCount();
+            _lastBeatTick = _lastTick;
+            _pendingSeconds = 0;
             _hasAnchor = true;
             _running = true;
+
+            lock (_powerLock)
+            {
+                _unbeatedElapsed = TimeSpan.Zero;
+                _suspended = false;
+            }
+
+            SubscribePowerEvents();
 
             var cts = new CancellationTokenSource();
             _loopCts = cts;
@@ -128,6 +147,8 @@ public sealed class StudySessionHeartbeatService : IStudySessionHeartbeatUseCase
 
     private async Task StopCoreAsync()
     {
+        UnsubscribePowerEvents();
+
         var cts = _loopCts;
         var loop = _loop;
         _loopCts = null;
@@ -168,6 +189,12 @@ public sealed class StudySessionHeartbeatService : IStudySessionHeartbeatUseCase
         _hasAnchor = false;
         _sessionId = null;
         _running = false;
+
+        lock (_powerLock)
+        {
+            _unbeatedElapsed = TimeSpan.Zero;
+            _suspended = false;
+        }
     }
 
     private async Task LoopAsync(CancellationToken cancellationToken)
@@ -219,10 +246,40 @@ public sealed class StudySessionHeartbeatService : IStudySessionHeartbeatUseCase
             return false;
 
         var tick = _clock.GetTickCount();
-        var elapsed = tick - _lastTick;
-        var seconds = elapsed > TimeSpan.Zero
-            ? (int)Math.Min(Math.Floor(elapsed.TotalSeconds), Math.Floor(_options.MaxActiveDelta.TotalSeconds))
+        var gapSinceLastBeat = tick - _lastBeatTick;
+        _lastBeatTick = tick;
+        TimeSpan elapsed;
+
+        lock (_powerLock)
+        {
+            if (_suspended && gapSinceLastBeat > _options.MaxActiveDelta)
+            {
+                // The timer was paused (sleep) and no resume event arrived;
+                // discard the gap and resume counting from this beat. Beats
+                // that keep firing (lock, disconnect) never hit this branch.
+                _lastTick = tick;
+                _suspended = false;
+            }
+
+            elapsed = _unbeatedElapsed;
+            _unbeatedElapsed = TimeSpan.Zero;
+
+            if (!_suspended)
+            {
+                if (tick > _lastTick)
+                    elapsed += tick - _lastTick;
+                _lastTick = tick;
+            }
+        }
+
+        var seconds = elapsed > TimeSpan.Zero && elapsed <= _options.MaxActiveDelta
+            ? (int)Math.Floor(elapsed.TotalSeconds)
             : 0;
+
+        // A failed write keeps its seconds so the next beat retries them, but
+        // the combined value stays within the per-beat cap.
+        seconds += _pendingSeconds;
+        seconds = Math.Min(seconds, (int)Math.Floor(_options.MaxActiveDelta.TotalSeconds));
 
         var now = _timeProvider.GetUtcNow().UtcDateTime;
 
@@ -243,7 +300,7 @@ public sealed class StudySessionHeartbeatService : IStudySessionHeartbeatUseCase
                 return false;
             }
 
-            _lastTick = tick;
+            _pendingSeconds = 0;
             _lastHeartbeatUtc = now;
             return true;
         }
@@ -253,10 +310,59 @@ public sealed class StudySessionHeartbeatService : IStudySessionHeartbeatUseCase
         }
         catch (Exception ex)
         {
+            _pendingSeconds = seconds;
             _logger.Warning(
                 LogCategories.Session,
                 $"{WriteWarning} ({ex.GetType().Name})");
             return true;
+        }
+    }
+
+    private void SubscribePowerEvents()
+    {
+        if (_powerSubscribed)
+            return;
+
+        _powerEvents.Suspended += OnSuspended;
+        _powerEvents.Resumed += OnResumed;
+        _powerSubscribed = true;
+    }
+
+    private void UnsubscribePowerEvents()
+    {
+        if (!_powerSubscribed)
+            return;
+
+        _powerEvents.Suspended -= OnSuspended;
+        _powerEvents.Resumed -= OnResumed;
+        _powerSubscribed = false;
+    }
+
+    private void OnSuspended(object? sender, EventArgs e)
+    {
+        lock (_powerLock)
+        {
+            if (_suspended)
+                return;
+
+            var tick = _clock.GetTickCount();
+            if (tick > _lastTick)
+                _unbeatedElapsed += tick - _lastTick;
+
+            _lastTick = tick;
+            _suspended = true;
+        }
+    }
+
+    private void OnResumed(object? sender, EventArgs e)
+    {
+        lock (_powerLock)
+        {
+            if (!_suspended)
+                return;
+
+            _lastTick = _clock.GetTickCount();
+            _suspended = false;
         }
     }
 }

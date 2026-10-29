@@ -34,6 +34,7 @@ public sealed class ActivityTrackingService : IActivityUseCase, IAsyncDisposable
     private readonly IForegroundActivityPort _foreground;
     private readonly IBrowserUrlProviderPort _urls;
     private readonly IMonotonicClockPort _clock;
+    private readonly ISystemPowerEventPort _powerEvents;
     private readonly IAppLogger _logger;
     private readonly TimeProvider _timeProvider;
     private readonly ActivityTrackingOptions _options;
@@ -52,6 +53,8 @@ public sealed class ActivityTrackingService : IActivityUseCase, IAsyncDisposable
     private bool _foregroundFaultReported;
     private bool _urlFaultReported;
     private bool _sessionEnded;
+    private bool _powerSubscribed;
+    private int _powerResetRequested;
     private volatile bool _running;
 
     public ActivityTrackingService(
@@ -61,6 +64,7 @@ public sealed class ActivityTrackingService : IActivityUseCase, IAsyncDisposable
         IForegroundActivityPort foreground,
         IBrowserUrlProviderPort urls,
         IMonotonicClockPort clock,
+        ISystemPowerEventPort powerEvents,
         IAppLogger logger,
         TimeProvider timeProvider,
         ActivityTrackingOptions options)
@@ -71,6 +75,7 @@ public sealed class ActivityTrackingService : IActivityUseCase, IAsyncDisposable
         _foreground = foreground ?? throw new ArgumentNullException(nameof(foreground));
         _urls = urls ?? throw new ArgumentNullException(nameof(urls));
         _clock = clock ?? throw new ArgumentNullException(nameof(clock));
+        _powerEvents = powerEvents ?? throw new ArgumentNullException(nameof(powerEvents));
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
         _timeProvider = timeProvider ?? throw new ArgumentNullException(nameof(timeProvider));
 
@@ -150,6 +155,9 @@ public sealed class ActivityTrackingService : IActivityUseCase, IAsyncDisposable
             _sessionEnded = false;
             _running = true;
 
+            Interlocked.Exchange(ref _powerResetRequested, 0);
+            SubscribePowerEvents();
+
             var cts = new CancellationTokenSource();
             _loopCts = cts;
             _loop = Task.Run(() => LoopAsync(cts.Token), CancellationToken.None);
@@ -197,6 +205,9 @@ public sealed class ActivityTrackingService : IActivityUseCase, IAsyncDisposable
 
     private async Task StopCoreAsync()
     {
+        UnsubscribePowerEvents();
+        Interlocked.Exchange(ref _powerResetRequested, 0);
+
         var cts = _loopCts;
         var loop = _loop;
         _loopCts = null;
@@ -276,6 +287,17 @@ public sealed class ActivityTrackingService : IActivityUseCase, IAsyncDisposable
         var elapsed = tick - _lastSampleTick;
         var now = ClampNow(UtcNow());
 
+        if (Interlocked.Exchange(ref _powerResetRequested, 0) == 1)
+        {
+            // Suspend/resume or lock/unlock: restart the cadence at the resumed
+            // instant so the away gap is never sampled.
+            _lastSampleTick = tick;
+            _lastSampleUtc = now;
+            _candidateKey = null;
+            _idleSampleWritten = false;
+            return false;
+        }
+
         var snapshot = ReadForeground();
 
         var idleSeconds = Math.Max(snapshot?.IdleSeconds ?? 0, 0);
@@ -285,6 +307,16 @@ public sealed class ActivityTrackingService : IActivityUseCase, IAsyncDisposable
             _idleSampleWritten = false;
 
         UpdateCandidate(tick, snapshot);
+
+        if (elapsed > _options.MaxSampleGap)
+        {
+            // The power-event port misses events on some machines; a gap this
+            // large is a suspend/stall, so no category time is attributed to it.
+            _lastSampleTick = tick;
+            _lastSampleUtc = now;
+            _idleSampleWritten = false;
+            return false;
+        }
 
         if (elapsed < _options.SampleInterval)
             return false;
@@ -507,4 +539,27 @@ public sealed class ActivityTrackingService : IActivityUseCase, IAsyncDisposable
     }
 
     private DateTime UtcNow() => _timeProvider.GetUtcNow().UtcDateTime;
+
+    private void SubscribePowerEvents()
+    {
+        if (_powerSubscribed)
+            return;
+
+        _powerEvents.Suspended += OnPowerChanged;
+        _powerEvents.Resumed += OnPowerChanged;
+        _powerSubscribed = true;
+    }
+
+    private void UnsubscribePowerEvents()
+    {
+        if (!_powerSubscribed)
+            return;
+
+        _powerEvents.Suspended -= OnPowerChanged;
+        _powerEvents.Resumed -= OnPowerChanged;
+        _powerSubscribed = false;
+    }
+
+    private void OnPowerChanged(object? sender, EventArgs e) =>
+        Interlocked.Exchange(ref _powerResetRequested, 1);
 }
