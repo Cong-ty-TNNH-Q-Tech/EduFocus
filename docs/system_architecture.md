@@ -885,6 +885,12 @@ AttentionPercent =
 - `AttentionSample` chỉ chứa timestamp, trạng thái lỗi, luminance, thời gian capture/inference và các
   trường số của khuôn mặt (confidence, yaw/pitch, số mắt); không chứa pixel, ảnh hay landmark thô. Frame
   được dispose trước khi sample được phát cho subscriber (issue #31).
+- Issue #44 bổ sung lớp minh bạch: `PrivacyNoticeWindow` + `PrivacyNoticeRenderer` render Markdown nhúng
+  (`docs/privacy-notice.md`) và mở được từ bước Privacy/Preferences của onboarding cùng thẻ
+  **Dữ liệu & quyền riêng tư** trong Parent Mode; MSI có bước consent trước khi copy file. Nội dung
+  notice, DPIA, bản đồ dữ liệu và quy trình sự cố nằm ở
+  [privacy-notice.md](./privacy-notice.md), [dpia.md](./dpia.md) và
+  [THIRD-PARTY-NOTICES.md](../THIRD-PARTY-NOTICES.md).
 
 ### 8.6. Settings, update check & xóa dữ liệu (issue #38)
 
@@ -1182,7 +1188,8 @@ EduFocus/
 │   ├── EduFocus.WPF/
 │   │   ├── Views/
 │   │   ├── ViewModels/
-│   │   ├── Services/
+│   │   ├── Services/       (PrivacyNoticeRenderer, logging, watchdog host, ...)
+│   │   ├── PrivacyNoticeWindow.xaml(.cs)
 │   │   ├── App.xaml
 │   │   └── EduFocus.WPF.csproj
 │   └── EduFocus.Domain.Tests/
@@ -1199,12 +1206,15 @@ EduFocus/
 │   ├── system_architecture.md
 │   ├── database_schema.md
 │   ├── domain-invariants.md
+│   ├── privacy-notice.md
+│   ├── dpia.md
 │   ├── installer.md
 │   ├── release-process.md
 │   ├── release-checklist.md
 │   ├── security-e2e-checklist.md
 │   ├── performance-report.md
 │   └── legacy-cleanup.md
+├── THIRD-PARTY-NOTICES.md
 └── .github/workflows/
 ```
 
@@ -1243,6 +1253,9 @@ EduFocus/
 > (độ trễ loopback p95, start/stop listener lặp), `scripts/Measure-Soak.ps1` (soak 8 giờ cho
 > Idle/Protection/Attention) và [release-checklist.md](./release-checklist.md) có ký duyệt; số đo
 > thực tế và ngưỡng ở [performance-report.md](./performance-report.md).
+> Issue #44 hoàn thiện hồ sơ minh bạch trước phát hành: privacy notice tiếng Việt + trình xem trong app,
+> DPIA/bản đồ dữ liệu/quy trình sự cố, consent hai lớp (MSI + onboarding), third-party notices và
+> cập nhật README/SECURITY/installer/release checklist.
 > Inventory 1.x ở [legacy-cleanup.md](./legacy-cleanup.md), invariant domain ở
 > [domain-invariants.md](./domain-invariants.md).
 

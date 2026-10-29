@@ -58,6 +58,20 @@ EduFocus được thiết kế để **không trở thành phần mềm do thám
 - Báo cáo luôn hiển thị **độ phủ camera** và **độ tin cậy** để phụ huynh không hiểu sai kết quả.
 - Ứng dụng phải được thông báo công khai cho học sinh; không khuyến khích giám sát bí mật.
 
+**Hồ sơ minh bạch:**
+
+- [Thông báo quyền riêng tư](./docs/privacy-notice.md) — dữ liệu, mục đích, nơi lưu, thời hạn,
+  quyền của phụ huynh/học sinh và kênh liên hệ. Thông báo được hiển thị trong installer và mở lại
+  được từ onboarding/Parent Mode trước khi bật giám sát.
+- [DPIA](./docs/dpia.md) — data map, đánh giá rủi ro, quy trình xử lý yêu cầu dữ liệu (xác nhận
+  trong 72 giờ làm việc, hoàn tất trong 30 ngày) và ứng phó sự cố.
+- [Third-party notices](./THIRD-PARTY-NOTICES.md) — danh mục giấy phép của mọi thư viện được
+  phân phối trong MSI/ZIP.
+
+**Xóa dữ liệu:** Parent Mode → "Dữ liệu & quyền riêng tư" → xóa toàn bộ dữ liệu quan sát bằng
+PIN; khi gỡ cài đặt có thể chọn xóa `%ProgramData%\EduFocus`. Chi tiết và thời hạn phản hồi ở
+[thông báo quyền riêng tư §10](./docs/privacy-notice.md#10-yêu-cầu-xóa-dữ-liệu-và-thời-hạn-phản-hồi).
+
 > **Giới hạn:** Webcam thường không phải eye tracker hồng ngoại. "Tập trung" là ước lượng, không phải bằng chứng tuyệt đối. Khi Google Meet/Teams đang dùng camera, app có thể không quan sát được nếu máy chưa hỗ trợ Multi-App Camera.
 >
 > **Blocking:** Hosts chỉ chặn domain và không tạo log HTTPS. Trang chặn chỉ hiển thị với HTTP; HTTPS thường báo lỗi kết nối/SSL. Vì vậy số lần bị chặn là **best-effort**, không phải tổng tuyệt đối.
@@ -158,6 +172,9 @@ dotnet test EduFocus.slnx --configuration Release
 - [📝 Changelog](./CHANGELOG.md) — Lịch sử thay đổi
 - [🤝 Contributing](./CONTRIBUTING.md) — Hướng dẫn đóng góp
 - [🔒 Security](./SECURITY.md) — Chính sách bảo mật và báo cáo lỗ hổng
+- [🔏 Privacy Notice](./docs/privacy-notice.md) — Thông báo quyền riêng tư (bản đang áp dụng)
+- [📊 DPIA](./docs/dpia.md) — Đánh giá tác động xử lý dữ liệu cá nhân
+- [⚖️ Third-Party Notices](./THIRD-PARTY-NOTICES.md) — Giấy phép thư viện bên thứ ba
 
 ---
 
@@ -212,6 +229,7 @@ Mọi đóng góp đều được chào đón. Vui lòng đọc [CONTRIBUTING.md
 
 ## 📜 License
 
-Dự án được phân phối dưới giấy phép [MIT](./LICENSE).
+Dự án được phân phối dưới giấy phép [MIT](./LICENSE). Danh mục giấy phép của các thư viện được
+phân phối kèm nằm trong [THIRD-PARTY-NOTICES.md](./THIRD-PARTY-NOTICES.md).
 
 © 2026 ThanhTrunggDEV. Dự án kế thừa Don't Be Lazy theo giấy phép MIT.

@@ -800,6 +800,9 @@
                                            FontSize="12" Foreground="#5B6270" TextWrapping="Wrap" />
                                 <TextBlock Text="{Binding Privacy.CameraSummary}" Margin="0,4,0,0"
                                            FontSize="12" Foreground="#5B6270" TextWrapping="Wrap" />
+                                <Button Content="Xem thông báo quyền riêng tư đầy đủ"
+                                        Style="{StaticResource LinkButton}" Margin="0,6,0,0"
+                                        Click="OpenPrivacyNotice_OnClick" />
 
                                 <CheckBox Content="Bật giám sát tập trung trong phiên học"
                                           IsChecked="{Binding Privacy.MonitoringEnabled}"

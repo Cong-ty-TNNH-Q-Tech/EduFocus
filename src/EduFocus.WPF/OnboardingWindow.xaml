@@ -151,6 +151,10 @@
                             <Run Text="Phụ huynh có thể xem và xóa dữ liệu trong Parent Mode sau khi thiết lập." />
                         </TextBlock>
 
+                        <Button Content="Xem thông báo quyền riêng tư đầy đủ"
+                                Style="{StaticResource QuietButton}" Margin="0,16,0,0"
+                                Click="OpenPrivacyNotice_OnClick" />
+
                         <CheckBox x:Name="PrivacyCheckBox"
                                   IsChecked="{Binding PrivacyAccepted, Mode=TwoWay}"
                                   AutomationProperties.Name="Tôi đã đọc thông báo quyền riêng tư"
@@ -179,6 +183,9 @@
                                   Content="Bật giám sát tập trung bằng camera khi phiên học bắt đầu" />
                         <TextBlock Style="{StaticResource BodyText}" Margin="24,4,0,0"
                                    Text="Camera chỉ được mở trong phiên học và tắt khi phiên kết thúc. Không có ảnh hay video nào được ghi lại." />
+                        <Button Content="Xem lại thông báo quyền riêng tư"
+                                Style="{StaticResource QuietButton}" Margin="24,6,0,0"
+                                Click="OpenPrivacyNotice_OnClick" />
 
                         <CheckBox IsChecked="{Binding StartWithWindows, Mode=TwoWay}"
                                   AutomationProperties.Name="Khởi động cùng Windows"

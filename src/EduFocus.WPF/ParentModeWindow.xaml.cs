@@ -49,6 +49,9 @@ public partial class ParentModeWindow : Window
 
     private void OnTimerTick(object? sender, EventArgs e) => _viewModel.HandleTick();
 
+    private void OpenPrivacyNotice_OnClick(object sender, RoutedEventArgs e) =>
+        new PrivacyNoticeWindow { Owner = this }.ShowDialog();
+
     private void OnPasswordBoxesShouldClear(object? sender, EventArgs e)
     {
         LoginPinBox.Clear();

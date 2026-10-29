@@ -54,6 +54,9 @@ public partial class OnboardingWindow : Window
         ResumePinBox.Clear();
     }
 
+    private void OpenPrivacyNotice_OnClick(object sender, RoutedEventArgs e) =>
+        new PrivacyNoticeWindow { Owner = this }.ShowDialog();
+
     private void PinBox_OnPasswordChanged(object sender, RoutedEventArgs e) =>
         _viewModel.Pin = PinBox.Password;
 

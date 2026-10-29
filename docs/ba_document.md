@@ -401,6 +401,7 @@ EduFocus cung cấp một lớp bảo vệ và quan sát **tối thiểu, minh b
 - Tại Việt Nam, dữ liệu khuôn mặt/sinh trắc học là **dữ liệu cá nhân nhạy cảm**. Việc xử lý cần tuân thủ **Luật Bảo vệ dữ liệu cá nhân 91/2025/QH15** (hiệu lực 01/01/2026) và **Nghị định 356/2025/NĐ-CP** (hiệu lực 01/01/2026, thay thế Nghị định 13/2023/NĐ-CP) cùng các văn bản hướng dẫn hiện hành.
 - Nguyên tắc áp dụng: mục đích rõ ràng, tối thiểu hóa, lưu trữ hạn chế, minh bạch, có sự đồng ý của người đại diện hợp pháp và đánh giá tác động xử lý dữ liệu cá nhân (DPIA) trước khi phát hành.
 - Không lưu ảnh/video làm giảm rủi ro nhưng không loại bỏ hoàn toàn nghĩa vụ thông báo, đồng thuận và đánh giá tác động.
+- Hồ sơ minh bạch đã hoàn thiện ở issue #44: [`docs/privacy-notice.md`](./privacy-notice.md) (thông báo quyền riêng tư tiếng Việt), [`docs/dpia.md`](./dpia.md) (DPIA, bản đồ dữ liệu, người chịu trách nhiệm, quy trình sự cố) và [`THIRD-PARTY-NOTICES.md`](../THIRD-PARTY-NOTICES.md) (giấy phép bên thứ ba). Notice hiển thị trước khi bật monitoring (onboarding/Parent Mode) và trong bộ cài MSI.
 - Tài liệu này không phải tư vấn pháp lý; cần luật sư/DPO xem xét trước khi phát hành thương mại.
 
 ### 10.3. Giới hạn kỹ thuật đã biết

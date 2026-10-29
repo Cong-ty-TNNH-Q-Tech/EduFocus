@@ -46,7 +46,11 @@ MSI chứa:
 - `EduFocus.exe` (self-contained, component GUID cố định để nâng cấp thay thế file, không tạo bản cài thứ hai).
 - Shortcut **Desktop** và **Start Menu** dùng chung cho mọi người dùng (`CommonDesktopFolder`, `CommonProgramsFolder`).
 - Registry `HKLM\Software\ThanhTrunggDEV\EduFocus` với `InstallLocation` và `Version` (keypath của component shortcut/registry).
+- `docs\privacy-notice.md`, `THIRD-PARTY-NOTICES.md` và `LICENSE` (bản sao chỉ đọc từ repo) trong thư mục cài.
 - Không có database, log, file cấu hình hay secret.
+
+`Package/@Codepage` là `65001` (UTF-8) để toàn bộ text tiếng Việt trong UI cài đặt hiển thị đúng;
+codepage 1252/1258 không biểu diễn hoặc không round-trip được chữ Việt precomposed.
 
 **Chống secret trong payload:** script từ chối build nếu publish chứa:
 
@@ -63,16 +67,22 @@ MSI chứa:
 
 Trình tự MSI thực hiện:
 
-1. `util:CloseApplication` đóng `EduFocus.exe` (app và watchdog dùng chung file) nếu đang chạy.
-2. Copy file vào `%ProgramFiles%\EduFocus`.
-3. Chạy deferred custom action `--prepare-data-directory` **as SYSTEM**:
+1. `WelcomeDlg` → `PrivacyConsentDlg`: tóm tắt thông báo quyền riêng tư, checkbox **Tôi đã đọc và
+   đồng ý** (property `PRIVACY_CONSENT`). Nút Next chỉ mở `InstallDirDlg` khi đã tick; Back quay
+   lại Welcome, Cancel hủy cài đặt. Bản đầy đủ nằm ở [privacy-notice.md](./privacy-notice.md).
+   Silent install (`/qn`) bỏ qua UI; consent vẫn được ghi trong onboarding ở lần chạy đầu.
+2. `util:CloseApplication` đóng `EduFocus.exe` (app và watchdog dùng chung file) nếu đang chạy.
+3. Copy file vào `%ProgramFiles%\EduFocus`.
+4. Chạy deferred custom action `--prepare-data-directory` **as SYSTEM**:
    tạo `%ProgramData%\EduFocus` và áp ACL chỉ Administrators + SYSTEM (kế thừa cho file con).
    Nếu bước này lỗi, cài đặt thất bại và rollback — app sẽ không có thư mục dữ liệu hở quyền.
-4. Tạo shortcut và registry entry.
+5. Tạo shortcut và registry entry.
 
 Sau khi cài, người dùng mở EduFocus từ shortcut. Lần chạy đầu:
 
-- Onboarding (consent, PIN, recovery code) chạy trước dashboard.
+- Onboarding (consent quyền riêng tư, PIN, recovery code) chạy trước dashboard; nút
+  **Xem thông báo quyền riêng tư đầy đủ** mở bản render từ Markdown nhúng, và bản cài kèm nằm ở
+  `%ProgramFiles%\EduFocus\docs\privacy-notice.md`.
 - Database được tạo với incremental auto-vacuum + WAL.
 - Khi phụ huynh bật bảo vệ, `WatchdogCoordinator` đăng ký hai scheduled task
   `EduFocusLogon` và `EduFocusWatchdog` (HIGHEST). Installer **không** đăng ký task:
@@ -174,7 +184,10 @@ Chưa thể chạy tự động trong CI (cần VM Windows). Checklist bắt bu�
 
 **Windows 10 22H2 và Windows 11 (64-bit), mỗi bản trên VM sạch:**
 
-1. Cài bằng tài khoản Administrator → thành công; shortcut Desktop + Start Menu tồn tại;
+1. Cài bằng tài khoản Administrator → dialog **Thông báo quyền riêng tư** hiện trước khi copy file,
+   Next không tiến được khi chưa tick, Back/Cancel hoạt động, text tiếng Việt không lỗi font;
+   hoàn tất cài đặt, shortcut Desktop + Start Menu tồn tại; thư mục cài có
+   `docs\privacy-notice.md`, `THIRD-PARTY-NOTICES.md`, `LICENSE`;
    `%ProgramData%\EduFocus` tồn tại với ACL chỉ Administrators/SYSTEM
    (`icacls "%ProgramData%\EduFocus"`).
 2. Mở app bằng **standard user** → xác nhận UAC xuất hiện (hành vi dự kiến) và app chạy sau khi
@@ -191,6 +204,8 @@ Chưa thể chạy tự động trong CI (cần VM Windows). Checklist bắt bu�
    không có chứng chỉ/private key trong MSI.
 8. Với bản tải từ GitHub Release: đối chiếu SHA-256 với `SHA256SUMS.txt` và chạy
    `Get-AuthenticodeSignature` trên MSI (khi bản phát hành được ký) trước khi cài.
+9. Cài silent (`msiexec /i "EduFocus-2.0.0-win-x64.msi" /qn`) → thành công, không UI; mở app lần
+   đầu vẫn bắt buộc onboarding consent trước khi vào dashboard.
 
 Kết quả từng lần chạy ghi vào [release-checklist.md](./release-checklist.md) §2.4. Quy trình tag,
 ký số, checksum và dry run nằm ở [release-process.md](./release-process.md); ngưỡng hiệu năng và

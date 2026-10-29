@@ -59,9 +59,11 @@ Tham chiếu: [release-process.md](./release-process.md),
 
 ### 2.4. Cài đặt, nâng cấp và gỡ cài đặt
 
-- [ ] Cài mới bằng MSI trên VM sạch (Windows 10 22H2 và Windows 11) thành công.
+- [ ] Cài mới bằng MSI trên VM sạch (Windows 10 22H2 và Windows 11) thành công; dialog
+      **Thông báo quyền riêng tư** hiển thị đúng tiếng Việt và chặn Next khi chưa tick.
 - [ ] Shortcut Desktop/Start Menu tồn tại; `%ProgramData%\EduFocus` có ACL
-      Administrators/SYSTEM.
+      Administrators/SYSTEM; thư mục cài có `docs\privacy-notice.md`,
+      `THIRD-PARTY-NOTICES.md`, `LICENSE`.
 - [ ] Standard user mở app nhận UAC dự kiến và app chạy sau khi nâng quyền.
 - [ ] Nâng cấp từ bản trước giữ DB/settings, session cũ được phục hồi, chỉ còn một entry
       trong Apps & Features.
@@ -78,7 +80,11 @@ Tham chiếu: [release-process.md](./release-process.md),
 ### 2.6. Tài liệu
 
 - [ ] CHANGELOG, SECURITY (phiên bản hỗ trợ), hướng dẫn cài đặt và release notes đã cập nhật.
-- [ ] Privacy notice/DPIA của bản phát hành đã được duyệt (issue #44) và khớp tính năng.
+- [ ] [privacy-notice.md](./privacy-notice.md) và [dpia.md](./dpia.md) của bản phát hành đã được
+      duyệt và khớp tính năng; timestamp consent trong onboarding và dialog MSI hoạt động.
+- [ ] [THIRD-PARTY-NOTICES.md](../THIRD-PARTY-NOTICES.md) khớp dependency thực tế
+      (`dotnet list package --include-transitive`), không có GPL/AGPL/non-commercial;
+      FluentAssertions vẫn pin 7.2.0.
 - [ ] Tài liệu người dùng nêu rõ giới hạn hosts/HTTPS và block page chỉ áp dụng HTTP.
 
 ---

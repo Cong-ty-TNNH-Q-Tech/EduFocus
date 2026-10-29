@@ -58,6 +58,21 @@ EduFocus is designed **not to be spyware**:
 - Reports always show **camera coverage** and **confidence** so parents don't misread results.
 - The app should be disclosed openly to the student; covert monitoring is discouraged.
 
+**Transparency records:**
+
+- [Privacy Notice](./docs/privacy-notice.md) — data, purposes, storage, retention, parent/student
+  rights and contact channel. It is shown in the installer and can be reopened from onboarding or
+  Parent Mode before monitoring is enabled (Vietnamese).
+- [DPIA](./docs/dpia.md) — data map, risk assessment, data-request process (acknowledged within
+  72 business hours, completed within 30 days) and incident response (Vietnamese).
+- [Third-party notices](./THIRD-PARTY-NOTICES.md) — license inventory for every library shipped in
+  the MSI/ZIP.
+
+**Deleting data:** Parent Mode → "Dữ liệu & quyền riêng tư" → delete all observation data with the
+PIN; the uninstaller can also remove `%ProgramData%\EduFocus`. Details and response deadlines are
+in [privacy notice §10](./docs/privacy-notice.md#10-yêu-cầu-xóa-dữ-liệu-và-thời-hạn-phản-hồi)
+(Vietnamese).
+
 > **Limitation:** A webcam is not an infrared eye tracker. "Focus" is an estimate, not absolute proof. When Google Meet/Teams is using the camera, the app may not be able to observe if the machine does not support Multi-App Camera.
 >
 > **Blocking:** Hosts blocks domains but does not log HTTPS. The block page only appears over HTTP; HTTPS usually shows a connection/SSL error. Blocked-attempt counts are therefore **best-effort**, not absolute totals.
@@ -158,6 +173,9 @@ dotnet test EduFocus.slnx --configuration Release
 - [📝 Changelog](./CHANGELOG.md)
 - [🤝 Contributing](./CONTRIBUTING.md)
 - [🔒 Security](./SECURITY.md)
+- [🔏 Privacy Notice](./docs/privacy-notice.md) — current privacy notice (Vietnamese)
+- [📊 DPIA](./docs/dpia.md) — data protection impact assessment (Vietnamese)
+- [⚖️ Third-Party Notices](./THIRD-PARTY-NOTICES.md) — third-party license inventory
 
 ---
 
@@ -212,6 +230,7 @@ Contributions are welcome. Please read [CONTRIBUTING.md](./CONTRIBUTING.md) befo
 
 ## 📜 License
 
-Distributed under the [MIT License](./LICENSE).
+Distributed under the [MIT License](./LICENSE). The licenses of bundled third-party libraries are
+listed in [THIRD-PARTY-NOTICES.md](./THIRD-PARTY-NOTICES.md).
 
 © 2026 ThanhTrunggDEV. EduFocus is built on the MIT-licensed Don't Be Lazy project.

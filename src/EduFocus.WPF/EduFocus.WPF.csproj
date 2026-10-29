@@ -41,4 +41,23 @@
     <ProjectReference Include="..\EduFocus.SqliteDataAccess\EduFocus.SqliteDataAccess.csproj" />
   </ItemGroup>
 
+  <!-- Privacy notice and license texts are embedded for the in-app viewer and
+       copied next to the executable so the installer ships them unchanged. -->
+  <ItemGroup>
+    <EmbeddedResource Include="..\..\docs\privacy-notice.md"
+                      LogicalName="EduFocus.Resources.privacy-notice.md" />
+    <Content Include="..\..\docs\privacy-notice.md"
+             Link="docs\privacy-notice.md"
+             CopyToOutputDirectory="PreserveNewest"
+             CopyToPublishDirectory="PreserveNewest" />
+    <Content Include="..\..\THIRD-PARTY-NOTICES.md"
+             Link="THIRD-PARTY-NOTICES.md"
+             CopyToOutputDirectory="PreserveNewest"
+             CopyToPublishDirectory="PreserveNewest" />
+    <Content Include="..\..\LICENSE"
+             Link="LICENSE"
+             CopyToOutputDirectory="PreserveNewest"
+             CopyToPublishDirectory="PreserveNewest" />
+  </ItemGroup>
+
 </Project>

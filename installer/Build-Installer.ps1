@@ -67,7 +67,7 @@ $forbiddenExtensions = @(
 )
 $forbiddenNames = @('secrets.json', 'credentials.json', 'id_rsa', 'id_ed25519')
 $scannedExtensions = @(
-    '.config', '.json', '.xml', '.txt', '.yml', '.yaml',
+    '.config', '.json', '.xml', '.txt', '.md', '.yml', '.yaml',
     '.ps1', '.cmd', '.bat', '.ini', '.properties'
 )
 $privateKeyMarker = '-----BEGIN [A-Z0-9 ]*PRIVATE KEY-----'
@@ -246,7 +246,11 @@ if (-not (Test-Path -LiteralPath $payloadDirectory -PathType Container)) {
 $payloadWxs = Join-Path $payloadDirectory 'Payload.wxs'
 [System.IO.File]::WriteAllText($payloadWxs, $builder.ToString(), (New-Object System.Text.UTF8Encoding($false)))
 
-$warnings = $payloadFiles | Where-Object { $_.Length -gt 0 -and $_.Relative -notmatch '\.(exe|dll|onnx|json|xml|dat|bin)$' }
+$warnings = $payloadFiles | Where-Object {
+    ($_.Length -gt 0) -and
+    ($_.Relative -notmatch '\.(exe|dll|onnx|json|xml|dat|bin|md|txt)$') -and
+    ($_.Name -notmatch '^(LICENSE|NOTICE)$')
+}
 foreach ($warning in $warnings) {
     Write-Warning "Shipping '$($warning.Relative)' ($($warning.Length) bytes); confirm it contains no secrets."
 }

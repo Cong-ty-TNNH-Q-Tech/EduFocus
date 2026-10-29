@@ -331,6 +331,14 @@ và dự án tuân theo [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 - **Tài liệu liên kết:** cập nhật [docs/release-process.md](docs/release-process.md) §6/§8 (cổng hiệu năng + soak + checklist ký duyệt), [docs/installer.md](docs/installer.md) §7 và architecture §13/§14.
 - **Tests:** +5 test (`PerformanceBudgetTests` 3, `BlockPagePerformanceTests` 2); tổng **956 test pass**, build Release 0 warning.
 
+### Added (Phase 7 — Hồ sơ minh bạch & tuân thủ dữ liệu, issue #44)
+- **Thông báo quyền riêng tư:** thêm [docs/privacy-notice.md](docs/privacy-notice.md) (tiếng Việt; dữ liệu, mục đích, lưu trữ, chia sẻ, quyền của chủ thể dữ liệu, xóa, sự cố, liên hệ) và `PrivacyNoticeWindow` + `PrivacyNoticeRenderer` trong WPF đọc Markdown nhúng; mở từ bước Privacy/Preferences của onboarding và thẻ **Dữ liệu & quyền riêng tư** trong Parent Mode trước khi bật monitoring.
+- **DPIA & bản đồ dữ liệu:** [docs/dpia.md](docs/dpia.md) theo **Luật Bảo vệ dữ liệu cá nhân 91/2025/QH15** và **Nghị định 356/2025/NĐ-CP**, gồm bản đồ dữ liệu, đánh giá rủi ro, người chịu trách nhiệm, retention, quy trình xóa và ứng cứu sự cố.
+- **Consent trong installer:** `PrivacyConsentDlg` bắt buộc tick trước khi copy file, Back/Cancel hoạt động, Back từ InstallDir quay lại bước consent; MSI chuyển codepage sang UTF-8 (`65001`) để hiển thị tiếng Việt; payload kèm `docs\privacy-notice.md`, `THIRD-PARTY-NOTICES.md` và `LICENSE`.
+- **Third-party licenses:** [THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md) liệt kê runtime/test/model kèm phiên bản, giấy phép và văn bản đầy đủ; xác nhận không có GPL/AGPL/SSPL/non-commercial. FluentAssertions pin **7.2.0** vì từ 8.x dùng Xceed Community License chỉ cho mục đích phi thương mại.
+- **Tài liệu người dùng:** README/README.en thêm mục **Hồ sơ minh bạch**, quy trình xóa dữ liệu và liên kết third-party; cập nhật `SECURITY.md`, `docs/installer.md`, `docs/release-checklist.md`, `docs/ba_document.md` §10.2 và architecture §8.5/§14.
+- **Kiểm thử:** renderer xác nhận render đủ 38 block/10.765 ký tự (heading, camera, liên hệ, bold); MSI build + `wix msi validate` thành công, kiểm tra qua COM xác nhận dialog consent, thứ tự ControlEvent và file `docs\privacy-notice.md` trong File table; **956 test pass**, build Release 0 warning.
+
 ### Breaking changes
 - **Không migrate dữ liệu 1.x:** 2.0.0 dùng schema mới tại `%ProgramData%\EduFocus\edufocus.db`; DB của Don't Be Lazy (1.x) không được đọc hoặc nâng cấp tự động. Người dùng chuyển từ 1.x bắt đầu lại onboarding và dữ liệu 2.0.
 - **Mô hình bảo vệ và dữ liệu mới:** không còn phiên tập trung 1.x; quyền điều khiển thuộc Parent Mode + PIN, dữ liệu nằm trong `%ProgramData%` với ACL Administrators/SYSTEM.
