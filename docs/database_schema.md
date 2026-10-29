@@ -475,11 +475,14 @@ ORDER BY StartedAtUtc;
 | Log file | 7–14 ngày | `FileLogger` |
 
 **Retention job**
-- Chạy mỗi ngày lúc 03:00 local hoặc khi app khởi động.
-- Xóa theo batch (500–1000 rows) để tránh khóa DB lâu.
-- Khi tạo DB, đặt `PRAGMA auto_vacuum = INCREMENTAL;`; sau khi xóa, chạy `PRAGMA incremental_vacuum;` định kỳ.
+- Chạy một lần khi app khởi động và mỗi ngày khi local time ≥ 03:00 (`RetentionSchedulerService`).
+- Xóa theo batch 500 mặc định (`RetentionOptions.BatchSize`), lặp đến khi batch ngắn, để tránh khóa DB lâu.
+- Thứ tự xóa: `ActivitySamples` → `AttentionEvents` → `BlockedAttempts` → `AuditLogs` → `StudySessions`; chi tiết xóa trước để session summary giữ đủ hạn.
+- Không xóa row của session `Active`, không xóa `AttentionEvent` còn mở; `StudySessions` chỉ xóa khi `Status <> 'Active'` và `EndedAtUtc < cutoff`. Xóa session cascade sample/event còn sót và đặt `BlockedAttempts.SessionId = NULL`.
+- Khi tạo DB, đặt `PRAGMA auto_vacuum = INCREMENTAL;`; sau mỗi pass retention chạy `PRAGMA incremental_vacuum;`.
 - Bật `PRAGMA foreign_keys = ON;` và `PRAGMA journal_mode = WAL;` khi mở kết nối.
-- Ghi audit "RetentionCompleted" với số bản ghi đã xóa.
+- Ghi audit `RetentionApplied` (tên cũ trong tài liệu: "RetentionCompleted") với số bản ghi từng bảng và danh sách bảng lỗi; lỗi một bảng không dừng các bảng khác và không báo thành công giả.
+- `AuditLogs` dùng cửa sổ cố định 365 ngày (`RetentionOptions.AuditRetentionDays`) vì `AppSettings` không có knob riêng.
 - Retention chỉ xóa bản ghi chi tiết; `StudySessions` (summary) được giữ đến `SessionRetentionDays`, nên xóa `ActivitySamples`/`AttentionEvents` không làm mất báo cáo dài hạn.
 
 ---

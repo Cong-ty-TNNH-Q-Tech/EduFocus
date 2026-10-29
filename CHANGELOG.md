@@ -215,6 +215,14 @@ và dự án tuân theo [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 - **DI:** đăng ký singleton `ISystemPowerEventPort`/`WindowsSystemPowerEventPort`; activity và heartbeat nhận port này qua constructor.
 - **Tests:** 7 test heartbeat (suspend/resume, dừng khi suspended, suspend lặp, nhiều chu kỳ trước beat, lock dài không resume, mất resume sau gap, DST), cập nhật test gap dài và clamp; 3 test activity (bỏ gap suspend, reset cửa sổ sau resume, forward clock), cập nhật test gap; tổng **603 test pass**, build Release 0 warning.
 
+### Added (Phase 4 — Retention job, issue #29)
+- **Retention theo AppSettings:** `IRetentionUseCase`/`RetentionService` đọc `ActivityRetentionDays`/`EventRetentionDays`/`SessionRetentionDays` và xóa `ActivitySamples` (mặc định 30 ngày), `AttentionEvents` + `BlockedAttempts` (90 ngày), `AuditLogs` (365 ngày cố định) và `StudySessions` (365 ngày) theo batch mặc định 500. Thiếu settings hoặc đọc settings lỗi thì bỏ qua toàn bộ pass, không xóa ngoài phạm vi.
+- **An toàn dữ liệu đang dùng:** `SqliteRetentionRepository` dùng raw SQL subquery `LIMIT @batch` vì SQLite không hỗ trợ `DELETE ... LIMIT`; sample/event của session `Active` bị loại khỏi mọi batch, attention event còn mở không bị xóa, session `Active` hoặc chưa kết thúc không bị xóa. Chi tiết được xóa trước session để báo cáo dài hạn giữ đến hạn session; xóa session cascade sample/event còn sót, còn `BlockedAttempts` chuyển `SessionId` về NULL.
+- **Lỗi cục bộ, không báo thành công giả:** mỗi bảng chạy độc lập; bảng lỗi giữ số đã xóa và vào danh sách `Failures`, các bảng khác vẫn tiếp tục; lỗi vacuum/audit cũng được ghi nhận. Audit `RetentionApplied` (actor `System`) ghi số bản ghi từng bảng và danh sách bảng lỗi, không chứa nội dung nhạy cảm.
+- **Lịch chạy:** `RetentionSchedulerService` chạy một lần lúc khởi động và mỗi ngày khi local time ≥ 03:00; pass chạy trên thread pool nên batch không giữ UI thread. `PRAGMA incremental_vacuum` chạy sau mỗi pass trên DB `auto_vacuum = INCREMENTAL`.
+- **Ghi chú:** issue ghi "RetentionCompleted"; domain đã có enum `AuditEventType.RetentionApplied` nên dùng lại tên này.
+- **Tests:** 11 test `RetentionService` (cutoff theo settings, batch đến khi batch ngắn, lỗi giữa batch, thiếu/lỗi settings, vacuum/audit lỗi, audit count, chạy lặp tuần tự, validate options) và 8 test SQLite (sample session Active, event mở, blocked attempt/audit cutoff, batch session + cascade + SET NULL, session Active/recent, vacuum, validate cutoff/batch); tổng **622 test pass**, build Release 0 warning.
+
 ### Removed (khỏi phạm vi EduFocus)
 - Quản lý task, profile học tập, quote động lực và Gemini AI.
 - Cơ chế "friction" bắt gõ câu xác nhận bỏ cuộc.

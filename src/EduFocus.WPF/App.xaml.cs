@@ -12,6 +12,7 @@ using EduFocus.UseCases.Blocking;
 using EduFocus.UseCases.Lifecycle;
 using EduFocus.UseCases.Onboarding;
 using EduFocus.UseCases.Protection;
+using EduFocus.UseCases.Retention;
 using EduFocus.UseCases.Schedule;
 using EduFocus.UseCases.Sessions;
 using EduFocus.WPF.Services;
@@ -105,6 +106,7 @@ public partial class App : Application
 
         Services.GetRequiredService<TrayIconService>().Start();
         scheduleScheduler.Start();
+        Services.GetRequiredService<RetentionSchedulerService>().Start();
 
         // Background update check — non-blocking, silent on failure
         _ = Services.GetRequiredService<MainWindowViewModel>().Update.CheckForUpdateAsync();
@@ -124,6 +126,7 @@ public partial class App : Application
         services.AddSingleton<IBlockRuleRepository, SqliteBlockRuleRepository>();
         services.AddSingleton<IBlockedAttemptRepository, SqliteBlockedAttemptRepository>();
         services.AddSingleton<IActivitySampleRepository, SqliteActivitySampleRepository>();
+        services.AddSingleton<IRetentionRepository, SqliteRetentionRepository>();
         services.AddSingleton<ISystemPowerEventPort, WindowsSystemPowerEventPort>();
         services.AddSingleton(new StudySessionHeartbeatOptions());
         services.AddSingleton<IStudySessionHeartbeatUseCase, StudySessionHeartbeatService>();
@@ -140,6 +143,8 @@ public partial class App : Application
         services.AddSingleton<IOnboardingUseCase, OnboardingService>();
         services.AddSingleton<IProtectionUseCase, ProtectionService>();
         services.AddSingleton<IScheduleUseCase, ScheduleService>();
+        services.AddSingleton(new RetentionOptions());
+        services.AddSingleton<IRetentionUseCase, RetentionService>();
         services.AddSingleton<IAppLifecycleUseCase, AppLifecycleService>();
         services.AddSingleton<DatabaseBootstrapper>();
 
@@ -151,6 +156,7 @@ public partial class App : Application
         services.AddSingleton<MainWindowViewModel>();
         services.AddSingleton<TrayIconService>();
         services.AddSingleton<ScheduleSchedulerService>();
+        services.AddSingleton<RetentionSchedulerService>();
         services.AddSingleton<AppExitState>();
         services.AddSingleton<MainWindow>();
         services.AddTransient<ParentModeViewModel>();

@@ -13,8 +13,15 @@ internal sealed class FakeAppSettingsRepository : IAppSettingsRepository
 
     public bool ThrowOnUpdate { get; set; }
 
-    public Task<AppSettings?> GetAsync(CancellationToken cancellationToken = default) =>
-        Task.FromResult(Stored);
+    public bool ThrowOnRead { get; set; }
+
+    public Task<AppSettings?> GetAsync(CancellationToken cancellationToken = default)
+    {
+        if (ThrowOnRead)
+            throw new InvalidOperationException("The settings store is unavailable.");
+
+        return Task.FromResult(Stored);
+    }
 
     public Task AddAsync(AppSettings settings, CancellationToken cancellationToken = default)
     {

@@ -111,7 +111,7 @@ IAttentionUseCase
 IBlockRuleUseCase
 IScheduleUseCase
 IReportUseCase
-IDataRetentionUseCase
+IRetentionUseCase
 ```
 
 **Outbound**
@@ -130,6 +130,7 @@ IBlockRuleRepository
 IScheduleWindowRepository
 IStudySessionRepository
 IActivitySampleRepository
+IRetentionRepository
 ISystemPowerEventPort
 IAttentionEventRepository
 IBlockedAttemptRepository
@@ -157,7 +158,7 @@ IProcessWatchdogPort
 | `BlockRuleUseCase` | CRUD rule, validate, allowlist override |
 | `ScheduleService` | CRUD khung giờ, đánh giá 30 giây, auto ON/OFF và override |
 | `ReportUseCase` | Query dashboard, timeline, export |
-| `DataRetentionUseCase` | Xóa dữ liệu quá hạn, xóa theo yêu cầu |
+| `RetentionService` | Xóa dữ liệu quá hạn theo AppSettings, batch và audit (issue #29); xóa theo yêu cầu/CSV thuộc UC11 UI sau |
 
 `ParentSessionState` (singleton, chỉ trong bộ nhớ) triển khai `IParentAuthorizer` để các use case
 nhạy cảm kiểm tra phiên trước khi thực thi.
@@ -229,6 +230,18 @@ gap vượt `MaxActiveDelta` bị bỏ rồi đếm lại. Activity reset `_last
 làm phồng thời lượng, còn backward wall clock vẫn clamp timestamp. Khi ghi heartbeat lỗi, `_pendingSeconds`
 được cộng vào beat sau và clamp `MaxActiveDelta`.
 
+**Hiện trạng issue #29:** `IRetentionUseCase`/`RetentionService` đọc retention từ `AppSettings`, tính cutoff
+UTC cho từng bảng rồi xóa `ActivitySamples` → `AttentionEvents` → `BlockedAttempts` → `AuditLogs` →
+`StudySessions` bằng batch 500 (lặp đến khi batch ngắn). `SqliteRetentionRepository` dùng raw SQL subquery
+`LIMIT @batch` vì SQLite không hỗ trợ `DELETE ... LIMIT`; sample/event thuộc session `Active` và attention
+event còn mở bị loại khỏi batch, session chỉ bị xóa khi đã kết thúc và quá hạn. Mỗi bảng lỗi độc lập, giữ số
+đã xóa và ghi vào `Failures`; lỗi vacuum/audit cũng được báo thay vì giả thành công. Audit `RetentionApplied`
+(actor `System`) chứa số bản ghi từng bảng và danh sách bảng lỗi, không có nội dung nhạy cảm. Thiếu hoặc lỗi
+đọc settings thì bỏ qua toàn bộ pass. Sau khi xóa, service chạy `PRAGMA incremental_vacuum`.
+`RetentionSchedulerService` chạy một pass lúc khởi động và mỗi ngày khi local time ≥ 03:00; pass chạy trên
+thread pool, chống chồng bằng cờ `_running`. Xóa dữ liệu thủ công theo yêu cầu phụ huynh (UC11) vẫn thuộc
+phần UI sau.
+
 ### 3.4. Infrastructure (`EduFocus.Infrastructure`)
 
 Triển khai outbound ports, tương tác Windows.
@@ -262,6 +275,7 @@ Triển khai outbound ports, tương tác Windows.
 - `SqliteStudySessionRepository`: đọc phiên `Active` hiện tại, thêm/cập nhật phiên; unique partial index đảm bảo tối đa một phiên active. Heartbeat và `BlockedAttemptCount` được ghi bằng `ExecuteUpdateAsync` có điều kiện (chỉ session `Active`, không lùi timestamp).
 - `SqliteScheduleWindowRepository`: CRUD `ScheduleWindows`, list theo `StartMinutes`/`EndMinutes`/`DaysMask` cho scheduler và UI.
 - `SqliteAuditLogRepository`: ghi audit event kèm `CorrelationId`, tách khỏi file log kỹ thuật.
+- `SqliteRetentionRepository`: xóa theo batch bằng raw SQL subquery `LIMIT` (SQLite không hỗ trợ `DELETE ... LIMIT`), loại session `Active`/event còn mở, và chạy `PRAGMA incremental_vacuum`.
 - `SqlitePragmaInterceptor`: `PRAGMA foreign_keys = ON` mỗi kết nối; WAL và `auto_vacuum` do initializer thiết lập.
 - Các repository còn lại sẽ được thêm ở các issue sau.
 
@@ -808,7 +822,7 @@ Trạng thái lưu trong `AppSettings.ProtectionEnabled`; session active lưu tr
 - DB hỏng integrity check: giữ nguyên file, ném `SqliteDatabaseCorruptException`; `RestoreBackup` thay thế bằng backup đã verify và snapshot DB hiện tại khi có thể.
 - Timestamp lưu **UTC**; hiển thị local. Query theo ngày dùng local boundary chuyển sang UTC.
 - Session summary giữ lâu hơn sample chi tiết (365 ngày vs 30 ngày).
-- Retention job chạy mỗi ngày; xóa theo batch để tránh khóa DB lâu.
+- Retention job chạy lúc khởi động và mỗi ngày khi local time ≥ 03:00; xóa theo batch 500 để tránh khóa DB lâu, bỏ qua session `Active`/event còn mở và chạy `PRAGMA incremental_vacuum` sau mỗi pass.
 - Backup trước migration schema; giữ 3 bản gần nhất. Không migrate dữ liệu từ 1.x.
 - Không lưu ảnh/video/audio.
 - Không network call chứa dữ liệu học tập. Update check nếu có phải opt-in, chỉ gửi version/OS và có thể tắt; server vẫn thấy IP và điều này phải được thông báo.
@@ -935,6 +949,12 @@ AddViews()
 > qua constructor, subscribe khi start và unsubscribe khi stop. Adapter giữ `SystemEvents` subscription
 > trong suốt vòng đời singleton và dispose cùng `ServiceProvider`.
 
+> **Bổ sung sau issue #29:** composition root đăng ký `IRetentionRepository`/`SqliteRetentionRepository`,
+> `RetentionOptions` (batch 500, audit 365 ngày), singleton `IRetentionUseCase`/`RetentionService` và
+> `RetentionSchedulerService`. `App` gọi `RetentionSchedulerService.Start()` sau khi hiện cửa sổ chính và
+> scheduler đã chạy; service chạy pass đầu tiên trên thread pool, sau đó kiểm tra mỗi phút và chạy khi
+> local time ≥ 03:00 (mỗi ngày một lần). `ServiceProvider.Dispose()` dừng `DispatcherTimer`.
+
 ---
 
 ## 14. Cấu trúc thư mục đích
@@ -957,6 +977,7 @@ EduFocus/
 │   │   ├── Auth/
 │   │   ├── Protection/
 │   │   ├── Sessions/
+│   │   ├── Retention/
 │   │   ├── Attention/
 │   │   ├── Reports/
 │   │   └── EduFocus.UseCases.csproj

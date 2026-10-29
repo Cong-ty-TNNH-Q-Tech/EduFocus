@@ -165,7 +165,7 @@
 | Built-in allowlist | `ProtectedDomains` chặn block; `BuiltInRuleCatalog` định nghĩa rule | Unique key `(RuleType, MatchType, NormalizedValue, Effect)` | `BlockRuleSeedService` seed sau onboarding: idempotent, không ghi đè rule phụ huynh, giữ trạng thái bật/tắt |
 | Debounce blocked attempt | Không | — | `ProtectionEngine` debounce 30 giây theo domain/tên app bằng monotonic clock; ghi `BlockedAttempt` qua writer channel bất đồng bộ (best-effort) |
 | Đánh giá schedule | `Covers`, `Overlaps` | Bảng `ScheduleWindows` | Scheduler local time |
-| Xóa theo retention | Không | — | Retention use case |
+| Xóa theo retention | Không | `SqliteRetentionRepository` batch 500, loại session `Active`/event mở, `incremental_vacuum` | `RetentionService` đọc hạn từ `AppSettings`, xóa detail trước session, audit `RetentionApplied` kèm lỗi từng bảng |
 | Khôi phục Protection sau crash | Cờ `ProtectionEnabled` | Bảng `AppSettings` | Startup/recovery use case |
 | Sở hữu hosts file | Không (domain thuần) | `HostsFileBlocker` chỉ sửa khối marker, backup/journal và restore exact khi ngoài marker không đổi; lỗi ném `HostsFileException` | `ProtectionEngine` (issue #24) gọi apply/restore/self-heal; lỗi restore khi tắt ném lỗi để giữ nguyên trạng thái bảo vệ |
 | PIN gate cho thao tác nhạy cảm | Không (domain thuần) | — | `IParentAuthorizer` |
@@ -228,5 +228,6 @@ phủ debounce foreground, cadence 15 giây, một sample idle/chuỗi, sanitize
 đa ngôn ngữ/chat/idle cho overlay lớp online, bỏ gap suspend, reset cửa sổ sau resume, forward/backward clock,
 lỗi port/DB và dừng khi session kết thúc.
 `EduFocus.SqliteDataAccess.Tests` phủ heartbeat có điều kiện, chống hồi sinh session, unique active,
-retention giữ session summary, round-trip `ActivitySample` (kể cả `IsOnlineClass`) và
+retention job (bảng quá hạn, session `Active`, event còn mở, batch session + cascade/SET NULL, vacuum),
+round-trip `ActivitySample` (kể cả `IsOnlineClass`) và
 `AddActivitySecondsAsync` (targeted, chỉ session `Active`).

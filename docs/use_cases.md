@@ -720,6 +720,13 @@
 
 **Business rules:** BR-13, BR-16.
 
+**Hiện trạng issue #29:** retention job tự động đã chạy: `RetentionService` đọc hạn trong `AppSettings`, xóa
+từng bảng theo batch 500 (sample/event/blocked attempt/audit/session), bỏ qua session `Active` và event còn
+mở, ghi audit `RetentionApplied` kèm số bản ghi và danh sách bảng lỗi. Job chạy lúc khởi động và mỗi ngày khi
+local time ≥ 03:00, sau đó `PRAGMA incremental_vacuum`. Đổi retention, xóa theo khoảng thời gian, xóa toàn bộ,
+xuất CSV và audit viewer trong màn hình **Dữ liệu & Quyền riêng tư** vẫn chưa có UI/use case — thuộc phần còn
+lại của UC11.
+
 ---
 
 ### UC12 — Vòng đời ứng dụng & chống tắt
