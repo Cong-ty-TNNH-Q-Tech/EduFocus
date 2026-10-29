@@ -8,6 +8,7 @@ using EduFocus.SqliteDataAccess.Repositories;
 using EduFocus.UseCases.Auth;
 using EduFocus.UseCases.Onboarding;
 using EduFocus.UseCases.Protection;
+using EduFocus.UseCases.Schedule;
 using EduFocus.WPF.Services;
 using EduFocus.WPF.ViewModels;
 using Microsoft.Extensions.DependencyInjection;
@@ -69,12 +70,18 @@ public partial class App : Application
                 "Không thể khôi phục trạng thái bảo vệ sau khi khởi động. Hãy mở Parent Mode để kiểm tra.");
         }
 
+        // Apply the schedule once before any UI shows so a window that started
+        // while the app was closed is reflected in the tray and main window.
+        var scheduleScheduler = Services.GetRequiredService<ScheduleSchedulerService>();
+        await scheduleScheduler.EvaluateNowAsync();
+
         var mainWindow = Services.GetRequiredService<MainWindow>();
         MainWindow = mainWindow;
         ShutdownMode = ShutdownMode.OnMainWindowClose;
         mainWindow.Show();
 
         Services.GetRequiredService<TrayIconService>().Start();
+        scheduleScheduler.Start();
 
         // Background update check — non-blocking, silent on failure
         _ = Services.GetRequiredService<MainWindowViewModel>().Update.CheckForUpdateAsync();
@@ -90,19 +97,23 @@ public partial class App : Application
         services.AddSingleton<IParentCredentialRepository, SqliteParentCredentialRepository>();
         services.AddSingleton<IAuditLogRepository, SqliteAuditLogRepository>();
         services.AddSingleton<IStudySessionRepository, SqliteStudySessionRepository>();
+        services.AddSingleton<IScheduleWindowRepository, SqliteScheduleWindowRepository>();
         services.AddSingleton<IParentAuthUseCase, ParentAuthUseCase>();
         services.AddSingleton<ParentSessionState>();
         services.AddSingleton<IParentAuthorizer>(provider => provider.GetRequiredService<ParentSessionState>());
         services.AddSingleton<IParentModeUseCase, ParentModeService>();
         services.AddSingleton<IOnboardingUseCase, OnboardingService>();
         services.AddSingleton<IProtectionUseCase, ProtectionService>();
+        services.AddSingleton<IScheduleUseCase, ScheduleService>();
         services.AddSingleton<DatabaseBootstrapper>();
 
         services.AddSingleton<UpdaterService>();
         services.AddSingleton<UpdateViewModel>();
         services.AddSingleton<ProtectionStatusViewModel>();
+        services.AddSingleton<ScheduleViewModel>();
         services.AddSingleton<MainWindowViewModel>();
         services.AddSingleton<TrayIconService>();
+        services.AddSingleton<ScheduleSchedulerService>();
         services.AddSingleton<MainWindow>();
         services.AddTransient<ParentModeViewModel>();
         services.AddTransient<ParentModeWindow>();

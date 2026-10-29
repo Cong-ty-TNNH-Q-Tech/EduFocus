@@ -25,8 +25,9 @@
 |---|---|
 | Singleton; `CreateDefault` dùng đúng default của schema | `CreateDefault(nowUtc)` |
 | Bật/tắt thủ công xóa `ScheduleOverrideUntilUtc` (BR-07) | `EnableProtection`, `DisableProtection` |
+| `ProtectionSource` khác `None` khi ON và bằng `None` khi OFF; bật thủ công ghi `Manual` | `EnableProtection`, `DisableProtection`, `DisableProtectionWithScheduleOverride` |
 | Tắt schedule cũng xóa override | `SetScheduleEnabled(false, …)` |
-| Override phải kết thúc trong tương lai | `SetScheduleOverrideUntil` |
+| Override phải kết thúc trong tương lai | `SetScheduleOverrideUntil`, `DisableProtectionWithScheduleOverride` |
 | `UpdatedAtUtc` UTC và không lùi | `Touch` nội bộ |
 | Retention/threshold dương | `UpdateRetention`, `UpdateThresholds` |
 | Chỉ PIN exit mới đặt `LastCleanShutdownAtUtc` | `RecordCleanShutdown` — use case quyết định, Windows shutdown không gọi |
@@ -67,6 +68,8 @@
 | `0 ≤ StartMinutes ≤ 1439`, `1 ≤ EndMinutes ≤ 1440`, `End > Start` | `Validate` |
 | Không hỗ trợ khung qua nửa đêm | `Validate` |
 | End là exclusive | `Covers` |
+| Chọn khung kết thúc sớm nhất khi nhiều khung cùng phủ một thời điểm | `ScheduleClock.FindActive` |
+| Local→UTC xử lý DST: giờ không tồn tại tiến tới phút hợp lệ, giờ ambiguous dùng offset chuẩn | `ScheduleClock.LocalToUtc` |
 | Khung enabled không chồng lấn; bỏ qua khung disabled | `ScheduleValidator` |
 | Label ≤ 100 ký tự, được trim/sanitize | `TextSanitizer.Clean` |
 | Đánh giá theo wall clock local | Use case/scheduler (domain chỉ cung cấp `Covers`) |

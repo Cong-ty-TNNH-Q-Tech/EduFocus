@@ -18,9 +18,10 @@ public sealed class InitializationTests
         var result = await db.CreateInitializer().InitializeAsync();
 
         result.WasCreated.Should().BeTrue();
-        result.AppliedMigrations.Should().HaveCount(2)
+        result.AppliedMigrations.Should().HaveCount(3)
             .And.Contain(migration => migration.EndsWith("_InitialEduFocusSchema"))
-            .And.Contain(migration => migration.EndsWith("_AddOnboardingConsent"));
+            .And.Contain(migration => migration.EndsWith("_AddOnboardingConsent"))
+            .And.Contain(migration => migration.EndsWith("_AddProtectionSource"));
         result.BackupPath.Should().BeNull();
         File.Exists(db.DatabasePath).Should().BeTrue();
         db.Logger.Errors.Should().BeEmpty();
@@ -120,7 +121,7 @@ public sealed class InitializationTests
     }
 
     [Fact]
-    public async Task Upgrade_adds_consent_columns_and_preserves_existing_settings()
+    public async Task Upgrade_applies_pending_migrations_and_preserves_existing_settings()
     {
         await using var db = new TempDatabase();
 
@@ -146,13 +147,14 @@ public sealed class InitializationTests
 
         var result = await db.CreateInitializer().InitializeAsync();
 
-        result.AppliedMigrations.Should().ContainSingle()
-            .Which.Should().EndWith("_AddOnboardingConsent");
+        result.AppliedMigrations.Should().HaveCount(2);
+        result.AppliedMigrations.Last().Should().EndWith("_AddProtectionSource");
         result.BackupPath.Should().NotBeNullOrEmpty();
         File.Exists(result.BackupPath!).Should().BeTrue();
 
         using var upgraded = db.OpenConnection();
         TempDatabase.Scalar(upgraded, "SELECT ProtectionEnabled FROM AppSettings;").Should().Be(1L);
+        TempDatabase.Scalar(upgraded, "SELECT ProtectionSource FROM AppSettings;").Should().Be("Manual");
         TempDatabase.Scalar(upgraded, "SELECT PrivacyAcceptedAtUtc FROM AppSettings;").Should().Be(DBNull.Value);
         TempDatabase.Scalar(upgraded, "SELECT GuardianAcknowledgedAtUtc FROM AppSettings;").Should().Be(DBNull.Value);
     }

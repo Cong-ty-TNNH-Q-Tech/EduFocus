@@ -254,4 +254,87 @@ public sealed class ProtectionServiceTests
         status.ActiveSessionStartedAtUtc.Should().Be(ProtectionHarness.Start.UtcDateTime);
         status.MonitoringEnabled.Should().BeTrue();
     }
+
+    [Fact]
+    public async Task Schedule_enable_requires_the_schedule_to_be_on()
+    {
+        var harness = new ProtectionHarness();
+
+        var result = await harness.Service.EnableForScheduleAsync();
+
+        result.Changed.Should().BeFalse();
+        harness.SettingsRow.ProtectionEnabled.Should().BeFalse();
+        harness.Engine.ApplyCount.Should().Be(0);
+        harness.Sessions.Sessions.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task Schedule_enable_starts_a_schedule_session_as_the_system()
+    {
+        var harness = new ProtectionHarness();
+        harness.SettingsRow.SetScheduleEnabled(true, ProtectionHarness.Start.UtcDateTime);
+
+        var result = await harness.Service.EnableForScheduleAsync();
+
+        result.Changed.Should().BeTrue();
+        result.Status.IsEnabled.Should().BeTrue();
+        harness.SettingsRow.ProtectionSource.Should().Be(ProtectionSource.Schedule);
+        harness.Sessions.Active!.Trigger.Should().Be(SessionTrigger.Schedule);
+        harness.Audits.Entries.Should().ContainSingle(x =>
+            x.EventType == AuditEventType.ProtectionOn && x.Actor == AuditActor.System);
+    }
+
+    [Fact]
+    public async Task Schedule_disable_leaves_manually_enabled_protection_on()
+    {
+        var harness = new ProtectionHarness();
+        harness.Session.Authenticate();
+        await harness.Service.EnableAsync();
+
+        var result = await harness.Service.DisableForScheduleAsync();
+
+        result.Changed.Should().BeFalse();
+        harness.SettingsRow.ProtectionEnabled.Should().BeTrue();
+        harness.SettingsRow.ProtectionSource.Should().Be(ProtectionSource.Manual);
+        harness.Engine.RemoveCount.Should().Be(0);
+        harness.Sessions.Active.Should().NotBeNull();
+    }
+
+    [Fact]
+    public async Task Manual_disable_inside_an_active_window_sets_an_override()
+    {
+        var harness = new ProtectionHarness();
+        harness.SettingsRow.SetScheduleEnabled(true, ProtectionHarness.Start.UtcDateTime);
+        harness.ScheduleWindows.Windows.Add(
+            ScheduleWindow.Create(ScheduleDays.Thursday, 480, 540, "Giờ học", ProtectionHarness.Start.UtcDateTime));
+        harness.Session.Authenticate();
+        await harness.Service.EnableAsync();
+
+        var result = await harness.Service.DisableAsync();
+
+        result.Status.IsEnabled.Should().BeFalse();
+        harness.SettingsRow.ProtectionEnabled.Should().BeFalse();
+        harness.SettingsRow.ScheduleOverrideUntilUtc.Should()
+            .Be(ProtectionHarness.Start.UtcDateTime.AddHours(1));
+
+        var description = harness.Audits.Entries
+            .Single(x => x.EventType == AuditEventType.ProtectionOff)
+            .Description;
+        description.Should().Contain("override");
+    }
+
+    [Fact]
+    public async Task Manual_disable_outside_a_window_does_not_create_an_override()
+    {
+        var harness = new ProtectionHarness();
+        harness.SettingsRow.SetScheduleEnabled(true, ProtectionHarness.Start.UtcDateTime);
+        harness.ScheduleWindows.Windows.Add(
+            ScheduleWindow.Create(ScheduleDays.Thursday, 600, 660, "Muộn hơn", ProtectionHarness.Start.UtcDateTime));
+        harness.Session.Authenticate();
+        await harness.Service.EnableAsync();
+
+        await harness.Service.DisableAsync();
+
+        harness.SettingsRow.ScheduleOverrideUntilUtc.Should().BeNull();
+    }
 }

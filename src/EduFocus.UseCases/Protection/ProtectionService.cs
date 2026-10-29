@@ -1,5 +1,6 @@
 using EduFocus.Domain.Entities;
 using EduFocus.Domain.Enums;
+using EduFocus.Domain.Scheduling;
 using EduFocus.Ports.DTOs;
 using EduFocus.Ports.Inbound;
 using EduFocus.Ports.Outbound.Persistence;
@@ -28,6 +29,7 @@ public sealed class ProtectionService : IProtectionUseCase
 
     private readonly IAppSettingsRepository _settings;
     private readonly IStudySessionRepository _sessions;
+    private readonly IScheduleWindowRepository _scheduleWindows;
     private readonly IProtectionEnginePort _engine;
     private readonly IParentAuthorizer _authorizer;
     private readonly IAuditLogRepository _auditLogs;
@@ -38,6 +40,7 @@ public sealed class ProtectionService : IProtectionUseCase
     public ProtectionService(
         IAppSettingsRepository settings,
         IStudySessionRepository sessions,
+        IScheduleWindowRepository scheduleWindows,
         IProtectionEnginePort engine,
         IParentAuthorizer authorizer,
         IAuditLogRepository auditLogs,
@@ -47,6 +50,7 @@ public sealed class ProtectionService : IProtectionUseCase
     {
         _settings = settings ?? throw new ArgumentNullException(nameof(settings));
         _sessions = sessions ?? throw new ArgumentNullException(nameof(sessions));
+        _scheduleWindows = scheduleWindows ?? throw new ArgumentNullException(nameof(scheduleWindows));
         _engine = engine ?? throw new ArgumentNullException(nameof(engine));
         _authorizer = authorizer ?? throw new ArgumentNullException(nameof(authorizer));
         _auditLogs = auditLogs ?? throw new ArgumentNullException(nameof(auditLogs));
@@ -68,16 +72,48 @@ public sealed class ProtectionService : IProtectionUseCase
 
     public async Task<ProtectionOperationResult> EnableAsync(CancellationToken cancellationToken = default)
     {
-        var now = UtcNow();
         _authorizer.EnsureAuthorized("enable protection");
+
+        return await EnableCoreAsync(
+            ProtectionSource.Manual,
+            AuditActor.Parent,
+            "Parent enabled protection.",
+            allowTakingOwnership: true,
+            cancellationToken);
+    }
+
+    public Task<ProtectionOperationResult> EnableForScheduleAsync(CancellationToken cancellationToken = default) =>
+        EnableCoreAsync(
+            ProtectionSource.Schedule,
+            AuditActor.System,
+            "Protection enabled by the schedule.",
+            allowTakingOwnership: false,
+            cancellationToken);
+
+    private async Task<ProtectionOperationResult> EnableCoreAsync(
+        ProtectionSource source,
+        AuditActor actor,
+        string description,
+        bool allowTakingOwnership,
+        CancellationToken cancellationToken)
+    {
+        var now = UtcNow();
 
         var settings = await _settings.GetAsync(cancellationToken)
             ?? throw new InvalidOperationException(SettingsMissing);
 
-        var wasEnabled = settings.ProtectionEnabled;
         var active = await _sessions.GetActiveAsync(cancellationToken);
-        var warnings = await ApplyEngineAsync(cancellationToken);
 
+        if (source == ProtectionSource.Schedule && !settings.ScheduleEnabled)
+            return new ProtectionOperationResult(CreateStatus(settings, active), Changed: false, []);
+
+        var wasEnabled = settings.ProtectionEnabled;
+        var sourceChanged = wasEnabled && settings.ProtectionSource != source;
+
+        if (wasEnabled && (!allowTakingOwnership || !sourceChanged))
+            return new ProtectionOperationResult(CreateStatus(settings, active), Changed: false, []);
+
+        var warnings = wasEnabled ? [] : await ApplyEngineAsync(cancellationToken);
         var createdSession = false;
 
         try
@@ -87,24 +123,21 @@ public sealed class ProtectionService : IProtectionUseCase
                 active = StudySession.Start(
                     now,
                     LocalDate(now),
-                    SessionTrigger.Manual,
+                    source == ProtectionSource.Schedule ? SessionTrigger.Schedule : SessionTrigger.Manual,
                     settings.MonitoringEnabled);
 
                 await _sessions.AddAsync(active, cancellationToken);
                 createdSession = true;
             }
 
-            if (!wasEnabled)
-            {
-                settings.EnableProtection(now);
-                await _settings.UpdateAsync(settings, cancellationToken);
-                await WriteAuditAsync(
-                    AuditActor.Parent,
-                    AuditEventType.ProtectionOn,
-                    "Parent enabled protection.",
-                    now,
-                    cancellationToken);
-            }
+            settings.EnableProtection(now, source);
+            await _settings.UpdateAsync(settings, cancellationToken);
+            await WriteAuditAsync(
+                actor,
+                AuditEventType.ProtectionOn,
+                description,
+                now,
+                cancellationToken);
         }
         catch
         {
@@ -119,22 +152,56 @@ public sealed class ProtectionService : IProtectionUseCase
 
         return new ProtectionOperationResult(
             CreateStatus(settings, active),
-            Changed: createdSession || !wasEnabled,
+            Changed: createdSession || !wasEnabled || sourceChanged,
             warnings);
     }
 
     public async Task<ProtectionOperationResult> DisableAsync(CancellationToken cancellationToken = default)
     {
-        var now = UtcNow();
         _authorizer.EnsureAuthorized("disable protection");
+
+        return await DisableCoreAsync(
+            AuditActor.Parent,
+            "Parent disabled protection.",
+            createScheduleOverride: true,
+            scheduleOwnedOnly: false,
+            cancellationToken);
+    }
+
+    public Task<ProtectionOperationResult> DisableForScheduleAsync(CancellationToken cancellationToken = default) =>
+        DisableCoreAsync(
+            AuditActor.System,
+            "Protection disabled at the end of the scheduled window.",
+            createScheduleOverride: false,
+            scheduleOwnedOnly: true,
+            cancellationToken);
+
+    private async Task<ProtectionOperationResult> DisableCoreAsync(
+        AuditActor actor,
+        string description,
+        bool createScheduleOverride,
+        bool scheduleOwnedOnly,
+        CancellationToken cancellationToken)
+    {
+        var now = UtcNow();
 
         var settings = await _settings.GetAsync(cancellationToken)
             ?? throw new InvalidOperationException(SettingsMissing);
 
         var active = await _sessions.GetActiveAsync(cancellationToken);
 
+        if (scheduleOwnedOnly
+            && (!settings.ProtectionEnabled || settings.ProtectionSource != ProtectionSource.Schedule))
+        {
+            return new ProtectionOperationResult(CreateStatus(settings, active), Changed: false, []);
+        }
+
         if (!settings.ProtectionEnabled && active is null)
             return new ProtectionOperationResult(CreateStatus(settings, null), Changed: false, []);
+
+        var overrideUntil = createScheduleOverride
+            ? await ResolveScheduleOverrideEndAsync(settings, now, cancellationToken)
+            : null;
 
         var wasEnabled = settings.ProtectionEnabled;
         var warnings = await RemoveEngineAsync(cancellationToken);
@@ -149,14 +216,18 @@ public sealed class ProtectionService : IProtectionUseCase
 
             if (wasEnabled)
             {
-                settings.DisableProtection(now);
+                if (overrideUntil is { } until)
+                {
+                    settings.DisableProtectionWithScheduleOverride(until, now);
+                    description = $"{description} Schedule override until {until:u}.";
+                }
+                else
+                {
+                    settings.DisableProtection(now);
+                }
+
                 await _settings.UpdateAsync(settings, cancellationToken);
-                await WriteAuditAsync(
-                    AuditActor.Parent,
-                    AuditEventType.ProtectionOff,
-                    "Parent disabled protection.",
-                    now,
-                    cancellationToken);
+                await WriteAuditAsync(actor, AuditEventType.ProtectionOff, description, now, cancellationToken);
             }
         }
         catch
@@ -168,6 +239,30 @@ public sealed class ProtectionService : IProtectionUseCase
         }
 
         return new ProtectionOperationResult(CreateStatus(settings, null), Changed: true, warnings);
+    }
+
+    private async Task<DateTime?> ResolveScheduleOverrideEndAsync(
+        AppSettings settings,
+        DateTime nowUtc,
+        CancellationToken cancellationToken)
+    {
+        if (!settings.ScheduleEnabled)
+            return null;
+
+        var windows = await _scheduleWindows.ListAsync(cancellationToken);
+        var zone = _timeProvider.LocalTimeZone;
+        var localNow = TimeZoneInfo.ConvertTimeFromUtc(nowUtc, zone);
+        var activeWindow = ScheduleClock.FindActive(windows, localNow);
+
+        if (activeWindow is null)
+            return null;
+
+        var windowEndUtc = ScheduleClock.GetWindowEndUtc(
+            activeWindow,
+            DateOnly.FromDateTime(localNow),
+            zone);
+
+        return windowEndUtc > nowUtc ? windowEndUtc : null;
     }
 
     public async Task<ProtectionOperationResult> ReconcileAsync(CancellationToken cancellationToken = default)

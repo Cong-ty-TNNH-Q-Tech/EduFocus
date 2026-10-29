@@ -69,9 +69,10 @@ public sealed class SchemaTests
             connection,
             "SELECT MigrationId FROM __EFMigrationsHistory ORDER BY MigrationId;");
 
-        migrations.Should().HaveCount(2)
+        migrations.Should().HaveCount(3)
             .And.Contain(migration => migration.EndsWith("_InitialEduFocusSchema"))
-            .And.Contain(migration => migration.EndsWith("_AddOnboardingConsent"));
+            .And.Contain(migration => migration.EndsWith("_AddOnboardingConsent"))
+            .And.Contain(migration => migration.EndsWith("_AddProtectionSource"));
     }
 
     [Fact]
@@ -125,6 +126,9 @@ public sealed class SchemaTests
 
         var settings = ReadColumns(connection, "AppSettings");
         settings["ProtectionEnabled"].DefaultValue.Should().Be("0");
+        settings["ProtectionSource"].Type.Should().Be("TEXT(16)");
+        settings["ProtectionSource"].NotNull.Should().BeTrue();
+        settings["ProtectionSource"].DefaultValue.Should().Be("'None'");
         settings["MonitoringEnabled"].DefaultValue.Should().Be("1");
         settings["Theme"].DefaultValue.Should().Be("'dark'");
         settings["Language"].DefaultValue.Should().Be("'vi'");

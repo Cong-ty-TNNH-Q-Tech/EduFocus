@@ -357,6 +357,11 @@
 **Hậu điều kiện**
 - Schedule được lưu; trạng thái ON/OFF phản ánh đúng thời điểm.
 
+**Hiện trạng triển khai (issue #17)**
+- `ScheduleService` xử lý CRUD khung giờ (yêu cầu phiên Parent Mode, audit `ScheduleChanged`, chống chồng lấn) và `EvaluateAsync` chạy mỗi 30 giây cùng một lần lúc khởi động. `ProtectionSource` lưu bền vững nguồn bật (`Manual`/`Schedule`) nên lịch chỉ tự tắt bảo vệ do chính nó bật.
+- Tắt thủ công trong khung giờ tạo `ScheduleOverrideUntilUtc` đến hết khung; khi sửa khung đang hoạt động, override được clamp theo giờ kết thúc mới. Bật thủ công xóa override và chuyển nguồn sang `Manual`.
+- UI Parent Mode nhận giờ theo `HH:mm`, hỗ trợ `24:00` cho giờ kết thúc; khung không vắt qua nửa đêm. Lỗi engine khi tự bật/tắt được hiển thị thành cảnh báo và sẽ được thử lại ở lần đánh giá sau.
+
 **Business rules:** BR-07, BR-20.
 
 ---

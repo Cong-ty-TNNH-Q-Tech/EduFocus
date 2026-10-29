@@ -40,6 +40,8 @@ EduFocus là ứng dụng desktop **local-first** dành cho phụ huynh giám s�
 - Không có PIN, recovery code hay nội dung clipboard nào được ghi vào DB, audit hay file log; ô mật khẩu được xóa sau mỗi lần gửi và khi đóng wizard.
 - Bật/tắt bảo vệ thủ công bắt buộc phiên Parent Mode còn hiệu lực (`IParentAuthorizer`); không có API UI nào tắt bảo vệ mà không qua PIN. `ProtectionEnabled` trong `AppSettings` là nguồn sự thật: engine được áp trước khi ghi ON và gỡ trước khi ghi OFF, kèm rollback khi ghi DB thất bại. Mỗi lần đổi trạng thái ghi audit `ProtectionOn`/`ProtectionOff`; khôi phục sau restart ghi `SessionInterrupted`/`SessionRecovered`. Audit chỉ chứa hành động và thời điểm, không chứa PIN/recovery code.
 - Khi app khởi động, phiên `Active` còn sót được đóng tại heartbeat và một phiên `Recovery` được tạo nếu bảo vệ đang ON; trạng thái tray/UI đọc từ DB sau bước reconcile nên không hiển thị ON khi DB đang OFF.
+- Lịch bảo vệ tự bật/tắt với actor `System`, không cần PIN. Scheduler chỉ tự tắt bảo vệ có `ProtectionSource = Schedule`; bảo vệ phụ huynh bật thủ công (`Manual`) tồn tại ngoài khung giờ. Tắt thủ công trong khung giờ tạo override đến hết khung; bật thủ công xóa override. Mọi thay đổi lịch ghi audit `ScheduleChanged`, không chứa secret.
+- Khi wall clock lệch hơn 2 phút so với monotonic clock, app ghi audit `TamperDetected` và bỏ qua auto-disable trong tick đó; auto-enable vẫn được phép.
 - Retention mặc định: sample 30 ngày, event/blocked attempt 90 ngày, session summary/audit 365 ngày.
 
 ### Giới hạn đã biết (không phải lỗ hổng)
@@ -51,6 +53,7 @@ Các điểm sau **không được coi là lỗ hổng bảo mật** vì đã đ
 - Hosts không tạo log truy cập HTTPS; `BlockedAttempt` là best-effort, không phải tổng tuyệt đối.
 - Trang chặn chỉ hiển thị với HTTP; HTTPS thường báo lỗi kết nối/SSL.
 - Windows shutdown/logoff vẫn là đường bypass; watchdog scheduled task có độ trễ tới khoảng 60 giây.
+- Đổi giờ hệ thống có thể làm lịch bảo vệ lệch: app phát hiện nhảy giờ, ghi audit và không tự tắt bảo vệ ở tick phát hiện, nhưng không khôi phục được giờ đúng; các tick sau vẫn đánh giá theo wall clock mới.
 - Watchdog scheduled task không tự phục hồi nếu task bị disable/xóa hoặc máy chưa đăng nhập lại; nếu có thêm watchdog process, kill cả app lẫn watchdog trong cùng phiên cũng không được phục hồi cho tới lần đăng nhập sau.
 - Watchdog giới hạn restart (mặc định 5 lần/10 phút) để tránh vòng lặp vô hạn; sau ngưỡng đó app không tự phục hồi cho tới lần đăng nhập sau hoặc khi phụ huynh mở lại.
 - Phát hiện treo dựa trên heartbeat; nếu file heartbeat/state bị khóa, hỏng hoặc ổ đĩa đầy, watchdog có thể phát hiện sai hoặc trễ.

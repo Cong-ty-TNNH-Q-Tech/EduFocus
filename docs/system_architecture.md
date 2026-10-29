@@ -125,7 +125,7 @@ IRecoveryCodeGenerator
 IParentCredentialRepository
 IAppSettingsRepository
 IBlockRuleRepository
-IScheduleRepository
+IScheduleWindowRepository
 IStudySessionRepository
 IActivitySampleRepository
 IAttentionEventRepository
@@ -151,7 +151,7 @@ IProcessWatchdogPort
 | `ActivityUseCase` | Ghi sample, phân loại app/URL, phát hiện lớp online |
 | `AttentionUseCase` | Nhận trạng thái từ camera, tạo event, tính score |
 | `BlockRuleUseCase` | CRUD rule, validate, allowlist override |
-| `ScheduleUseCase` | Đánh giá khung giờ, auto ON/OFF |
+| `ScheduleService` | CRUD khung giờ, đánh giá 30 giây, auto ON/OFF và override |
 | `ReportUseCase` | Query dashboard, timeline, export |
 | `DataRetentionUseCase` | Xóa dữ liệu quá hạn, xóa theo yêu cầu |
 
@@ -165,6 +165,15 @@ process hay block page. Thứ tự bền vững là engine → session → `Prot
 engine → kết thúc session → `ProtectionEnabled = false` khi tắt; lỗi ghi DB kích hoạt rollback tương ứng
 và lỗi gỡ engine giữ nguyên trạng thái ON. `DeferredProtectionEngine` là adapter tạm thời trả cảnh báo
 cho tới khi engine thật được triển khai ở Phase 3 (issue #24); vì vậy "bật bảo vệ" hiện chưa chặn web/app.
+
+**Hiện trạng issue #17:** `ProtectionSource` lưu bền vững nguồn bật bảo vệ (`None`/`Manual`/`Schedule`).
+`ProtectionService.EnableForScheduleAsync`/`DisableForScheduleAsync` dùng actor `System` và chỉ tắt được
+bảo vệ do lịch sở hữu; `DisableAsync` của phụ huynh trong khung giờ đang hoạt động ghi
+`ScheduleOverrideUntilUtc` đến hết khung. `ScheduleService` serialize mọi thao tác bằng semaphore, kiểm tra
+parent auth cho CRUD, chống chồng lấn qua `ScheduleValidator`, ghi audit `ScheduleChanged`, và chạy
+`EvaluateAsync` mỗi 30 giây lẫn lúc khởi động. Khi phát hiện lệch wall clock > 2 phút so với monotonic,
+service ghi `TamperDetected` và bỏ qua auto-disable trong tick đó. Lỗi engine được chuyển thành cảnh báo
+thay vì làm hỏng vòng đánh giá.
 
 ### 3.4. Infrastructure (`EduFocus.Infrastructure`)
 
@@ -188,7 +197,7 @@ Triển khai outbound ports, tương tác Windows.
 ### 3.5. Data Access (`EduFocus.SqliteDataAccess`)
 
 - `EduFocusDbContext` với 9 DbSet mới; Fluent API cấu hình index, unique constraint, converter và check constraint.
-- Migration `InitialEduFocusSchema` + `AddOnboardingConsent` (hai mốc consent nullable trên `AppSettings`); **không migrate** dữ liệu từ `DontBeLazy` 1.x.
+- Migration `InitialEduFocusSchema` + `AddOnboardingConsent` (hai mốc consent nullable trên `AppSettings`) + `AddProtectionSource` (cột `ProtectionSource`, backfill `Manual`); **không migrate** dữ liệu từ `DontBeLazy` 1.x.
 - DB path: `%ProgramData%\EduFocus\edufocus.db` (mặc định trong `EduFocusDatabaseOptions`).
 - `SqliteDatabaseInitializer`: tạo/khóa thư mục dữ liệu, kiểm tra integrity DB hiện có, backup trước migration (verified, giữ 3 bản), giữ DB nếu lỗi và ghi log hướng dẫn khôi phục.
 - `SqliteBackupStore`: tạo/verify/rotate backup và `Restore` an toàn (snapshot trước khi thay thế).
@@ -196,6 +205,7 @@ Triển khai outbound ports, tương tác Windows.
 - `SqliteParentCredentialRepository`: đọc/ghi singleton `ParentCredentials` (hash + lockout state), không lưu plaintext.
 - `SqliteAppSettingsRepository`: đọc/ghi singleton `AppSettings`, gồm consent onboarding và tuỳ chọn an toàn.
 - `SqliteStudySessionRepository`: đọc phiên `Active` hiện tại, thêm/cập nhật phiên; unique partial index đảm bảo tối đa một phiên active.
+- `SqliteScheduleWindowRepository`: CRUD `ScheduleWindows`, list theo `StartMinutes`/`EndMinutes`/`DaysMask` cho scheduler và UI.
 - `SqliteAuditLogRepository`: ghi audit event kèm `CorrelationId`, tách khỏi file log kỹ thuật.
 - `SqlitePragmaInterceptor`: `PRAGMA foreign_keys = ON` mỗi kết nối; WAL và `auto_vacuum` do initializer thiết lập.
 - Các repository còn lại sẽ được thêm ở các issue sau.
@@ -241,6 +251,14 @@ engine); cửa sổ chính chỉ hiển thị trạng thái và cảnh báo. Tr�
 `IProtectionUseCase.ReconcileAsync()` để đồng bộ DB, phiên học, engine và tray; lỗi reconcile được log và
 hiển thị trên UI. `TrayIconService` dùng `NotifyIcon` (WinForms) với icon/tooltip theo trạng thái và không
 có mục thoát — luồng thoát cần PIN thuộc issue #18.
+
+Triển khai (issue #17): thẻ "Lịch bảo vệ" trong màn hình quản lý của `ParentModeWindow` hiển thị trạng thái
+lịch, khung giờ đang hoạt động và override; phụ huynh thêm/sửa/xóa khung giờ (7 ngày, `HH:mm`, hỗ trợ
+`24:00`, nhãn) và bật/tắt lịch. `ScheduleViewModel` là singleton dùng chung, chỉ gọi `IScheduleUseCase` và
+không giữ secret. `ScheduleSchedulerService` dùng `DispatcherTimer` 30 giây, chạy `EvaluateAsync` một lần
+trước khi mở cửa sổ chính rồi khởi động timer; lỗi được log và hiển thị cảnh báo, không làm sập app.
+`ScheduleViewModel.ApplyEvaluationAsync` chỉ thay danh sách khi dữ liệu đổi nên không ghi đè editor khi
+tick 30 giây.
 
 ---
 
@@ -302,12 +320,19 @@ Timer 1–2s
 ### 4.4. Schedule
 
 ```text
-Timer 30s
-  → ScheduleUseCase.Evaluate(localNow)
-  → nếu vào window và OFF → ProtectionUseCase.EnableAsync(System)
-  → nếu hết window và ON do schedule → ProtectionUseCase.DisableAsync(System)
-  → Manual override được ghi audit và hết hiệu lực khi window kết thúc
+DispatcherTimer 30s (+ một lần trước khi mở cửa sổ chính)
+  → IScheduleUseCase.EvaluateAsync()
+  → đọc AppSettings + ScheduleWindows, tính localNow theo TimeProvider.LocalTimeZone
+  → clamp/xóa ScheduleOverrideUntilUtc theo khung đang hoạt động
+  → trong khung & OFF & không override → ProtectionService.EnableForScheduleAsync() (actor System)
+  → ngoài khung & ON & ProtectionSource=Schedule → ProtectionService.DisableForScheduleAsync() (actor System)
+  → wall-clock lệch > 2 phút so với monotonic → audit TamperDetected, bỏ qua auto-disable trong tick
 ```
+
+Phụ huynh tắt bảo vệ trong khung giờ tạo override đến hết khung; bật thủ công xóa override và chuyển
+`ProtectionSource` sang `Manual`, nên lịch không tự tắt bảo vệ thủ công khi hết khung. Khi phụ huynh sửa
+khung đang hoạt động, override được clamp lại theo giờ kết thúc mới. CRUD khung giờ yêu cầu Parent Mode,
+chống chồng lấn và ghi audit `ScheduleChanged`.
 
 Schedule dùng **wall clock/local time** để xác định khung giờ. Monotonic clock chỉ dùng đo elapsed trong một process và phát hiện nhảy giờ; không dùng monotonic xuyên reboot. Khi phát hiện nhảy giờ, ghi audit `TamperDetected` và không tự tắt protection chỉ vì thay đổi giờ.
 
@@ -690,6 +715,11 @@ AddViews()
 > `IProtectionEnginePort` hiện do `DeferredProtectionEngine` triển khai; decorator logging và engine thật
 > được thêm ở Phase 3.
 
+> **Bổ sung sau issue #17:** composition root đăng ký thêm `IScheduleWindowRepository`,
+> `IScheduleUseCase`/`ScheduleService`, `ScheduleViewModel` (singleton) và `ScheduleSchedulerService`.
+> `App` chạy `ScheduleSchedulerService.EvaluateNowAsync()` sau reconcile protection và trước khi hiện
+> cửa sổ chính, sau đó gọi `Start()` để timer 30 giây hoạt động; `ServiceProvider.Dispose()` dừng timer.
+
 ---
 
 ## 14. Cấu trúc thư mục đích
@@ -758,7 +788,10 @@ EduFocus/
 > recovery-code generator và credential repository; issue #14 thêm `ParentSessionState`,
 > `ParentModeService` và cửa sổ Parent Mode trong WPF (login, lockout, đổi/reset PIN);
 > issue #15 thêm consent/repository AppSettings, migration `AddOnboardingConsent`, use case
-> onboarding có resume và wizard first-run chặn dashboard đến khi hoàn tất.
+> onboarding có resume và wizard first-run chặn dashboard đến khi hoàn tất; issue #16 thêm
+> `IProtectionEnginePort`, state machine `ProtectionService`, session repository, reconcile và tray;
+> issue #17 thêm lịch bảo vệ: `ScheduleService`, `ProtectionSource` + migration `AddProtectionSource`,
+> repository `ScheduleWindows`, scheduler 30 giây và thẻ lịch trong Parent Mode.
 > Inventory 1.x ở [legacy-cleanup.md](./legacy-cleanup.md), invariant domain ở
 > [domain-invariants.md](./domain-invariants.md).
 

@@ -11,7 +11,7 @@ internal sealed class ProtectionHarness
 
     public ProtectionHarness()
     {
-        Clock = new ManualTimeProvider(Start);
+        Clock = new ManualTimeProvider(Start, TimeZoneInfo.Utc);
         Correlation = new TestCorrelationContext { Current = CorrelationId };
         Session = new ParentSessionState(Clock);
         Settings.Stored = AppSettings.CreateDefault(Start.UtcDateTime);
@@ -21,6 +21,8 @@ internal sealed class ProtectionHarness
     public FakeAppSettingsRepository Settings { get; } = new();
 
     public FakeStudySessionRepository Sessions { get; } = new();
+
+    public FakeScheduleWindowRepository ScheduleWindows { get; } = new();
 
     public FakeProtectionEngine Engine { get; } = new();
 
@@ -39,5 +41,5 @@ internal sealed class ProtectionHarness
     public AppSettings SettingsRow => Settings.Stored!;
 
     public ProtectionService CreateService() =>
-        new(Settings, Sessions, Engine, Session, Audits, Correlation, Logger, Clock);
+        new(Settings, Sessions, ScheduleWindows, Engine, Session, Audits, Correlation, Logger, Clock);
 }

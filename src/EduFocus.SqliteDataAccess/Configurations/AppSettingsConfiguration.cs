@@ -26,6 +26,14 @@ internal sealed class AppSettingsConfiguration : IEntityTypeConfiguration<AppSet
         builder.Property(x => x.Id).ValueGeneratedNever();
 
         builder.Property(x => x.ProtectionEnabled).HasDefaultValue(false).ValueGeneratedNever();
+
+        builder.Property(x => x.ProtectionSource)
+            .HasConversion<string>()
+            .HasMaxLength(16)
+            .HasColumnType("TEXT(16)")
+            .HasDefaultValue(ProtectionSource.None)
+            .ValueGeneratedNever();
+
         builder.Property(x => x.MonitoringEnabled).HasDefaultValue(true).ValueGeneratedNever();
         builder.Property(x => x.ScheduleEnabled).HasDefaultValue(false).ValueGeneratedNever();
         builder.Property(x => x.MonitorOnlyDuringClasses).HasDefaultValue(false).ValueGeneratedNever();

@@ -34,6 +34,7 @@ public partial class ParentModeViewModel : ObservableObject
 
     private readonly IParentModeUseCase _mode;
     private readonly ProtectionStatusViewModel _protection;
+    private readonly ScheduleViewModel _schedule;
     private readonly DatabaseBootstrapper _database;
     private readonly IAppLogger _logger;
     private readonly TimeProvider _timeProvider;
@@ -64,18 +65,22 @@ public partial class ParentModeViewModel : ObservableObject
 
     public ProtectionStatusViewModel Protection => _protection;
 
+    public ScheduleViewModel Schedule => _schedule;
+
     public event EventHandler? PasswordBoxesShouldClear;
     public event EventHandler? CloseRequested;
 
     public ParentModeViewModel(
         IParentModeUseCase mode,
         ProtectionStatusViewModel protection,
+        ScheduleViewModel schedule,
         DatabaseBootstrapper database,
         IAppLogger logger,
         TimeProvider timeProvider)
     {
         _mode = mode ?? throw new ArgumentNullException(nameof(mode));
         _protection = protection ?? throw new ArgumentNullException(nameof(protection));
+        _schedule = schedule ?? throw new ArgumentNullException(nameof(schedule));
         _database = database ?? throw new ArgumentNullException(nameof(database));
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
         _timeProvider = timeProvider ?? throw new ArgumentNullException(nameof(timeProvider));
@@ -115,6 +120,7 @@ public partial class ParentModeViewModel : ObservableObject
             if (_mode.IsAuthenticated)
             {
                 await _protection.RefreshAsync();
+                await _schedule.RefreshAsync();
                 View = ParentModeView.Management;
                 SetStatus("Parent Mode đang mở. Phiên tự khóa sau 5 phút không hoạt động.", false);
             }
@@ -363,6 +369,7 @@ public partial class ParentModeViewModel : ObservableObject
         try
         {
             var result = await _protection.ToggleAsync();
+            await _schedule.RefreshAsync();
             var state = result.Status.IsEnabled ? "bật" : "tắt";
 
             SetStatus(
@@ -434,6 +441,7 @@ public partial class ParentModeViewModel : ObservableObject
             case ParentAuthStatus.Success:
                 _lockoutUntilUtc = null;
                 await _protection.RefreshAsync();
+                await _schedule.RefreshAsync();
                 View = ParentModeView.Management;
                 SetStatus("Đã mở Parent Mode. Phiên tự khóa sau 5 phút không hoạt động.", false);
                 break;

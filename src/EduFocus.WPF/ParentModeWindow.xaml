@@ -2,7 +2,7 @@
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         Title="Parent Mode"
-        Height="620" Width="480"
+        Height="760" Width="540"
         WindowStartupLocation="CenterOwner"
         ShowInTaskbar="False"
         Background="#F4F5F9"
@@ -113,6 +113,148 @@
                                         Style="{StaticResource PrimaryButton}"
                                         Command="{Binding ToggleProtectionCommand}"
                                         IsEnabled="{Binding Protection.IsNotBusy}" />
+                            </StackPanel>
+                        </Border>
+
+                        <Border Margin="0,16,0,0" Padding="14" CornerRadius="10" Background="#F8F9FC"
+                                BorderBrush="#DDE1EA" BorderThickness="1">
+                            <StackPanel>
+                                <TextBlock Text="Lịch bảo vệ" FontSize="14" FontWeight="SemiBold"
+                                           Foreground="#1F2430" />
+                                <TextBlock Text="{Binding Schedule.ScheduleStatusText}" Margin="0,6,0,0"
+                                           FontSize="13" Foreground="#5B6270" TextWrapping="Wrap" />
+                                <Button Content="{Binding Schedule.ScheduleToggleText}"
+                                        Style="{StaticResource SecondaryButton}"
+                                        Command="{Binding Schedule.ToggleScheduleCommand}"
+                                        IsEnabled="{Binding Schedule.IsNotBusy}" />
+
+                                <TextBlock Text="Chưa có khung giờ nào. Thêm khung giờ để bảo vệ tự bật theo lịch."
+                                           Margin="0,10,0,0" FontSize="12.5" Foreground="#8A909C"
+                                           TextWrapping="Wrap"
+                                           Visibility="{Binding Schedule.HasNoWindows, Converter={StaticResource BoolToVisibility}}" />
+
+                                <ListBox ItemsSource="{Binding Schedule.Windows}"
+                                         SelectedItem="{Binding Schedule.SelectedWindow, Mode=TwoWay}"
+                                         Margin="0,8,0,0" MaxHeight="170" BorderThickness="0"
+                                         Background="Transparent"
+                                         ScrollViewer.HorizontalScrollBarVisibility="Disabled">
+                                    <ListBox.ItemContainerStyle>
+                                        <Style TargetType="ListBoxItem">
+                                            <Setter Property="Padding" Value="0" />
+                                            <Setter Property="Margin" Value="0,0,0,4" />
+                                            <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+                                            <Setter Property="Template">
+                                                <Setter.Value>
+                                                    <ControlTemplate TargetType="ListBoxItem">
+                                                        <ContentPresenter />
+                                                    </ControlTemplate>
+                                                </Setter.Value>
+                                            </Setter>
+                                        </Style>
+                                    </ListBox.ItemContainerStyle>
+                                    <ListBox.ItemTemplate>
+                                        <DataTemplate>
+                                            <Border Padding="10" CornerRadius="8" Background="White"
+                                                    BorderThickness="1">
+                                                <Border.Style>
+                                                    <Style TargetType="Border">
+                                                        <Setter Property="BorderBrush" Value="#E1E4EC" />
+                                                        <Style.Triggers>
+                                                            <DataTrigger Binding="{Binding IsSelected, RelativeSource={RelativeSource AncestorType=ListBoxItem}}"
+                                                                         Value="True">
+                                                                <Setter Property="BorderBrush" Value="#2F6FED" />
+                                                            </DataTrigger>
+                                                        </Style.Triggers>
+                                                    </Style>
+                                                </Border.Style>
+                                                <Grid>
+                                                    <Grid.ColumnDefinitions>
+                                                        <ColumnDefinition Width="*" />
+                                                        <ColumnDefinition Width="Auto" />
+                                                    </Grid.ColumnDefinitions>
+                                                    <StackPanel Grid.Column="0">
+                                                        <TextBlock Text="{Binding Title}" FontSize="13"
+                                                                   FontWeight="SemiBold" Foreground="#1F2430" />
+                                                        <TextBlock Text="{Binding Summary}" FontSize="12"
+                                                                   Foreground="#5B6270" Margin="0,3,0,0" />
+                                                    </StackPanel>
+                                                    <TextBlock Grid.Column="1" Text="{Binding StateText}"
+                                                               FontSize="11.5" Foreground="#5B6270"
+                                                               VerticalAlignment="Center" Margin="10,0,0,0" />
+                                                </Grid>
+                                            </Border>
+                                        </DataTemplate>
+                                    </ListBox.ItemTemplate>
+                                </ListBox>
+
+                                <TextBlock Text="{Binding Schedule.EditorTitle}" FontSize="13"
+                                           FontWeight="SemiBold" Foreground="#1F2430" Margin="0,12,0,0" />
+                                <WrapPanel Margin="0,6,0,0">
+                                    <CheckBox Content="T2" IsChecked="{Binding Schedule.Monday}"
+                                              Margin="0,0,10,4" />
+                                    <CheckBox Content="T3" IsChecked="{Binding Schedule.Tuesday}"
+                                              Margin="0,0,10,4" />
+                                    <CheckBox Content="T4" IsChecked="{Binding Schedule.Wednesday}"
+                                              Margin="0,0,10,4" />
+                                    <CheckBox Content="T5" IsChecked="{Binding Schedule.Thursday}"
+                                              Margin="0,0,10,4" />
+                                    <CheckBox Content="T6" IsChecked="{Binding Schedule.Friday}"
+                                              Margin="0,0,10,4" />
+                                    <CheckBox Content="T7" IsChecked="{Binding Schedule.Saturday}"
+                                              Margin="0,0,10,4" />
+                                    <CheckBox Content="CN" IsChecked="{Binding Schedule.Sunday}"
+                                              Margin="0,0,10,4" />
+                                </WrapPanel>
+                                <Grid Margin="0,4,0,0">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="12" />
+                                        <ColumnDefinition Width="*" />
+                                    </Grid.ColumnDefinitions>
+                                    <StackPanel Grid.Column="0">
+                                        <TextBlock Text="Bắt đầu" FontSize="11.5" Foreground="#5B6270" />
+                                        <TextBox Text="{Binding Schedule.StartTime, UpdateSourceTrigger=PropertyChanged}"
+                                                 Padding="8,6" Margin="0,4,0,0" />
+                                    </StackPanel>
+                                    <StackPanel Grid.Column="2">
+                                        <TextBlock Text="Kết thúc" FontSize="11.5" Foreground="#5B6270" />
+                                        <TextBox Text="{Binding Schedule.EndTime, UpdateSourceTrigger=PropertyChanged}"
+                                                 Padding="8,6" Margin="0,4,0,0" />
+                                    </StackPanel>
+                                </Grid>
+                                <TextBlock Text="Định dạng 24 giờ HH:mm; 24:00 là hết ngày. Khung giờ không vắt qua nửa đêm."
+                                           FontSize="11" Foreground="#8A909C" Margin="0,5,0,0"
+                                           TextWrapping="Wrap" />
+                                <TextBlock Text="Nhãn (không bắt buộc)" FontSize="11.5"
+                                           Foreground="#5B6270" Margin="0,8,0,0" />
+                                <TextBox Text="{Binding Schedule.WindowLabel, UpdateSourceTrigger=PropertyChanged}"
+                                         MaxLength="100" Padding="8,6" Margin="0,4,0,0" />
+                                <CheckBox Content="Khung giờ đang bật"
+                                          IsChecked="{Binding Schedule.WindowEnabled}" Margin="0,10,0,0" />
+                                <Button Content="{Binding Schedule.SaveButtonText}"
+                                        Style="{StaticResource PrimaryButton}"
+                                        Command="{Binding Schedule.SaveWindowCommand}"
+                                        IsEnabled="{Binding Schedule.IsNotBusy}" />
+                                <Button Content="Xóa khung giờ" Style="{StaticResource SecondaryButton}"
+                                        Command="{Binding Schedule.DeleteWindowCommand}"
+                                        Visibility="{Binding Schedule.CanDelete, Converter={StaticResource BoolToVisibility}}" />
+                                <Button Content="Thêm khung giờ mới" Style="{StaticResource LinkButton}"
+                                        Command="{Binding Schedule.NewWindowCommand}" />
+                                <TextBlock Text="{Binding Schedule.StatusMessage}" Margin="0,8,0,0"
+                                           FontSize="12" TextWrapping="Wrap"
+                                           Visibility="{Binding Schedule.HasStatusMessage, Converter={StaticResource BoolToVisibility}}">
+                                    <TextBlock.Style>
+                                        <Style TargetType="TextBlock">
+                                            <Setter Property="Foreground" Value="#5B6270" />
+                                            <Style.Triggers>
+                                                <DataTrigger Binding="{Binding Schedule.StatusIsError}"
+                                                             Value="True">
+                                                    <Setter Property="Foreground" Value="#B42318" />
+                                                </DataTrigger>
+                                            </Style.Triggers>
+                                        </Style>
+                                    </TextBlock.Style>
+                                </TextBlock>
                             </StackPanel>
                         </Border>
 

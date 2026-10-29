@@ -120,6 +120,14 @@ và dự án tuân theo [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 - **UI và tray:** thẻ "Bảo vệ học tập" trong Parent Mode (trạng thái, cảnh báo engine, nút Bật/Tắt) và trên cửa sổ chính; `NotifyIcon` đổi icon/tooltip theo trạng thái, menu mở lại EduFocus. Tray không có mục thoát — luồng thoát cần PIN thuộc issue #18.
 - **Tests:** 13 test `ProtectionService` (bắt buộc auth, bật/tắt đầy đủ, lặp lại idempotent, lỗi engine giữ trạng thái cũ, rollback khi lỗi lưu phiên, reconcile crash + cảnh báo) và 2 test `SqliteStudySessionRepository`; tổng **339 test pass**, build Release 0 warning.
 
+### Added (Phase 2 — Protection schedule, issue #17)
+- **Lịch bảo vệ (UC06):** `ScheduleClock` tính khung theo wall clock/local time, xử lý DST gap/ambiguous và chọn khung kết thúc sớm nhất; `IScheduleWindowRepository`/`SqliteScheduleWindowRepository` CRUD khung giờ; validate `DaysMask`, `StartMinutes`/`EndMinutes`, không qua nửa đêm và không chồng lấn.
+- **Nguồn bảo vệ bền vững:** thêm `ProtectionSource` (`None`/`Manual`/`Schedule`) trên `AppSettings` + migration `AddProtectionSource` backfill `Manual` cho DB cũ đang bật. Nhờ đó scheduler chỉ tự tắt bảo vệ do lịch sở hữu, còn bảo vệ phụ huynh bật thủ công tồn tại ngoài khung giờ.
+- **Use case:** `ScheduleService` yêu cầu Parent Mode cho CRUD, ghi audit `ScheduleChanged`, tự bật `ScheduleEnabled` khi thêm khung đầu tiên và serialize thao tác bằng semaphore. `EvaluateAsync` chạy mỗi 30 giây và lúc khởi động: tự bật trong khung, tự tắt khi hết khung, tôn trọng override và clamp override khi khung bị sửa; lệch wall clock > 2 phút so với monotonic ghi `TamperDetected` và bỏ qua auto-disable trong tick đó.
+- **Override (BR-07):** tắt bảo vệ trong khung giờ tạo `ScheduleOverrideUntilUtc` đến hết khung; bật thủ công xóa override và chuyển nguồn sang `Manual`; tắt lịch cũng kết thúc bảo vệ do lịch sở hữu và xóa override.
+- **UI:** thẻ "Lịch bảo vệ" trong Parent Mode — danh sách khung giờ, trạng thái khung đang hoạt động/override, bật/tắt lịch và editor 7 ngày + `HH:mm` (hỗ trợ `24:00`), nhãn, khung đang bật/tắt. `ScheduleSchedulerService` dùng `DispatcherTimer` 30 giây, đánh giá ngay trước khi mở cửa sổ chính; lỗi engine/đánh giá hiển thị cảnh báo thay vì làm sập app.
+- **Tests:** thêm test domain `ScheduleClock`/`AppSettings`, 4 test repository `ScheduleWindows`, 17 test `ScheduleService` (override, clock jump, DST, biên 24:00, lỗi engine) và 5 test schedule trong `ProtectionService`; cập nhật test migration/schema. Tổng **379 test pass**, build Release 0 warning.
+
 ### Removed (khỏi phạm vi EduFocus)
 - Quản lý task, profile học tập, quote động lực và Gemini AI.
 - Cơ chế "friction" bắt gõ câu xác nhận bỏ cuộc.

@@ -114,6 +114,7 @@ public sealed class PersistenceTests
 
         var loadedSettings = await read.AppSettings.AsNoTracking().SingleAsync();
         loadedSettings.ProtectionEnabled.Should().BeTrue();
+        loadedSettings.ProtectionSource.Should().Be(ProtectionSource.Manual);
         loadedSettings.Theme.Should().Be(AppTheme.Dark);
         loadedSettings.Language.Should().Be(AppLanguage.Vi);
         loadedSettings.CreatedAtUtc.Should().Be(Now);

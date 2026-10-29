@@ -162,6 +162,12 @@ namespace EduFocus.SqliteDataAccess.Migrations
                         .HasColumnType("INTEGER")
                         .HasDefaultValue(false);
 
+                    b.Property<string>("ProtectionSource")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("TEXT(16)")
+                        .HasDefaultValue("None");
+
                     b.Property<int>("SampleIntervalSeconds")
                         .HasColumnType("INTEGER")
                         .HasDefaultValue(15);

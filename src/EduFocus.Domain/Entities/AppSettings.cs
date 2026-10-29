@@ -17,6 +17,7 @@ public sealed class AppSettings
     {
         Id = id;
         ProtectionEnabled = false;
+        ProtectionSource = ProtectionSource.None;
         MonitoringEnabled = true;
         ScheduleEnabled = false;
         MonitorOnlyDuringClasses = false;
@@ -42,6 +43,13 @@ public sealed class AppSettings
     public AppSettingsId Id { get; }
 
     public bool ProtectionEnabled { get; private set; }
+
+    /// <summary>
+    /// Why protection is ON. Manual ownership survives outside schedule windows,
+    /// while schedule ownership lets the scheduler turn protection off at the
+    /// end of the window (UC06).
+    /// </summary>
+    public ProtectionSource ProtectionSource { get; private set; }
 
     public bool MonitoringEnabled { get; private set; }
 
@@ -96,9 +104,15 @@ public sealed class AppSettings
     }
 
     /// <summary>Manual protection on clears any temporary schedule override (BR-07).</summary>
-    public void EnableProtection(DateTime nowUtc)
+    public void EnableProtection(DateTime nowUtc, ProtectionSource source = ProtectionSource.Manual)
     {
+        Guard.Defined(source, nameof(source));
+
+        if (source == ProtectionSource.None)
+            throw new ArgumentOutOfRangeException(nameof(source), source, "A source is required when enabling protection.");
+
         ProtectionEnabled = true;
+        ProtectionSource = source;
         ScheduleOverrideUntilUtc = null;
         Touch(nowUtc);
     }
@@ -106,7 +120,26 @@ public sealed class AppSettings
     public void DisableProtection(DateTime nowUtc)
     {
         ProtectionEnabled = false;
+        ProtectionSource = ProtectionSource.None;
         ScheduleOverrideUntilUtc = null;
+        Touch(nowUtc);
+    }
+
+    /// <summary>
+    /// Manual disable inside an active window keeps protection off only until the
+    /// window ends so the schedule cannot re-enable it on the next tick (UC06).
+    /// </summary>
+    public void DisableProtectionWithScheduleOverride(DateTime untilUtc, DateTime nowUtc)
+    {
+        Guard.Utc(nowUtc, nameof(nowUtc));
+        Guard.Utc(untilUtc, nameof(untilUtc));
+
+        if (untilUtc <= nowUtc)
+            throw new ArgumentException("Override must end in the future.", nameof(untilUtc));
+
+        ProtectionEnabled = false;
+        ProtectionSource = ProtectionSource.None;
+        ScheduleOverrideUntilUtc = untilUtc;
         Touch(nowUtc);
     }
 

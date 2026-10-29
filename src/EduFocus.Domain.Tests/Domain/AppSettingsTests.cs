@@ -14,6 +14,7 @@ public class AppSettingsTests
         var settings = AppSettings.CreateDefault(Now);
 
         settings.ProtectionEnabled.Should().BeFalse();
+        settings.ProtectionSource.Should().Be(ProtectionSource.None);
         settings.MonitoringEnabled.Should().BeTrue();
         settings.ScheduleEnabled.Should().BeFalse();
         settings.MonitorOnlyDuringClasses.Should().BeFalse();
@@ -43,10 +44,73 @@ public class AppSettingsTests
 
         settings.EnableProtection(Now.AddMinutes(1));
         settings.ProtectionEnabled.Should().BeTrue();
+        settings.ProtectionSource.Should().Be(ProtectionSource.Manual);
 
         settings.DisableProtection(Now.AddMinutes(2));
         settings.ProtectionEnabled.Should().BeFalse();
+        settings.ProtectionSource.Should().Be(ProtectionSource.None);
         settings.UpdatedAtUtc.Should().Be(Now.AddMinutes(2));
+    }
+
+    [Fact]
+    public void Schedule_enable_records_schedule_ownership()
+    {
+        var settings = AppSettings.CreateDefault(Now);
+
+        settings.EnableProtection(Now.AddMinutes(1), ProtectionSource.Schedule);
+
+        settings.ProtectionEnabled.Should().BeTrue();
+        settings.ProtectionSource.Should().Be(ProtectionSource.Schedule);
+    }
+
+    [Fact]
+    public void Manual_enable_promotes_schedule_ownership_and_clears_override()
+    {
+        var settings = AppSettings.CreateDefault(Now);
+        settings.EnableProtection(Now.AddMinutes(1), ProtectionSource.Schedule);
+        settings.SetScheduleOverrideUntil(Now.AddHours(2), Now.AddMinutes(2));
+
+        settings.EnableProtection(Now.AddMinutes(3));
+
+        settings.ProtectionSource.Should().Be(ProtectionSource.Manual);
+        settings.ScheduleOverrideUntilUtc.Should().BeNull();
+    }
+
+    [Fact]
+    public void Enable_rejects_missing_or_unknown_source()
+    {
+        var settings = AppSettings.CreateDefault(Now);
+
+        var none = () => settings.EnableProtection(Now, ProtectionSource.None);
+        var unknown = () => settings.EnableProtection(Now, (ProtectionSource)99);
+
+        none.Should().Throw<ArgumentOutOfRangeException>().WithParameterName("source");
+        unknown.Should().Throw<ArgumentOutOfRangeException>().WithParameterName("source");
+    }
+
+    [Fact]
+    public void Disable_with_schedule_override_keeps_protection_off_until_window_end()
+    {
+        var settings = AppSettings.CreateDefault(Now);
+        settings.EnableProtection(Now.AddMinutes(1), ProtectionSource.Schedule);
+
+        settings.DisableProtectionWithScheduleOverride(Now.AddHours(1), Now.AddMinutes(2));
+
+        settings.ProtectionEnabled.Should().BeFalse();
+        settings.ProtectionSource.Should().Be(ProtectionSource.None);
+        settings.ScheduleOverrideUntilUtc.Should().Be(Now.AddHours(1));
+        settings.IsScheduleOverridden(Now.AddMinutes(30)).Should().BeTrue();
+        settings.IsScheduleOverridden(Now.AddHours(1)).Should().BeFalse();
+    }
+
+    [Fact]
+    public void Disable_with_schedule_override_requires_a_future_end()
+    {
+        var settings = AppSettings.CreateDefault(Now);
+
+        var act = () => settings.DisableProtectionWithScheduleOverride(Now, Now);
+
+        act.Should().Throw<ArgumentException>().WithParameterName("untilUtc");
     }
 
     [Fact]

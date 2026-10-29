@@ -75,6 +75,7 @@ Singleton — ứng dụng đảm bảo chỉ có 1 bản ghi với `Id` cố đ
 |---|---|---|---|
 | `Id` | TEXT(36) | PK | GUID cố định |
 | `ProtectionEnabled` | INTEGER | NOT NULL, default 0 | Trạng thái bảo vệ hiện tại; exit hợp lệ đặt 0, Windows shutdown giữ nguyên |
+| `ProtectionSource` | TEXT(16) | NOT NULL, default `'None'` | Nguồn bật bảo vệ: `None` / `Manual` / `Schedule`; scheduler chỉ tự tắt khi nguồn là `Schedule` |
 | `MonitoringEnabled` | INTEGER | NOT NULL, default 1 | Bật attention monitoring |
 | `ScheduleEnabled` | INTEGER | NOT NULL, default 0 | Bật lịch tự động |
 | `MonitorOnlyDuringClasses` | INTEGER | NOT NULL, default 0 | Chỉ monitor khi phát hiện Meet/Teams/Zoom |
@@ -98,6 +99,7 @@ Singleton — ứng dụng đảm bảo chỉ có 1 bản ghi với `Id` cố đ
 
 **Ghi chú**
 - `ProtectionEnabled` là nguồn sự thật cho trạng thái ON/OFF.
+- `ProtectionSource` phân biệt bảo vệ do lịch bật với bảo vệ phụ huynh bật thủ công. Bật thủ công đặt `Manual` và xóa override; scheduler không tự tắt bảo vệ `Manual` khi hết khung giờ. Migration `AddProtectionSource` backfill `Manual` cho các bản ghi cũ đang bật.
 - Khi app crash, lần khởi động sau đọc cờ này để phục hồi.
 - Hai mốc consent được ghi cùng lúc khi phụ huynh xác nhận cả hai mục ở onboarding; `OnboardingCompleted` chỉ được đặt khi `ParentCredentials` tồn tại và cả hai mốc đã có. Mốc đầu tiên được giữ nguyên nếu onboarding được tiếp tục sau restart.
 - Nếu có `ParentCredentials` nhưng `OnboardingCompleted = 0`, app coi onboarding đang dang dở: phụ huynh nhập PIN để tạo lại recovery code (mã cũ chỉ lưu hash nên không thể hiển thị lại) rồi hoàn tất.
@@ -498,6 +500,7 @@ Giả định:
 - Dùng EF Core migrations.
 - Migration đầu tiên: `InitialEduFocusSchema` — đã tạo trong `src/EduFocus.SqliteDataAccess/Migrations` (issue #9), gồm 9 bảng, index, check constraint, FK và generated column.
 - Migration `AddOnboardingConsent` (issue #15) thêm hai cột nullable `PrivacyAcceptedAtUtc` và `GuardianAcknowledgedAtUtc` vào `AppSettings`; DB cũ được backup tự động trước khi nâng cấp.
+- Migration `AddProtectionSource` (issue #17) thêm cột `ProtectionSource` vào `AppSettings` và backfill `Manual` cho các hàng đang có `ProtectionEnabled = 1`.
 - Mỗi migration có backup tự động trước khi chạy — `SqliteBackupStore` backup bằng SQLite backup API, kiểm tra `PRAGMA integrity_check` và chỉ tiếp tục khi bản backup hợp lệ; giữ tối đa 3 bản gần nhất.
 - Tên backup `edufocus-{UTC}-{nn}.db` là duy nhất, không ghi đè bản cũ; retention chỉ xóa bản cũ nhất.
 - Nếu migration thất bại:
