@@ -6,6 +6,7 @@
     <Project Path="src/EduFocus.Infrastructure.Attention/EduFocus.Infrastructure.Attention.csproj" />
     <Project Path="src/EduFocus.Ports/EduFocus.Ports.csproj" />
     <Project Path="src/EduFocus.SqliteDataAccess/EduFocus.SqliteDataAccess.csproj" />
+    <Project Path="src/EduFocus.SqliteDataAccess.Tests/EduFocus.SqliteDataAccess.Tests.csproj" />
     <Project Path="src/EduFocus.UseCases/EduFocus.UseCases.csproj" />
     <Project Path="src/EduFocus.WPF/EduFocus.WPF.csproj" />
   </Folder>

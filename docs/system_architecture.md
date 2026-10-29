@@ -172,12 +172,12 @@ Triển khai outbound ports, tương tác Windows.
 
 ### 3.5. Data Access (`EduFocus.SqliteDataAccess`)
 
-- `AppDbContext` mới với các DbSet mới.
-- Repository implementations.
-- Fluent API cấu hình index, unique constraint, converter.
-- Migration schema mới; **không migrate** dữ liệu từ `DontBeLazy` 1.x.
-- DB path: `%ProgramData%\EduFocus\edufocus.db`.
-- Backup trước mỗi migration schema; giữ 3 bản gần nhất.
+- `EduFocusDbContext` với 9 DbSet mới; Fluent API cấu hình index, unique constraint, converter và check constraint.
+- Migration `InitialEduFocusSchema`; **không migrate** dữ liệu từ `DontBeLazy` 1.x.
+- DB path: `%ProgramData%\EduFocus\edufocus.db` (mặc định trong `EduFocusDatabaseOptions`).
+- `SqliteDatabaseInitializer`: backup trước mỗi migration schema (giữ 3 bản gần nhất), giữ DB nếu migration lỗi, ghi log hướng dẫn khôi phục.
+- `SqlitePragmaInterceptor`: `PRAGMA foreign_keys = ON` mỗi kết nối; WAL và `auto_vacuum` do initializer thiết lập.
+- Repository implementations sẽ được thêm ở các issue sau.
 
 ### 3.6. UI (`EduFocus.WPF`)
 
@@ -642,9 +642,10 @@ EduFocus/
 
 > Phase 1 (issue #5) đã đổi đồng bộ tên file, namespace, solution và CI sang `EduFocus.*`.
 >
-> Issue #7 đã xóa toàn bộ code 1.x; issue #8 đã thêm domain model 2.0. `Domain` hiện chứa
-> entity/enum/value object 2.0 và `Attention/`; `Ports` còn contract attention/logger/clock,
-> `UseCases` và `SqliteDataAccess` vẫn là scaffold chờ issue #9; `WPF` là shell tối thiểu.
+> Issue #7 đã xóa toàn bộ code 1.x; issue #8 đã thêm domain model 2.0; issue #9 đã thêm
+> `EduFocus.SqliteDataAccess` (DbContext, configuration, converter, migration
+> `InitialEduFocusSchema`, initializer + backup). `UseCases` vẫn là scaffold chờ các issue
+> repository/use case; `WPF` là shell tối thiểu.
 > Inventory 1.x ở [legacy-cleanup.md](./legacy-cleanup.md), invariant domain ở
 > [domain-invariants.md](./domain-invariants.md).
 

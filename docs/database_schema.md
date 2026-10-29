@@ -224,10 +224,10 @@ Singleton.
 | `DistractionSeconds` | INTEGER | NOT NULL, default 0 | Category Distraction |
 | `NeutralSeconds` | INTEGER | NOT NULL, default 0 | Category Neutral/Unknown |
 | `OnlineClassSeconds` | INTEGER | NOT NULL, default 0 | Overlay; không cộng trùng vào tổng category |
-| `MonitoredSeconds` | INTEGER | NOT NULL, default 0 | Tổng Focused + Distracted + Absent + Drowsy |
+| `MonitoredSeconds` | INTEGER | NOT NULL, stored generated | Tổng Focused + Distracted + Absent + Drowsy; SQLite tự tính |
 | `MonitoringEligibleSeconds` | INTEGER | NOT NULL, default 0 | Thời gian monitoring được kỳ vọng |
-| `AttentionPercent` | REAL | NULL | Focused / Monitored × 100 |
-| `CoveragePercent` | REAL | NULL | Monitored / MonitoringEligible × 100 |
+| `AttentionPercent` | REAL | stored generated, NULL | Focused / Monitored × 100; SQLite tự tính |
+| `CoveragePercent` | REAL | stored generated, NULL | Monitored / MonitoringEligible × 100; SQLite tự tính |
 | `ConfidenceAvg` | REAL | NULL | 0.0–1.0, trung bình có trọng số |
 | `BlockedAttemptCount` | INTEGER | NOT NULL, default 0 | Số quan sát được; best-effort |
 | `Note` | TEXT(512) | NULL | |
@@ -243,6 +243,7 @@ Singleton.
 - Nếu Protection vẫn ON khi phục hồi, tạo session mới `Trigger = Recovery`, không cộng thời gian gián đoạn.
 - `AttentionPercent` chỉ tính khi `MonitoredSeconds > 0`.
 - `CoveragePercent` chỉ tính khi `MonitoringEligibleSeconds > 0`; nếu bằng 0 thì NULL.
+- `MonitoredSeconds`, `AttentionPercent`, `CoveragePercent` là **stored generated columns**: SQLite tự tính từ các cột đếm khi ghi, EF Core chỉ đọc. EF SQLite provider bỏ kiểu khai báo trong DDL generated column (SQLite không bắt buộc), nên `PRAGMA table_xinfo` trả `type = ''`; giá trị vẫn là INTEGER/REAL theo biểu thức.
 - `OnlineClassSeconds` là overlay (thời gian được đánh dấu lớp online), không cộng vào `StudySeconds + DistractionSeconds + NeutralSeconds`.
 - Nếu `CoveragePercent < 50`, báo cáo hiển thị cảnh báo.
 - `BlockedAttemptCount` chỉ phản ánh attempt quan sát được; báo cáo phải ghi rõ best-effort.
@@ -484,14 +485,16 @@ Giả định:
 ## 17. Migration & phiên bản schema
 
 - Dùng EF Core migrations.
-- Migration đầu tiên: `InitialEduFocusSchema`.
-- Mỗi migration có backup tự động trước khi chạy.
+- Migration đầu tiên: `InitialEduFocusSchema` — đã tạo trong `src/EduFocus.SqliteDataAccess/Migrations` (issue #9), gồm 9 bảng, index, check constraint, FK và generated column.
+- Mỗi migration có backup tự động trước khi chạy — `SqliteDatabaseInitializer` backup bằng SQLite backup API vào thư mục `backups`, giữ 3 bản gần nhất.
 - Nếu migration thất bại:
   - Giữ DB cũ.
   - Ghi log.
   - Hiển thị lỗi cho phụ huynh; không tự xóa dữ liệu.
 - Không hỗ trợ downgrade schema; nếu cần, khôi phục từ backup.
 - DB từ `DontBeLazy` 1.x không được mở bởi EduFocus.
+- Convention khi mở kết nối: `PRAGMA foreign_keys = ON` (interceptor); DB mới được set `auto_vacuum = INCREMENTAL` trước khi tạo bảng và `journal_mode = WAL`; DB cũ được bật WAL sau khi backup, trước migration.
+- Test tích hợp: `src/EduFocus.SqliteDataAccess.Tests` (schema, khởi tạo/backup/retention, roundtrip entity).
 
 ---
 

@@ -20,7 +20,8 @@ public sealed class StudySession
         DateTime startedAtUtc,
         DateOnly startLocalDate,
         SessionTrigger trigger,
-        bool monitoringEnabled)
+        bool monitoringEnabled,
+        DateTime createdAtUtc)
     {
         Id = id;
         StartedAtUtc = startedAtUtc;
@@ -29,8 +30,8 @@ public sealed class StudySession
         Status = StudySessionStatus.Active;
         Trigger = trigger;
         MonitoringEnabled = monitoringEnabled;
-        CreatedAtUtc = startedAtUtc;
-        UpdatedAtUtc = startedAtUtc;
+        CreatedAtUtc = createdAtUtc;
+        UpdatedAtUtc = createdAtUtc;
     }
 
     public StudySessionId Id { get; }
@@ -112,7 +113,8 @@ public sealed class StudySession
             startedAtUtc,
             startLocalDate,
             trigger,
-            monitoringEnabled);
+            monitoringEnabled,
+            startedAtUtc);
     }
 
     public void Heartbeat(DateTime nowUtc)

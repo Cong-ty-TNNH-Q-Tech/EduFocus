@@ -57,6 +57,14 @@ và dự án tuân theo [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 - **Tests:** 190 test trong `EduFocus.Domain.Tests` cho session lifecycle, block matching, schedule, protection state, credential/lockout và privacy; `EduFocus.Domain` không tham chiếu EF Core, WPF hay Windows API.
 - **Docs:** [docs/domain-invariants.md](docs/domain-invariants.md), liên kết từ architecture §3.1.
 
+### Added (Phase 1 — EF Core schema, issue #9)
+- **Persistence 2.0:** `EduFocusDbContext` + 9 `IEntityTypeConfiguration` map đúng `docs/database_schema.md` — tên bảng/cột, `TEXT(n)`, check constraint, FK (cascade cho sample/event, `SET NULL` cho blocked attempt) và index, gồm unique partial index `UX_StudySessions_Active` chỉ cho phép một session `Active`.
+- **Migration `InitialEduFocusSchema`:** tạo toàn bộ schema 9 bảng; `MonitoredSeconds`/`AttentionPercent`/`CoveragePercent` là stored generated columns do SQLite tính.
+- **Converter:** UTC DateTime `TEXT(28)` (`yyyy-MM-ddTHH:mm:ss.fffZ`), DateOnly `TEXT(10)`, strongly-typed ID `TEXT(36)`, `DomainName`, theme/language lowercase; enum lưu tên.
+- **Khởi tạo DB:** `SqliteDatabaseInitializer` backup trước migration (giữ 3 bản), giữ nguyên DB và log hướng dẫn khôi phục khi migration lỗi; DB mới set `auto_vacuum = INCREMENTAL` + `journal_mode = WAL`; `SqlitePragmaInterceptor` bật `foreign_keys` mỗi kết nối.
+- **Config:** `EduFocusDatabaseOptions` mặc định `%ProgramData%\EduFocus\edufocus.db`, backup trong `backups`; design-time factory cho `dotnet ef`.
+- **Tests:** project `EduFocus.SqliteDataAccess.Tests` với 19 test — schema/index/constraint, khởi tạo/backup/retention, roundtrip entity và ràng buộc một session `Active`.
+
 ### Removed (khỏi phạm vi EduFocus)
 - Quản lý task, profile học tập, quote động lực và Gemini AI.
 - Cơ chế "friction" bắt gõ câu xác nhận bỏ cuộc.

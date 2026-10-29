@@ -71,7 +71,8 @@ tray icon và logic chặn thoát khi có phiên.
 ## 5. Việc tiếp theo
 
 - Issue #8: domain model 2.0 — đã hoàn tất; xem [domain-invariants.md](./domain-invariants.md).
-- Issue #9: `InitialEduFocusSchema` + repository mới trong `EduFocus.SqliteDataAccess`.
+- Issue #9: `InitialEduFocusSchema` + DbContext/converter/configuration — đã hoàn tất; xem [database_schema.md](./database_schema.md) §17.
 - Issue #10: DB tại `%ProgramData%\EduFocus` + ACL/backup.
+- Repository và use case sẽ được thêm sau khi chốt contract `Ports`.
 - Các phase sau: PIN/Parent Mode, ProtectionEngine/BlockPageServer, session/activity,
   attention monitoring, dashboard/reports, installer hoàn chỉnh.

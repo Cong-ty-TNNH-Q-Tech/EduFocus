@@ -24,7 +24,7 @@ public sealed class ParentCredential
         string recoveryCodeHash,
         string recoveryCodeSalt,
         int recoveryCodeIterations,
-        DateTime nowUtc)
+        DateTime createdAtUtc)
     {
         Id = id;
         PinHash = pinHash;
@@ -35,8 +35,8 @@ public sealed class ParentCredential
         RecoveryCodeIterations = recoveryCodeIterations;
         FailedAttempts = 0;
         LockoutUntilUtc = null;
-        PinUpdatedAtUtc = nowUtc;
-        CreatedAtUtc = nowUtc;
+        PinUpdatedAtUtc = createdAtUtc;
+        CreatedAtUtc = createdAtUtc;
     }
 
     public ParentCredentialId Id { get; }

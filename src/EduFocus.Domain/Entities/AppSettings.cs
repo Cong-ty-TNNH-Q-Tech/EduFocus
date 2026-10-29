@@ -13,7 +13,7 @@ public sealed class AppSettings
 {
     public const int MaxCameraDeviceIdLength = 256;
 
-    private AppSettings(AppSettingsId id, DateTime nowUtc)
+    private AppSettings(AppSettingsId id, DateTime createdAtUtc)
     {
         Id = id;
         ProtectionEnabled = false;
@@ -33,8 +33,8 @@ public sealed class AppSettings
         OnboardingCompleted = false;
         ScheduleOverrideUntilUtc = null;
         LastCleanShutdownAtUtc = null;
-        CreatedAtUtc = nowUtc;
-        UpdatedAtUtc = nowUtc;
+        CreatedAtUtc = createdAtUtc;
+        UpdatedAtUtc = createdAtUtc;
     }
 
     public AppSettingsId Id { get; }
