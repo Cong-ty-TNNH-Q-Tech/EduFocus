@@ -32,7 +32,7 @@ EduFocus là ứng dụng desktop **local-first** dành cho phụ huynh giám s�
 - Dữ liệu nằm trong `%ProgramData%\EduFocus`, được bảo vệ bằng ACL cho Administrators/SYSTEM. Ứng dụng áp ACL khi khởi tạo DB; file DB, WAL và backup kế thừa ACL này. Khởi tạo dữ liệu cần quyền Administrator.
 - Backup trước migration được kiểm tra `PRAGMA integrity_check`; giữ tối đa 3 bản. Khi DB hỏng, ứng dụng giữ nguyên file và yêu cầu khôi phục từ backup, không tự xóa dữ liệu.
 - Log kỹ thuật nằm trong `%LocalAppData%\EduFocus\logs`, tối đa 10 MB/file và giữ 14 ngày. PIN, recovery code, token và URL đầy đủ được redact trước khi ghi; audit event quan trọng nằm trong `AuditLogs` của DB, không ghi vào file log.
-- PIN/recovery code chỉ lưu dưới dạng hash PBKDF2-SHA256 với salt riêng; dùng chung lockout 5 lần/15 phút. Recovery code chỉ hiển thị một lần.
+- PIN/recovery code chỉ lưu dưới dạng hash PBKDF2-SHA256 600.000 iterations, salt 16 byte, hash 32 byte; so sánh constant-time; dùng chung lockout 5 lần/15 phút. Recovery code 12 ký tự chỉ hiển thị một lần và được xoay sau khi dùng để reset PIN. Mỗi lần sai PIN/recovery code được ghi audit `AuthenticationFailed`; lần thứ 5 ghi thêm `LockoutTriggered`.
 - Retention mặc định: sample 30 ngày, event/blocked attempt 90 ngày, session summary/audit 365 ngày.
 
 ### Giới hạn đã biết (không phải lỗ hổng)

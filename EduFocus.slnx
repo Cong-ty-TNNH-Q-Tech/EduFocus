@@ -9,6 +9,7 @@
     <Project Path="src/EduFocus.SqliteDataAccess/EduFocus.SqliteDataAccess.csproj" />
     <Project Path="src/EduFocus.SqliteDataAccess.Tests/EduFocus.SqliteDataAccess.Tests.csproj" />
     <Project Path="src/EduFocus.UseCases/EduFocus.UseCases.csproj" />
+    <Project Path="src/EduFocus.UseCases.Tests/EduFocus.UseCases.Tests.csproj" />
     <Project Path="src/EduFocus.WPF/EduFocus.WPF.csproj" />
   </Folder>
 </Solution>

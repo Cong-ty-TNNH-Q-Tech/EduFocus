@@ -28,5 +28,6 @@ public enum AuditEventType
     BlockRuleChanged,
     SettingsChanged,
     ClockJumpDetected,
-    RetentionApplied
+    RetentionApplied,
+    AuthenticationFailed
 }

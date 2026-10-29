@@ -75,7 +75,7 @@ tray icon và logic chặn thoát khi có phiên.
 - Issue #10: ACL thư mục dữ liệu, backup verify/retention và restore — đã hoàn tất.
 - Issue #11: CI .NET 10 với cache/artifact và hướng dẫn branch protection — đã hoàn tất.
 - Issue #12: structured logging, correlation id và audit log tách khỏi log kỹ thuật — đã hoàn tất.
-- Issue #13: PIN hash PBKDF2 và recovery code.
-- Repository và use case sẽ được thêm sau khi chốt contract `Ports`.
-- Các phase sau: PIN/Parent Mode, ProtectionEngine/BlockPageServer, session/activity,
+- Issue #13: PBKDF2 hasher, recovery code, `ParentAuthUseCase` và credential repository — đã hoàn tất.
+- Issue #14: Parent Mode/PIN UI và lockout — tiếp theo.
+- Các phase sau: ProtectionEngine/BlockPageServer, session/activity,
   attention monitoring, dashboard/reports, installer hoàn chỉnh.

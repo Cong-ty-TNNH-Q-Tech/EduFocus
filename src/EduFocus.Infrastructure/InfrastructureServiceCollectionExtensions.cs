@@ -1,4 +1,5 @@
 using System.Runtime.Versioning;
+using EduFocus.Infrastructure.Auth;
 using EduFocus.Infrastructure.Logging;
 using EduFocus.Infrastructure.Services;
 using EduFocus.Ports.Outbound.Services;
@@ -19,6 +20,8 @@ public static class InfrastructureServiceCollectionExtensions
             provider.GetRequiredService<ICorrelationContext>(),
             provider.GetRequiredService<TimeProvider>()));
         services.AddSingleton<IMonotonicClockPort, MonotonicClockAdapter>();
+        services.AddSingleton<IPasswordHasher, Pbkdf2PasswordHasher>();
+        services.AddSingleton<IRecoveryCodeGenerator, RecoveryCodeGenerator>();
 
         return services;
     }

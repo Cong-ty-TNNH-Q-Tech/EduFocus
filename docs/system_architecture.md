@@ -118,6 +118,8 @@ IForegroundActivityPort
 IBrowserUrlProviderPort
 IWebcamAttentionPort
 IMonotonicClockPort
+IPasswordHasher
+IRecoveryCodeGenerator
 IParentCredentialRepository
 IAppSettingsRepository
 IBlockRuleRepository
@@ -164,7 +166,8 @@ Triển khai outbound ports, tương tác Windows.
 | `BrowserUrlProvider` | UI Automation (MVP); browser extension native messaging (post-MVP) |
 | `WebcamAttentionMonitor` | OpenCV + ONNX; face/head/iris/EAR; không lưu frame |
 | `CameraAvailabilityProbe` | Kiểm tra camera bận/không có quyền |
-| `ParentAuthService` | PBKDF2, constant-time compare, recovery code, shared lockout |
+| `Pbkdf2PasswordHasher` | PBKDF2-SHA256 600.000 iterations, salt 16 byte, hash 32 byte, constant-time compare |
+| `RecoveryCodeGenerator` | Sinh recovery code 12 ký tự từ alphabet không nhập nhằng bằng CSPRNG |
 | `ParentAuthorizer` | Kiểm tra Parent Mode cho use case nhạy cảm; chặn exit khi chưa PIN |
 | `WatchdogService` | Scheduled task (MVP, poll 60 giây) / Windows Service (post-MVP) |
 | `FileLogger` | Log xoay vòng theo ngày, redact dữ liệu nhạy cảm |
@@ -178,6 +181,7 @@ Triển khai outbound ports, tương tác Windows.
 - `SqliteDatabaseInitializer`: tạo/khóa thư mục dữ liệu, kiểm tra integrity DB hiện có, backup trước migration (verified, giữ 3 bản), giữ DB nếu lỗi và ghi log hướng dẫn khôi phục.
 - `SqliteBackupStore`: tạo/verify/rotate backup và `Restore` an toàn (snapshot trước khi thay thế).
 - `DataDirectorySecurity`: ACL Administrators/SYSTEM, kế thừa cho file DB và backup.
+- `SqliteParentCredentialRepository`: đọc/ghi singleton `ParentCredentials` (hash + lockout state), không lưu plaintext.
 - `SqlitePragmaInterceptor`: `PRAGMA foreign_keys = ON` mỗi kết nối; WAL và `auto_vacuum` do initializer thiết lập.
 - Repository implementations sẽ được thêm ở các issue sau.
 
@@ -494,6 +498,14 @@ AttentionPercent =
 - Lockout 5 lần / 15 phút, dùng chung cho PIN và recovery code.
 - Không lưu plaintext; không log PIN/recovery code.
 
+Triển khai (issue #13): `ParentAuthUseCase` điều phối `IParentCredentialRepository`,
+`IPasswordHasher`, `IRecoveryCodeGenerator`, `IAuditLogRepository` và `ICorrelationContext`.
+`Pbkdf2PasswordHasher` dùng `Rfc2898DeriveBytes.Pbkdf2` + `CryptographicOperations.FixedTimeEquals`;
+`RecoveryCodeGenerator` dùng `RandomNumberGenerator.GetInt32`. Recovery code được chuẩn hóa
+(uppercase, bỏ dấu gạch/space) trước khi hash; setup trả mã một lần, reset xoay mã mới.
+Mỗi lần sai PIN/recovery code ghi audit `AuthenticationFailed`; lần thứ 5 ghi thêm
+`LockoutTriggered`. Không có migration mới vì schema `ParentCredentials` đã đủ cột.
+
 ### 9.2. Parent session
 
 - `ParentSessionState` singleton:
@@ -678,8 +690,9 @@ EduFocus/
 > `EduFocus.SqliteDataAccess` (DbContext, configuration, converter, migration
 > `InitialEduFocusSchema`, initializer + backup); issue #10 thêm ACL thư mục dữ liệu và
 > quy trình verify/restore backup; issue #11 cập nhật CI; issue #12 thêm structured logging,
-> correlation id và audit repository. `UseCases` vẫn là scaffold chờ các issue
-> repository/use case; `WPF` là shell tối thiểu.
+> correlation id và audit repository; issue #13 thêm `ParentAuthUseCase`, PBKDF2 hasher,
+> recovery-code generator và credential repository. `WPF` vẫn là shell tối thiểu chờ
+> Parent Mode UI (issue #14).
 > Inventory 1.x ở [legacy-cleanup.md](./legacy-cleanup.md), invariant domain ở
 > [domain-invariants.md](./domain-invariants.md).
 
@@ -717,6 +730,7 @@ EduFocus/
 - Domain: PIN validation, rule matching, attention score, session totals, schedule.
 - Privacy: `LogSanitizer` che PIN/token/URL, giữ exception đọc được; `FileLogger` format UTC/category/correlation, rotation và retention.
 - UseCases: protection enable/disable, permission checks, lockout, retention.
+- Parent auth: setup/đổi PIN, xác thực, lockout dùng chung PIN + recovery code, xoay recovery code; fake hasher/repository/audit.
 - Fake ports; không chạm Windows API.
 
 ### Integration tests
@@ -724,6 +738,7 @@ EduFocus/
 - Rule persistence, session aggregation.
 - Retention deletion.
 - Audit log ghi kèm `CorrelationId`.
+- Parent credential round-trip với PBKDF2 thật; PIN/recovery hoạt động sau khi tạo lại repository (mô phỏng restart).
 - Backup verify/rotation/restore, corrupt DB, data-directory ACL.
 
 ### CI

@@ -86,6 +86,14 @@ và dự án tuân theo [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 - **Tests:** thêm 24 test (16 redaction domain, 7 log rotation/correlation, 1 audit persistence); tổng 239 test pass.
 - **Tài liệu vận hành:** vị trí log, vòng đời file và cách thu thập log khi báo lỗi trong README vi/en, SECURITY và architecture §12.
 
+### Added (Phase 1 — Parent authentication, issue #13)
+- **PBKDF2 hasher:** `Pbkdf2PasswordHasher` dùng PBKDF2-SHA256 600.000 iterations, salt ngẫu nhiên 16 byte, hash 32 byte và `FixedTimeEquals`; từ chối hash/salt/iterations không hợp lệ.
+- **Recovery code:** `RecoveryCodeGenerator` sinh mã 12 ký tự từ alphabet `A–Z`/`2–9` không nhập nhằng; `ParentRecoveryCode` chuẩn hóa chữ hoa và bỏ dấu gạch/space trước khi hash.
+- **Use case:** `ParentAuthUseCase` xử lý setup, đăng nhập, đổi PIN và reset bằng recovery code; lockout dùng chung 5 lần/15 phút; reset xoay recovery code và trả mã mới một lần.
+- **Audit:** ghi `PinSetup`, `ParentLogin`, `AuthenticationFailed` cho từng lần sai, `LockoutTriggered`, `PinChanged` và `RecoveryCodeUsed` kèm correlation id; không chứa PIN/recovery code.
+- **Persistence:** `SqliteParentCredentialRepository` đọc/ghi singleton `ParentCredentials`; schema hiện có đủ cột nên không cần migration mới.
+- **Tests:** project `EduFocus.UseCases.Tests` (19 test) + hasher/generator, recovery-code format và round-trip SQLite với PBKDF2 thật; tổng 289 test pass, build Release 0 warning.
+
 ### Removed (khỏi phạm vi EduFocus)
 - Quản lý task, profile học tập, quote động lực và Gemini AI.
 - Cơ chế "friction" bắt gõ câu xác nhận bỏ cuộc.

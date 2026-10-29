@@ -125,6 +125,7 @@ Singleton.
 - Sai 5 lần (PIN hoặc recovery code) → `LockoutUntilUtc = now + 15 phút`.
 - Khi đổi PIN, tạo salt mới; không tái sử dụng hash cũ.
 - Recovery code chỉ hiển thị một lần khi tạo/đổi; DB chỉ giữ hash, không thể hiển thị lại.
+- Issue #13 dùng PBKDF2-SHA256 600.000 iterations, salt 16 byte, hash 32 byte; recovery code 12 ký tự được chuẩn hóa trước khi hash. Không cần migration mới.
 
 ---
 
@@ -360,7 +361,7 @@ Singleton.
 | `Id` | TEXT(36) | PK | GUID |
 | `OccurredAtUtc` | TEXT(28) | NOT NULL | |
 | `Actor` | TEXT(16) | NOT NULL | `Parent` / `System` / `Student` |
-| `EventType` | TEXT(64) | NOT NULL | `ParentLogin`, `ProtectionOn`, `ProtectionOff`, `PinChanged`, `DataDeleted`, `TamperDetected`, `SessionInterrupted`, `WatchdogRestart`, `SystemShutdown`, … |
+| `EventType` | TEXT(64) | NOT NULL | `ParentLogin`, `AuthenticationFailed`, `LockoutTriggered`, `PinSetup`, `PinChanged`, `RecoveryCodeUsed`, `ProtectionOn`, `ProtectionOff`, `DataDeleted`, `TamperDetected`, `SessionInterrupted`, `WatchdogRestart`, `SystemShutdown`, … |
 | `Description` | TEXT(512) | NOT NULL | Mô tả ngắn, không chứa PIN/URL nhạy cảm |
 | `MetadataJson` | TEXT(2048) | NULL | Dữ liệu bổ sung đã redact |
 | `CorrelationId` | TEXT(36) | NULL | Liên kết log file |
