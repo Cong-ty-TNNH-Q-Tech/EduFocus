@@ -111,6 +111,15 @@ và dự án tuân theo [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 - **Khởi động có cổng onboarding:** app chạy `ShutdownMode=OnExplicitShutdown`, hiển thị wizard modal trước `MainWindow`; đóng wizard giữa chừng thì app thoát và lần sau tiếp tục đúng bước.
 - **Tests:** 9 test `OnboardingService` (mặc định an toàn, consent idempotent + audit, chặn PIN khi chưa consent, hủy giữa chừng, restart rồi hoàn tất, sai PIN, hoàn tất hai lần) và 3 test tái phát hành recovery code; 3 test repository mới; test upgrade migration giữ nguyên settings cũ; 2 test consent trong domain. Tổng **324 test pass**, build Release 0 warning.
 
+### Added (Phase 2 — Protection toggle, issue #16)
+- **State machine bảo vệ:** `ProtectionService` triển khai `IProtectionUseCase` — `EnableAsync`/`DisableAsync` yêu cầu phiên Parent Mode qua `IParentAuthorizer`; `GetStatusAsync` trả trạng thái đã lưu kèm phiên đang hoạt động. Bật áp engine trước khi ghi `ProtectionEnabled = true`; tắt gỡ engine trước khi ghi OFF, nên crash giữa chừng để lại tài nguyên có thể dọn thay vì trạng thái OFF mà chặn vẫn còn. Lỗi ghi DB sau khi áp engine sẽ rollback (gỡ engine, hủy phiên mới); lỗi gỡ engine giữ nguyên trạng thái ON.
+- **Idempotency:** bật khi đã ON không tạo phiên thứ hai và không ghi audit lặp; tắt khi đã OFF không gọi engine. Bật thủ công xóa `ScheduleOverrideUntilUtc`; audit `ProtectionOn`/`ProtectionOff` actor Parent (không chứa PIN).
+- **Engine port tạm thời:** `IProtectionEnginePort` (`ApplyAsync`/`RemoveAsync`/`ReconcileAsync`) + `DeferredProtectionEngine` trả cảnh báo rõ ràng rằng chặn web/app thực tế thuộc Phase 3 (issue #24). Trạng thái, phiên, audit và UI hoạt động đầy đủ nhưng chưa chặn domain/app.
+- **Session repository:** `IStudySessionRepository` + `SqliteStudySessionRepository`; phiên `Active` duy nhất theo partial index, `GetActiveAsync` phục vụ state machine và khôi phục sau restart.
+- **Khôi phục sau khởi động:** app reconcile trước khi mở cửa sổ chính — phiên `Active` mồ côi bị đóng tại heartbeat (`Interrupted`, audit `SessionInterrupted`); nếu `ProtectionEnabled = true`, engine được reconcile và tạo phiên `Trigger=Recovery` (audit `SessionRecovered`); nếu OFF, tài nguyên sót được dọn. Kết quả/cảnh báo được đưa vào UI thay vì im lặng.
+- **UI và tray:** thẻ "Bảo vệ học tập" trong Parent Mode (trạng thái, cảnh báo engine, nút Bật/Tắt) và trên cửa sổ chính; `NotifyIcon` đổi icon/tooltip theo trạng thái, menu mở lại EduFocus. Tray không có mục thoát — luồng thoát cần PIN thuộc issue #18.
+- **Tests:** 13 test `ProtectionService` (bắt buộc auth, bật/tắt đầy đủ, lặp lại idempotent, lỗi engine giữ trạng thái cũ, rollback khi lỗi lưu phiên, reconcile crash + cảnh báo) và 2 test `SqliteStudySessionRepository`; tổng **339 test pass**, build Release 0 warning.
+
 ### Removed (khỏi phạm vi EduFocus)
 - Quản lý task, profile học tập, quote động lực và Gemini AI.
 - Cơ chế "friction" bắt gõ câu xác nhận bỏ cuộc.

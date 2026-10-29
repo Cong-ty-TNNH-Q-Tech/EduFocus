@@ -38,6 +38,8 @@ EduFocus là ứng dụng desktop **local-first** dành cho phụ huynh giám s�
 - Onboarding chỉ **lưu** tùy chọn `StartWithWindows` và `MonitoringEnabled`; đăng ký auto-start thật và mở webcam thuộc issue #39/#30. Tiền kiểm tra camera chỉ đọc consent store của Windows, không mở thiết bị và không lưu frame.
 - Recovery code lần đầu và mã tái phát hành khi tiếp tục onboarding đều chỉ hiển thị một lần; mã cũ bị vô hiệu hóa. Nút sao chép đưa mã vào clipboard của phiên Windows hiện tại — clipboard do người dùng kiểm soát và nằm ngoài phạm vi bảo vệ của EduFocus, nên hướng dẫn lưu mã ở nơi an toàn.
 - Không có PIN, recovery code hay nội dung clipboard nào được ghi vào DB, audit hay file log; ô mật khẩu được xóa sau mỗi lần gửi và khi đóng wizard.
+- Bật/tắt bảo vệ thủ công bắt buộc phiên Parent Mode còn hiệu lực (`IParentAuthorizer`); không có API UI nào tắt bảo vệ mà không qua PIN. `ProtectionEnabled` trong `AppSettings` là nguồn sự thật: engine được áp trước khi ghi ON và gỡ trước khi ghi OFF, kèm rollback khi ghi DB thất bại. Mỗi lần đổi trạng thái ghi audit `ProtectionOn`/`ProtectionOff`; khôi phục sau restart ghi `SessionInterrupted`/`SessionRecovered`. Audit chỉ chứa hành động và thời điểm, không chứa PIN/recovery code.
+- Khi app khởi động, phiên `Active` còn sót được đóng tại heartbeat và một phiên `Recovery` được tạo nếu bảo vệ đang ON; trạng thái tray/UI đọc từ DB sau bước reconcile nên không hiển thị ON khi DB đang OFF.
 - Retention mặc định: sample 30 ngày, event/blocked attempt 90 ngày, session summary/audit 365 ngày.
 
 ### Giới hạn đã biết (không phải lỗ hổng)
@@ -60,6 +62,7 @@ Các điểm sau **không được coi là lỗ hổng bảo mật** vì đã đ
 - Không phát hiện được mọi chatbot mới hoặc chatbot nhúng trong ứng dụng khác.
 - Process watcher dựa trên tên/đường dẫn process; app đổi tên hoặc chạy portable có thể không bị phát hiện.
 - URL/path, wildcard subdomain và AI sidebar chưa được enforce trong MVP.
+- Trong bản dựng Phase 2 (issue #16), engine chặn web/app thật chưa được triển khai (issue #24). Bật bảo vệ ghi trạng thái, phiên và audit nhưng chưa chặn domain/app; UI hiển thị cảnh báo "engine sẽ được bật trong Phase 3".
 
 Nếu bạn phát hiện cách vượt qua các giới hạn trên **trong điều kiện người dùng standard user**, hãy báo cáo — đó có thể là lỗ hổng thực sự.
 

@@ -5,7 +5,7 @@ namespace EduFocus.UseCases.Tests.TestSupport;
 
 internal sealed class FakeAppSettingsRepository : IAppSettingsRepository
 {
-    public AppSettings? Stored { get; private set; }
+    public AppSettings? Stored { get; set; }
 
     public int AddCount { get; private set; }
 

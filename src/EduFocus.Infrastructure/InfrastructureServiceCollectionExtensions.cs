@@ -1,6 +1,7 @@
 using System.Runtime.Versioning;
 using EduFocus.Infrastructure.Auth;
 using EduFocus.Infrastructure.Logging;
+using EduFocus.Infrastructure.Protection;
 using EduFocus.Infrastructure.Services;
 using EduFocus.Ports.Outbound.Services;
 using Microsoft.Extensions.DependencyInjection;
@@ -22,6 +23,7 @@ public static class InfrastructureServiceCollectionExtensions
         services.AddSingleton<IMonotonicClockPort, MonotonicClockAdapter>();
         services.AddSingleton<IPasswordHasher, Pbkdf2PasswordHasher>();
         services.AddSingleton<IRecoveryCodeGenerator, RecoveryCodeGenerator>();
+        services.AddSingleton<IProtectionEnginePort, DeferredProtectionEngine>();
 
         return services;
     }

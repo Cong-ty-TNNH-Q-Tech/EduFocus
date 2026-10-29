@@ -98,6 +98,24 @@
                                    Foreground="#1F2430" />
                         <TextBlock Margin="0,10,0,0" FontSize="13" Foreground="#5B6270" TextWrapping="Wrap"
                                    Text="Phiên sẽ tự khóa sau 5 phút không hoạt động. Đóng cửa sổ này cũng khóa phiên ngay." />
+
+                        <Border Margin="0,16,0,0" Padding="14" CornerRadius="10" Background="#F8F9FC"
+                                BorderBrush="#DDE1EA" BorderThickness="1">
+                            <StackPanel>
+                                <TextBlock Text="Bảo vệ học tập" FontSize="14" FontWeight="SemiBold"
+                                           Foreground="#1F2430" />
+                                <TextBlock Text="{Binding Protection.StatusText}" Margin="0,6,0,0"
+                                           FontSize="13" Foreground="#5B6270" TextWrapping="Wrap" />
+                                <TextBlock Text="{Binding Protection.WarningText}" Margin="0,8,0,0"
+                                           FontSize="12" Foreground="#B42318" TextWrapping="Wrap"
+                                           Visibility="{Binding Protection.HasWarning, Converter={StaticResource BoolToVisibility}}" />
+                                <Button Content="{Binding Protection.ToggleButtonText}"
+                                        Style="{StaticResource PrimaryButton}"
+                                        Command="{Binding ToggleProtectionCommand}"
+                                        IsEnabled="{Binding Protection.IsNotBusy}" />
+                            </StackPanel>
+                        </Border>
+
                         <Button Content="Đổi PIN phụ huynh" Style="{StaticResource PrimaryButton}"
                                 Command="{Binding OpenChangePinCommand}" />
                         <Button Content="Khóa phiên" Style="{StaticResource SecondaryButton}"

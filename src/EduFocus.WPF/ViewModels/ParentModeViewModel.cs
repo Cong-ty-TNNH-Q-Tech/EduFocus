@@ -4,6 +4,7 @@ using EduFocus.Domain.Security;
 using EduFocus.Ports.DTOs;
 using EduFocus.Ports.Inbound;
 using EduFocus.Ports.Outbound.Services;
+using EduFocus.Ports.Protection;
 using EduFocus.Ports.Security;
 using EduFocus.WPF.Services;
 
@@ -32,6 +33,7 @@ public partial class ParentModeViewModel : ObservableObject
         "PIN phải có 6–8 chữ số, không lặp lại một chữ số và không tăng/giảm liên tiếp.";
 
     private readonly IParentModeUseCase _mode;
+    private readonly ProtectionStatusViewModel _protection;
     private readonly DatabaseBootstrapper _database;
     private readonly IAppLogger _logger;
     private readonly TimeProvider _timeProvider;
@@ -60,16 +62,20 @@ public partial class ParentModeViewModel : ObservableObject
     public bool IsRecoveryResetVisible => View == ParentModeView.RecoveryReset;
     public bool IsRecoveryCodeVisible => View == ParentModeView.RecoveryCode;
 
+    public ProtectionStatusViewModel Protection => _protection;
+
     public event EventHandler? PasswordBoxesShouldClear;
     public event EventHandler? CloseRequested;
 
     public ParentModeViewModel(
         IParentModeUseCase mode,
+        ProtectionStatusViewModel protection,
         DatabaseBootstrapper database,
         IAppLogger logger,
         TimeProvider timeProvider)
     {
         _mode = mode ?? throw new ArgumentNullException(nameof(mode));
+        _protection = protection ?? throw new ArgumentNullException(nameof(protection));
         _database = database ?? throw new ArgumentNullException(nameof(database));
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
         _timeProvider = timeProvider ?? throw new ArgumentNullException(nameof(timeProvider));
@@ -108,6 +114,7 @@ public partial class ParentModeViewModel : ObservableObject
 
             if (_mode.IsAuthenticated)
             {
+                await _protection.RefreshAsync();
                 View = ParentModeView.Management;
                 SetStatus("Parent Mode đang mở. Phiên tự khóa sau 5 phút không hoạt động.", false);
             }
@@ -146,7 +153,7 @@ public partial class ParentModeViewModel : ObservableObject
         try
         {
             var result = await Task.Run(() => _mode.LoginAsync(pin));
-            ApplyLoginResult(result);
+            await ApplyLoginResultAsync(result);
         }
         catch (Exception ex)
         {
@@ -346,6 +353,50 @@ public partial class ParentModeViewModel : ObservableObject
     }
 
     [RelayCommand]
+    private async Task ToggleProtectionAsync()
+    {
+        if (View != ParentModeView.Management || !TryTouchSession())
+            return;
+
+        SetStatus("Đang cập nhật trạng thái bảo vệ...", false);
+
+        try
+        {
+            var result = await _protection.ToggleAsync();
+            var state = result.Status.IsEnabled ? "bật" : "tắt";
+
+            SetStatus(
+                result.Changed
+                    ? $"Đã {state} bảo vệ."
+                    : $"Bảo vệ đã ở trạng thái {state}.",
+                false);
+        }
+        catch (ParentAuthorizationException)
+        {
+            _mode.Lock();
+            ClearInputs();
+            View = ParentModeView.Login;
+            SetStatus("Phiên Parent Mode đã hết hạn. Vui lòng đăng nhập lại.", true);
+        }
+        catch (ProtectionEngineException ex)
+        {
+            _logger.Error(LogCategories.Protection, "Protection toggle failed.", ex);
+            await _protection.RefreshAsync();
+            SetStatus(
+                ex.Operation == "remove"
+                    ? "Không thể gỡ engine bảo vệ nên trạng thái vẫn là BẬT. Vui lòng thử lại."
+                    : "Không thể áp dụng engine bảo vệ nên trạng thái vẫn là TẮT. Vui lòng thử lại.",
+                true);
+        }
+        catch (Exception ex)
+        {
+            _logger.Error(LogCategories.Protection, "Protection toggle failed unexpectedly.", ex);
+            await _protection.RefreshAsync();
+            SetStatus("Không thể đổi trạng thái bảo vệ lúc này. Vui lòng thử lại.", true);
+        }
+    }
+
+    [RelayCommand]
     private void Close()
     {
         _mode.Lock();
@@ -376,12 +427,13 @@ public partial class ParentModeViewModel : ObservableObject
         ClearInputs();
     }
 
-    private void ApplyLoginResult(ParentAuthResult result)
+    private async Task ApplyLoginResultAsync(ParentAuthResult result)
     {
         switch (result.Status)
         {
             case ParentAuthStatus.Success:
                 _lockoutUntilUtc = null;
+                await _protection.RefreshAsync();
                 View = ParentModeView.Management;
                 SetStatus("Đã mở Parent Mode. Phiên tự khóa sau 5 phút không hoạt động.", false);
                 break;

@@ -146,7 +146,7 @@ IProcessWatchdogPort
 | `ParentAuthUseCase` | Setup PIN, login, lockout, đổi PIN, recovery, tạo lại recovery code sau khi xác thực PIN |
 | `ParentModeService` | Parent session: login mở phiên, đổi PIN/reset kết thúc phiên |
 | `OnboardingService` | First-run: consent, tuỳ chọn an toàn, PIN, resume và hoàn tất UC01 |
-| `ProtectionUseCase` | Bật/tắt bảo vệ, áp dụng/gỡ rule, phục hồi trạng thái |
+| `ProtectionService` | Bật/tắt bảo vệ, đồng bộ phiên học và engine, phục hồi trạng thái sau restart |
 | `StudySessionUseCase` | Bắt đầu/kết thúc session, tổng hợp thời gian |
 | `ActivityUseCase` | Ghi sample, phân loại app/URL, phát hiện lớp online |
 | `AttentionUseCase` | Nhận trạng thái từ camera, tạo event, tính score |
@@ -159,6 +159,12 @@ IProcessWatchdogPort
 nhạy cảm kiểm tra phiên trước khi thực thi.
 
 **Decorator:** giữ pattern logging decorator cho các use case nhạy cảm (Protection, ParentAuth).
+
+**Hiện trạng issue #16:** `ProtectionService` chỉ phụ thuộc `IProtectionEnginePort`, nên không biết hosts,
+process hay block page. Thứ tự bền vững là engine → session → `ProtectionEnabled` khi bật và
+engine → kết thúc session → `ProtectionEnabled = false` khi tắt; lỗi ghi DB kích hoạt rollback tương ứng
+và lỗi gỡ engine giữ nguyên trạng thái ON. `DeferredProtectionEngine` là adapter tạm thời trả cảnh báo
+cho tới khi engine thật được triển khai ở Phase 3 (issue #24); vì vậy "bật bảo vệ" hiện chưa chặn web/app.
 
 ### 3.4. Infrastructure (`EduFocus.Infrastructure`)
 
@@ -189,6 +195,7 @@ Triển khai outbound ports, tương tác Windows.
 - `DataDirectorySecurity`: ACL Administrators/SYSTEM, kế thừa cho file DB và backup.
 - `SqliteParentCredentialRepository`: đọc/ghi singleton `ParentCredentials` (hash + lockout state), không lưu plaintext.
 - `SqliteAppSettingsRepository`: đọc/ghi singleton `AppSettings`, gồm consent onboarding và tuỳ chọn an toàn.
+- `SqliteStudySessionRepository`: đọc phiên `Active` hiện tại, thêm/cập nhật phiên; unique partial index đảm bảo tối đa một phiên active.
 - `SqliteAuditLogRepository`: ghi audit event kèm `CorrelationId`, tách khỏi file log kỹ thuật.
 - `SqlitePragmaInterceptor`: `PRAGMA foreign_keys = ON` mỗi kết nối; WAL và `auto_vacuum` do initializer thiết lập.
 - Các repository còn lại sẽ được thêm ở các issue sau.
@@ -228,6 +235,13 @@ kiểm tra quyền camera qua Windows consent store (chỉ cảnh báo) và hỗ
 Các bước đã lưu cho phép resume sau restart; nếu PIN đã tạo nhưng chưa hoàn tất, phụ huynh nhập PIN
 để tạo lại mã khôi phục mới.
 
+Triển khai (issue #16): `ProtectionStatusViewModel` là nguồn hiển thị dùng chung cho `MainWindow`,
+`ParentModeWindow` và tray. Parent Mode có nút Bật/Tắt bảo vệ (gọi `IProtectionUseCase`, hiển thị cảnh báo
+engine); cửa sổ chính chỉ hiển thị trạng thái và cảnh báo. Trước khi mở cửa sổ chính, `App` gọi
+`IProtectionUseCase.ReconcileAsync()` để đồng bộ DB, phiên học, engine và tray; lỗi reconcile được log và
+hiển thị trên UI. `TrayIconService` dùng `NotifyIcon` (WinForms) với icon/tooltip theo trạng thái và không
+có mục thoát — luồng thoát cần PIN thuộc issue #18.
+
 ---
 
 ## 4. Luồng nghiệp vụ chính
@@ -252,6 +266,12 @@ Parent bấm ON
 ```
 
 **Rollback:** nếu bước hosts thất bại, gỡ phần đã áp dụng và giữ OFF. Nếu block page server thất bại nhưng hosts thành công, vẫn giữ protection ON và cảnh báo.
+
+> **Hiện trạng Phase 2 (issue #16):** `EnableAsync` đã thực hiện đúng thứ tự engine → session → lưu
+> `ProtectionEnabled`, rollback engine/phiên khi ghi DB lỗi và bỏ qua việc tạo phiên thứ hai. Rule
+> validation, ActivityTracker và attention thuộc các issue #21/#25/#28 trở đi; engine thật thuộc #24.
+> Hiện tại `DeferredProtectionEngine` chỉ ghi log và trả cảnh báo, nên UI phải hiển thị cảnh báo thay vì
+> tuyên bố đã chặn.
 
 ### 4.2. Học sinh truy cập chatbot
 
@@ -660,11 +680,15 @@ AddViews()
 - Scoped/transient: repositories, use cases (trừ stateful).
 - `IProtectionEnginePort` được bọc bởi `LoggingProtectionEngineDecorator`.
 
-> **Hiện trạng sau issue #15:** composition root gọi `AddInfrastructureServices()` (logger +
-> monotonic clock), đăng ký SQLite repositories (`IParentCredentialRepository`,
-> `IAppSettingsRepository`, `IAuditLogRepository`), `ParentAuthUseCase`, `ParentSessionState`,
-> `ParentModeService`, `OnboardingService`, `DatabaseBootstrapper` và các cửa sổ/ViewModel.
-> Onboarding được mở trước dashboard ở mỗi lần khởi động để đọc trạng thái hoàn tất.
+> **Hiện trạng sau issue #16:** composition root gọi `AddInfrastructureServices()` (logger,
+> monotonic clock, `DeferredProtectionEngine`), đăng ký SQLite repositories
+> (`IParentCredentialRepository`, `IAppSettingsRepository`, `IStudySessionRepository`,
+> `IAuditLogRepository`), `ParentAuthUseCase`, `ParentSessionState`, `ParentModeService`,
+> `OnboardingService`, `ProtectionService`, `DatabaseBootstrapper`, `ProtectionStatusViewModel`,
+> `MainWindowViewModel`, `TrayIconService` và các cửa sổ/ViewModel. Onboarding được mở trước dashboard
+> ở mỗi lần khởi động; sau onboarding, `App` reconcile protection trước khi hiện cửa sổ chính.
+> `IProtectionEnginePort` hiện do `DeferredProtectionEngine` triển khai; decorator logging và engine thật
+> được thêm ở Phase 3.
 
 ---
 

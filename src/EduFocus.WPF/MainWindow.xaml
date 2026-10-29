@@ -35,36 +35,46 @@
                 Background="White" BorderBrush="#E1E4EC" BorderThickness="1">
             <ScrollViewer VerticalScrollBarVisibility="Auto">
                 <StackPanel>
-                    <TextBlock Text="Trạng thái bản dựng" FontSize="18" FontWeight="SemiBold" Foreground="#1F2430" />
+                    <TextBlock Text="Bảo vệ học tập" FontSize="18" FontWeight="SemiBold" Foreground="#1F2430" />
+                    <TextBlock Text="{Binding Protection.StatusText}" Margin="0,10,0,0"
+                               FontSize="13" Foreground="#5B6270" TextWrapping="Wrap" />
+                    <TextBlock Text="{Binding Protection.WarningText}" Margin="0,8,0,0"
+                               FontSize="12" Foreground="#B42318" TextWrapping="Wrap"
+                               Visibility="{Binding Protection.HasWarning, Converter={StaticResource BoolToVisibility}}" />
+                    <TextBlock Margin="0,8,0,0" FontSize="12" Foreground="#8A909C" TextWrapping="Wrap"
+                               Text="Bật hoặc tắt bảo vệ trong Parent Mode. Trạng thái được khôi phục tự động sau khi khởi động lại." />
+
+                    <TextBlock Text="Trạng thái bản dựng" Margin="0,24,0,0" FontSize="18" FontWeight="SemiBold"
+                               Foreground="#1F2430" />
                     <TextBlock Margin="0,10,0,0" FontSize="13" Foreground="#5B6270" TextWrapping="Wrap"
                                Text="Mã nguồn 1.x đã được loại bỏ. Parent Mode bảo vệ các thao tác nhạy cảm bằng PIN phụ huynh; engine bảo vệ sẽ được bổ sung ở các phase tiếp theo." />
 
                     <TextBlock Margin="0,20,0,0" FontSize="13" Foreground="#5B6270">
                         <Run Text="Phiên bản hiện tại: " />
-                        <Run Text="{Binding CurrentVersion, Mode=OneWay}" FontWeight="SemiBold" />
+                        <Run Text="{Binding Update.CurrentVersion, Mode=OneWay}" FontWeight="SemiBold" />
                     </TextBlock>
 
                     <StackPanel Orientation="Horizontal" Margin="0,16,0,0">
                         <Button Content="Kiểm tra cập nhật" Padding="16,8"
-                                Command="{Binding CheckForUpdateCommand}" />
-                        <TextBlock Text="{Binding StatusMessage}" Margin="14,0,0,0"
+                                Command="{Binding Update.CheckForUpdateCommand}" />
+                        <TextBlock Text="{Binding Update.StatusMessage}" Margin="14,0,0,0"
                                    VerticalAlignment="Center" FontSize="13" Foreground="#5B6270" />
                     </StackPanel>
 
                     <StackPanel Margin="0,18,0,0"
-                                Visibility="{Binding IsUpdateAvailable, Converter={StaticResource BoolToVisibility}}">
+                                Visibility="{Binding Update.IsUpdateAvailable, Converter={StaticResource BoolToVisibility}}">
                         <TextBlock FontSize="14" FontWeight="SemiBold" Foreground="#1F2430">
                             <Run Text="Có bản cập nhật v" />
-                            <Run Text="{Binding LatestVersion, Mode=OneWay}" />
+                            <Run Text="{Binding Update.LatestVersion, Mode=OneWay}" />
                         </TextBlock>
-                        <TextBlock Text="{Binding ReleaseNotes}" Margin="0,8,0,0"
+                        <TextBlock Text="{Binding Update.ReleaseNotes}" Margin="0,8,0,0"
                                    FontSize="12" Foreground="#5B6270" TextWrapping="Wrap" />
                         <Button Content="Tải và cài đặt" Padding="16,8" Margin="0,12,0,0"
                                 HorizontalAlignment="Left"
-                                Command="{Binding DownloadAndInstallCommand}" />
+                                Command="{Binding Update.DownloadAndInstallCommand}" />
                         <ProgressBar Height="6" Margin="0,12,0,0" Minimum="0" Maximum="100"
-                                     Value="{Binding DownloadProgress}"
-                                     Visibility="{Binding IsDownloading, Converter={StaticResource BoolToVisibility}}" />
+                                     Value="{Binding Update.DownloadProgress}"
+                                     Visibility="{Binding Update.IsDownloading, Converter={StaticResource BoolToVisibility}}" />
                     </StackPanel>
                 </StackPanel>
             </ScrollViewer>

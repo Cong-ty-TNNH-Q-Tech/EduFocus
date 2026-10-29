@@ -7,6 +7,7 @@ using EduFocus.SqliteDataAccess.Persistence;
 using EduFocus.SqliteDataAccess.Repositories;
 using EduFocus.UseCases.Auth;
 using EduFocus.UseCases.Onboarding;
+using EduFocus.UseCases.Protection;
 using EduFocus.WPF.Services;
 using EduFocus.WPF.ViewModels;
 using Microsoft.Extensions.DependencyInjection;
@@ -19,7 +20,7 @@ public partial class App : Application
     private static System.Threading.Mutex? _mutex;
     private static IDisposable? _correlationScope;
 
-    protected override void OnStartup(StartupEventArgs e)
+    protected override async void OnStartup(StartupEventArgs e)
     {
         const string appName = "EduFocus_SingleInstance_Mutex";
         _mutex = new System.Threading.Mutex(true, appName, out bool createdNew);
@@ -53,13 +54,30 @@ public partial class App : Application
             return;
         }
 
+        // Restore protection before any UI shows so the tray, window and
+        // persisted state never disagree after a crash or restart.
+        var protectionMonitor = Services.GetRequiredService<ProtectionStatusViewModel>();
+        try
+        {
+            var reconciled = await Services.GetRequiredService<IProtectionUseCase>().ReconcileAsync();
+            protectionMonitor.Apply(reconciled);
+        }
+        catch (Exception ex)
+        {
+            logger.Error(LogCategories.Protection, "Protection reconciliation at startup failed.", ex);
+            protectionMonitor.ReportFailure(
+                "Không thể khôi phục trạng thái bảo vệ sau khi khởi động. Hãy mở Parent Mode để kiểm tra.");
+        }
+
         var mainWindow = Services.GetRequiredService<MainWindow>();
         MainWindow = mainWindow;
         ShutdownMode = ShutdownMode.OnMainWindowClose;
         mainWindow.Show();
 
+        Services.GetRequiredService<TrayIconService>().Start();
+
         // Background update check — non-blocking, silent on failure
-        _ = Services.GetRequiredService<UpdateViewModel>().CheckForUpdateAsync();
+        _ = Services.GetRequiredService<MainWindowViewModel>().Update.CheckForUpdateAsync();
     }
 
     private static void ConfigureServices(IServiceCollection services)
@@ -71,15 +89,20 @@ public partial class App : Application
         services.AddSingleton<IAppSettingsRepository, SqliteAppSettingsRepository>();
         services.AddSingleton<IParentCredentialRepository, SqliteParentCredentialRepository>();
         services.AddSingleton<IAuditLogRepository, SqliteAuditLogRepository>();
+        services.AddSingleton<IStudySessionRepository, SqliteStudySessionRepository>();
         services.AddSingleton<IParentAuthUseCase, ParentAuthUseCase>();
         services.AddSingleton<ParentSessionState>();
         services.AddSingleton<IParentAuthorizer>(provider => provider.GetRequiredService<ParentSessionState>());
         services.AddSingleton<IParentModeUseCase, ParentModeService>();
         services.AddSingleton<IOnboardingUseCase, OnboardingService>();
+        services.AddSingleton<IProtectionUseCase, ProtectionService>();
         services.AddSingleton<DatabaseBootstrapper>();
 
         services.AddSingleton<UpdaterService>();
         services.AddSingleton<UpdateViewModel>();
+        services.AddSingleton<ProtectionStatusViewModel>();
+        services.AddSingleton<MainWindowViewModel>();
+        services.AddSingleton<TrayIconService>();
         services.AddSingleton<MainWindow>();
         services.AddTransient<ParentModeViewModel>();
         services.AddTransient<ParentModeWindow>();

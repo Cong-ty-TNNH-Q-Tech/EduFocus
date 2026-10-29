@@ -252,6 +252,13 @@
 
 **Business rules:** BR-05, BR-06, BR-07, BR-17.
 
+> **Hiện trạng Phase 2 (issue #16):** UC03/UC04 đã có state machine bền vững: bật/tắt yêu cầu Parent Mode,
+> tạo/kết thúc `StudySession`, ghi audit `ProtectionOn`/`ProtectionOff`, bật thủ công xóa
+> `ScheduleOverrideUntilUtc`, và lặp lại thao tác không tạo phiên/audit trùng. Khi app khởi động, phiên
+> `Active` mồ côi bị đóng tại heartbeat và phiên `Recovery` được tạo nếu bảo vệ ON (UC14). Engine chặn
+> web/app thật, ActivityTracker và attention thuộc Phase 3–5; hiện UI hiển thị cảnh báo thay vì giả định
+> đã chặn.
+
 ---
 
 ### UC05 — Quản lý blocklist / allowlist

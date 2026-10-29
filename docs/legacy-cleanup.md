@@ -78,6 +78,7 @@ tray icon và logic chặn thoát khi có phiên.
 - Issue #13: PBKDF2 hasher, recovery code, `ParentAuthUseCase` và credential repository — đã hoàn tất.
 - Issue #14: Parent Mode UI, phiên 5 phút, lockout và reset PIN — đã hoàn tất.
 - Issue #15: onboarding thiết lập PIN, privacy consent và tùy chọn an toàn — đã hoàn tất.
-- Issue #16: bật/tắt bảo vệ và trạng thái toggle — tiếp theo.
+- Issue #16: bật/tắt bảo vệ, session/audit, tray và reconcile sau restart — đã hoàn tất; engine chặn thật thuộc issue #24.
+- Issue #17: schedule khung giờ bảo vệ — tiếp theo.
 - Các phase sau: ProtectionEngine/BlockPageServer, session/activity,
   attention monitoring, dashboard/reports, installer hoàn chỉnh.
