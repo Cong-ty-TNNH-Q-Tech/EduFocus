@@ -153,6 +153,7 @@ dotnet test src/EduFocus.Domain.Tests/EduFocus.Domain.Tests.csproj
 - [📋 Use Cases](./docs/use_cases.md) — Luồng nghiệp vụ chi tiết UC01–UC14
 - [🏛️ System Architecture](./docs/system_architecture.md) — Kiến trúc, thành phần, quyết định thiết kế
 - [🗄️ Database Schema](./docs/database_schema.md) — Schema SQLite, index, retention
+- [🧩 Domain Invariants](./docs/domain-invariants.md) — Entity invariants, ranh giới domain/DB/use case
 - [📝 Changelog](./CHANGELOG.md) — Lịch sử thay đổi
 - [🤝 Contributing](./CONTRIBUTING.md) — Hướng dẫn đóng góp
 - [🔒 Security](./SECURITY.md) — Chính sách bảo mật và báo cáo lỗ hổng

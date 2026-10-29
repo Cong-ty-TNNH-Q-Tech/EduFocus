@@ -50,6 +50,13 @@ và dự án tuân theo [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 - **Rebrand build/installer:** MSI và GitHub Release dùng tên **EduFocus**; bỏ shortcut/description/icon 1.x và `app.ico`/`assets/logo.png`. Giữ `UpgradeCode` cũ để nâng cấp từ 1.x.
 - **Không còn entry point 1.x:** hosts marker `DONTBELAZY`, chặn process và guilt-trip không còn được tạo bởi bất kỳ code nào trong build.
 
+### Added (Phase 1 — Domain model, issue #8)
+- **Domain model 2.0:** 9 entity (`AppSettings`, `ParentCredential`, `BlockRule`, `ScheduleWindow`, `StudySession`, `ActivitySample`, `AttentionEvent`, `BlockedAttempt`, `AuditLog`), enum và strongly-typed ID; factory/invariant cho protection state, PIN/lockout, rule matching, schedule và session lifecycle.
+- **Rule engine domain:** `BlockRuleEvaluator` (allow thắng block) và `ProtectedDomains`; chặn được dịch vụ cụ thể như `gemini.google.com`/`copilot.microsoft.com` nhưng không chặn domain dùng chung/đăng nhập/lớp học.
+- **Privacy helpers:** `DomainName`, `UrlSanitizer` (bỏ query/fragment/credentials), `TextSanitizer` (control character/truncate); domain không có field ảnh/video/landmark.
+- **Tests:** 190 test trong `EduFocus.Domain.Tests` cho session lifecycle, block matching, schedule, protection state, credential/lockout và privacy; `EduFocus.Domain` không tham chiếu EF Core, WPF hay Windows API.
+- **Docs:** [docs/domain-invariants.md](docs/domain-invariants.md), liên kết từ architecture §3.1.
+
 ### Removed (khỏi phạm vi EduFocus)
 - Quản lý task, profile học tập, quote động lực và Gemini AI.
 - Cơ chế "friction" bắt gõ câu xác nhận bỏ cuộc.

@@ -66,6 +66,9 @@ EduFocus kế thừa nền **Clean Architecture + Ports & Adapters** của dự 
 
 Không phụ thuộc project ngoài. Chứa entity, enum, value object và business rules thuần túy.
 
+> Domain model 2.0 đã được triển khai ở issue #8. Chi tiết invariant và ranh giới trách nhiệm:
+> [domain-invariants.md](./domain-invariants.md).
+
 **Entity chính**
 
 | Entity | Trách nhiệm |
@@ -80,7 +83,7 @@ Không phụ thuộc project ngoài. Chứa entity, enum, value object và busin
 | `BlockedAttempt` | Lần truy cập bị chặn |
 | `AuditLog` | Thao tác nhạy cảm |
 
-**Value Object:** giữ pattern `StronglyTypedId` (`SessionId`, `RuleId`, `CredentialId`…).
+**Value Object:** `StronglyTypedId` cho từng entity (`StudySessionId`, `BlockRuleId`, `ParentCredentialId`…) và `DomainName`; helper privacy `UrlSanitizer`, `TextSanitizer`.
 
 **Business rules tiêu biểu**
 - PIN phải 6–8 chữ số, không yếu.
@@ -631,15 +634,19 @@ EduFocus/
 │   ├── ba_document.md
 │   ├── use_cases.md
 │   ├── system_architecture.md
-│   └── database_schema.md
+│   ├── database_schema.md
+│   ├── domain-invariants.md
+│   └── legacy-cleanup.md
 └── .github/workflows/
 ```
 
 > Phase 1 (issue #5) đã đổi đồng bộ tên file, namespace, solution và CI sang `EduFocus.*`.
 >
-> Issue #7 đã xóa toàn bộ code 1.x: `Domain` chỉ còn `Attention/`, `Ports` còn contract
-> attention/logger/clock, `UseCases` và `SqliteDataAccess` tạm là project rỗng chờ issue #8/#9,
-> `WPF` là shell tối thiểu. Inventory đầy đủ ở [legacy-cleanup.md](./legacy-cleanup.md).
+> Issue #7 đã xóa toàn bộ code 1.x; issue #8 đã thêm domain model 2.0. `Domain` hiện chứa
+> entity/enum/value object 2.0 và `Attention/`; `Ports` còn contract attention/logger/clock,
+> `UseCases` và `SqliteDataAccess` vẫn là scaffold chờ issue #9; `WPF` là shell tối thiểu.
+> Inventory 1.x ở [legacy-cleanup.md](./legacy-cleanup.md), invariant domain ở
+> [domain-invariants.md](./domain-invariants.md).
 
 ---
 
@@ -750,5 +757,6 @@ EduFocus/
 - [BA Document](./ba_document.md)
 - [Use Cases](./use_cases.md)
 - [Database Schema](./database_schema.md)
+- [Domain Invariants](./domain-invariants.md)
 - [Security Policy](../SECURITY.md)
 - [Contributing](../CONTRIBUTING.md)

@@ -531,5 +531,6 @@ EduFocus cung cấp một lớp bảo vệ và quan sát **tối thiểu, minh b
 - [Use Cases](./use_cases.md)
 - [System Architecture](./system_architecture.md)
 - [Database Schema](./database_schema.md)
+- [Domain Invariants](./domain-invariants.md)
 - [README](../README.md)
 - [Security Policy](../SECURITY.md)
