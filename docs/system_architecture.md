@@ -526,6 +526,16 @@ Thứ tự:
 - Ghi `BlockedAttempt` với `ObservedVia = ProcessWatcher`; debounce 30 giây theo process.
 - Kill process có thể làm mất dữ liệu chưa lưu; UI phải thông báo và giới hạn này phải được ghi trong known limitations.
 
+> **Triển khai watcher (issue #23):** MVP dùng polling `Process.GetProcesses()` mỗi 2 giây qua seam
+> `IProcessController` (chưa cần WMI eventing); chỉ process có `MainWindowHandle` khác 0 mới được xử
+> lý. Tên process được chuẩn hóa (bỏ path/`.exe`, lowercase) và so khớp **exact**; allowlist thắng
+> blocklist. Watcher bỏ qua PID ≤ 4, chính EduFocus và danh sách process hệ thống quan trọng
+> (`explorer`, `lsass`, `svchost`…). `WM_CLOSE` qua `CloseMainWindow()` + chờ tối đa 2 giây; hết hạn
+> thì `Kill(entireProcessTree: true)`. Kết quả `ClosedGracefully`/`Killed`/`Failed` được phát qua
+> `ProcessBlockedObservation` để engine #24 debounce và ghi `BlockedAttempt`; watcher tự debounce 30
+> giây theo tên process bằng monotonic clock. Lỗi đóng/kill hoặc handler không làm dừng vòng polling;
+> log không ghi window title, path hay nội dung tài liệu.
+
 ### 6.4. Hạn chế đã biết
 
 - DoH/DoT, VPN, proxy có thể bypass hosts.

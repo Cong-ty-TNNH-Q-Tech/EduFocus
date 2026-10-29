@@ -47,6 +47,7 @@ EduFocus là ứng dụng desktop **local-first** dành cho phụ huynh giám s�
 - Windows shutdown/logoff không bị app chặn: `App.OnSessionEnding` chỉ ghi nhận best-effort trong tối đa 2 giây (session `Interrupted` + `Note = SystemShutdown`, audit `SessionInterrupted`/`SystemShutdown`) rồi để Windows tiếp tục. App không gỡ chặn, không đổi `ProtectionEnabled`/`ProtectionSource` và **không** đặt `LastCleanShutdownAtUtc`, nên lần đăng nhập sau reconcile tự bật lại bảo vệ với session `Recovery`. Lỗi DB trong lúc shutdown bị nuốt kèm log thay vì chặn OS.
 - Adapter hosts file (`HostsFileBlocker`) chỉ sửa khối giữa marker `### EDUFOCUS BLOCK START/END ###`, ghi cả `127.0.0.1` và `::1` cho domain exact và không tự thêm `www.`. Trước lần ghi đầu, hosts được backup vào `%ProgramData%\EduFocus\hosts-backup` kèm `journal.json`; restore trả lại đúng byte gốc nếu ngoài marker không bị sửa, ngược lại chỉ gỡ marker để không đè chỉnh sửa của người dùng. Lỗi quyền/khóa file ném `HostsFileException` để bảo vệ không bị coi là đã tắt; log chỉ ghi số domain, không ghi nội dung hosts.
 - Block page chỉ ghi nhận domain + thời điểm qua `BlockPageHit` (engine debounce rồi ghi `BlockedAttempt`); không ghi path/query/User-Agent hay nội dung trang. Log kỹ thuật chỉ ghi cổng/trạng thái listener, không ghi domain; cổng 80 bận trả warning và không làm tắt bảo vệ.
+- Process watcher chỉ xử lý process có cửa sổ chính, khớp chính xác tên đã chuẩn hóa và không nằm trong allowlist; PID ≤ 4, chính EduFocus và process hệ thống quan trọng bị bỏ qua. Trước khi kill, watcher gửi `WM_CLOSE` và chờ tối đa 2 giây; quá hạn mới kill process tree. `ProcessBlockedObservation` chỉ gồm tên process, PID, kết quả và cảnh báo; không ghi window title, path hay nội dung tài liệu. Log không ghi danh sách process đang chạy.
 - Retention mặc định: sample 30 ngày, event/blocked attempt 90 ngày, session summary/audit 365 ngày.
 
 ### Giới hạn đã biết (không phải lỗ hổng)
@@ -70,9 +71,9 @@ Các điểm sau **không được coi là lỗ hổng bảo mật** vì đã đ
 - Webcam attention chỉ là ước lượng, không phải eye tracker y khoa.
 - Ứng dụng không chống gian lận thi cử và không nên dùng cho mục đích đó.
 - Không phát hiện được mọi chatbot mới hoặc chatbot nhúng trong ứng dụng khác.
-- Process watcher dựa trên tên/đường dẫn process; app đổi tên hoặc chạy portable có thể không bị phát hiện.
+- Process watcher khớp chính xác tên process (basename, không phân biệt hoa thường); app đổi tên binary hoặc chạy portable có thể không bị phát hiện. Process không có cửa sổ chính bị bỏ qua, nên app chạy nền không bị đóng.
 - URL/path, wildcard subdomain và AI sidebar chưa được enforce trong MVP.
-- Trong bản dựng hiện tại, adapter hosts file (issue #21) và block page loopback (issue #22) đã có nhưng engine chưa nối chúng (issue #23–#24). Bật bảo vệ ghi trạng thái, phiên và audit nhưng chưa chặn domain/app; UI hiển thị cảnh báo "engine sẽ được bật trong Phase 3".
+- Trong bản dựng hiện tại, adapter hosts file (issue #21), block page loopback (issue #22) và process watcher (issue #23) đã có nhưng engine chưa nối chúng (issue #24). Bật bảo vệ ghi trạng thái, phiên và audit nhưng chưa chặn domain/app; UI hiển thị cảnh báo "engine sẽ được bật trong Phase 3".
 
 Nếu bạn phát hiện cách vượt qua các giới hạn trên **trong điều kiện người dùng standard user**, hãy báo cáo — đó có thể là lỗ hổng thực sự.
 

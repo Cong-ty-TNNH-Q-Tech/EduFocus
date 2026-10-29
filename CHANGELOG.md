@@ -164,6 +164,15 @@ và dự án tuân theo [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 - **Chưa nối vào engine:** DI đăng ký adapter; `IProtectionEnginePort` vẫn là `DeferredProtectionEngine` cho tới issue #24.
 - **Tests:** 18 test `BlockPageServerTests` sandbox (cổng ephemeral, không cần elevation) — start/stop/restart, idempotent + cập nhật domain, cổng bận, trang chặn + security header, không tài nguyên ngoài, XSS qua Host/path/query, HEAD/POST, header quá lớn/thiếu Host, hit và log không chứa domain; tổng **462 test pass**, build Release 0 warning.
 
+### Added (Phase 3 — Process watcher, issue #23)
+- **Theo dõi process:** port `IProcessWatcher` + `ProcessWatcher` polling mỗi 2 giây qua seam `IProcessController`; `WindowsProcessController` dùng `Process.GetProcesses()` (chưa cần WMI eventing) và chỉ xét process có cửa sổ chính.
+- **Quy tắc chặn:** tên process được chuẩn hóa (bỏ path/`.exe`, lowercase) và so khớp **exact**; allowlist luôn thắng blocklist. Watcher bỏ qua PID ≤ 4, chính EduFocus, process không có cửa sổ chính và danh sách process hệ thống quan trọng (`explorer`, `lsass`, `svchost`…).
+- **Đóng mềm trước khi kill:** gửi `WM_CLOSE` qua `CloseMainWindow()` và chờ tối đa 2 giây; nếu chưa thoát thì `Kill(entireProcessTree: true)`. Kết quả `ClosedGracefully`/`Killed`/`Failed` kèm cảnh báo tiếng Việt về dữ liệu chưa lưu hoặc thiếu quyền; lỗi đóng/kill không làm dừng vòng theo dõi.
+- **Debounce 30 giây:** theo tên process và dùng monotonic clock, nên app bị kill rồi tự khởi động lại không tạo vòng kill/log; `StopAsync` xóa debounce để lần bật sau xử lý ngay.
+- **Không log chi tiết:** log chỉ ghi trạng thái watcher và loại lỗi; không ghi window title, path hay nội dung tài liệu.
+- **Chưa nối vào engine:** DI đăng ký adapter; `IProtectionEnginePort` vẫn là `DeferredProtectionEngine` cho tới issue #24, nơi `ProcessBlockedObservation` được debounce/ghi `BlockedAttempt` với `ObservedVia = ProcessWatcher`.
+- **Tests:** 18 test `ProcessWatcherTests` với `IProcessController`, monotonic clock và logger giả — đóng mềm, timeout → kill, close/kill lỗi, allowlist, protected/self/windowless, chuẩn hóa tên, debounce + advance clock, update rule, stop/restart, handler lỗi, scan lỗi một lần rồi phục hồi, tên/option sai; tổng **480 test pass**, build Release 0 warning.
+
 ### Removed (khỏi phạm vi EduFocus)
 - Quản lý task, profile học tập, quote động lực và Gemini AI.
 - Cơ chế "friction" bắt gõ câu xác nhận bỏ cuộc.

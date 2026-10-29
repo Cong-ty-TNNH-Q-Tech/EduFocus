@@ -558,8 +558,8 @@
 > domain exact và ghi cả IPv4 `127.0.0.1` lẫn IPv6 `::1`, không tự sinh biến thể `www.`. Backup +
 > `journal.json` nằm trong `%ProgramData%\EduFocus\hosts-backup`; restore khôi phục exact khi ngoài
 > marker chưa bị sửa, ngược lại chỉ gỡ marker để giữ chỉnh sửa của người dùng. Lỗi quyền/khóa file
-> được báo bằng `HostsFileException` để use case không coi là đã tắt; log chỉ ghi số domain. Process
-> watcher (issue #23) và engine nối các thành phần (issue #24) chưa có trong bản dựng này.
+> được báo bằng `HostsFileException` để use case không coi là đã tắt; log chỉ ghi số domain. Engine
+> nối hosts + block page + process watcher (issue #24) chưa có trong bản dựng này.
 >
 > **Triển khai block page (issue #22):** `BlockPageServer` dùng `TcpListener` bind `127.0.0.1:80`
 > (cổng 0 cho test) thay vì `HttpListener` nên không cần URL ACL; chỉ phục vụ GET/HEAD và chỉ trả
@@ -568,6 +568,15 @@
 > `Referrer-Policy: no-referrer`. Cổng bận/thiếu quyền trả warning để engine giữ Protection ON và UI
 > cảnh báo. Mỗi request bị chặn phát `BlockPageHit` (domain + UTC) để engine debounce và ghi
 > `BlockedAttempt` với `ObservedVia = BlockPage` ở issue #24.
+>
+> **Triển khai process watcher (issue #23):** `ProcessWatcher` polling mỗi 2 giây qua
+> `IProcessController` (`WindowsProcessController` dùng `Process.GetProcesses`), chỉ xét process có
+> cửa sổ chính và khớp **chính xác** tên đã chuẩn hóa (bỏ path/`.exe`, lowercase); allowlist thắng
+> blocklist. Process hệ thống quan trọng, PID ≤ 4, process EduFocus và process không có cửa sổ chính
+> bị bỏ qua. Trước khi kill, watcher gửi `WM_CLOSE` và chờ tối đa 2 giây; quá hạn mới kill process
+> tree và cảnh báo dữ liệu chưa lưu có thể bị mất. Attempt được debounce 30 giây theo tên process
+> bằng monotonic clock; `ProcessBlockedObservation` (tên, PID, kết quả, cảnh báo) để engine #24 ghi
+> `BlockedAttempt` với `ObservedVia = ProcessWatcher`. Log không ghi window title, path hay tài liệu.
 
 ---
 

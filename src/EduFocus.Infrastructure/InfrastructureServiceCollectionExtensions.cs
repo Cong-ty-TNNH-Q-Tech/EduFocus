@@ -29,6 +29,9 @@ public static class InfrastructureServiceCollectionExtensions
         services.AddSingleton<IHostsFileBlocker, HostsFileBlocker>();
         services.AddSingleton(new BlockPageOptions());
         services.AddSingleton<IBlockPageServer, BlockPageServer>();
+        services.AddSingleton(new ProcessWatcherOptions());
+        services.AddSingleton<IProcessController, WindowsProcessController>();
+        services.AddSingleton<IProcessWatcher, ProcessWatcher>();
 
         return services;
     }

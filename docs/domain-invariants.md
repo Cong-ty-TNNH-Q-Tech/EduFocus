@@ -197,5 +197,6 @@ Các rule cần quyền phụ huynh (BR-05), watchdog (BR-28), block page (BR-26
 
 Chạy: `dotnet test src/EduFocus.Domain.Tests/EduFocus.Domain.Tests.csproj -c Release`.
 
-Adapter hạ tầng như `HostsFileBlockerTests` nằm trong `EduFocus.Infrastructure.Tests`, chạy sandbox
-với thư mục tạm (không cần elevation): `dotnet test src/EduFocus.Infrastructure.Tests/EduFocus.Infrastructure.Tests.csproj -c Release`.
+Adapter hạ tầng như `HostsFileBlockerTests`, `BlockPageServerTests` và `ProcessWatcherTests` nằm trong
+`EduFocus.Infrastructure.Tests`, chạy sandbox (thư mục tạm/cổng ephemeral/process giả, không cần
+elevation): `dotnet test src/EduFocus.Infrastructure.Tests/EduFocus.Infrastructure.Tests.csproj -c Release`.
