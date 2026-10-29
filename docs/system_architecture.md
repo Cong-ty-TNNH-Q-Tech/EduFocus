@@ -107,6 +107,7 @@ IAppLifecycleUseCase
 IStudySessionUseCase
 IStudySessionHeartbeatUseCase
 IActivityUseCase
+ICameraSessionUseCase
 IAttentionUseCase
 IBlockRuleUseCase
 IScheduleUseCase
@@ -120,7 +121,8 @@ IProtectionEnginePort
 IBlockPageHostPort
 IForegroundActivityPort
 IBrowserUrlProviderPort
-IWebcamAttentionPort
+ICameraPort
+IAttentionFrameAnalyzer
 IMonotonicClockPort
 IPasswordHasher
 IRecoveryCodeGenerator
@@ -154,6 +156,7 @@ IProcessWatchdogPort
 | `AppLifecycleService` | Thoát bằng PIN (clean exit) và ghi nhận Windows shutdown/logoff (UC12) |
 | `StudySessionUseCase` | Bắt đầu/kết thúc session, tổng hợp thời gian |
 | `ActivityUseCase` | Ghi sample, phân loại app/URL, phát hiện lớp online |
+| `CameraSessionService` | Chọn/mở/đóng camera, báo lỗi quyền/bận/mất kết nối, retry backoff (issue #30) |
 | `AttentionUseCase` | Nhận trạng thái từ camera, tạo event, tính score |
 | `BlockRuleUseCase` | CRUD rule, validate, allowlist override |
 | `ScheduleService` | CRUD khung giờ, đánh giá 30 giây, auto ON/OFF và override |
@@ -242,6 +245,18 @@ event còn mở bị loại khỏi batch, session chỉ bị xóa khi đã kết
 thread pool, chống chồng bằng cờ `_running`. Xóa dữ liệu thủ công theo yêu cầu phụ huynh (UC11) vẫn thuộc
 phần UI sau.
 
+**Hiện trạng issue #30:** `ICameraSessionUseCase`/`CameraSessionService` sở hữu vòng đời một camera: đọc
+`AppSettings.CameraDeviceId`, liệt kê thiết bị qua `ICameraPort.ListDevices`, fallback camera mặc định khi
+thiết bị đã lưu không còn, mở/đóng tuần tự bằng semaphore. Open/list/capture chạy trên thread pool với
+timeout 5 giây (`CameraOptions`), nên driver treo không chặn UI. Lỗi mở → `Unavailable` + `LastFailure`,
+tự mở lại sau 30 giây và backoff nhân đôi tới 5 phút; capture trước hạn trả lỗi mà không mở lại. Capture
+lỗi liên tiếp 3 lần hoặc `Disconnected` mới đóng camera và chuyển `Unavailable`; lỗi lẻ không kết luận mất
+kết nối. `CameraOptions` validate timeout/backoff/ngưỡng. Adapter `OpenCvCameraPort` copy `Mat` sang
+`CameraFrame` BGR24 managed và giải phóng native buffer trước khi trả về; `WindowsCameraDeviceCatalog` liệt
+kê PNP camera qua WMI (best effort). `CameraStatusViewModel` hiển thị trạng thái và hướng dẫn quyền trong
+cửa sổ chính/tray. Camera **chưa tự bật**; pipeline attention (#31–#33) sẽ gọi `StartAsync`/`CaptureAsync`
+và chịu trách nhiệm ghi `AttentionEvent`/`CameraUnavailable`.
+
 ### 3.4. Infrastructure (`EduFocus.Infrastructure`)
 
 Triển khai outbound ports, tương tác Windows.
@@ -255,7 +270,8 @@ Triển khai outbound ports, tương tác Windows.
 | `UiAutomationBrowserUrlProvider` | UI Automation đọc address bar (MVP); browser extension native messaging (post-MVP) |
 | `WindowsSystemPowerEventPort` | `SystemEvents.PowerModeChanged` + `SessionSwitch` → `Suspended`/`Resumed` |
 | `WebcamAttentionMonitor` | OpenCV + ONNX; face/head/iris/EAR; không lưu frame |
-| `CameraAvailabilityProbe` | Kiểm tra camera bận/không có quyền |
+| `OpenCvCameraPort` | `ICameraPort` trên OpenCvSharp MSMF; chọn thiết bị theo PNP id, copy frame sang buffer managed, giải phóng `Mat` ngay |
+| `WindowsCameraDeviceCatalog` | Liệt kê camera qua WMI `Win32_PnPEntity` (best effort) |
 | `Pbkdf2PasswordHasher` | PBKDF2-SHA256 600.000 iterations, salt 16 byte, hash 32 byte, constant-time compare |
 | `RecoveryCodeGenerator` | Sinh recovery code 12 ký tự từ alphabet không nhập nhằng bằng CSPRNG |
 | `WatchdogService` | Scheduled task (MVP, poll 60 giây) / Windows Service (post-MVP) |
@@ -741,6 +757,11 @@ AttentionPercent =
   - Báo cáo ghi rõ thời gian không quan sát được.
 - Post-MVP: companion phone camera hoặc virtual camera.
 
+> **Triển khai issue #30:** `CameraSessionService` coi camera bận/không quyền/mất kết nối là `Unavailable`
+> và tự mở lại sau 30 giây (backoff nhân đôi tới 5 phút); chỉ `Disconnected` hoặc 3 lỗi capture liên tiếp
+> mới đóng thiết bị. `CameraStatusViewModel` hiển thị trạng thái và hướng dẫn bật quyền Camera trong cửa
+> sổ chính/tray. Việc ghi `CameraUnavailable` và cộng `MonitoringEligibleSeconds` thuộc #33.
+
 ### 8.5. Privacy
 
 - Không ghi frame, không gửi network.
@@ -955,6 +976,13 @@ AddViews()
 > scheduler đã chạy; service chạy pass đầu tiên trên thread pool, sau đó kiểm tra mỗi phút và chạy khi
 > local time ≥ 03:00 (mỗi ngày một lần). `ServiceProvider.Dispose()` dừng `DispatcherTimer`.
 
+> **Bổ sung sau issue #30:** composition root đăng ký `ICameraDeviceCatalog`/`WindowsCameraDeviceCatalog`,
+> `CameraPortOptions` (MSMF 640×480), `ICameraPort`/`OpenCvCameraPort`, `CameraOptions` (timeout 5 giây,
+> retry 30 giây → 5 phút, ngưỡng 3 lỗi capture), `ICameraSessionUseCase`/`CameraSessionService` và
+> `CameraStatusViewModel`; WPF tham chiếu project `EduFocus.Infrastructure.Attention`. `ServiceProvider.DisposeAsync()`
+> đóng camera qua `OpenCvCameraPort.Dispose()`. Camera chưa được start ở composition root — pipeline attention
+> (#31–#33) sẽ gọi `StartAsync`/`StopAsync` theo vòng đời phiên học.
+
 ---
 
 ## 14. Cấu trúc thư mục đích
@@ -989,6 +1017,7 @@ EduFocus/
 │   │   ├── Watchdog/
 │   │   └── EduFocus.Infrastructure.csproj
 │   ├── EduFocus.Infrastructure.Attention/
+│   │   ├── Camera/          (OpenCvCameraPort, WindowsCameraDeviceCatalog, OpenCvCameraSource)
 │   │   └── ... (adapter OpenCvSharp/ONNX từ spike attention)
 │   ├── EduFocus.SqliteDataAccess/
 │   │   ├── AppDbContext.cs

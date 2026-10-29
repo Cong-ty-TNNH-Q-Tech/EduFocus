@@ -223,6 +223,15 @@ và dự án tuân theo [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 - **Ghi chú:** issue ghi "RetentionCompleted"; domain đã có enum `AuditEventType.RetentionApplied` nên dùng lại tên này.
 - **Tests:** 11 test `RetentionService` (cutoff theo settings, batch đến khi batch ngắn, lỗi giữa batch, thiếu/lỗi settings, vacuum/audit lỗi, audit count, chạy lặp tuần tự, validate options) và 8 test SQLite (sample session Active, event mở, blocked attempt/audit cutoff, batch session + cascade + SET NULL, session Active/recent, vacuum, validate cutoff/batch); tổng **622 test pass**, build Release 0 warning.
 
+### Added (Phase 5 — Camera abstraction & attention port, issue #30)
+- **Port camera không phụ thuộc OpenCV:** `ICameraPort` + DTO thuần (`CameraDeviceInfo`, `CameraFrame` BGR24 managed, `CameraOpenResult`, `CameraCaptureResult`, `CameraFailureKind`, `CameraSessionState`). Adapter copy pixel khỏi `Mat` sang buffer managed rồi giải phóng native buffer ngay trong `CaptureFrame`; không frame/ảnh/embedding nào được ghi disk hay gửi network.
+- **Supervisor phiên camera:** `ICameraSessionUseCase`/`CameraSessionService` đọc `AppSettings.CameraDeviceId`, fallback camera mặc định khi thiết bị đã lưu không còn kết nối, mở/đóng tuần tự bằng semaphore. Open/list/capture chạy trên thread pool với timeout 5 giây (`CameraOptions`), nên driver treo không chặn caller; lỗi được phân biệt thành `PermissionDenied`/`Busy`/`NotFound`/`Disconnected`/`Timeout`/`Unknown`.
+- **Retry có backoff:** lỗi mở → `Unavailable` + `LastFailure`, tự mở lại sau 30 giây, backoff nhân đôi tới trần 5 phút; capture trước hạn trả lỗi mà không mở lại. Lỗi capture lẻ không kết luận mất kết nối — chỉ `Disconnected` hoặc 3 lỗi liên tiếp mới đóng camera và chuyển `Unavailable`.
+- **Adapter Windows:** `OpenCvCameraPort` (OpenCvSharp MSMF 640×480, flush frame đầu, chọn thiết bị theo PNP id) và `WindowsCameraDeviceCatalog` (WMI `Win32_PnPEntity`, best effort); thêm `System.Management` 10.0.14.
+- **UI:** `CameraStatusViewModel` hiển thị trạng thái/thời điểm lỗi và hướng dẫn quyền trong cửa sổ chính, kèm mục "Camera" trong menu tray. Camera **chưa tự bật** — vòng đời do attention pipeline (#31–#33) điều khiển.
+- **DI:** đăng ký `ICameraDeviceCatalog`/`WindowsCameraDeviceCatalog`, `CameraPortOptions`, `ICameraPort`/`OpenCvCameraPort`, `CameraOptions`, `ICameraSessionUseCase`/`CameraSessionService`, `CameraStatusViewModel`; WPF tham chiếu `EduFocus.Infrastructure.Attention`.
+- **Tests:** 25 test `CameraSessionService` (chọn thiết bị lưu/mặc định, catalog WMI rỗng, settings lỗi, permission/busy, backoff 30→60→90 giây, disconnect, ngưỡng capture, timeout open/capture, stop/idempotent, event, refresh thiết bị, validate options); tổng **647 test pass**, build Release 0 warning.
+
 ### Removed (khỏi phạm vi EduFocus)
 - Quản lý task, profile học tập, quote động lực và Gemini AI.
 - Cơ chế "friction" bắt gõ câu xác nhận bỏ cuộc.

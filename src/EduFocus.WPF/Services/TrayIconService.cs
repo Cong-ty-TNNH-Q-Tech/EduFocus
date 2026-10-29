@@ -1,3 +1,4 @@
+using System.ComponentModel;
 using System.Drawing;
 using System.Windows.Forms;
 using EduFocus.Ports.Outbound.Services;
@@ -7,24 +8,29 @@ namespace EduFocus.WPF.Services;
 
 /// <summary>
 /// System tray presence. The icon and tooltip mirror the persisted protection
-/// state. Exit opens the PIN-gated exit dialog (UC12) instead of closing the app
-/// directly, even when protection is OFF.
+/// state, and the menu reports the camera supervisor state. Exit opens the
+/// PIN-gated exit dialog (UC12) instead of closing the app directly, even when
+/// protection is OFF.
 /// </summary>
 public sealed class TrayIconService : IDisposable
 {
     private readonly ProtectionStatusViewModel _protection;
+    private readonly CameraStatusViewModel _camera;
     private readonly IAppLogger _logger;
     private readonly Func<ExitWindow> _exitWindowFactory;
 
     private NotifyIcon? _icon;
     private ToolStripMenuItem? _statusItem;
+    private ToolStripMenuItem? _cameraItem;
 
     public TrayIconService(
         ProtectionStatusViewModel protection,
+        CameraStatusViewModel camera,
         IAppLogger logger,
         Func<ExitWindow> exitWindowFactory)
     {
         _protection = protection ?? throw new ArgumentNullException(nameof(protection));
+        _camera = camera ?? throw new ArgumentNullException(nameof(camera));
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
         _exitWindowFactory = exitWindowFactory ?? throw new ArgumentNullException(nameof(exitWindowFactory));
     }
@@ -37,9 +43,11 @@ public sealed class TrayIconService : IDisposable
         try
         {
             _statusItem = new ToolStripMenuItem { Enabled = false };
+            _cameraItem = new ToolStripMenuItem { Enabled = false };
 
             var menu = new ContextMenuStrip();
             menu.Items.Add(_statusItem);
+            menu.Items.Add(_cameraItem);
             menu.Items.Add(new ToolStripSeparator());
             menu.Items.Add("Mở EduFocus", null, (_, _) => ShowMainWindow());
             menu.Items.Add("Thoát EduFocus...", null, (_, _) => ShowExitDialog());
@@ -52,7 +60,9 @@ public sealed class TrayIconService : IDisposable
             _icon.DoubleClick += (_, _) => ShowMainWindow();
 
             _protection.TrayStateChanged += OnTrayStateChanged;
+            _camera.PropertyChanged += OnCameraPropertyChanged;
             UpdateIcon();
+            UpdateCameraItem();
         }
         catch (Exception ex)
         {
@@ -85,6 +95,7 @@ public sealed class TrayIconService : IDisposable
     public void Dispose()
     {
         _protection.TrayStateChanged -= OnTrayStateChanged;
+        _camera.PropertyChanged -= OnCameraPropertyChanged;
 
         if (_icon is null)
             return;
@@ -94,9 +105,22 @@ public sealed class TrayIconService : IDisposable
         _icon.Dispose();
         _icon = null;
         _statusItem = null;
+        _cameraItem = null;
     }
 
     private void OnTrayStateChanged(object? sender, EventArgs e) => UpdateIcon();
+
+    private void OnCameraPropertyChanged(object? sender, PropertyChangedEventArgs e)
+    {
+        if (e.PropertyName == nameof(CameraStatusViewModel.TrayStatusText))
+            UpdateCameraItem();
+    }
+
+    private void UpdateCameraItem()
+    {
+        if (_cameraItem is not null)
+            _cameraItem.Text = _camera.TrayStatusText;
+    }
 
     private void UpdateIcon()
     {

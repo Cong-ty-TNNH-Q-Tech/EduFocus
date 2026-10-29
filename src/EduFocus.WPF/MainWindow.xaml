@@ -44,6 +44,14 @@
                     <TextBlock Margin="0,8,0,0" FontSize="12" Foreground="#8A909C" TextWrapping="Wrap"
                                Text="Bật hoặc tắt bảo vệ trong Parent Mode. Trạng thái được khôi phục tự động sau khi khởi động lại." />
 
+                    <StackPanel Orientation="Horizontal" Margin="0,16,0,0">
+                        <Ellipse Width="10" Height="10" VerticalAlignment="Center"
+                                 Fill="{Binding Camera.IndicatorBrush}" />
+                        <TextBlock Text="{Binding Camera.StatusText}" Margin="8,0,0,0"
+                                   FontSize="12" Foreground="#5B6270" TextWrapping="Wrap"
+                                   VerticalAlignment="Center" />
+                    </StackPanel>
+
                     <TextBlock Text="Trạng thái bản dựng" Margin="0,24,0,0" FontSize="18" FontWeight="SemiBold"
                                Foreground="#1F2430" />
                     <TextBlock Margin="0,10,0,0" FontSize="13" Foreground="#5B6270" TextWrapping="Wrap"

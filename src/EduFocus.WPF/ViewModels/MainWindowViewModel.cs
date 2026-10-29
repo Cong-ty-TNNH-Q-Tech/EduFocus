@@ -10,9 +10,15 @@ public sealed class MainWindowViewModel
 
     public ProtectionStatusViewModel Protection { get; }
 
-    public MainWindowViewModel(UpdateViewModel update, ProtectionStatusViewModel protection)
+    public CameraStatusViewModel Camera { get; }
+
+    public MainWindowViewModel(
+        UpdateViewModel update,
+        ProtectionStatusViewModel protection,
+        CameraStatusViewModel camera)
     {
         Update = update ?? throw new ArgumentNullException(nameof(update));
         Protection = protection ?? throw new ArgumentNullException(nameof(protection));
+        Camera = camera ?? throw new ArgumentNullException(nameof(camera));
     }
 }

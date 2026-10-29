@@ -531,6 +531,13 @@
 > `MonitoringEligibleSeconds` hay không. Việc cộng eligible/monitored theo tick và tính coverage thuộc
 > issue #33; policy được test với cùng 40 giây monitored cho coverage 20% (mọi lúc) và 80% (chỉ trong lớp).
 
+> **Triển khai (issue #30):** `ICameraSessionUseCase`/`CameraSessionService` chọn camera đã lưu trong
+> `AppSettings.CameraDeviceId` hoặc camera mặc định, mở/đóng tuần tự và bọc open/list/capture trong timeout
+> 5 giây. Camera bận/không quyền/mất kết nối → `CameraUnavailable`, tự mở lại sau 30 giây (backoff nhân đôi
+> tới 5 phút); lỗi capture lẻ không kết luận mất tập trung, chỉ 3 lỗi liên tiếp hoặc `Disconnected` mới đóng
+> thiết bị. `CameraStatusViewModel` hiển thị trạng thái và hướng dẫn quyền trong cửa sổ chính/tray. Việc
+> phân tích frame, ghi `AttentionEvent`/`CameraUnavailable` và cộng thời gian monitored thuộc #31–#33.
+
 ---
 
 ### UC09 — Trang chặn & chặn ứng dụng

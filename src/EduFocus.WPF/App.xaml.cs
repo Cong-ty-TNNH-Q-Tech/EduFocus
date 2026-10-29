@@ -1,12 +1,14 @@
 using System.Windows;
 using EduFocus.Domain.Protection;
 using EduFocus.Infrastructure;
+using EduFocus.Infrastructure.Attention.Camera;
 using EduFocus.Ports.Inbound;
 using EduFocus.Ports.Outbound.Persistence;
 using EduFocus.Ports.Outbound.Services;
 using EduFocus.SqliteDataAccess.Persistence;
 using EduFocus.SqliteDataAccess.Repositories;
 using EduFocus.UseCases.Activity;
+using EduFocus.UseCases.Attention;
 using EduFocus.UseCases.Auth;
 using EduFocus.UseCases.Blocking;
 using EduFocus.UseCases.Lifecycle;
@@ -133,6 +135,11 @@ public partial class App : Application
         services.AddSingleton(new ActivityTrackingOptions());
         services.AddSingleton<IBrowserUrlProviderPort, UiAutomationBrowserUrlProvider>();
         services.AddSingleton<IActivityUseCase, ActivityTrackingService>();
+        services.AddSingleton<ICameraDeviceCatalog, WindowsCameraDeviceCatalog>();
+        services.AddSingleton(new CameraPortOptions());
+        services.AddSingleton<ICameraPort, OpenCvCameraPort>();
+        services.AddSingleton(new CameraOptions());
+        services.AddSingleton<ICameraSessionUseCase, CameraSessionService>();
         services.AddSingleton(BuiltInRuleCatalog.Default);
         services.AddSingleton<IBlockRuleSeedUseCase, BlockRuleSeedService>();
         services.AddSingleton<IBlockRuleUseCase, BlockRuleService>();
@@ -151,6 +158,7 @@ public partial class App : Application
         services.AddSingleton<UpdaterService>();
         services.AddSingleton<UpdateViewModel>();
         services.AddSingleton<ProtectionStatusViewModel>();
+        services.AddSingleton<CameraStatusViewModel>();
         services.AddSingleton<ScheduleViewModel>();
         services.AddSingleton<BlocklistViewModel>();
         services.AddSingleton<MainWindowViewModel>();
