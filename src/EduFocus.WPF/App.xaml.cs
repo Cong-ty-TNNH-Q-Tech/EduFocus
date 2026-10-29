@@ -174,6 +174,7 @@ public partial class App : Application
         services.AddSingleton<IProtectionUseCase, ProtectionService>();
         services.AddSingleton<IDashboardUseCase, DashboardService>();
         services.AddSingleton<IReportUseCase, ReportService>();
+        services.AddSingleton<IReportExportUseCase, ReportExportService>();
         services.AddSingleton<IScheduleUseCase, ScheduleService>();
         services.AddSingleton(new RetentionOptions());
         services.AddSingleton<IRetentionUseCase, RetentionService>();

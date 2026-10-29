@@ -494,6 +494,12 @@ ORDER BY StartedAtUtc;
 > và cap 100 event (đọc 101 để biết truncation). Session có `MonitoredSeconds`/`CameraUnavailableSeconds` > 0
 > nhưng không còn event nào bị coi là detail đã hết retention → `StudyReport.AttentionDetailsExpired` tạo
 > cảnh báo, không phải lỗi; cờ này bị bỏ qua khi danh sách event đã bị truncation để tránh báo nhầm.
+>
+> **Triển khai issue #37:** xuất CSV không tạo bảng/cột mới. `ReportExportService` dùng lại
+> `ListForReportAsync` của `ActivitySamples` (projection chỉ có app name/domain đã làm sạch) và danh sách
+> `AttentionEvents` trong `StudyReport`; session và tổng ngày lấy từ snapshot báo cáo nên không cần query lại.
+> Không truy vấn nào đọc `WindowTitle`, URL đầy đủ hay `ProcessName`; file CSV nằm ngoài DB tại
+> `%LocalAppData%\EduFocus\exports`.
 
 ---
 

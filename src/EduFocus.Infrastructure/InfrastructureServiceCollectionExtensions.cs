@@ -1,6 +1,7 @@
 using System.Runtime.Versioning;
 using EduFocus.Infrastructure.Activity;
 using EduFocus.Infrastructure.Auth;
+using EduFocus.Infrastructure.Export;
 using EduFocus.Infrastructure.Logging;
 using EduFocus.Infrastructure.Protection;
 using EduFocus.Infrastructure.Services;
@@ -35,6 +36,8 @@ public static class InfrastructureServiceCollectionExtensions
         services.AddSingleton(new ProtectionEngineOptions());
         services.AddSingleton<IProtectionEnginePort, ProtectionEngine>();
         services.AddSingleton<IForegroundActivityPort, WindowsForegroundActivityPort>();
+        services.AddSingleton(new CsvExportOptions());
+        services.AddSingleton<ICsvExportStore, LocalCsvExportStore>();
 
         return services;
     }

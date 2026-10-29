@@ -5,6 +5,7 @@ using EduFocus.Domain.Attention;
 using EduFocus.Domain.Entities;
 using EduFocus.Domain.Enums;
 using EduFocus.Domain.Reports;
+using EduFocus.Ports.DTOs;
 using EduFocus.Ports.Inbound;
 using EduFocus.Ports.Outbound.Services;
 
@@ -33,17 +34,23 @@ public sealed partial class ReportViewModel : ObservableObject
     private static readonly string[] WeekdayNames = ["CN", "T2", "T3", "T4", "T5", "T6", "T7"];
 
     private readonly IReportUseCase _reports;
+    private readonly IReportExportUseCase _exports;
     private readonly IAppLogger _logger;
     private readonly TimeProvider _timeProvider;
     private readonly SemaphoreSlim _gate = new(1, 1);
 
+    private StudyReport? _currentReport;
     private bool _loaded;
 
     [ObservableProperty] private ReportRangeOption? _selectedRange;
     [ObservableProperty] private bool _isLoading = true;
+    [ObservableProperty] private bool _isExporting;
     [ObservableProperty] private bool _hasError;
     [ObservableProperty] private string _errorMessage = string.Empty;
     [ObservableProperty] private bool _hasSessions;
+    [ObservableProperty] private string _exportMessage = string.Empty;
+    [ObservableProperty] private bool _hasExportMessage;
+    [ObservableProperty] private bool _exportIsError;
     [ObservableProperty] private string _periodLabel = string.Empty;
     [ObservableProperty] private string _studyTimeText = "0 phút";
     [ObservableProperty] private string _activeTimeText = "0 phút";
@@ -71,10 +78,12 @@ public sealed partial class ReportViewModel : ObservableObject
 
     public ReportViewModel(
         IReportUseCase reports,
+        IReportExportUseCase exports,
         IAppLogger logger,
         TimeProvider timeProvider)
     {
         _reports = reports ?? throw new ArgumentNullException(nameof(reports));
+        _exports = exports ?? throw new ArgumentNullException(nameof(exports));
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
         _timeProvider = timeProvider ?? throw new ArgumentNullException(nameof(timeProvider));
 
@@ -94,6 +103,11 @@ public sealed partial class ReportViewModel : ObservableObject
     public bool ShowSummary => !IsLoading && !HasError && HasSessions;
 
     public bool ShowEmptyState => !IsLoading && !HasError && !HasSessions;
+
+    public string ExportButtonText => IsExporting ? "Đang xuất..." : "Xuất CSV";
+
+    private bool CanExport() =>
+        !IsLoading && !IsExporting && !HasError && _currentReport is { HasSessions: true };
 
     public bool HasDayRows => DayRows.Count > 0;
 
@@ -123,18 +137,27 @@ public sealed partial class ReportViewModel : ObservableObject
         OnPropertyChanged(nameof(IsNotLoading));
         OnPropertyChanged(nameof(ShowSummary));
         OnPropertyChanged(nameof(ShowEmptyState));
+        ExportCommand.NotifyCanExecuteChanged();
+    }
+
+    partial void OnIsExportingChanged(bool value)
+    {
+        OnPropertyChanged(nameof(ExportButtonText));
+        ExportCommand.NotifyCanExecuteChanged();
     }
 
     partial void OnHasErrorChanged(bool value)
     {
         OnPropertyChanged(nameof(ShowSummary));
         OnPropertyChanged(nameof(ShowEmptyState));
+        ExportCommand.NotifyCanExecuteChanged();
     }
 
     partial void OnHasSessionsChanged(bool value)
     {
         OnPropertyChanged(nameof(ShowSummary));
         OnPropertyChanged(nameof(ShowEmptyState));
+        ExportCommand.NotifyCanExecuteChanged();
     }
 
     partial void OnDayRowsChanged(IReadOnlyList<ReportDayRow> value) =>
@@ -165,6 +188,10 @@ public sealed partial class ReportViewModel : ObservableObject
             IsLoading = true;
             HasError = false;
             ErrorMessage = string.Empty;
+            HasExportMessage = false;
+            ExportMessage = string.Empty;
+            _currentReport = null;
+            ExportCommand.NotifyCanExecuteChanged();
 
             var range = SelectedRange ?? Ranges[0];
             var today = DateOnly.FromDateTime(_timeProvider.GetLocalNow().DateTime);
@@ -194,8 +221,40 @@ public sealed partial class ReportViewModel : ObservableObject
     [RelayCommand]
     private Task ReloadAsync() => RefreshAsync();
 
+    [RelayCommand(CanExecute = nameof(CanExport))]
+    private async Task ExportAsync()
+    {
+        if (_currentReport is not { } report)
+            return;
+
+        IsExporting = true;
+        HasExportMessage = false;
+        ExportMessage = string.Empty;
+
+        try
+        {
+            var result = await _exports.ExportCsvAsync(report).ConfigureAwait(false);
+            ExportIsError = false;
+            ExportMessage = BuildExportMessage(result);
+        }
+        catch (Exception ex)
+        {
+            _logger.Error(LogCategories.UI, "Could not export the study report.", ex);
+            ExportIsError = true;
+            ExportMessage = "Không thể xuất CSV. Hãy kiểm tra quyền ghi và dung lượng ổ đĩa rồi thử lại.";
+        }
+        finally
+        {
+            IsExporting = false;
+            HasExportMessage = true;
+        }
+    }
+
     private void Apply(StudyReport report, ReportRangeOption range)
     {
+        _currentReport = report;
+        ExportCommand.NotifyCanExecuteChanged();
+
         HasError = false;
         ErrorMessage = string.Empty;
         HasSessions = report.HasSessions;
@@ -349,6 +408,18 @@ public sealed partial class ReportViewModel : ObservableObject
         notes.Add(StudyReport.BlockedAttemptsNote);
         notes.Add("Báo cáo chỉ hiển thị tên ứng dụng và tên miền đã làm sạch; không có tiêu đề cửa sổ, URL đầy đủ hay nội dung trang.");
         return string.Join(" ", notes);
+    }
+
+    private static string BuildExportMessage(ReportExportResult result)
+    {
+        var message =
+            $"Đã lưu CSV tại: {result.FilePath}. " +
+            "File chứa dữ liệu học tập nhạy cảm; hãy bảo vệ file và chỉ chia sẻ với người bạn tin tưởng.";
+
+        if (result.Warnings.Count > 0)
+            message += " " + string.Join(" ", result.Warnings);
+
+        return message;
     }
 
     private static ReportPeriod BuildPeriod(ReportRangeKind kind, DateOnly today) =>

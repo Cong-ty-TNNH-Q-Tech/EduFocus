@@ -217,6 +217,7 @@
                                     <Grid.ColumnDefinitions>
                                         <ColumnDefinition Width="*" />
                                         <ColumnDefinition Width="Auto" />
+                                        <ColumnDefinition Width="Auto" />
                                     </Grid.ColumnDefinitions>
                                     <ComboBox Grid.Column="0" ItemsSource="{Binding Report.Ranges}"
                                               SelectedItem="{Binding Report.SelectedRange, Mode=TwoWay}"
@@ -226,7 +227,31 @@
                                             Margin="8,0,0,0" VerticalAlignment="Center"
                                             Command="{Binding Report.ReloadCommand}"
                                             IsEnabled="{Binding Report.IsNotLoading}" />
+                                    <Button Grid.Column="2" Content="{Binding Report.ExportButtonText}"
+                                            Style="{StaticResource SecondaryButton}"
+                                            Margin="8,0,0,0" VerticalAlignment="Center"
+                                            Command="{Binding Report.ExportCommand}" />
                                 </Grid>
+
+                                <TextBlock Margin="0,8,0,0" FontSize="11" Foreground="#8A909C"
+                                           TextWrapping="Wrap"
+                                           Text="File CSV chỉ gồm dữ liệu báo cáo đã lược bỏ tiêu đề cửa sổ, URL đầy đủ và dữ liệu camera. Hãy bảo vệ file sau khi xuất." />
+
+                                <TextBlock Text="{Binding Report.ExportMessage}" Margin="0,8,0,0"
+                                           FontSize="11.5" TextWrapping="Wrap"
+                                           Visibility="{Binding Report.HasExportMessage, Converter={StaticResource BoolToVisibility}}">
+                                    <TextBlock.Style>
+                                        <Style TargetType="TextBlock">
+                                            <Setter Property="Foreground" Value="#2F6FED" />
+                                            <Style.Triggers>
+                                                <DataTrigger Binding="{Binding Report.ExportIsError}"
+                                                             Value="True">
+                                                    <Setter Property="Foreground" Value="#B42318" />
+                                                </DataTrigger>
+                                            </Style.Triggers>
+                                        </Style>
+                                    </TextBlock.Style>
+                                </TextBlock>
 
                                 <ProgressBar IsIndeterminate="True" Height="4" Margin="0,10,0,0"
                                              Visibility="{Binding Report.IsLoading, Converter={StaticResource BoolToVisibility}}" />

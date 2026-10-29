@@ -161,8 +161,9 @@ IProcessWatchdogPort
 | `AttentionMonitorService` | Nhận `AttentionSample`, làm mượt 5–10 giây, chạy state machine, mở/đóng `AttentionEvent` và cộng giây attention (issue #32); `ProtectionService` start/stop monitor + pipeline theo phiên học (issue #33) |
 | `BlockRuleUseCase` | CRUD rule, validate, allowlist override |
 | `ScheduleService` | CRUD khung giờ, đánh giá 30 giây, auto ON/OFF và override |
-| `ReportUseCase` | Query dashboard, timeline, export |
-| `RetentionService` | Xóa dữ liệu quá hạn theo AppSettings, batch và audit (issue #29); xóa theo yêu cầu/CSV thuộc UC11 UI sau |
+| `ReportUseCase` | Query dashboard, báo cáo ngày/tuần, timeline (issue #35/#36) |
+| `ReportExportService` | Xuất đúng snapshot báo cáo ra một CSV, lọc sample/event theo ngày local, chống formula injection (issue #37) |
+| `RetentionService` | Xóa dữ liệu quá hạn theo AppSettings, batch và audit (issue #29); xóa theo yêu cầu/audit viewer thuộc UC11 UI sau |
 
 `ParentSessionState` (singleton, chỉ trong bộ nhớ) triển khai `IParentAuthorizer` để các use case
 nhạy cảm kiểm tra phiên trước khi thực thi.
@@ -244,7 +245,7 @@ event còn mở bị loại khỏi batch, session chỉ bị xóa khi đã kết
 đọc settings thì bỏ qua toàn bộ pass. Sau khi xóa, service chạy `PRAGMA incremental_vacuum`.
 `RetentionSchedulerService` chạy một pass lúc khởi động và mỗi ngày khi local time ≥ 03:00; pass chạy trên
 thread pool, chống chồng bằng cờ `_running`. Xóa dữ liệu thủ công theo yêu cầu phụ huynh (UC11) vẫn thuộc
-phần UI sau.
+phần UI sau; xuất CSV đã có ở issue #37.
 
 **Hiện trạng issue #30:** `ICameraSessionUseCase`/`CameraSessionService` sở hữu vòng đời một camera: đọc
 `AppSettings.CameraDeviceId`, liệt kê thiết bị qua `ICameraPort.ListDevices`, fallback camera mặc định khi
@@ -819,6 +820,16 @@ AttentionPercent =
 > idle. Session có counter nhưng không còn sample/event bị đánh dấu detail hết retention thay vì báo lỗi.
 > `ReportViewModel` trong Parent Mode đọc theo yêu cầu (mở Parent Mode, đổi kỳ, nút Làm mới) và cap hiển thị
 > 20 session/24 khung giờ/10 event; Student Mode không bị ảnh hưởng.
+>
+> **Triển khai issue #37:** `ReportExportService` nhận chính `StudyReport` mà Parent Mode đang hiển thị nên
+> dòng `Tổng hợp`/`Ngày`/`Phiên học` khớp số liệu màn hình; sample hoạt động được đọc lại qua projection
+> privacy-safe của #36 (không window title/URL/process), event lấy từ snapshot, cả hai chuyển UTC → local bằng
+> `TimeProvider.LocalTimeZone` rồi lọc theo `ReportPeriod` nên không lọt dữ liệu ngoài khoảng đã chọn.
+> `ReportCsvWriter` phát một header 27 cột + các dòng theo `Loại bản ghi`, quote ô có dấu phẩy/nháy/xuống dòng
+> và thêm `'` trước ô bắt đầu bằng `=`, `+`, `-`, `@` để chặn formula injection. `LocalCsvExportStore` ghi
+> UTF-8 **có BOM** (Excel nhận đúng tiếng Việt), chỉ nhận tên file phẳng, không ghi đè và lưu tại
+> `%LocalAppData%\EduFocus\exports`. `ReportViewModel.ExportCommand` chỉ bật khi có phiên và không tải; kết quả
+> hiện đường dẫn file kèm nhắc bảo vệ file nhạy cảm. Không có bảng mới — export chỉ đọc dữ liệu hiện có.
 
 ### 8.4. Camera contention
 

@@ -183,6 +183,17 @@
 | Attention/coverage dùng lại bốn counter, `CameraUnavailable` ngoài mẫu số | `StudyReport.Attention` → `SessionAttentionSummary` |
 | Projection sample không có window title, URL đầy đủ hay process name | `ReportActivitySample` + reflection test |
 
+**Xuất CSV báo cáo (`ReportExportService`/`ReportCsvWriter`, issue #37):**
+
+| Invariant | Thực thi |
+|---|---|
+| Tổng, số phiên và dòng ngày khớp báo cáo đang hiển thị | Export nhận `StudyReport` snapshot, không query lại session |
+| Một header, mọi dòng cùng số cột; UTF-8 BOM do store ghi; dòng kết thúc CRLF | `ReportCsvWriter` + `LocalCsvExportStore` |
+| Ô bắt đầu `=`, `+`, `-`, `@` (kể cả sau khoảng trắng) được escape bằng `'`; ô có dấu phẩy/nháy/xuống dòng được quote | `ReportCsvWriter.EscapeCell` |
+| Sample/event chỉ được xuất khi ngày local nằm trong `ReportPeriod` | `ReportExportService.IsInPeriod` |
+| Không ghi note, window title, URL đầy đủ, process name hay dữ liệu camera | Projection `ReportActivitySample` + writer |
+| Không ghi đè file, tên file phải phẳng và lỗi ghi dọn file dở | `LocalCsvExportStore` |
+
 ### 2.8. `BlockedAttempt`
 
 | Invariant | Thực thi |

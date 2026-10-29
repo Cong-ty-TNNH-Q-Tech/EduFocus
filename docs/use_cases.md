@@ -735,7 +735,17 @@
 > timeline theo giờ local (UTC→local lúc đọc nên xử lý
 > đúng DST), top domain/app và attention event. Chi tiết đã hết retention chỉ tạo cảnh báo, summary vẫn
 > hiển thị; báo cáo chỉ dùng app name và domain đã làm sạch, không có window title/URL đầy đủ/process name.
-> Bộ lọc 90/365 ngày chỉ summary và xuất CSV thuộc #37; xóa dữ liệu thuộc #38.
+> Bộ lọc 90/365 ngày chỉ summary vẫn thuộc phần sau; xóa dữ liệu thuộc #38.
+>
+> **Triển khai xuất CSV (issue #37):** nút **Xuất CSV** trong thẻ Báo cáo xuất đúng snapshot đang hiển thị —
+> một dòng `Tổng hợp`, một dòng mỗi ngày có phiên, mỗi phiên, mỗi mẫu hoạt động và mỗi sự kiện tập trung — nên
+> số liệu khớp màn hình. File UTF-8 có BOM (Excel đọc đúng tiếng Việt), một header 27 cột, CRLF; tên
+> `EduFocus-bao-cao-yyyyMMdd-HHmmss.csv` lưu tại `%LocalAppData%\EduFocus\exports`, không ghi đè file cũ.
+> Ô bắt đầu bằng `=`, `+`, `-`, `@` được escape để chống formula injection; ô chứa dấu phẩy/nháy/xuống dòng
+> được quote. Chỉ app name + domain đã làm sạch: không note, window title, URL đầy đủ, process name hay dữ
+> liệu camera; sample/event ngoài khoảng ngày local bị loại. UI hiện đường dẫn file và nhắc bảo vệ file vì chứa
+> dữ liệu học tập nhạy cảm; cảnh báo retention/truncation được đưa vào ghi chú của file CSV. Xóa dữ liệu vẫn
+> thuộc #38.
 
 ---
 
@@ -780,9 +790,9 @@
 **Hiện trạng issue #29:** retention job tự động đã chạy: `RetentionService` đọc hạn trong `AppSettings`, xóa
 từng bảng theo batch 500 (sample/event/blocked attempt/audit/session), bỏ qua session `Active` và event còn
 mở, ghi audit `RetentionApplied` kèm số bản ghi và danh sách bảng lỗi. Job chạy lúc khởi động và mỗi ngày khi
-local time ≥ 03:00, sau đó `PRAGMA incremental_vacuum`. Đổi retention, xóa theo khoảng thời gian, xóa toàn bộ,
-xuất CSV và audit viewer trong màn hình **Dữ liệu & Quyền riêng tư** vẫn chưa có UI/use case — thuộc phần còn
-lại của UC11.
+local time ≥ 03:00, sau đó `PRAGMA incremental_vacuum`. Xuất CSV đã có trong thẻ Báo cáo (issue #37). Đổi
+retention, xóa theo khoảng thời gian, xóa toàn bộ và audit viewer trong màn hình **Dữ liệu & Quyền riêng tư**
+vẫn chưa có UI/use case — thuộc phần còn lại của UC11 (#38).
 
 ---
 

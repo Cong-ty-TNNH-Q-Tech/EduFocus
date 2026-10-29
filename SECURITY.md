@@ -49,6 +49,7 @@ EduFocus là ứng dụng desktop **local-first** dành cho phụ huynh giám s�
 - Block page chỉ ghi nhận domain + thời điểm qua `BlockPageHit` (engine debounce rồi ghi `BlockedAttempt`); không ghi path/query/User-Agent hay nội dung trang. Log kỹ thuật chỉ ghi cổng/trạng thái listener, không ghi domain; cổng 80 bận trả warning và không làm tắt bảo vệ.
 - Process watcher chỉ xử lý process có cửa sổ chính, khớp chính xác tên đã chuẩn hóa và không nằm trong allowlist; PID ≤ 4, chính EduFocus và process hệ thống quan trọng bị bỏ qua. Trước khi kill, watcher gửi `WM_CLOSE` và chờ tối đa 2 giây; quá hạn mới kill process tree. `ProcessBlockedObservation` chỉ gồm tên process, PID, kết quả và cảnh báo; không ghi window title, path hay nội dung tài liệu. Log không ghi danh sách process đang chạy.
 - Retention mặc định: sample 30 ngày, event/blocked attempt 90 ngày, session summary/audit 365 ngày.
+- Báo cáo CSV do phụ huynh chủ động xuất từ Parent Mode được ghi vào `%LocalAppData%\EduFocus\exports` (ngoài ACL của `%ProgramData%`), dùng UTF-8 có BOM và không ghi đè file cũ. File chỉ chứa tổng hợp session, app name + domain đã làm sạch, attention state/confidence và thời lượng; không có PIN/recovery code/token, window title, URL đầy đủ, note hay dữ liệu camera. Ô bắt đầu bằng `=`, `+`, `-`, `@` được escape trước khi mở bằng Excel (chống formula injection), và UI nhắc phụ huynh bảo vệ file vì đây là dữ liệu học tập nhạy cảm; ứng dụng không tự gửi file đi đâu.
 
 ### Giới hạn đã biết (không phải lỗ hổng)
 
@@ -76,6 +77,7 @@ Các điểm sau **không được coi là lỗ hổng bảo mật** vì đã đ
 - Từ issue #24, `ProtectionEngine` đã nối adapter hosts file (issue #21), block page loopback (issue #22) và process watcher (issue #23); bật bảo vệ chặn domain/app thật. Cổng 80 bận chỉ tạo cảnh báo (Protection vẫn ON); hosts restore thất bại khi tắt ném lỗi để Protection giữ ON thay vì báo OFF giả.
 - Engine debounce 30 giây cho cùng domain/tên app và ghi `BlockedAttempt` bất đồng bộ qua writer channel; số attempt có thể ít hơn thực tế và bản cuối có thể mất nếu app thoát đột ngột.
 - Thay đổi rule khi Protection ON chưa tự áp dụng lại engine; cần tắt/bật hoặc khởi động lại.
+- File CSV đã xuất nằm ngoài DB nên retention không xóa; phụ huynh tự quản lý, di chuyển hoặc xóa file trong `%LocalAppData%\EduFocus\exports`.
 
 Nếu bạn phát hiện cách vượt qua các giới hạn trên **trong điều kiện người dùng standard user**, hãy báo cáo — đó có thể là lỗ hổng thực sự.
 
