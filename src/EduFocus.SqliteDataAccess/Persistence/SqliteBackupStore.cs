@@ -71,7 +71,7 @@ public sealed class SqliteBackupStore
                 "The EduFocus database backup failed the integrity check. Migration was not started and existing data was kept.");
         }
 
-        _logger.Info($"Database backup created and verified at '{backupPath}'.");
+        _logger.Info(LogCategories.Database, $"Database backup created and verified at '{backupPath}'.");
         ApplyRetention(backupDirectory, backupPath);
         return backupPath;
     }
@@ -161,7 +161,7 @@ public sealed class SqliteBackupStore
 
         DeleteSideFiles(databasePath);
 
-        _logger.Info($"Database restored from '{sourcePath}'.");
+        _logger.Info(LogCategories.Database, $"Database restored from '{sourcePath}'.");
 
         var backupDirectory = Path.GetFullPath(_options.ResolvedBackupDirectory);
         if (Directory.Exists(backupDirectory))
@@ -193,16 +193,17 @@ public sealed class SqliteBackupStore
             {
                 TryDelete(snapshotPath);
                 _logger.Warning(
+                    LogCategories.Database,
                     "The pre-restore snapshot failed the integrity check and was discarded; the restore continued.");
                 return null;
             }
 
-            _logger.Info($"Pre-restore database snapshot created at '{snapshotPath}'.");
+            _logger.Info(LogCategories.Database, $"Pre-restore database snapshot created at '{snapshotPath}'.");
             return snapshotPath;
         }
         catch (Exception ex) when (ex is SqliteBackupException || IsFileAccessFailure(ex))
         {
-            _logger.Warning($"Could not snapshot the current database before restoring: {ex.Message}");
+            _logger.Warning(LogCategories.Database, $"Could not snapshot the current database before restoring: {ex.Message}");
             return null;
         }
     }
@@ -231,7 +232,7 @@ public sealed class SqliteBackupStore
         }
         catch (Exception ex) when (ex is UnauthorizedAccessException or IOException or DirectoryNotFoundException)
         {
-            _logger.Error($"Could not protect the backup directory '{backupDirectory}'.", ex);
+            _logger.Error(LogCategories.Database, $"Could not protect the backup directory '{backupDirectory}'.", ex);
             throw new SqliteBackupException(
                 "Could not protect the EduFocus backup folder. No data was deleted.",
                 ex);
@@ -287,11 +288,11 @@ public sealed class SqliteBackupStore
             {
                 File.Delete(oldBackup);
                 remaining--;
-                _logger.Info($"Removed old database backup '{oldBackup}'.");
+                _logger.Info(LogCategories.Database, $"Removed old database backup '{oldBackup}'.");
             }
             catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
             {
-                _logger.Warning($"Could not remove old database backup '{oldBackup}': {ex.Message}");
+                _logger.Warning(LogCategories.Database, $"Could not remove old database backup '{oldBackup}': {ex.Message}");
             }
         }
     }

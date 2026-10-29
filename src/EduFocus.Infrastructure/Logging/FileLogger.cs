@@ -1,67 +1,168 @@
-using System;
-using System.IO;
-using System.Runtime.Versioning;
+using System.Globalization;
+using System.Text;
+using System.Text.RegularExpressions;
+using EduFocus.Domain.Privacy;
 using EduFocus.Ports.Outbound.Services;
 
 namespace EduFocus.Infrastructure.Logging;
 
-[SupportedOSPlatform("windows")]
-public sealed class FileLogger : IAppLogger, IDisposable
+/// <summary>
+/// Append-only technical file log with one file per local day, size-based
+/// rolling, retention and secret redaction. Each line starts with an UTC
+/// timestamp, level, category and the ambient correlation id. Writes are
+/// best-effort and never throw (system architecture §12).
+/// </summary>
+public sealed class FileLogger : IAppLogger
 {
-    private readonly string _logDirectory;
+    public const string FilePrefix = "edufocus";
+    private const string FileExtension = ".log";
+    private const string TimestampFormat = "yyyy-MM-dd'T'HH:mm:ss.fff'Z'";
+    private const int MaxCategoryLength = 32;
+
+    private static readonly Regex FileNamePattern = new(
+        @"^edufocus-(?<date>\d{8})(?:-\d{3,})?\.log$",
+        RegexOptions.IgnoreCase | RegexOptions.CultureInvariant | RegexOptions.NonBacktracking);
+
+    private readonly FileLoggerOptions _options;
+    private readonly ICorrelationContext _correlation;
+    private readonly TimeProvider _timeProvider;
     private readonly object _lock = new();
-    private const int MaxDaysToKeep = 7;
+    private DateOnly? _lastPurgeDate;
+    private bool _directoryReady;
 
-    public FileLogger()
+    public FileLogger(
+        FileLoggerOptions options,
+        ICorrelationContext correlation,
+        TimeProvider? timeProvider = null)
     {
-        _logDirectory = Path.Combine(
-            Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
-            "EduFocus", "logs");
+        ArgumentNullException.ThrowIfNull(options);
+        ArgumentNullException.ThrowIfNull(correlation);
 
-        Directory.CreateDirectory(_logDirectory);
-        PurgeOldLogs();
+        if (string.IsNullOrWhiteSpace(options.DirectoryPath))
+            throw new ArgumentException("A log directory is required.", nameof(options));
+        if (options.RetentionDays is < 1 or > 90)
+            throw new ArgumentOutOfRangeException(nameof(options), "Retention days must be between 1 and 90.");
+        if (options.FileSizeLimitBytes < 4096)
+            throw new ArgumentOutOfRangeException(nameof(options), "The log file size limit must be at least 4 KB.");
+
+        _options = options;
+        _correlation = correlation;
+        _timeProvider = timeProvider ?? TimeProvider.System;
     }
 
-    private string CurrentLogPath =>
-        Path.Combine(_logDirectory, $"app-{DateTime.Now:yyyy-MM-dd}.log");
+    public void Info(string category, string message) =>
+        Write("INFO", category, message, null);
 
-    public void Info(string message)    => Write("INFO   ", message, null);
-    public void Warning(string message) => Write("WARNING", message, null);
-    public void Error(string message, Exception? ex = null) => Write("ERROR  ", message, ex);
+    public void Warning(string category, string message) =>
+        Write("WARN", category, message, null);
 
-    private void Write(string level, string message, Exception? ex)
-    {
-        var timestamp = DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss.fff");
-        var line = $"[{timestamp}] [{level}] {message}";
-        if (ex != null)
-            line += $"\n              Exception: {ex.GetType().Name}: {ex.Message}\n              StackTrace: {ex.StackTrace}";
+    public void Error(string category, string message, Exception? exception = null) =>
+        Write("ERROR", category, message, exception);
 
-        lock (_lock)
-        {
-            try
-            {
-                File.AppendAllText(CurrentLogPath, line + Environment.NewLine);
-            }
-            catch
-            {
-                // Never crash the app because of a logging failure
-            }
-        }
-    }
-
-    private void PurgeOldLogs()
+    private void Write(string level, string category, string message, Exception? exception)
     {
         try
         {
-            var cutoff = DateTime.Now.AddDays(-MaxDaysToKeep);
-            foreach (var file in Directory.GetFiles(_logDirectory, "app-*.log"))
+            var safeMessage = LogSanitizer.Redact(message);
+            var line = new StringBuilder()
+                .Append(_timeProvider.GetUtcNow().UtcDateTime.ToString(TimestampFormat, CultureInfo.InvariantCulture))
+                .Append(" [").Append(level.PadRight(5)).Append(']')
+                .Append(" [").Append(NormalizeCategory(category)).Append(']')
+                .Append(" [cid=").Append(_correlation.Current?.ToString("N") ?? "-").Append("] ")
+                .Append(safeMessage);
+
+            if (exception is not null)
             {
-                if (File.GetLastWriteTime(file) < cutoff)
-                    File.Delete(file);
+                line.Append(Environment.NewLine)
+                    .Append(LogSanitizer.RedactPreservingLines(exception.ToString()));
+            }
+
+            var entry = line.Append(Environment.NewLine).ToString();
+
+            lock (_lock)
+            {
+                EnsureDirectoryAndPurge();
+                File.AppendAllText(SelectCurrentPath(), entry, Encoding.UTF8);
             }
         }
-        catch { /* best effort */ }
+        catch
+        {
+            // Logging must never take the application down.
+        }
     }
 
-    public void Dispose() { /* StreamWriter not held open; nothing to dispose */ }
+    private string SelectCurrentPath()
+    {
+        var date = _timeProvider.GetLocalNow().ToString("yyyyMMdd", CultureInfo.InvariantCulture);
+        var baseName = $"{FilePrefix}-{date}";
+        var path = Path.Combine(_options.DirectoryPath, baseName + FileExtension);
+
+        for (var part = 1; File.Exists(path) && new FileInfo(path).Length >= _options.FileSizeLimitBytes; part++)
+            path = Path.Combine(_options.DirectoryPath, $"{baseName}-{part:D3}{FileExtension}");
+
+        return path;
+    }
+
+    private void EnsureDirectoryAndPurge()
+    {
+        if (!_directoryReady)
+        {
+            Directory.CreateDirectory(_options.DirectoryPath);
+            _directoryReady = true;
+        }
+
+        var today = DateOnly.FromDateTime(_timeProvider.GetLocalNow().DateTime);
+        if (_lastPurgeDate == today)
+            return;
+
+        _lastPurgeDate = today;
+        PurgeOldLogs(today);
+    }
+
+    private void PurgeOldLogs(DateOnly today)
+    {
+        var cutoff = today.AddDays(-(_options.RetentionDays - 1));
+
+        foreach (var path in Directory.EnumerateFiles(
+            _options.DirectoryPath, $"{FilePrefix}-*{FileExtension}"))
+        {
+            var match = FileNamePattern.Match(Path.GetFileName(path));
+            if (!match.Success)
+                continue;
+
+            if (!DateOnly.TryParseExact(
+                    match.Groups["date"].Value,
+                    "yyyyMMdd",
+                    CultureInfo.InvariantCulture,
+                    DateTimeStyles.None,
+                    out var fileDate))
+            {
+                continue;
+            }
+
+            if (fileDate >= cutoff)
+                continue;
+
+            try
+            {
+                File.Delete(path);
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+            {
+                // Retention is best-effort; the next start retries.
+            }
+        }
+    }
+
+    private static string NormalizeCategory(string? category)
+    {
+        var safe = LogSanitizer.Redact(category)
+            .Replace('[', '(')
+            .Replace(']', ')');
+
+        if (string.IsNullOrWhiteSpace(safe))
+            return LogCategories.App;
+
+        return safe.Length <= MaxCategoryLength ? safe : safe[..MaxCategoryLength];
+    }
 }

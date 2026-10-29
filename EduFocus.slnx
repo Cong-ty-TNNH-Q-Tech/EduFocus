@@ -4,6 +4,7 @@
     <Project Path="src/EduFocus.Domain/EduFocus.Domain.csproj" />
     <Project Path="src/EduFocus.Infrastructure/EduFocus.Infrastructure.csproj" />
     <Project Path="src/EduFocus.Infrastructure.Attention/EduFocus.Infrastructure.Attention.csproj" />
+    <Project Path="src/EduFocus.Infrastructure.Tests/EduFocus.Infrastructure.Tests.csproj" />
     <Project Path="src/EduFocus.Ports/EduFocus.Ports.csproj" />
     <Project Path="src/EduFocus.SqliteDataAccess/EduFocus.SqliteDataAccess.csproj" />
     <Project Path="src/EduFocus.SqliteDataAccess.Tests/EduFocus.SqliteDataAccess.Tests.csproj" />

@@ -176,6 +176,14 @@ dotnet test EduFocus.slnx --configuration Release
 
 ---
 
+## 🔍 Logs & troubleshooting
+
+- Technical logs: `%LOCALAPPDATA%\EduFocus\logs\edufocus-YYYYMMDD.log` — at most 10 MB per file, kept for 14 days.
+- Every line has a UTC timestamp, level, category and correlation id; PINs, recovery codes, tokens and full URLs are redacted before writing.
+- When reporting a bug, attach the log files around the failure plus the EduFocus version, Windows version and reproduction steps. Never attach the database or webcam images/video.
+
+---
+
 ## ⚠️ Known Limitations
 
 - The PIN is not a security boundary if the student shares the Windows account or has Administrator rights. The data-folder ACL only separates access when parent and student use separate Windows accounts; the PIN protects the UI, not the database file.

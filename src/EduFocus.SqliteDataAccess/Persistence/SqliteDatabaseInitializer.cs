@@ -65,7 +65,7 @@ public sealed class SqliteDatabaseInitializer
 
             if (pending.Count == 0)
             {
-                _logger.Info($"Database schema is up to date at '{_options.DatabasePath}'.");
+                _logger.Info(LogCategories.Database, $"Database schema is up to date at '{_options.DatabasePath}'.");
                 return new DatabaseInitializationResult(false, [], null);
             }
 
@@ -76,6 +76,7 @@ public sealed class SqliteDatabaseInitializer
             }
 
             _logger.Info(
+                LogCategories.Database,
                 $"Applying {pending.Count} migration(s) to '{_options.DatabasePath}': {string.Join(", ", pending)}.");
             await context.Database.MigrateAsync(cancellationToken);
         }
@@ -86,17 +87,19 @@ public sealed class SqliteDatabaseInitializer
         catch (SqliteBackupException)
         {
             _logger.Error(
+                LogCategories.Database,
                 "The pre-migration database backup failed, so no migration was started. The existing database was kept.");
             throw;
         }
         catch (Exception ex)
         {
             _logger.Error(
+                LogCategories.Database,
                 $"Database migration failed for '{_options.DatabasePath}'. The existing database was kept and no data was deleted.",
                 ex);
 
             if (backupPath is not null)
-                _logger.Warning($"Restore the database from the backup at '{backupPath}' if needed.");
+                _logger.Warning(LogCategories.Database, $"Restore the database from the backup at '{backupPath}' if needed.");
 
             throw new SqliteMigrationException(
                 "Database migration failed. The existing database was kept; restore from the backup if necessary.",
@@ -104,7 +107,7 @@ public sealed class SqliteDatabaseInitializer
                 backupPath);
         }
 
-        _logger.Info($"Database schema initialized at '{_options.DatabasePath}'.");
+        _logger.Info(LogCategories.Database, $"Database schema initialized at '{_options.DatabasePath}'.");
         return new DatabaseInitializationResult(!existed, pending, backupPath);
     }
 
@@ -129,12 +132,13 @@ public sealed class SqliteDatabaseInitializer
                 return;
 
             DataDirectorySecurity.Apply(directory);
-            _logger.Info($"Data directory restricted to Administrators and SYSTEM: '{directory}'.");
+            _logger.Info(LogCategories.Database, $"Data directory restricted to Administrators and SYSTEM: '{directory}'.");
         }
         catch (Exception ex) when (ex is UnauthorizedAccessException or IOException
             or DirectoryNotFoundException or PlatformNotSupportedException)
         {
             _logger.Error(
+                LogCategories.Database,
                 $"Could not prepare or restrict the data directory '{directory}'. No data was deleted.",
                 ex);
 
@@ -152,8 +156,9 @@ public sealed class SqliteDatabaseInitializer
         var backupDirectory = _options.ResolvedBackupDirectory;
 
         _logger.Error(
+            LogCategories.Database,
             $"Database integrity check failed for '{_options.DatabasePath}'. The file was not modified and no data was deleted.");
-        _logger.Warning($"Restore a verified backup from '{backupDirectory}' before using EduFocus again.");
+        _logger.Warning(LogCategories.Database, $"Restore a verified backup from '{backupDirectory}' before using EduFocus again.");
 
         throw new SqliteDatabaseCorruptException(
             "The EduFocus database failed the integrity check. The file was not modified; restore a backup before continuing.",
@@ -170,6 +175,7 @@ public sealed class SqliteDatabaseInitializer
         catch (Exception ex) when (ex is SqliteException or IOException or UnauthorizedAccessException)
         {
             _logger.Error(
+                LogCategories.Database,
                 $"Could not create the database at '{_options.DatabasePath}'. Check folder permissions and free disk space.",
                 ex);
 
@@ -191,7 +197,7 @@ public sealed class SqliteDatabaseInitializer
         {
             ExecuteNonQuery(connection, "PRAGMA auto_vacuum = INCREMENTAL;");
             ExecuteNonQuery(connection, "VACUUM;");
-            _logger.Info("Configured incremental auto-vacuum for the new database.");
+            _logger.Info(LogCategories.Database, "Configured incremental auto-vacuum for the new database.");
         }
 
         ExecuteNonQuery(connection, "PRAGMA journal_mode = WAL;");

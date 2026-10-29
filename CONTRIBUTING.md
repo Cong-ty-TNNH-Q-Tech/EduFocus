@@ -151,6 +151,7 @@ Mọi PR có tương tác với webcam, dữ liệu học sinh hoặc quyền h�
 - **Không lưu ảnh, video, audio, frame, face embedding.**
 - **Không gửi dữ liệu ra network** (trừ update check đã được duyệt).
 - **Không log PIN, recovery code, token, URL đầy đủ có query nhạy cảm.**
+- **Log qua `IAppLogger` kèm category; mọi dữ liệu bên ngoài (message, exception) phải đi qua `LogSanitizer` và không ghi toàn bộ window title/nội dung trang.**
 - **Không thêm telemetry/analytics** khi chưa có quyết định rõ ràng.
 - **Không thêm hành vi giám sát bí mật** (keylogger, screenshot, clipboard, đọc tin nhắn).
 - Thay đổi hosts phải giữ nguyên các dòng không thuộc EduFocus và có cơ chế self-heal; chỉ chặn domain exact trong MVP.

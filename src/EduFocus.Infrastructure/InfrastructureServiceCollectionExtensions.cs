@@ -11,7 +11,13 @@ public static class InfrastructureServiceCollectionExtensions
     [SupportedOSPlatform("windows")]
     public static IServiceCollection AddInfrastructureServices(this IServiceCollection services)
     {
-        services.AddSingleton<IAppLogger, FileLogger>();
+        services.AddSingleton(TimeProvider.System);
+        services.AddSingleton<ICorrelationContext, CorrelationContext>();
+        services.AddSingleton<FileLoggerOptions>();
+        services.AddSingleton<IAppLogger>(provider => new FileLogger(
+            provider.GetRequiredService<FileLoggerOptions>(),
+            provider.GetRequiredService<ICorrelationContext>(),
+            provider.GetRequiredService<TimeProvider>()));
         services.AddSingleton<IMonotonicClockPort, MonotonicClockAdapter>();
 
         return services;

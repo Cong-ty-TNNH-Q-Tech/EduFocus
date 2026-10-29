@@ -554,16 +554,43 @@ Trạng thái lưu trong `AppSettings.ProtectionEnabled`; session active lưu tr
 
 ## 12. Logging & Observability
 
-- `FileLogger` ghi theo ngày: `app-YYYY-MM-DD.log`.
-- Mức log: Info, Warning, Error.
-- Redact:
-  - Không log PIN/recovery code.
-  - Không log URL đầy đủ/query string; chỉ domain đã chuẩn hóa.
-  - Không log window title đầy đủ nếu có khả năng chứa nội dung nhạy cảm.
-  - Không log frame/camera data.
-- Correlation ID cho mỗi phiên và thao tác.
-- Audit log riêng trong DB cho thao tác phụ huynh.
-- Không gửi log ra ngoài.
+### Technical log
+
+- `FileLogger` triển khai `IAppLogger`; không gửi log ra network.
+- Mỗi dòng có dạng:
+  `2026-10-29T14:08:16.123Z [INFO ] [Database] [cid=6f1c...] message`
+  → timestamp **UTC**, level, category, correlation id.
+- Level: `INFO`, `WARN`, `ERROR`. Category chuẩn: `App`, `Database`, `Security`, `UI`;
+  module mới thêm hằng số trong `LogCategories`.
+- Vị trí: `%LOCALAPPDATA%\EduFocus\logs\edufocus-YYYYMMDD.log` (theo user, không cần admin).
+- Xoay vòng theo ngày và dung lượng: tối đa **10 MB/file** (`edufocus-YYYYMMDD-001.log`, ...),
+  giữ **14 ngày**; file cũ bị dọn khi khởi động hoặc sang ngày mới.
+- Correlation: `ICorrelationContext` dùng `AsyncLocal`. App tạo id khi khởi động; mỗi thao tác
+  phụ huynh, phiên học, protection engine và block page request mở scope riêng. Log ngoài scope
+  ghi `cid=-`.
+- Redaction tập trung ở `LogSanitizer` trước khi ghi: PIN, password, recovery code, token/API key,
+  `Authorization`/`Bearer`, URL đầy đủ (chỉ còn domain đã chuẩn hóa) và control character;
+  message tối đa 4.096 ký tự, exception message/stack cũng được redact.
+- Không log toàn bộ window title, nội dung trang, query string, frame/camera hay dữ liệu sinh trắc học.
+  Activity/attention code chỉ ghi domain đã chuẩn hóa và app/process đã `TextSanitizer`.
+- Ghi log là best-effort: lỗi file/ổ đĩa bị nuốt, không làm app crash và không tạo dữ liệu ngoài máy.
+
+### Audit log
+
+- `AuditLogs` trong SQLite tách khỏi file log kỹ thuật; ghi qua `IAuditLogRepository`
+  (`SqliteAuditLogRepository`).
+- Chỉ thao tác phụ huynh/hệ thống quan trọng (PIN, protection, xóa dữ liệu, tamper...) mới ghi audit,
+  kèm `CorrelationId` để đối chiếu với file log.
+- Audit không chứa PIN, recovery code, token hoặc nội dung camera.
+- Retention audit 365 ngày theo [database_schema.md](./database_schema.md) §14.
+
+### Thu thập log khi báo lỗi
+
+1. Mở `%LOCALAPPDATA%\EduFocus\logs` (thường là `C:\Users\<user>\AppData\Local\EduFocus\logs`).
+2. Gửi các file `edufocus-*.log` quanh thời điểm lỗi (nén lại).
+3. Kèm thời điểm UTC, phiên bản EduFocus, phiên bản Windows và các bước tái hiện.
+4. Không đính kèm DB, ảnh/video webcam hoặc dữ liệu học sinh; dù log đã redact, vẫn kiểm tra trước khi chia sẻ.
+
 
 ---
 
@@ -650,7 +677,8 @@ EduFocus/
 > Issue #7 đã xóa toàn bộ code 1.x; issue #8 đã thêm domain model 2.0; issue #9 đã thêm
 > `EduFocus.SqliteDataAccess` (DbContext, configuration, converter, migration
 > `InitialEduFocusSchema`, initializer + backup); issue #10 thêm ACL thư mục dữ liệu và
-> quy trình verify/restore backup. `UseCases` vẫn là scaffold chờ các issue
+> quy trình verify/restore backup; issue #11 cập nhật CI; issue #12 thêm structured logging,
+> correlation id và audit repository. `UseCases` vẫn là scaffold chờ các issue
 > repository/use case; `WPF` là shell tối thiểu.
 > Inventory 1.x ở [legacy-cleanup.md](./legacy-cleanup.md), invariant domain ở
 > [domain-invariants.md](./domain-invariants.md).
@@ -687,6 +715,7 @@ EduFocus/
 
 ### Unit tests
 - Domain: PIN validation, rule matching, attention score, session totals, schedule.
+- Privacy: `LogSanitizer` che PIN/token/URL, giữ exception đọc được; `FileLogger` format UTC/category/correlation, rotation và retention.
 - UseCases: protection enable/disable, permission checks, lockout, retention.
 - Fake ports; không chạm Windows API.
 
@@ -694,6 +723,7 @@ EduFocus/
 - SQLite repositories + migrations.
 - Rule persistence, session aggregation.
 - Retention deletion.
+- Audit log ghi kèm `CorrelationId`.
 - Backup verify/rotation/restore, corrupt DB, data-directory ACL.
 
 ### CI

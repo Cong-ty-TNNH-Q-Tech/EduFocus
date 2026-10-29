@@ -48,7 +48,7 @@ tray icon và logic chặn thoát khi có phiên.
 | `EduFocus.Domain/Attention/*` + `Domain.Tests/Attention/*` | Spike pipeline attention (issue #1), dùng lại cho Phase 5 |
 | `EduFocus.Infrastructure.Attention/*` | Adapter OpenCvSharp/ONNX của spike attention |
 | `EduFocus.Ports/Outbound/Services/IAttentionFrameAnalyzer.cs`, `IMonotonicClockPort.cs`, `IAppLogger.cs`, `DTOs/AttentionDtos.cs` | Hợp đồng hạ tầng còn dùng |
-| `EduFocus.Infrastructure/Logging/FileLogger.cs` | Log theo ngày tại `%AppData%\EduFocus\logs`, dùng cho 2.0 |
+| `EduFocus.Infrastructure/Logging/FileLogger.cs` | Log kỹ thuật có cấu trúc tại `%LocalAppData%\EduFocus\logs` (issue #12) |
 | `EduFocus.Infrastructure/Services/MonotonicClockAdapter.cs` | Đo elapsed/detect clock jump (ADR-06) |
 | `EduFocus.WPF/Services/UpdaterService.cs`, `ViewModels/UpdateViewModel.cs` | Auto-update qua GitHub Releases vẫn dùng cho 2.0 |
 | `EduFocus.WPF/app.manifest`, `app.debug.manifest` | DPI awareness và elevation cho bản Release (ADR-07) |
@@ -74,7 +74,8 @@ tray icon và logic chặn thoát khi có phiên.
 - Issue #9: `InitialEduFocusSchema` + DbContext/converter/configuration — đã hoàn tất; xem [database_schema.md](./database_schema.md) §17.
 - Issue #10: ACL thư mục dữ liệu, backup verify/retention và restore — đã hoàn tất.
 - Issue #11: CI .NET 10 với cache/artifact và hướng dẫn branch protection — đã hoàn tất.
-- Issue #12: structured logging và correlation id.
+- Issue #12: structured logging, correlation id và audit log tách khỏi log kỹ thuật — đã hoàn tất.
+- Issue #13: PIN hash PBKDF2 và recovery code.
 - Repository và use case sẽ được thêm sau khi chốt contract `Ports`.
 - Các phase sau: PIN/Parent Mode, ProtectionEngine/BlockPageServer, session/activity,
   attention monitoring, dashboard/reports, installer hoàn chỉnh.

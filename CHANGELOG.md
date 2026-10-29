@@ -37,7 +37,7 @@ và dự án tuân theo [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ### Changed (Phase 1 — Foundation)
 - **Đổi tên codebase (issue #5):** solution, toàn bộ project, namespace, assembly và test project chuyển từ `DontBeLazy.*` sang `EduFocus.*`; file thực thi đổi thành `EduFocus.exe`.
-- **Đường dẫn dữ liệu mới (dự kiến):** DB `%LocalAppData%\EduFocus\edufocus.db`, log `%AppData%\EduFocus\logs`; không đọc hoặc migrate DB 1.x. Sau issue #7 app chưa mở DB; schema/database 2.0 sẽ được tạo lại ở issue #9/#10 (`%ProgramData%\EduFocus`).
+- **Đường dẫn dữ liệu mới:** DB `%ProgramData%\EduFocus\edufocus.db` (chốt ở issue #9/#10), log `%LocalAppData%\EduFocus\logs` (chốt ở issue #12); không đọc hoặc migrate DB 1.x. Sau issue #7 app chưa mở DB; schema/database 2.0 được tạo ở issue #9/#10.
 - **Cập nhật tích hợp:** auto-start registry, mutex single-instance, updater (repo `Cong-ty-TNNH-Q-Tech/EduFocus`), EF design-time DB, CI/release workflow và README/CONTRIBUTING.
 - **Nâng nền tảng .NET 10 (issue #6):** toàn bộ project chuyển sang `net10.0`/`net10.0-windows`; EF Core 10.0.14; đồng bộ `Microsoft.Extensions.*` và `System.Management` 10.0.14; CI/release dùng .NET 10; pin `dotnet-ef` 10.0.14 qua tool manifest.
 - **Cảnh báo build:** bỏ fallback `Assembly.Location` (IL3000), bổ sung annotation Windows cho Infrastructure (CA1416), dọn nullable trong test; giữ manifest DPI của WPF và suppress WFO0003 (analyzer chỉ dành cho WinForms). Build Release hiện 0 warning.
@@ -77,6 +77,14 @@ và dự án tuân theo [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 - **CI .NET 10:** workflow `EduFocus CI` trên Windows runner — restore, build/test Release, publish framework-dependent; cache NuGet theo csproj/tool manifest; timeout và concurrency để hủy run cũ.
 - **Artifact:** upload `edufocus-test-results` (TRX, kể cả khi fail) và `edufocus-ci-publish`; không đưa DB/log/secret vào artifact.
 - **Tài liệu:** README/README.en có badge CI và lệnh test toàn solution; CONTRIBUTING mô tả lệnh CI và nhắc maintainer bật required check **EduFocus — Build & Test** (branch protection hiện chưa bật).
+
+### Added (Phase 1 — Structured logging, issue #12)
+- **Log kỹ thuật có cấu trúc:** `FileLogger` ghi timestamp UTC, level, category và correlation id tại `%LocalAppData%\EduFocus\logs`; file `edufocus-YYYYMMDD.log`, tối đa 10 MB/file, giữ 14 ngày; lỗi ghi log không làm app crash.
+- **Correlation id:** `ICorrelationContext` dùng `AsyncLocal`; app tạo scope khi khởi động, sẵn sàng cho use case/protection engine/session/block page.
+- **Redaction:** `LogSanitizer` che PIN, password, recovery code, token/API key, `Authorization`/`Bearer` và URL đầy đủ (chỉ còn domain); message một dòng, tối đa 4.096 ký tự; exception message/stack cũng được redact.
+- **Audit tách biệt:** port `IAuditLogRepository` + `SqliteAuditLogRepository` ghi `AuditLogs` kèm `CorrelationId`, không trộn với file log kỹ thuật.
+- **Tests:** thêm 24 test (16 redaction domain, 7 log rotation/correlation, 1 audit persistence); tổng 239 test pass.
+- **Tài liệu vận hành:** vị trí log, vòng đời file và cách thu thập log khi báo lỗi trong README vi/en, SECURITY và architecture §12.
 
 ### Removed (khỏi phạm vi EduFocus)
 - Quản lý task, profile học tập, quote động lực và Gemini AI.

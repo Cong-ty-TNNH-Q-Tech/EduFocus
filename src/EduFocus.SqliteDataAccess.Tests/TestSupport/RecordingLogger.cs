@@ -12,11 +12,11 @@ internal sealed class RecordingLogger : IAppLogger
 
     public List<Exception?> Exceptions { get; } = [];
 
-    public void Info(string message) => Infos.Add(message);
+    public void Info(string category, string message) => Infos.Add(message);
 
-    public void Warning(string message) => Warnings.Add(message);
+    public void Warning(string category, string message) => Warnings.Add(message);
 
-    public void Error(string message, Exception? ex = null)
+    public void Error(string category, string message, Exception? ex = null)
     {
         Errors.Add(message);
         Exceptions.Add(ex);

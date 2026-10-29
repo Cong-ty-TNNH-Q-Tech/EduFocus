@@ -11,6 +11,7 @@ public partial class App : Application
 {
     public static ServiceProvider Services { get; private set; } = null!;
     private static System.Threading.Mutex? _mutex;
+    private static IDisposable? _correlationScope;
 
     protected override void OnStartup(StartupEventArgs e)
     {
@@ -36,8 +37,11 @@ public partial class App : Application
         MainWindow = mainWindow;
         mainWindow.Show();
 
+        var correlation = Services.GetRequiredService<ICorrelationContext>();
+        _correlationScope = correlation.BeginScope(Guid.NewGuid());
+
         var logger = Services.GetRequiredService<IAppLogger>();
-        logger.Info("====== EduFocus started ======");
+        logger.Info(LogCategories.App, "====== EduFocus started ======");
 
         // Background update check — non-blocking, silent on failure
         _ = Services.GetRequiredService<UpdateViewModel>().CheckForUpdateAsync();
@@ -55,9 +59,13 @@ public partial class App : Application
     {
         try
         {
-            Services?.GetService<IAppLogger>()?.Info("====== EduFocus exited ======");
+            Services?.GetService<IAppLogger>()?.Info(LogCategories.App, "====== EduFocus exited ======");
         }
         catch { /* best effort */ }
+        finally
+        {
+            _correlationScope?.Dispose();
+        }
         Services?.Dispose();
         _mutex?.ReleaseMutex();
         _mutex?.Dispose();
@@ -68,7 +76,7 @@ public partial class App : Application
     {
         try
         {
-            Services?.GetService<IAppLogger>()?.Error("[UI] Unhandled Dispatcher exception caught.", e.Exception);
+            Services?.GetService<IAppLogger>()?.Error(LogCategories.UI, "Unhandled Dispatcher exception caught.", e.Exception);
         }
         catch { }
         e.Handled = true;
@@ -78,7 +86,7 @@ public partial class App : Application
     {
         try
         {
-            Services?.GetService<IAppLogger>()?.Error("[BG] Unobserved task exception caught.", e.Exception);
+            Services?.GetService<IAppLogger>()?.Error(LogCategories.UI, "Unobserved task exception caught.", e.Exception);
         }
         catch { }
         e.SetObserved();

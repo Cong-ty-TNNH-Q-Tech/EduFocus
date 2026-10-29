@@ -176,6 +176,14 @@ dotnet test EduFocus.slnx --configuration Release
 
 ---
 
+## 🔍 Nhật ký & gỡ lỗi
+
+- Log kỹ thuật: `%LOCALAPPDATA%\EduFocus\logs\edufocus-YYYYMMDD.log` — mỗi file tối đa 10 MB, giữ 14 ngày.
+- Mỗi dòng có timestamp UTC, level, category và correlation id; PIN, recovery code, token và URL đầy đủ được redact trước khi ghi.
+- Khi báo lỗi, gửi các file log quanh thời điểm xảy ra kèm phiên bản EduFocus, phiên bản Windows và bước tái hiện. Không gửi DB hoặc ảnh/video webcam.
+
+---
+
 ## ⚠️ Giới hạn đã biết
 
 - PIN không phải ranh giới bảo mật nếu học sinh dùng chung tài khoản Windows hoặc có quyền Administrator. ACL thư mục dữ liệu chỉ tách được quyền khi phụ huynh và học sinh dùng tài khoản Windows riêng; PIN chỉ bảo vệ UI, không bảo vệ file DB.
