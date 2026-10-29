@@ -300,6 +300,13 @@ Singleton.
 - `WindowTitle` được truncate/strip trước khi lưu; coi là dữ liệu nhạy cảm.
 - Không lưu nội dung trang hoặc clipboard.
 
+> **Triển khai issue #26:** `ActivityTrackingService` ghi tối đa một sample mỗi 15 giây và một sample idle
+> cho mỗi chuỗi idle ≥ 5 phút. `SqliteActivitySampleRepository` chỉ insert sample; counters của session
+> (`StudySeconds`, `DistractionSeconds`, `NeutralSeconds`, `IdleSeconds`, `OnlineClassSeconds`) được cộng
+> bằng `SqliteStudySessionRepository.AddActivitySecondsAsync` — `UPDATE` targeted chỉ trên session `Active`
+> và chạy trước khi insert sample, nên sample không xuất hiện cho session đã kết thúc và full-entity write
+> không đè heartbeat. Sample vẫn bị retention xóa theo §14; báo cáo dài hạn đọc session summary.
+
 ---
 
 ## 10. Bảng `AttentionEvents`

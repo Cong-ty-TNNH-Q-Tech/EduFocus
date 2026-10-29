@@ -88,4 +88,5 @@ tray icon và logic chặn thoát khi có phiên.
 - Issue #23: process watcher polling `ProcessWatcher` (khớp tên exact, đóng mềm rồi kill tree, debounce 30 giây, `ProcessBlockedObservation`) — đã hoàn tất; `ProtectionEngine` (issue #24) nhận observation, debounce và ghi `BlockedAttempt`.
 - Issue #24: `ProtectionEngine` ghép block page + hosts + watcher (rollback/reconcile/cảnh báo), writer channel ghi `BlockedAttempt` + `BlockedAttemptCount`, debounce trung tâm 30 giây; `DeferredProtectionEngine` đã xóa — đã hoàn tất.
 - Issue #25: heartbeat session 10 giây tách khỏi sampling, `ActiveSeconds` monotonic có điều kiện, serialize enable/disable/reconcile, phục hồi phiên `Recovery` và dừng heartbeat khi thoát/shutdown — đã hoàn tất.
-- Các phase sau: activity monitoring, attention monitoring, dashboard/reports, installer hoàn chỉnh.
+- Issue #26: `ActivityTrackingService` poll foreground 1 giây, sample 15 giây với debounce 2 giây, một sample idle/chuỗi ≥ 5 phút, `ActivityClassifier` theo `BlockRuleSet` snapshot + overlay `IsOnlineClass`, adapter `WindowsForegroundActivityPort`/`UiAutomationBrowserUrlProvider`, bộ đếm session targeted trước khi insert sample và wiring vào `ProtectionService`/`AppLifecycleService` — đã hoàn tất.
+- Các phase sau: attention monitoring, dashboard/reports, installer hoàn chỉnh.

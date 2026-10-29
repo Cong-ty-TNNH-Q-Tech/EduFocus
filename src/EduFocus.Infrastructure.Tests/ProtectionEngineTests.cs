@@ -794,6 +794,33 @@ public sealed class ProtectionEngineTests
                 return Task.FromResult(true);
             }
         }
+
+        public Task<bool> AddActivitySecondsAsync(
+            StudySessionId sessionId,
+            ActivityCategory category,
+            int categorySeconds,
+            int idleSeconds,
+            int onlineClassSeconds,
+            DateTime nowUtc,
+            CancellationToken cancellationToken = default)
+        {
+            lock (_lock)
+            {
+                var session = Active;
+
+                if (session is null || session.Id != sessionId || !session.IsActive)
+                    return Task.FromResult(false);
+
+                var stamp = nowUtc < session.UpdatedAtUtc ? session.UpdatedAtUtc : nowUtc;
+                session.AddCategorySeconds(category, categorySeconds, stamp);
+                if (idleSeconds > 0)
+                    session.AddIdleSeconds(idleSeconds, stamp);
+                if (onlineClassSeconds > 0)
+                    session.AddOnlineClassSeconds(onlineClassSeconds, stamp);
+
+                return Task.FromResult(true);
+            }
+        }
     }
 
     private sealed class FakeClock : IMonotonicClockPort

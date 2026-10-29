@@ -440,6 +440,16 @@
 > được log và thử lại ở beat sau. Heartbeat dừng trước khi session `Complete`/`Interrupt` và tự dừng khi
 > session không còn `Active`.
 
+> **Triển khai (issue #26):** `ActivityTrackingService` poll foreground mỗi giây, debounce 2 giây và ghi
+> tối đa một `ActivitySample` mỗi 15 giây; `DurationSeconds` lấy từ monotonic clock, chặn 60 giây/sample
+> nên suspend không làm phồng thời gian. Idle ≥ 5 phút chỉ ghi một sample cho mỗi chuỗi nghỉ; `IdleSeconds`
+> lưu riêng và bị trừ khỏi category time. `ActivityClassifier` dùng `BlockRuleSet` (Study/Distraction/
+> Neutral/Unknown, allow thắng block); `OnlineClassDetector` nhận Meet/Teams/Zoom qua domain/process/title.
+> URL đọc best-effort qua UI Automation, strip query/fragment/credentials; không có URL thì `UrlSource=None`
+> và sample vẫn ghi app/process. Counters session ghi bằng targeted `AddActivitySecondsAsync` chỉ trên
+> session `Active` trước khi insert sample; lỗi DB được log và thử lại ở beat sau, session kết thúc thì
+> sampling tự dừng. Sampling start/stop cùng heartbeat trong enable/disable/reconcile và shutdown.
+
 ---
 
 ### UC08 — Ước lượng mức độ tập trung

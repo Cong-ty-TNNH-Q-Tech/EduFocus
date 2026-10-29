@@ -32,6 +32,7 @@ public sealed class ProtectionService : IProtectionUseCase
     private readonly IScheduleWindowRepository _scheduleWindows;
     private readonly IProtectionEnginePort _engine;
     private readonly IStudySessionHeartbeatUseCase _heartbeat;
+    private readonly IActivityUseCase _activity;
     private readonly IParentAuthorizer _authorizer;
     private readonly IAuditLogRepository _auditLogs;
     private readonly ICorrelationContext _correlation;
@@ -45,6 +46,7 @@ public sealed class ProtectionService : IProtectionUseCase
         IScheduleWindowRepository scheduleWindows,
         IProtectionEnginePort engine,
         IStudySessionHeartbeatUseCase heartbeat,
+        IActivityUseCase activity,
         IParentAuthorizer authorizer,
         IAuditLogRepository auditLogs,
         ICorrelationContext correlation,
@@ -56,6 +58,7 @@ public sealed class ProtectionService : IProtectionUseCase
         _scheduleWindows = scheduleWindows ?? throw new ArgumentNullException(nameof(scheduleWindows));
         _engine = engine ?? throw new ArgumentNullException(nameof(engine));
         _heartbeat = heartbeat ?? throw new ArgumentNullException(nameof(heartbeat));
+        _activity = activity ?? throw new ArgumentNullException(nameof(activity));
         _authorizer = authorizer ?? throw new ArgumentNullException(nameof(authorizer));
         _auditLogs = auditLogs ?? throw new ArgumentNullException(nameof(auditLogs));
         _correlation = correlation ?? throw new ArgumentNullException(nameof(correlation));
@@ -140,9 +143,13 @@ public sealed class ProtectionService : IProtectionUseCase
             }
 
             // The heartbeat starts before the persisted flag flips so an
-            // enabled state is never left without a cadence.
+            // enabled state is never left without a cadence. Activity sampling
+            // is best-effort and never blocks protection.
             if (createdSession || !wasEnabled)
+            {
                 await _heartbeat.StartAsync(active.Id, active.LastHeartbeatAtUtc, cancellationToken);
+                await TryStartActivityAsync(active);
+            }
 
             settings.EnableProtection(now, source);
             await _settings.UpdateAsync(settings, cancellationToken);
@@ -155,6 +162,7 @@ public sealed class ProtectionService : IProtectionUseCase
         }
         catch
         {
+            await TryStopActivityAsync();
             await TryStopHeartbeatAsync();
 
             if (createdSession)
@@ -255,8 +263,9 @@ public sealed class ProtectionService : IProtectionUseCase
 
         try
         {
-            // Flush the last beat before the engine is torn down, then reload
-            // the row so completion cannot overwrite the final heartbeat.
+            // Flush the final sample and beat before the engine is torn down,
+            // then reload the row so completion cannot overwrite them.
+            await TryStopActivityAsync();
             await _heartbeat.StopAsync(CancellationToken.None);
             active = await _sessions.GetActiveAsync(cancellationToken) ?? active;
 
@@ -301,6 +310,7 @@ public sealed class ProtectionService : IProtectionUseCase
             if (wasEnabled)
                 await TryReapplyEngineAsync();
 
+            await TryRestartActivityAsync();
             await TryRestartHeartbeatAsync();
             throw;
         }
@@ -346,6 +356,7 @@ public sealed class ProtectionService : IProtectionUseCase
                 Changed: false,
                 []);
 
+        await TryStopActivityAsync();
         await TryStopHeartbeatAsync();
 
         var warnings = new List<string>();
@@ -395,6 +406,7 @@ public sealed class ProtectionService : IProtectionUseCase
 
             await _sessions.AddAsync(recovered, cancellationToken);
             await _heartbeat.StartAsync(recovered.Id, recovered.LastHeartbeatAtUtc, cancellationToken);
+            await TryStartActivityAsync(recovered);
 
             await WriteAuditAsync(
                 AuditActor.System,
@@ -507,6 +519,55 @@ public sealed class ProtectionService : IProtectionUseCase
         catch (Exception ex)
         {
             _logger.Error(LogCategories.Session, "Could not stop the study-session heartbeat.", ex);
+        }
+    }
+
+    private async Task TryStopActivityAsync()
+    {
+        try
+        {
+            await _activity.StopAsync(CancellationToken.None);
+        }
+        catch (Exception ex)
+        {
+            _logger.Error(LogCategories.Session, "Could not stop activity sampling.", ex);
+        }
+    }
+
+    private async Task TryStartActivityAsync(StudySession session)
+    {
+        try
+        {
+            if (_activity.IsRunning)
+                return;
+
+            await _activity.StartAsync(session.Id, CancellationToken.None);
+        }
+        catch (Exception ex)
+        {
+            // Activity tracking is observability only; protection must stay ON.
+            _logger.Error(LogCategories.Session, "Could not start activity sampling.", ex);
+        }
+    }
+
+    private async Task TryRestartActivityAsync()
+    {
+        try
+        {
+            if (_activity.IsRunning)
+                return;
+
+            var active = await _sessions.GetActiveAsync(CancellationToken.None);
+
+            if (active is not null)
+                await _activity.StartAsync(active.Id, CancellationToken.None);
+        }
+        catch (Exception ex)
+        {
+            _logger.Error(
+                LogCategories.Session,
+                "Could not restart activity sampling after a failed protection change.",
+                ex);
         }
     }
 

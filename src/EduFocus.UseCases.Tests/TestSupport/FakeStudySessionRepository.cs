@@ -1,4 +1,5 @@
 using EduFocus.Domain.Entities;
+using EduFocus.Domain.Enums;
 using EduFocus.Domain.ValueObjects;
 using EduFocus.Ports.Outbound.Persistence;
 
@@ -16,7 +17,11 @@ internal sealed class FakeStudySessionRepository : IStudySessionRepository
 
     public bool ThrowOnHeartbeat { get; set; }
 
+    public bool ThrowOnActivity { get; set; }
+
     public int IncrementBlockedCalls { get; private set; }
+
+    public List<ActivityWriteCall> ActivityWrites { get; } = [];
 
     public StudySession? Active => Sessions.SingleOrDefault(session => session.IsActive);
 
@@ -88,8 +93,50 @@ internal sealed class FakeStudySessionRepository : IStudySessionRepository
         return Task.FromResult(true);
     }
 
+    public Task<bool> AddActivitySecondsAsync(
+        StudySessionId sessionId,
+        ActivityCategory category,
+        int categorySeconds,
+        int idleSeconds,
+        int onlineClassSeconds,
+        DateTime nowUtc,
+        CancellationToken cancellationToken = default)
+    {
+        if (ThrowOnActivity)
+            throw new InvalidOperationException("The session store is unavailable.");
+
+        var session = Sessions.SingleOrDefault(x => x.Id == sessionId && x.IsActive);
+
+        if (session is null)
+            return Task.FromResult(false);
+
+        var stamp = nowUtc < session.UpdatedAtUtc ? session.UpdatedAtUtc : nowUtc;
+        session.AddCategorySeconds(category, categorySeconds, stamp);
+        if (idleSeconds > 0)
+            session.AddIdleSeconds(idleSeconds, stamp);
+        if (onlineClassSeconds > 0)
+            session.AddOnlineClassSeconds(onlineClassSeconds, stamp);
+
+        ActivityWrites.Add(new ActivityWriteCall(
+            sessionId,
+            category,
+            categorySeconds,
+            idleSeconds,
+            onlineClassSeconds,
+            nowUtc));
+        return Task.FromResult(true);
+    }
+
     public readonly record struct HeartbeatCall(
         StudySessionId SessionId,
         DateTime HeartbeatAtUtc,
         int ActiveSeconds);
+
+    public readonly record struct ActivityWriteCall(
+        StudySessionId SessionId,
+        ActivityCategory Category,
+        int CategorySeconds,
+        int IdleSeconds,
+        int OnlineClassSeconds,
+        DateTime NowUtc);
 }

@@ -189,6 +189,17 @@ và dự án tuân theo [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 - **DI:** đăng ký `StudySessionHeartbeatOptions` + singleton `IStudySessionHeartbeatUseCase`; thêm log category `Session`.
 - **Tests:** 9 test heartbeat (cadence monotonic, clamp đồng hồ, biên 60 giây, lỗi DB retry, start/stop lặp), 10 test `ProtectionService` (heartbeat, concurrency, rollback, recovery), 2 test lifecycle shutdown và 6 test SQLite (heartbeat có điều kiện, chống hồi sinh, increment active, unique active, retention giữ summary); tổng **529 test pass**, build Release 0 warning.
 
+### Added (Phase 4 — Activity sampling, issue #26)
+- **Sampling tách khỏi heartbeat:** `IActivityUseCase`/`ActivityTrackingService` poll foreground mỗi giây nhưng chỉ ghi tối đa một `ActivitySample` mỗi 15 giây; foreground phải ổn định 2 giây (debounce) trước khi ghi. `DurationSeconds` lấy từ monotonic clock, chặn tối đa 60 giây/sample nên sleep/suspend không làm phồng thời gian; wall clock lùi được clamp để timestamp không đảo.
+- **Idle:** idle ≥ 5 phút chỉ ghi một sample idle cho mỗi chuỗi nghỉ; các beat sau bị chặn cho đến khi người dùng hoạt động lại. `IdleSeconds` và category time được trừ khỏi nhau nên thời gian idle không bị tính là học/giải trí.
+- **Phân loại:** `ActivityClassifier` (domain) trả `Study`/`Distraction`/`Neutral`/`Unknown` theo `BlockRuleSet`; allow thắng block. `OnlineClassDetector` nhận Meet/Teams/Zoom qua domain, process hoặc window title và đặt overlay `IsOnlineClass`/`OnlineClassSeconds`.
+- **Riêng tư:** URL chỉ đọc best-effort qua `IBrowserUrlProviderPort` (UIA, chỉ browser đã biết, bỏ field password); URL được strip query/fragment/credentials, title strip control/truncate 512; không lưu clipboard/nội dung trang. Không lấy được URL thì `UrlSource = None`, sample vẫn ghi app/process.
+- **Ghi DB bền:** counters `StudySeconds`/`DistractionSeconds`/`NeutralSeconds`/`IdleSeconds`/`OnlineClassSeconds` cập nhật bằng targeted `AddActivitySecondsAsync` chỉ trên session `Active` trước khi insert sample; session đã kết thúc thì dừng sampling, còn lỗi DB chỉ được log và thử lại ở beat sau.
+- **Adapter Windows:** `WindowsForegroundActivityPort` dùng `GetForegroundWindow`/`GetWindowThreadProcessId`/`GetWindowText`/`GetLastInputInfo`, chịu được process biến mất hoặc access denied. `UiAutomationBrowserUrlProvider` (WPF) đọc address bar qua UI Automation.
+- **Vòng đời:** `ProtectionService` start/stop sampling cùng heartbeat ở enable/disable/reconcile/rollback; activity start thất bại chỉ log, không chặn Protection ON. Windows shutdown và thoát sạch dừng sampling trước khi kết thúc session.
+- **DI:** đăng ký `ActivityTrackingOptions`, `IActivitySampleRepository`/`SqliteActivitySampleRepository`, `IForegroundActivityPort`, `IBrowserUrlProviderPort` và singleton `IActivityUseCase`.
+- **Tests:** 13 test `ActivityTrackingService` (foreground đổi nhanh, idle một sample, thiếu URL/quyền, process biến mất, DB retry, session kết thúc, suspend cap, wall clock lùi), 2 test SQLite sample round-trip + targeted counters, bổ sung assertion activity vào test ProtectionService/lifecycle; tổng **564 test pass**, build Release 0 warning.
+
 ### Removed (khỏi phạm vi EduFocus)
 - Quản lý task, profile học tập, quote động lực và Gemini AI.
 - Cơ chế "friction" bắt gõ câu xác nhận bỏ cuộc.

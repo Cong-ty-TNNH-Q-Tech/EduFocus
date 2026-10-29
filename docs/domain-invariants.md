@@ -107,6 +107,16 @@
 | `Domain` suy ra từ URL đã sanitize | `DeriveDomain` |
 | Title ≤ 512, app/process ≤ 128, control character bị thay bằng space | `TextSanitizer` |
 
+**Phân loại activity (`ActivityClassifier`, dùng chung `BlockRuleSet` snapshot):**
+
+| Invariant | Thực thi |
+|---|---|
+| Online class luôn là `Study` và thắng mọi rule block | `Classify` trả sớm trước khi đánh giá rule |
+| Block trên domain **hoặc** process → `Distraction` | `Classify` |
+| Không block và có allow trên domain **hoặc** process → `Study` | `Classify` |
+| Không có cả domain lẫn process → `Unknown`; còn lại → `Neutral` | `Classify` |
+| Idle không cộng giây vào category nào | Use case (issue #26), không thuộc domain |
+
 ### 2.7. `AttentionEvent`
 
 | Invariant | Thực thi |
@@ -193,6 +203,7 @@ Các rule cần quyền phụ huynh (BR-05), watchdog (BR-28), block page (BR-26
 | `ActivitySampleTests` | URL/title privacy, source consistency |
 | `AttentionEventTests` | Open/close, confidence, sanitization |
 | `BlockedAttemptTests` | Observation channel, normalization |
+| `ActivityClassifierTests`, `OnlineClassDetectorTests` | Rule snapshot, online class overlay, block/allow precedence, Unknown/Neutral |
 | `AuditLogTests` | Kích thước, correlation, timestamp |
 | `DomainNameTests`, `PrivacySanitizerTests` | Normalization và privacy helper |
 
@@ -204,6 +215,8 @@ ephemeral/process và adapter giả, không cần elevation):
 `dotnet test src/EduFocus.Infrastructure.Tests/EduFocus.Infrastructure.Tests.csproj -c Release`.
 
 Use case tests trong `EduFocus.UseCases.Tests` phủ heartbeat (monotonic, clamp đồng hồ, biên 60 giây,
-lỗi DB retry), serialize enable/disable/reconcile, rollback và phục hồi `Recovery`;
-`EduFocus.SqliteDataAccess.Tests` phủ heartbeat có điều kiện, chống hồi sinh session, unique active và
-retention giữ session summary.
+lỗi DB retry), serialize enable/disable/reconcile, rollback và phục hồi `Recovery`; `ActivityTrackingServiceTests`
+phủ debounce foreground, cadence 15 giây, một sample idle/chuỗi, sanitize URL, phân loại, lỗi port/DB và
+dừng khi session kết thúc. `EduFocus.SqliteDataAccess.Tests` phủ heartbeat có điều kiện, chống hồi sinh
+session, unique active, retention giữ session summary, round-trip `ActivitySample` và `AddActivitySecondsAsync`
+(targeted, chỉ session `Active`).

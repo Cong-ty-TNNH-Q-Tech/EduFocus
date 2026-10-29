@@ -177,6 +177,75 @@ public sealed class StudySessionRepositoryTests
     }
 
     [Fact]
+    public async Task AddActivitySeconds_updates_category_idle_and_online_class_counters()
+    {
+        await using var db = new TempDatabase();
+        await db.CreateInitializer().InitializeAsync();
+
+        var repository = new SqliteStudySessionRepository(db.Options);
+        var session = StudySession.Start(Now, new DateOnly(2026, 10, 29), SessionTrigger.Manual, true);
+        await repository.AddAsync(session);
+
+        var written = await repository.AddActivitySecondsAsync(
+            session.Id,
+            ActivityCategory.Study,
+            categorySeconds: 12,
+            idleSeconds: 3,
+            onlineClassSeconds: 12,
+            Now.AddSeconds(15));
+
+        written.Should().BeTrue();
+
+        var reloaded = await ReadSessionAsync(db, session.Id.Value);
+        reloaded.StudySeconds.Should().Be(12);
+        reloaded.IdleSeconds.Should().Be(3);
+        reloaded.OnlineClassSeconds.Should().Be(12);
+        reloaded.NeutralSeconds.Should().Be(0);
+        reloaded.UpdatedAtUtc.Should().Be(Now.AddSeconds(15));
+
+        await repository.AddActivitySecondsAsync(
+            session.Id,
+            ActivityCategory.Neutral,
+            categorySeconds: 10,
+            idleSeconds: 0,
+            onlineClassSeconds: 0,
+            Now.AddSeconds(30));
+
+        reloaded = await ReadSessionAsync(db, session.Id.Value);
+        reloaded.NeutralSeconds.Should().Be(10);
+        reloaded.StudySeconds.Should().Be(12);
+    }
+
+    [Fact]
+    public async Task AddActivitySeconds_does_not_resurrect_a_completed_session()
+    {
+        await using var db = new TempDatabase();
+        await db.CreateInitializer().InitializeAsync();
+
+        var repository = new SqliteStudySessionRepository(db.Options);
+        var session = StudySession.Start(Now, new DateOnly(2026, 10, 29), SessionTrigger.Manual, true);
+        await repository.AddAsync(session);
+
+        session.Complete(Now.AddMinutes(30));
+        await repository.UpdateAsync(session);
+
+        var written = await repository.AddActivitySecondsAsync(
+            session.Id,
+            ActivityCategory.Study,
+            categorySeconds: 15,
+            idleSeconds: 0,
+            onlineClassSeconds: 0,
+            Now.AddMinutes(31));
+
+        written.Should().BeFalse();
+
+        var reloaded = await ReadSessionAsync(db, session.Id.Value);
+        reloaded.Status.Should().Be(StudySessionStatus.Completed);
+        reloaded.StudySeconds.Should().Be(0);
+        reloaded.UpdatedAtUtc.Should().Be(Now.AddMinutes(30));
+    }
+
+    [Fact]
     public async Task A_second_active_session_is_rejected_by_the_unique_index()
     {
         await using var db = new TempDatabase();

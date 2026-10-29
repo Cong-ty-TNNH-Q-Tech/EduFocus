@@ -199,6 +199,16 @@ Windows shutdown đều dừng heartbeat trước khi kết thúc phiên; `App.O
 bất đồng bộ để ghi beat cuối và nhả timer. Repository ghi heartbeat/increment bằng targeted update có
 điều kiện nên heartbeat không hồi sinh session đã kết thúc hoặc đè lên bộ đếm blocked attempt.
 
+**Hiện trạng issue #26:** `IActivityUseCase`/`ActivityTrackingService` poll foreground mỗi giây, chỉ ghi
+sample khi context ổn định đủ 2 giây và cách sample trước 15 giây; idle ≥ 5 phút ghi đúng một sample cho
+mỗi chuỗi idle. Thời lượng lấy từ monotonic clock, cap 60 giây/sample; wall clock lùi bị clamp. Mỗi sample
+được phân loại bằng `BlockRuleSet` snapshot (load một lần lúc `StartAsync`), `OnlineClassDetector` phủ
+overlay `IsOnlineClass`; URL được sanitize qua `UrlSanitizer` trước khi suy domain. Bộ đếm session được ghi
+bằng `AddActivitySecondsAsync` targeted (chỉ session `Active`) **trước** khi insert sample, nên lỗi DB
+không đếm đôi; lỗi insert chỉ log và thử lại ở beat sau. Activity là observability: lỗi start/stop không
+làm hỏng Protection. Adapter Windows: `WindowsForegroundActivityPort` (Win32 + `GetLastInputInfo`) và
+`UiAutomationBrowserUrlProvider` (UIA address bar, allowlist trình duyệt).
+
 ### 3.4. Infrastructure (`EduFocus.Infrastructure`)
 
 Triển khai outbound ports, tương tác Windows.
@@ -208,8 +218,8 @@ Triển khai outbound ports, tương tác Windows.
 | `ProtectionEngine` | Refactor từ `WindowsStrictEngine`: hosts, block page server, process watcher, rule matching |
 | `BlockPageServer` | Local HTTP server trả trang chặn; refactor từ `LocalRedirectServer` |
 | `ChatbotBlocklist` | Danh sách domain chatbot mặc định, có version |
-| `ForegroundActivityTracker` | Win32 foreground window + process + idle time |
-| `BrowserUrlProvider` | UI Automation (MVP); browser extension native messaging (post-MVP) |
+| `WindowsForegroundActivityPort` | Win32 foreground window + process + idle time (`GetLastInputInfo`) |
+| `UiAutomationBrowserUrlProvider` | UI Automation đọc address bar (MVP); browser extension native messaging (post-MVP) |
 | `WebcamAttentionMonitor` | OpenCV + ONNX; face/head/iris/EAR; không lưu frame |
 | `CameraAvailabilityProbe` | Kiểm tra camera bận/không có quyền |
 | `Pbkdf2PasswordHasher` | PBKDF2-SHA256 600.000 iterations, salt 16 byte, hash 32 byte, constant-time compare |
@@ -618,6 +628,12 @@ Không lưu query string/fragment trong `ActivitySamples`; chỉ lưu domain và
 - Debounce chuyển foreground 2 giây.
 - Sample cũ bị retention job xóa; báo cáo dài hạn đọc session summary.
 
+> **Triển khai issue #26:** poll 1 giây, sample 15 giây, foreground debounce 2 giây; idle ≥ 5 phút ghi một
+> sample/chuỗi. `ActivityTrackingService` đọc `IForegroundActivityPort` + `IBrowserUrlProviderPort`, phân
+> loại bằng `ActivityClassifier`/`BlockRuleSet` snapshot, phủ `IsOnlineClass`, rồi ghi bộ đếm session
+> targeted trước khi insert `ActivitySample` (lỗi insert chỉ log và thử lại ở sample sau). `StopAsync`
+> không flush sample cuối; vòng lặp dừng khi session kết thúc.
+
 ---
 
 ## 8. Attention Monitor
@@ -871,6 +887,13 @@ AddViews()
 > `AppLifecycleService` nhận heartbeat qua DI; `App.OnExit` dispose `ServiceProvider` bằng `DisposeAsync`
 > để service ghi beat cuối và dừng timer. `ProtectionEngine` dùng targeted increment cho
 > `BlockedAttemptCount` thay vì cập nhật toàn bộ entity session.
+
+> **Bổ sung sau issue #26:** composition root đăng ký singleton `ActivityTrackingOptions`,
+> `IActivitySampleRepository`/`SqliteActivitySampleRepository`, `IActivityUseCase`/`ActivityTrackingService`
+> và `IBrowserUrlProviderPort`/`UiAutomationBrowserUrlProvider`; `AddInfrastructureServices()` đăng ký
+> `IForegroundActivityPort`/`WindowsForegroundActivityPort`. `ProtectionService` và `AppLifecycleService`
+> nhận `IActivityUseCase` qua DI; enable start activity sau heartbeat, disable/exit/shutdown stop trước khi
+> kết thúc phiên, và lỗi start/stop activity chỉ được log để không chặn Protection.
 
 ---
 

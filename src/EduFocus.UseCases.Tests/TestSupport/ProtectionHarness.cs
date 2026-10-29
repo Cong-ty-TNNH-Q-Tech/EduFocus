@@ -28,6 +28,8 @@ internal sealed class ProtectionHarness
 
     public FakeStudySessionHeartbeatUseCase Heartbeat { get; } = new();
 
+    public FakeActivityUseCase Activity { get; } = new();
+
     public RecordingAuditLogRepository Audits { get; } = new();
 
     public RecordingLogger Logger { get; } = new();
@@ -49,6 +51,7 @@ internal sealed class ProtectionHarness
             ScheduleWindows,
             Engine,
             Heartbeat,
+            Activity,
             Session,
             Audits,
             Correlation,

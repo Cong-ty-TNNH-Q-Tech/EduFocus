@@ -26,6 +26,7 @@ internal sealed class LifecycleHarness
             ScheduleWindows,
             Engine,
             Heartbeat,
+            Activity,
             Session,
             Audits,
             Correlation,
@@ -36,6 +37,7 @@ internal sealed class LifecycleHarness
             Protection,
             Sessions,
             Heartbeat,
+            Activity,
             Settings,
             Audits,
             Correlation,
@@ -52,6 +54,8 @@ internal sealed class LifecycleHarness
     public FakeProtectionEngine Engine { get; } = new();
 
     public FakeStudySessionHeartbeatUseCase Heartbeat { get; } = new();
+
+    public FakeActivityUseCase Activity { get; } = new();
 
     public RecordingAuditLogRepository Audits { get; } = new();
 

@@ -1,4 +1,5 @@
 using System.Runtime.Versioning;
+using EduFocus.Infrastructure.Activity;
 using EduFocus.Infrastructure.Auth;
 using EduFocus.Infrastructure.Logging;
 using EduFocus.Infrastructure.Protection;
@@ -33,6 +34,7 @@ public static class InfrastructureServiceCollectionExtensions
         services.AddSingleton<IProcessWatcher, ProcessWatcher>();
         services.AddSingleton(new ProtectionEngineOptions());
         services.AddSingleton<IProtectionEnginePort, ProtectionEngine>();
+        services.AddSingleton<IForegroundActivityPort, WindowsForegroundActivityPort>();
 
         return services;
     }

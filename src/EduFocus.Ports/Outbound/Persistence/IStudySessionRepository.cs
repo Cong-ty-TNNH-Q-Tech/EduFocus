@@ -1,4 +1,5 @@
 using EduFocus.Domain.Entities;
+using EduFocus.Domain.Enums;
 using EduFocus.Domain.ValueObjects;
 
 namespace EduFocus.Ports.Outbound.Persistence;
@@ -36,5 +37,20 @@ public interface IStudySessionRepository
         StudySessionId sessionId,
         DateTime nowUtc,
         int count = 1,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Adds foreground-activity totals to an Active session with targeted
+    /// increments: category seconds, the separate idle overlay and the online
+    /// class overlay. Returns false when the session already ended. No other
+    /// counters, including the heartbeat, are rewritten.
+    /// </summary>
+    Task<bool> AddActivitySecondsAsync(
+        StudySessionId sessionId,
+        ActivityCategory category,
+        int categorySeconds,
+        int idleSeconds,
+        int onlineClassSeconds,
+        DateTime nowUtc,
         CancellationToken cancellationToken = default);
 }

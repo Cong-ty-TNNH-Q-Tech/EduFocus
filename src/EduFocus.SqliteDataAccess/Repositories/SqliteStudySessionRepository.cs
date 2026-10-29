@@ -107,4 +107,63 @@ public sealed class SqliteStudySessionRepository : IStudySessionRepository
 
         return affected > 0;
     }
+
+    public async Task<bool> AddActivitySecondsAsync(
+        StudySessionId sessionId,
+        ActivityCategory category,
+        int categorySeconds,
+        int idleSeconds,
+        int onlineClassSeconds,
+        DateTime nowUtc,
+        CancellationToken cancellationToken = default)
+    {
+        if (!Enum.IsDefined(category))
+            throw new ArgumentOutOfRangeException(nameof(category), category, "Unknown activity category.");
+        if (categorySeconds < 0)
+            throw new ArgumentOutOfRangeException(nameof(categorySeconds), categorySeconds, "Seconds cannot be negative.");
+        if (idleSeconds < 0)
+            throw new ArgumentOutOfRangeException(nameof(idleSeconds), idleSeconds, "Seconds cannot be negative.");
+        if (onlineClassSeconds < 0)
+            throw new ArgumentOutOfRangeException(nameof(onlineClassSeconds), onlineClassSeconds, "Seconds cannot be negative.");
+        if (nowUtc.Kind != DateTimeKind.Utc)
+            throw new ArgumentException("The timestamp must be UTC.", nameof(nowUtc));
+
+        await using var context = new EduFocusDbContext(_dbContextOptions);
+
+        var query = context.StudySessions
+            .Where(x => x.Id == sessionId && x.Status == StudySessionStatus.Active);
+
+        var affected = category switch
+        {
+            ActivityCategory.Study => await query.ExecuteUpdateAsync(
+                setters => setters
+                    .SetProperty(x => x.StudySeconds, x => x.StudySeconds + categorySeconds)
+                    .SetProperty(x => x.IdleSeconds, x => x.IdleSeconds + idleSeconds)
+                    .SetProperty(x => x.OnlineClassSeconds, x => x.OnlineClassSeconds + onlineClassSeconds)
+                    .SetProperty(
+                        x => x.UpdatedAtUtc,
+                        x => x.UpdatedAtUtc < nowUtc ? nowUtc : x.UpdatedAtUtc),
+                cancellationToken),
+            ActivityCategory.Distraction => await query.ExecuteUpdateAsync(
+                setters => setters
+                    .SetProperty(x => x.DistractionSeconds, x => x.DistractionSeconds + categorySeconds)
+                    .SetProperty(x => x.IdleSeconds, x => x.IdleSeconds + idleSeconds)
+                    .SetProperty(x => x.OnlineClassSeconds, x => x.OnlineClassSeconds + onlineClassSeconds)
+                    .SetProperty(
+                        x => x.UpdatedAtUtc,
+                        x => x.UpdatedAtUtc < nowUtc ? nowUtc : x.UpdatedAtUtc),
+                cancellationToken),
+            _ => await query.ExecuteUpdateAsync(
+                setters => setters
+                    .SetProperty(x => x.NeutralSeconds, x => x.NeutralSeconds + categorySeconds)
+                    .SetProperty(x => x.IdleSeconds, x => x.IdleSeconds + idleSeconds)
+                    .SetProperty(x => x.OnlineClassSeconds, x => x.OnlineClassSeconds + onlineClassSeconds)
+                    .SetProperty(
+                        x => x.UpdatedAtUtc,
+                        x => x.UpdatedAtUtc < nowUtc ? nowUtc : x.UpdatedAtUtc),
+                cancellationToken)
+        };
+
+        return affected > 0;
+    }
 }

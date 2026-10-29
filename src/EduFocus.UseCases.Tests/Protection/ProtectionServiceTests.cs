@@ -385,6 +385,26 @@ public sealed class ProtectionServiceTests
         harness.Heartbeat.StartedSessions.Should().ContainSingle().Which.Should().Be(session!.Id);
         harness.Heartbeat.IsRunning.Should().BeTrue();
         harness.Heartbeat.StopCount.Should().Be(0);
+        harness.Activity.Started.Should().ContainSingle().Which.Should().Be(session.Id);
+        harness.Activity.IsRunning.Should().BeTrue();
+        harness.Activity.StopCalls.Should().Be(0);
+    }
+
+    [Fact]
+    public async Task Activity_start_failure_does_not_block_protection()
+    {
+        var harness = new ProtectionHarness();
+        harness.Activity.ThrowOnStart = true;
+        harness.Session.Authenticate();
+
+        var result = await harness.Service.EnableAsync();
+
+        result.Changed.Should().BeTrue();
+        harness.SettingsRow.ProtectionEnabled.Should().BeTrue();
+        harness.Sessions.Active.Should().NotBeNull();
+        harness.Heartbeat.IsRunning.Should().BeTrue();
+        harness.Logger.Errors.Should().Contain(error =>
+            error.Contains("Could not start activity sampling"));
     }
 
     [Fact]
@@ -400,6 +420,8 @@ public sealed class ProtectionServiceTests
 
         harness.Heartbeat.StopCount.Should().Be(1);
         harness.Heartbeat.IsRunning.Should().BeFalse();
+        harness.Activity.StopCalls.Should().Be(1);
+        harness.Activity.IsRunning.Should().BeFalse();
         harness.Sessions.Active.Should().BeNull();
         harness.Sessions.Sessions.Should().ContainSingle()
             .Which.Status.Should().Be(StudySessionStatus.Completed);
@@ -420,6 +442,9 @@ public sealed class ProtectionServiceTests
         harness.Heartbeat.StopCount.Should().Be(1);
         harness.Heartbeat.StartedSessions.Should().HaveCount(2);
         harness.Heartbeat.IsRunning.Should().BeTrue();
+        harness.Activity.StopCalls.Should().Be(1);
+        harness.Activity.Started.Should().HaveCount(2);
+        harness.Activity.IsRunning.Should().BeTrue();
     }
 
     [Fact]
@@ -442,6 +467,9 @@ public sealed class ProtectionServiceTests
         harness.Heartbeat.StartedSessions.Should().ContainSingle().Which.Should().Be(recovered.Id);
         harness.Heartbeat.IsRunning.Should().BeTrue();
         harness.Heartbeat.StopCount.Should().Be(1);
+        harness.Activity.Started.Should().ContainSingle().Which.Should().Be(recovered.Id);
+        harness.Activity.IsRunning.Should().BeTrue();
+        harness.Activity.StopCalls.Should().Be(1);
     }
 
     [Fact]
@@ -454,6 +482,9 @@ public sealed class ProtectionServiceTests
         harness.Heartbeat.StartedSessions.Should().BeEmpty();
         harness.Heartbeat.IsRunning.Should().BeFalse();
         harness.Heartbeat.StopCount.Should().Be(1);
+        harness.Activity.Started.Should().BeEmpty();
+        harness.Activity.IsRunning.Should().BeFalse();
+        harness.Activity.StopCalls.Should().Be(1);
     }
 
     [Fact]
@@ -505,6 +536,7 @@ public sealed class ProtectionServiceTests
         harness.Sessions.Sessions.Should().ContainSingle();
         harness.Sessions.Active.Should().NotBeNull();
         harness.Heartbeat.StartedSessions.Should().ContainSingle();
+        harness.Activity.Started.Should().ContainSingle();
         harness.Engine.ApplyCount.Should().Be(1);
         harness.Settings.UpdateCount.Should().Be(1);
     }

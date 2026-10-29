@@ -255,6 +255,8 @@ public sealed class AppLifecycleServiceTests
 
         harness.Heartbeat.StopCount.Should().Be(1);
         harness.Heartbeat.IsRunning.Should().BeFalse();
+        harness.Activity.StopCalls.Should().Be(1);
+        harness.Activity.IsRunning.Should().BeFalse();
 
         var session = harness.Sessions.Sessions.Should().ContainSingle().Subject;
         session.Status.Should().Be(StudySessionStatus.Interrupted);
@@ -273,6 +275,8 @@ public sealed class AppLifecycleServiceTests
         result.CanExit.Should().BeTrue();
         harness.Heartbeat.StopCount.Should().Be(1);
         harness.Heartbeat.IsRunning.Should().BeFalse();
+        harness.Activity.StopCalls.Should().Be(1);
+        harness.Activity.IsRunning.Should().BeFalse();
         harness.Sessions.Sessions.Should().ContainSingle()
             .Which.Status.Should().Be(StudySessionStatus.Completed);
     }

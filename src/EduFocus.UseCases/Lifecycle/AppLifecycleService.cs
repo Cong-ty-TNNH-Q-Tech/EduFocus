@@ -35,6 +35,7 @@ public sealed class AppLifecycleService : IAppLifecycleUseCase
     private readonly IProtectionUseCase _protection;
     private readonly IStudySessionRepository _sessions;
     private readonly IStudySessionHeartbeatUseCase _heartbeat;
+    private readonly IActivityUseCase _activity;
     private readonly IAppSettingsRepository _settings;
     private readonly IAuditLogRepository _auditLogs;
     private readonly ICorrelationContext _correlation;
@@ -46,6 +47,7 @@ public sealed class AppLifecycleService : IAppLifecycleUseCase
         IProtectionUseCase protection,
         IStudySessionRepository sessions,
         IStudySessionHeartbeatUseCase heartbeat,
+        IActivityUseCase activity,
         IAppSettingsRepository settings,
         IAuditLogRepository auditLogs,
         ICorrelationContext correlation,
@@ -56,6 +58,7 @@ public sealed class AppLifecycleService : IAppLifecycleUseCase
         _protection = protection ?? throw new ArgumentNullException(nameof(protection));
         _sessions = sessions ?? throw new ArgumentNullException(nameof(sessions));
         _heartbeat = heartbeat ?? throw new ArgumentNullException(nameof(heartbeat));
+        _activity = activity ?? throw new ArgumentNullException(nameof(activity));
         _settings = settings ?? throw new ArgumentNullException(nameof(settings));
         _auditLogs = auditLogs ?? throw new ArgumentNullException(nameof(auditLogs));
         _correlation = correlation ?? throw new ArgumentNullException(nameof(correlation));
@@ -112,6 +115,7 @@ public sealed class AppLifecycleService : IAppLifecycleUseCase
 
         // Stop the cadence first and reload the row so the shutdown interrupt
         // closes at the flushed heartbeat instead of a stale snapshot.
+        await TryStopActivityAsync();
         await TryStopHeartbeatAsync();
 
         try
@@ -222,6 +226,21 @@ public sealed class AppLifecycleService : IAppLifecycleUseCase
             login.LockoutUntilUtc,
             warnings,
             Error: null);
+    }
+
+    private async Task TryStopActivityAsync()
+    {
+        try
+        {
+            await _activity.StopAsync(CancellationToken.None);
+        }
+        catch (Exception ex)
+        {
+            _logger.Error(
+                LogCategories.Session,
+                "Could not stop activity sampling during Windows shutdown.",
+                ex);
+        }
     }
 
     private async Task TryStopHeartbeatAsync()
