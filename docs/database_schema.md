@@ -247,6 +247,7 @@ Singleton.
 - `Status`: `Completed` khi kết thúc bình thường; `Aborted` khi lỗi/tamper nghiêm trọng; `Interrupted` khi crash/shutdown và được phục hồi.
 - Khi kết thúc bình thường, `LastHeartbeatAtUtc = EndedAtUtc`; khi crash, giữ heartbeat cuối cùng.
 - Khi crash, `EndedAtUtc = LastHeartbeatAtUtc`; mọi `AttentionEvent` đang mở cũng đóng tại mốc này.
+- Heartbeat được ghi bằng `UPDATE` có điều kiện trên session `Active`: beat cũ hơn hoặc session đã kết thúc bị bỏ qua, nên không hồi sinh session và không đè lên `BlockedAttemptCount` (increment cũng là targeted update).
 - Nếu Protection vẫn ON khi phục hồi, tạo session mới `Trigger = Recovery`, không cộng thời gian gián đoạn.
 - `AttentionPercent` chỉ tính khi `MonitoredSeconds > 0`.
 - `CoveragePercent` chỉ tính khi `MonitoringEligibleSeconds > 0`; nếu bằng 0 thì NULL.
@@ -467,6 +468,7 @@ ORDER BY StartedAtUtc;
 - Khi tạo DB, đặt `PRAGMA auto_vacuum = INCREMENTAL;`; sau khi xóa, chạy `PRAGMA incremental_vacuum;` định kỳ.
 - Bật `PRAGMA foreign_keys = ON;` và `PRAGMA journal_mode = WAL;` khi mở kết nối.
 - Ghi audit "RetentionCompleted" với số bản ghi đã xóa.
+- Retention chỉ xóa bản ghi chi tiết; `StudySessions` (summary) được giữ đến `SessionRetentionDays`, nên xóa `ActivitySamples`/`AttentionEvents` không làm mất báo cáo dài hạn.
 
 ---
 
@@ -520,7 +522,7 @@ Giả định:
 - Không hỗ trợ downgrade schema; nếu cần, khôi phục từ backup.
 - DB từ `DontBeLazy` 1.x không được mở bởi EduFocus.
 - Convention khi mở kết nối: `PRAGMA foreign_keys = ON` (interceptor); DB mới được set `auto_vacuum = INCREMENTAL` trước khi tạo bảng và `journal_mode = WAL`; DB cũ được bật WAL sau khi backup, trước migration.
-- Test tích hợp: `src/EduFocus.SqliteDataAccess.Tests` (schema, khởi tạo/backup/retention, roundtrip entity, ACL, corrupt DB và restore).
+- Test tích hợp: `src/EduFocus.SqliteDataAccess.Tests` (schema, khởi tạo/backup/retention, roundtrip entity, heartbeat có điều kiện/chống hồi sinh, retention giữ session summary, ACL, corrupt DB và restore).
 
 ---
 

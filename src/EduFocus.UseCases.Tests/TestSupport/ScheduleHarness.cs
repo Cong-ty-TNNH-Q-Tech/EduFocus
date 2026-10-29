@@ -21,6 +21,7 @@ internal sealed class ScheduleHarness
             Sessions,
             ScheduleWindows,
             Engine,
+            Heartbeat,
             Session,
             Audits,
             Correlation,
@@ -45,6 +46,8 @@ internal sealed class ScheduleHarness
     public FakeScheduleWindowRepository ScheduleWindows { get; } = new();
 
     public FakeProtectionEngine Engine { get; } = new();
+
+    public FakeStudySessionHeartbeatUseCase Heartbeat { get; } = new();
 
     public FakeMonotonicClock Monotonic { get; } = new();
 

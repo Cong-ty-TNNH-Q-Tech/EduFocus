@@ -94,6 +94,7 @@
 | Interrupt kết thúc tại heartbeat cuối, không cộng downtime | `Interrupt` |
 | Confidence ∈ [0, 1]; note ≤ 512 | `SetAttentionConfidence`, `SetNote` |
 | Tối đa một session Active | DB unique partial index (issue #9), không phải entity |
+| Heartbeat chỉ ghi trên session Active và không lùi thời gian | Repository conditional update (issue #25) |
 
 ### 2.6. `ActivitySample`
 
@@ -201,3 +202,8 @@ Adapter hạ tầng như `HostsFileBlockerTests`, `BlockPageServerTests`, `Proce
 `ProtectionEngineTests` nằm trong `EduFocus.Infrastructure.Tests`, chạy sandbox (thư mục tạm/cổng
 ephemeral/process và adapter giả, không cần elevation):
 `dotnet test src/EduFocus.Infrastructure.Tests/EduFocus.Infrastructure.Tests.csproj -c Release`.
+
+Use case tests trong `EduFocus.UseCases.Tests` phủ heartbeat (monotonic, clamp đồng hồ, biên 60 giây,
+lỗi DB retry), serialize enable/disable/reconcile, rollback và phục hồi `Recovery`;
+`EduFocus.SqliteDataAccess.Tests` phủ heartbeat có điều kiện, chống hồi sinh session, unique active và
+retention giữ session summary.

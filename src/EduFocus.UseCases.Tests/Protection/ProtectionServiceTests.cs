@@ -371,4 +371,192 @@ public sealed class ProtectionServiceTests
         harness.SettingsRow.ScheduleOverrideUntilUtc.Should().BeNull();
         harness.Sessions.Active.Should().BeNull();
     }
+
+    [Fact]
+    public async Task Enabling_starts_the_heartbeat_for_the_new_session()
+    {
+        var harness = new ProtectionHarness();
+        harness.Session.Authenticate();
+
+        await harness.Service.EnableAsync();
+
+        var session = harness.Sessions.Active;
+        session.Should().NotBeNull();
+        harness.Heartbeat.StartedSessions.Should().ContainSingle().Which.Should().Be(session!.Id);
+        harness.Heartbeat.IsRunning.Should().BeTrue();
+        harness.Heartbeat.StopCount.Should().Be(0);
+    }
+
+    [Fact]
+    public async Task Disabling_stops_the_heartbeat_before_completing_the_session()
+    {
+        var harness = new ProtectionHarness();
+        harness.Session.Authenticate();
+        await harness.Service.EnableAsync();
+        harness.Clock.Advance(TimeSpan.FromMinutes(5));
+        harness.Session.Authenticate();
+
+        await harness.Service.DisableAsync();
+
+        harness.Heartbeat.StopCount.Should().Be(1);
+        harness.Heartbeat.IsRunning.Should().BeFalse();
+        harness.Sessions.Active.Should().BeNull();
+        harness.Sessions.Sessions.Should().ContainSingle()
+            .Which.Status.Should().Be(StudySessionStatus.Completed);
+    }
+
+    [Fact]
+    public async Task Engine_remove_failure_restarts_the_heartbeat()
+    {
+        var harness = new ProtectionHarness();
+        harness.Session.Authenticate();
+        await harness.Service.EnableAsync();
+        harness.Engine.ThrowOnRemove = true;
+
+        var act = () => harness.Service.DisableAsync();
+
+        await act.Should().ThrowAsync<ProtectionEngineException>();
+        harness.Sessions.Active.Should().NotBeNull();
+        harness.Heartbeat.StopCount.Should().Be(1);
+        harness.Heartbeat.StartedSessions.Should().HaveCount(2);
+        harness.Heartbeat.IsRunning.Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task Reconcile_starts_the_heartbeat_for_the_recovery_session()
+    {
+        var harness = new ProtectionHarness();
+        harness.SettingsRow.EnableProtection(ProtectionHarness.Start.UtcDateTime);
+        harness.Sessions.Sessions.Add(StudySession.Start(
+            ProtectionHarness.Start.UtcDateTime,
+            new DateOnly(2026, 10, 29),
+            SessionTrigger.Manual,
+            monitoringEnabled: true));
+        harness.Clock.Advance(TimeSpan.FromMinutes(10));
+
+        await harness.Service.ReconcileAsync();
+
+        var recovered = harness.Sessions.Active;
+        recovered.Should().NotBeNull();
+        recovered!.Trigger.Should().Be(SessionTrigger.Recovery);
+        harness.Heartbeat.StartedSessions.Should().ContainSingle().Which.Should().Be(recovered.Id);
+        harness.Heartbeat.IsRunning.Should().BeTrue();
+        harness.Heartbeat.StopCount.Should().Be(1);
+    }
+
+    [Fact]
+    public async Task Reconcile_with_protection_off_does_not_start_the_heartbeat()
+    {
+        var harness = new ProtectionHarness();
+
+        await harness.Service.ReconcileAsync();
+
+        harness.Heartbeat.StartedSessions.Should().BeEmpty();
+        harness.Heartbeat.IsRunning.Should().BeFalse();
+        harness.Heartbeat.StopCount.Should().Be(1);
+    }
+
+    [Fact]
+    public async Task Recovery_keeps_the_old_session_untouched_and_adds_no_downtime()
+    {
+        var harness = new ProtectionHarness();
+        harness.SettingsRow.EnableProtection(ProtectionHarness.Start.UtcDateTime);
+        var stale = StudySession.Start(
+            ProtectionHarness.Start.UtcDateTime,
+            new DateOnly(2026, 10, 29),
+            SessionTrigger.Manual,
+            monitoringEnabled: true);
+        stale.AddActiveSeconds(30, ProtectionHarness.Start.UtcDateTime);
+        harness.Sessions.Sessions.Add(stale);
+        harness.Clock.Advance(TimeSpan.FromHours(1));
+
+        await harness.Service.ReconcileAsync();
+
+        stale.Status.Should().Be(StudySessionStatus.Interrupted);
+        stale.ActiveSeconds.Should().Be(30);
+        stale.EndedAtUtc.Should().Be(ProtectionHarness.Start.UtcDateTime);
+        stale.StartedAtUtc.Should().Be(ProtectionHarness.Start.UtcDateTime);
+
+        var recovered = harness.Sessions.Active;
+        recovered.Should().NotBeNull();
+        recovered!.Id.Should().NotBe(stale.Id);
+        recovered.ActiveSeconds.Should().Be(0);
+        recovered.LastHeartbeatAtUtc.Should()
+            .Be(ProtectionHarness.Start.UtcDateTime.AddHours(1));
+    }
+
+    [Fact]
+    public async Task Concurrent_enables_create_one_session_and_start_one_heartbeat()
+    {
+        var harness = new ProtectionHarness();
+        harness.Session.Authenticate();
+        var gate = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        harness.Engine.ApplyGate = gate;
+
+        var first = harness.Service.EnableAsync();
+        await WaitUntilAsync(() => harness.Engine.ApplyCount == 1);
+        var second = harness.Service.EnableAsync();
+
+        gate.SetResult();
+        var results = await Task.WhenAll(first, second);
+
+        results[0].Changed.Should().BeTrue();
+        results[1].Changed.Should().BeFalse();
+        harness.Sessions.Sessions.Should().ContainSingle();
+        harness.Sessions.Active.Should().NotBeNull();
+        harness.Heartbeat.StartedSessions.Should().ContainSingle();
+        harness.Engine.ApplyCount.Should().Be(1);
+        harness.Settings.UpdateCount.Should().Be(1);
+    }
+
+    [Fact]
+    public async Task Repeated_enable_disable_cycles_start_and_stop_the_heartbeat()
+    {
+        var harness = new ProtectionHarness();
+        harness.Session.Authenticate();
+
+        await harness.Service.EnableAsync();
+        await harness.Service.DisableAsync();
+        await harness.Service.EnableAsync();
+        await harness.Service.DisableAsync();
+
+        harness.Sessions.Sessions.Should().HaveCount(2)
+            .And.OnlyContain(session => session.Status == StudySessionStatus.Completed);
+        harness.Heartbeat.StartedSessions.Should().HaveCount(2);
+        harness.Heartbeat.StopCount.Should().Be(2);
+        harness.Heartbeat.IsRunning.Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task Heartbeat_start_failure_rolls_back_the_session_and_engine()
+    {
+        var harness = new ProtectionHarness();
+        harness.Session.Authenticate();
+        harness.Heartbeat.ThrowOnStart = true;
+
+        var act = () => harness.Service.EnableAsync();
+
+        await act.Should().ThrowAsync<InvalidOperationException>();
+        harness.SettingsRow.ProtectionEnabled.Should().BeFalse();
+        harness.Engine.RemoveCount.Should().Be(1);
+        harness.Heartbeat.StopCount.Should().Be(1);
+        harness.Sessions.Active.Should().BeNull();
+        harness.Sessions.Sessions.Should().ContainSingle()
+            .Which.Status.Should().Be(StudySessionStatus.Aborted);
+    }
+
+    private static async Task WaitUntilAsync(Func<bool> condition)
+    {
+        var deadline = DateTime.UtcNow.AddSeconds(5);
+
+        while (DateTime.UtcNow < deadline)
+        {
+            if (condition())
+                return;
+
+            await Task.Delay(10);
+        }
+
+        throw new TimeoutException("Condition was not met in time.");
+    }
 }

@@ -1,8 +1,10 @@
+using EduFocus.Domain.Attention;
 using EduFocus.Domain.Entities;
 using EduFocus.Domain.Enums;
 using EduFocus.SqliteDataAccess.Repositories;
 using EduFocus.SqliteDataAccess.Tests.TestSupport;
 using FluentAssertions;
+using Microsoft.EntityFrameworkCore;
 
 namespace EduFocus.SqliteDataAccess.Tests;
 
@@ -67,6 +69,185 @@ public sealed class StudySessionRepositoryTests
         active!.Id.Should().Be(recovered.Id);
         active.Trigger.Should().Be(SessionTrigger.Recovery);
         active.MonitoringEnabled.Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task RecordHeartbeat_updates_active_seconds_and_the_last_heartbeat()
+    {
+        await using var db = new TempDatabase();
+        await db.CreateInitializer().InitializeAsync();
+
+        var repository = new SqliteStudySessionRepository(db.Options);
+        var session = StudySession.Start(Now, new DateOnly(2026, 10, 29), SessionTrigger.Manual, true);
+        await repository.AddAsync(session);
+
+        var written = await repository.RecordHeartbeatAsync(
+            session.Id,
+            Now.AddSeconds(10),
+            activeSeconds: 10);
+
+        written.Should().BeTrue();
+
+        var reloaded = await ReadSessionAsync(db, session.Id.Value);
+        reloaded.LastHeartbeatAtUtc.Should().Be(Now.AddSeconds(10));
+        reloaded.ActiveSeconds.Should().Be(10);
+        reloaded.UpdatedAtUtc.Should().Be(Now.AddSeconds(10));
+    }
+
+    [Fact]
+    public async Task RecordHeartbeat_rejects_a_timestamp_behind_the_stored_heartbeat()
+    {
+        await using var db = new TempDatabase();
+        await db.CreateInitializer().InitializeAsync();
+
+        var repository = new SqliteStudySessionRepository(db.Options);
+        var session = StudySession.Start(Now, new DateOnly(2026, 10, 29), SessionTrigger.Manual, true);
+        await repository.AddAsync(session);
+        await repository.RecordHeartbeatAsync(session.Id, Now.AddSeconds(10), activeSeconds: 10);
+
+        var written = await repository.RecordHeartbeatAsync(
+            session.Id,
+            Now.AddSeconds(5),
+            activeSeconds: 10);
+
+        written.Should().BeFalse();
+
+        var reloaded = await ReadSessionAsync(db, session.Id.Value);
+        reloaded.LastHeartbeatAtUtc.Should().Be(Now.AddSeconds(10));
+        reloaded.ActiveSeconds.Should().Be(10);
+    }
+
+    [Fact]
+    public async Task RecordHeartbeat_does_not_resurrect_a_completed_session()
+    {
+        await using var db = new TempDatabase();
+        await db.CreateInitializer().InitializeAsync();
+
+        var repository = new SqliteStudySessionRepository(db.Options);
+        var session = StudySession.Start(Now, new DateOnly(2026, 10, 29), SessionTrigger.Manual, true);
+        await repository.AddAsync(session);
+
+        session.Complete(Now.AddMinutes(30));
+        await repository.UpdateAsync(session);
+
+        var written = await repository.RecordHeartbeatAsync(
+            session.Id,
+            Now.AddMinutes(31),
+            activeSeconds: 10);
+
+        written.Should().BeFalse();
+
+        var reloaded = await ReadSessionAsync(db, session.Id.Value);
+        reloaded.Status.Should().Be(StudySessionStatus.Completed);
+        reloaded.EndedAtUtc.Should().Be(Now.AddMinutes(30));
+        reloaded.LastHeartbeatAtUtc.Should().Be(Now.AddMinutes(30));
+        reloaded.ActiveSeconds.Should().Be(0);
+    }
+
+    [Fact]
+    public async Task IncrementBlockedAttemptCount_only_updates_an_active_session()
+    {
+        await using var db = new TempDatabase();
+        await db.CreateInitializer().InitializeAsync();
+
+        var repository = new SqliteStudySessionRepository(db.Options);
+        var session = StudySession.Start(Now, new DateOnly(2026, 10, 29), SessionTrigger.Manual, true);
+        await repository.AddAsync(session);
+
+        var incremented = await repository.IncrementBlockedAttemptCountAsync(
+            session.Id,
+            Now.AddSeconds(5),
+            count: 2);
+
+        incremented.Should().BeTrue();
+
+        var active = await ReadSessionAsync(db, session.Id.Value);
+        active.BlockedAttemptCount.Should().Be(2);
+        active.LastHeartbeatAtUtc.Should().Be(Now);
+
+        active.Complete(Now.AddMinutes(30));
+        await repository.UpdateAsync(active);
+
+        var afterCompletion = await repository.IncrementBlockedAttemptCountAsync(
+            session.Id,
+            Now.AddMinutes(31));
+
+        afterCompletion.Should().BeFalse();
+        (await ReadSessionAsync(db, session.Id.Value)).BlockedAttemptCount.Should().Be(2);
+    }
+
+    [Fact]
+    public async Task A_second_active_session_is_rejected_by_the_unique_index()
+    {
+        await using var db = new TempDatabase();
+        await db.CreateInitializer().InitializeAsync();
+
+        var repository = new SqliteStudySessionRepository(db.Options);
+        var first = StudySession.Start(Now, new DateOnly(2026, 10, 29), SessionTrigger.Manual, true);
+        await repository.AddAsync(first);
+
+        var second = StudySession.Start(
+            Now.AddSeconds(1),
+            new DateOnly(2026, 10, 29),
+            SessionTrigger.Schedule,
+            true);
+
+        var act = () => repository.AddAsync(second);
+
+        await act.Should().ThrowAsync<DbUpdateException>();
+        (await repository.GetActiveAsync())!.Id.Should().Be(first.Id);
+
+        await using var context = db.CreateContext();
+        (await context.StudySessions.CountAsync(x => x.Status == StudySessionStatus.Active))
+            .Should().Be(1);
+    }
+
+    [Fact]
+    public async Task Deleting_detail_samples_and_events_keeps_the_session_summary()
+    {
+        await using var db = new TempDatabase();
+        await db.CreateInitializer().InitializeAsync();
+
+        var repository = new SqliteStudySessionRepository(db.Options);
+        var session = StudySession.Start(Now, new DateOnly(2026, 10, 29), SessionTrigger.Manual, true);
+        await repository.AddAsync(session);
+
+        await using (var context = db.CreateContext())
+        {
+            context.ActivitySamples.Add(ActivitySample.Capture(
+                session.Id,
+                Now.AddSeconds(1),
+                durationSeconds: 10,
+                ActivityCategory.Study,
+                isForeground: true,
+                isOnlineClass: false));
+            context.AttentionEvents.Add(AttentionEvent.Open(
+                session.Id,
+                AttentionState.Focused,
+                Now.AddSeconds(1)));
+            await context.SaveChangesAsync();
+        }
+
+        session.Complete(Now.AddMinutes(30));
+        await repository.UpdateAsync(session);
+
+        await using (var context = db.CreateContext())
+        {
+            (await context.ActivitySamples.ExecuteDeleteAsync()).Should().Be(1);
+            (await context.AttentionEvents.ExecuteDeleteAsync()).Should().Be(1);
+        }
+
+        await using (var context = db.CreateContext())
+        {
+            (await context.ActivitySamples.CountAsync()).Should().Be(0);
+            (await context.AttentionEvents.CountAsync()).Should().Be(0);
+        }
+
+        var summary = await ReadSessionAsync(db, session.Id.Value);
+        summary.Status.Should().Be(StudySessionStatus.Completed);
+        summary.StartedAtUtc.Should().Be(Now);
+        summary.EndedAtUtc.Should().Be(Now.AddMinutes(30));
+        summary.MonitoringEnabled.Should().BeTrue();
     }
 
     private static async Task<StudySession> ReadSessionAsync(TempDatabase db, Guid id)

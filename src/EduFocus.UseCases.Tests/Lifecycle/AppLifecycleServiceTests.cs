@@ -243,4 +243,37 @@ public sealed class AppLifecycleServiceTests
         harness.SettingsRow.ProtectionEnabled.Should().BeTrue();
         harness.SettingsRow.LastCleanShutdownAtUtc.Should().BeNull();
     }
+
+    [Fact]
+    public async Task System_shutdown_stops_the_heartbeat_before_interrupting_the_session()
+    {
+        var harness = await LifecycleHarness.WithPinAsync();
+        await harness.EnableProtectionAsync();
+        harness.Clock.Advance(TimeSpan.FromMinutes(10));
+
+        await harness.Lifecycle.NotifySystemShutdownAsync();
+
+        harness.Heartbeat.StopCount.Should().Be(1);
+        harness.Heartbeat.IsRunning.Should().BeFalse();
+
+        var session = harness.Sessions.Sessions.Should().ContainSingle().Subject;
+        session.Status.Should().Be(StudySessionStatus.Interrupted);
+        session.EndedAtUtc.Should().Be(LifecycleHarness.Start.UtcDateTime);
+    }
+
+    [Fact]
+    public async Task Clean_exit_stops_the_heartbeat_via_protection_disable()
+    {
+        var harness = await LifecycleHarness.WithPinAsync();
+        await harness.EnableProtectionAsync();
+        harness.Clock.Advance(TimeSpan.FromMinutes(30));
+
+        var result = await harness.Lifecycle.ExitWithPinAsync(LifecycleHarness.Pin);
+
+        result.CanExit.Should().BeTrue();
+        harness.Heartbeat.StopCount.Should().Be(1);
+        harness.Heartbeat.IsRunning.Should().BeFalse();
+        harness.Sessions.Sessions.Should().ContainSingle()
+            .Which.Status.Should().Be(StudySessionStatus.Completed);
+    }
 }

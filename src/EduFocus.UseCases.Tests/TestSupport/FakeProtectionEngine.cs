@@ -19,16 +19,21 @@ internal sealed class FakeProtectionEngine : IProtectionEnginePort
 
     public bool ThrowOnReconcile { get; set; }
 
+    public TaskCompletionSource? ApplyGate { get; set; }
+
     public IReadOnlyList<string> Warnings { get; set; } = [];
 
-    public Task<IReadOnlyList<string>> ApplyAsync(CancellationToken cancellationToken = default)
+    public async Task<IReadOnlyList<string>> ApplyAsync(CancellationToken cancellationToken = default)
     {
         ApplyCount++;
+
+        if (ApplyGate is { } gate)
+            await gate.Task;
 
         if (ThrowOnApply)
             throw new ProtectionEngineException("apply", "Blocking adapter failed.");
 
-        return Task.FromResult(Warnings);
+        return Warnings;
     }
 
     public Task<IReadOnlyList<string>> RemoveAsync(CancellationToken cancellationToken = default)

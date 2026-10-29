@@ -297,7 +297,7 @@ public sealed class ProtectionEngineTests
         attempt.SessionId.Should().Be(_sessions.Active!.Id);
 
         await WaitAsync(() => _sessions.Active!.BlockedAttemptCount == 1);
-        _sessions.UpdateCalls.Should().Be(1);
+        _sessions.IncrementCalls.Should().Be(1);
 
         _page.Raise("chatgpt.com");
         await Task.Delay(100);
@@ -374,7 +374,7 @@ public sealed class ProtectionEngineTests
 
         var attempt = (await _attempts.WaitForCountAsync(1))[0];
         attempt.SessionId.Should().BeNull();
-        _sessions.UpdateCalls.Should().Be(0);
+        _sessions.IncrementCalls.Should().Be(0);
     }
 
     [Fact]
@@ -730,6 +730,8 @@ public sealed class ProtectionEngineTests
 
         public int UpdateCalls { get; private set; }
 
+        public int IncrementCalls { get; private set; }
+
         public Task<StudySession?> GetActiveAsync(CancellationToken cancellationToken = default) =>
             Task.FromResult(Active);
 
@@ -747,6 +749,50 @@ public sealed class ProtectionEngineTests
                 UpdateCalls++;
 
             return Task.CompletedTask;
+        }
+
+        public Task<bool> RecordHeartbeatAsync(
+            StudySessionId sessionId,
+            DateTime heartbeatAtUtc,
+            int activeSeconds,
+            CancellationToken cancellationToken = default)
+        {
+            lock (_lock)
+            {
+                var session = Active;
+
+                if (session is null || session.Id != sessionId || !session.IsActive)
+                    return Task.FromResult(false);
+
+                var beat = heartbeatAtUtc < session.UpdatedAtUtc
+                    ? session.UpdatedAtUtc
+                    : heartbeatAtUtc;
+
+                session.Heartbeat(beat);
+                session.AddActiveSeconds(activeSeconds, beat);
+                return Task.FromResult(true);
+            }
+        }
+
+        public Task<bool> IncrementBlockedAttemptCountAsync(
+            StudySessionId sessionId,
+            DateTime nowUtc,
+            int count = 1,
+            CancellationToken cancellationToken = default)
+        {
+            lock (_lock)
+            {
+                IncrementCalls++;
+
+                var session = Active;
+
+                if (session is null || session.Id != sessionId || !session.IsActive)
+                    return Task.FromResult(false);
+
+                var stamp = nowUtc < session.UpdatedAtUtc ? session.UpdatedAtUtc : nowUtc;
+                session.IncrementBlockedAttempts(stamp, count);
+                return Task.FromResult(true);
+            }
         }
     }
 

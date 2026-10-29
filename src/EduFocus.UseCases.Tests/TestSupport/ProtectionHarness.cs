@@ -26,6 +26,8 @@ internal sealed class ProtectionHarness
 
     public FakeProtectionEngine Engine { get; } = new();
 
+    public FakeStudySessionHeartbeatUseCase Heartbeat { get; } = new();
+
     public RecordingAuditLogRepository Audits { get; } = new();
 
     public RecordingLogger Logger { get; } = new();
@@ -41,5 +43,15 @@ internal sealed class ProtectionHarness
     public AppSettings SettingsRow => Settings.Stored!;
 
     public ProtectionService CreateService() =>
-        new(Settings, Sessions, ScheduleWindows, Engine, Session, Audits, Correlation, Logger, Clock);
+        new(
+            Settings,
+            Sessions,
+            ScheduleWindows,
+            Engine,
+            Heartbeat,
+            Session,
+            Audits,
+            Correlation,
+            Logger,
+            Clock);
 }

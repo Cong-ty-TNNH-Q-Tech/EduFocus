@@ -479,8 +479,15 @@ public sealed class ProtectionEngine : IProtectionEnginePort, IAsyncDisposable
 
         try
         {
-            session.IncrementBlockedAttempts(_timeProvider.GetUtcNow().UtcDateTime);
-            await _sessions.UpdateAsync(session, CancellationToken.None).ConfigureAwait(false);
+            // Targeted update: a full-entity write here could overwrite a
+            // heartbeat that landed while the active session was being read.
+            await _sessions
+                .IncrementBlockedAttemptCountAsync(
+                    session.Id,
+                    _timeProvider.GetUtcNow().UtcDateTime,
+                    count: 1,
+                    CancellationToken.None)
+                .ConfigureAwait(false);
         }
         catch (Exception ex)
         {

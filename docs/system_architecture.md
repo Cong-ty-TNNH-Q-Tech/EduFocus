@@ -105,6 +105,7 @@ IParentModeUseCase
 IProtectionUseCase
 IAppLifecycleUseCase
 IStudySessionUseCase
+IStudySessionHeartbeatUseCase
 IActivityUseCase
 IAttentionUseCase
 IBlockRuleUseCase
@@ -188,6 +189,16 @@ theo trạng thái đã lưu. Windows shutdown/logoff chỉ đóng phiên đang 
 `ProtectionEnabled` và `LastCleanShutdownAtUtc`; mọi lỗi DB được log và nuốt để không chặn hệ điều hành.
 `ParentSessionState` luôn bị khóa sau khi luồng thoát kết thúc, kể cả khi PIN sai.
 
+**Hiện trạng issue #25:** `IStudySessionHeartbeatUseCase`/`StudySessionHeartbeatService` chạy beat 10 giây
+bằng `PeriodicTimer`, cộng `ActiveSeconds` theo monotonic clock (tối đa 60 giây/beat), clamp wall clock
+lùi và dừng trước khi session kết thúc. `ProtectionService` serialize enable/disable/reconcile bằng
+semaphore, khởi động heartbeat trước khi lưu `ProtectionEnabled = true`, dừng heartbeat trước khi
+`Complete`/`Interrupt` và rollback khi bật thất bại. Reconcile đóng session cũ tại `LastHeartbeatAtUtc`
+rồi tạo phiên `Recovery` tại thời điểm hiện tại, nên thời gian app tắt không bị cộng. Thoát sạch và
+Windows shutdown đều dừng heartbeat trước khi kết thúc phiên; `App.OnExit` dispose `ServiceProvider`
+bất đồng bộ để ghi beat cuối và nhả timer. Repository ghi heartbeat/increment bằng targeted update có
+điều kiện nên heartbeat không hồi sinh session đã kết thúc hoặc đè lên bộ đếm blocked attempt.
+
 ### 3.4. Infrastructure (`EduFocus.Infrastructure`)
 
 Triển khai outbound ports, tương tác Windows.
@@ -217,7 +228,7 @@ Triển khai outbound ports, tương tác Windows.
 - `DataDirectorySecurity`: ACL Administrators/SYSTEM, kế thừa cho file DB và backup.
 - `SqliteParentCredentialRepository`: đọc/ghi singleton `ParentCredentials` (hash + lockout state), không lưu plaintext.
 - `SqliteAppSettingsRepository`: đọc/ghi singleton `AppSettings`, gồm consent onboarding và tuỳ chọn an toàn.
-- `SqliteStudySessionRepository`: đọc phiên `Active` hiện tại, thêm/cập nhật phiên; unique partial index đảm bảo tối đa một phiên active.
+- `SqliteStudySessionRepository`: đọc phiên `Active` hiện tại, thêm/cập nhật phiên; unique partial index đảm bảo tối đa một phiên active. Heartbeat và `BlockedAttemptCount` được ghi bằng `ExecuteUpdateAsync` có điều kiện (chỉ session `Active`, không lùi timestamp).
 - `SqliteScheduleWindowRepository`: CRUD `ScheduleWindows`, list theo `StartMinutes`/`EndMinutes`/`DaysMask` cho scheduler và UI.
 - `SqliteAuditLogRepository`: ghi audit event kèm `CorrelationId`, tách khỏi file log kỹ thuật.
 - `SqlitePragmaInterceptor`: `PRAGMA foreign_keys = ON` mỗi kết nối; WAL và `auto_vacuum` do initializer thiết lập.
@@ -307,9 +318,13 @@ Parent bấm ON
 
 > **Hiện trạng Phase 2 (issue #16):** `EnableAsync` đã thực hiện đúng thứ tự engine → session → lưu
 > `ProtectionEnabled`, rollback engine/phiên khi ghi DB lỗi và bỏ qua việc tạo phiên thứ hai. Rule
-> validation, ActivityTracker và attention thuộc các issue #19/#25/#28 trở đi. Engine thật
+> validation, ActivityTracker và attention thuộc các issue #26/#28 trở đi. Engine thật
 > `ProtectionEngine` đã được nối ở issue #24 — apply/remove/reconcile điều phối block page, hosts và
 > watcher; cảnh báo của adapter được trả về UI thay vì tuyên bố đã chặn mọi thứ.
+>
+> **Heartbeat (issue #25):** `ProtectionService` giữ thứ tự engine → session → heartbeat → lưu
+> `ProtectionEnabled`; heartbeat dừng trước khi session kết thúc và được khởi động lại nếu disable lỗi.
+> Enable/disable/reconcile serialize bằng semaphore nên không tạo hai session hoặc hai heartbeat.
 
 ### 4.2. Học sinh truy cập chatbot
 
@@ -368,6 +383,7 @@ Tray → "Thoát EduFocus..."
   → IAppLifecycleUseCase.ExitWithPinAsync(pin)
        → IParentModeUseCase.LoginAsync(pin)  (PIN luôn bắt buộc)
        → ProtectionService.DisableForExitAsync()  (không tạo override)
+            → heartbeat.StopAsync()  (flush beat cuối)
             → ProtectionEngine.RemoveAsync()
             → session Completed (nếu có)
             → ProtectionEnabled = false, ScheduleOverrideUntilUtc = null
@@ -380,6 +396,7 @@ Tray → "Thoát EduFocus..."
 Windows shutdown / logoff
   → Application.OnSessionEnding (không bao giờ e.Cancel)
   → best-effort NotifySystemShutdownAsync() trong tối đa 2 giây
+       → heartbeat.StopAsync()
        → session Note = "SystemShutdown" + Interrupted
        → audit SessionInterrupted, SystemShutdown
        → giữ ProtectionEnabled, không đặt LastCleanShutdownAtUtc
@@ -594,7 +611,9 @@ Không lưu query string/fragment trong `ActivitySamples`; chỉ lưu domain và
 ### 7.4. Sampling
 
 - Mỗi 10–30 giây.
-- Heartbeat session mỗi 10 giây, độc lập với sample.
+- Heartbeat session mỗi 10 giây, độc lập với sample: `StudySessionHeartbeatService` dùng `PeriodicTimer`,
+  cộng `ActiveSeconds` theo monotonic clock (tối đa 60 giây/beat), clamp wall clock lùi; lỗi DB được log và
+  thử lại ở beat sau; heartbeat dừng trước khi session kết thúc.
 - Không ghi khi idle > 5 phút (chỉ ghi một sample idle); `IdleSeconds` lưu riêng.
 - Debounce chuyển foreground 2 giây.
 - Sample cũ bị retention job xóa; báo cáo dài hạn đọc session summary.
@@ -711,7 +730,7 @@ ON  ──Schedule end───────────> OFF (Completed)
 ON  ──Parent override────────> OFF (until current window end)
 ```
 
-Trạng thái lưu trong `AppSettings.ProtectionEnabled`; session active lưu trong `StudySessions`. Khi phục hồi trong thời gian bảo vệ, tạo session mới với `Trigger = Recovery`, không cộng thời gian app tắt.
+Trạng thái lưu trong `AppSettings.ProtectionEnabled`; session active lưu trong `StudySessions`. Khi phục hồi trong thời gian bảo vệ, tạo session mới với `Trigger = Recovery`, không cộng thời gian app tắt. Heartbeat 10 giây xác định điểm kết thúc khi crash; beat cuối được flush trước khi session `Complete`/`Interrupt`.
 
 ### 9.4. First-run onboarding & consent
 
@@ -771,7 +790,7 @@ Trạng thái lưu trong `AppSettings.ProtectionEnabled`; session active lưu tr
 - Mỗi dòng có dạng:
   `2026-10-29T14:08:16.123Z [INFO ] [Database] [cid=6f1c...] message`
   → timestamp **UTC**, level, category, correlation id.
-- Level: `INFO`, `WARN`, `ERROR`. Category chuẩn: `App`, `Database`, `Security`, `UI`;
+- Level: `INFO`, `WARN`, `ERROR`. Category chuẩn: `App`, `Database`, `Security`, `Protection`, `Session`, `UI`;
   module mới thêm hằng số trong `LogCategories`.
 - Vị trí: `%LOCALAPPDATA%\EduFocus\logs\edufocus-YYYYMMDD.log` (theo user, không cần admin).
 - Xoay vòng theo ngày và dung lượng: tối đa **10 MB/file** (`edufocus-YYYYMMDD-001.log`, ...),
@@ -846,6 +865,12 @@ AddViews()
 > root đăng ký thêm `IBlockedAttemptRepository`/`SqliteBlockedAttemptRepository`. `ProtectionEngine`
 > resolve `IHostsFileBlocker`, `IBlockPageServer`, `IProcessWatcher`, repository rule/session/attempt,
 > monotonic clock, `TimeProvider` và logger qua DI.
+
+> **Bổ sung sau issue #25:** composition root đăng ký `StudySessionHeartbeatOptions` và singleton
+> `IStudySessionHeartbeatUseCase`/`StudySessionHeartbeatService`. `ProtectionService` và
+> `AppLifecycleService` nhận heartbeat qua DI; `App.OnExit` dispose `ServiceProvider` bằng `DisposeAsync`
+> để service ghi beat cuối và dừng timer. `ProtectionEngine` dùng targeted increment cho
+> `BlockedAttemptCount` thay vì cập nhật toàn bộ entity session.
 
 ---
 

@@ -34,6 +34,7 @@ public sealed class AppLifecycleService : IAppLifecycleUseCase
     private readonly IParentModeUseCase _parentMode;
     private readonly IProtectionUseCase _protection;
     private readonly IStudySessionRepository _sessions;
+    private readonly IStudySessionHeartbeatUseCase _heartbeat;
     private readonly IAppSettingsRepository _settings;
     private readonly IAuditLogRepository _auditLogs;
     private readonly ICorrelationContext _correlation;
@@ -44,6 +45,7 @@ public sealed class AppLifecycleService : IAppLifecycleUseCase
         IParentModeUseCase parentMode,
         IProtectionUseCase protection,
         IStudySessionRepository sessions,
+        IStudySessionHeartbeatUseCase heartbeat,
         IAppSettingsRepository settings,
         IAuditLogRepository auditLogs,
         ICorrelationContext correlation,
@@ -53,6 +55,7 @@ public sealed class AppLifecycleService : IAppLifecycleUseCase
         _parentMode = parentMode ?? throw new ArgumentNullException(nameof(parentMode));
         _protection = protection ?? throw new ArgumentNullException(nameof(protection));
         _sessions = sessions ?? throw new ArgumentNullException(nameof(sessions));
+        _heartbeat = heartbeat ?? throw new ArgumentNullException(nameof(heartbeat));
         _settings = settings ?? throw new ArgumentNullException(nameof(settings));
         _auditLogs = auditLogs ?? throw new ArgumentNullException(nameof(auditLogs));
         _correlation = correlation ?? throw new ArgumentNullException(nameof(correlation));
@@ -106,6 +109,10 @@ public sealed class AppLifecycleService : IAppLifecycleUseCase
     public async Task NotifySystemShutdownAsync(CancellationToken cancellationToken = default)
     {
         var now = UtcNow();
+
+        // Stop the cadence first and reload the row so the shutdown interrupt
+        // closes at the flushed heartbeat instead of a stale snapshot.
+        await TryStopHeartbeatAsync();
 
         try
         {
@@ -215,6 +222,21 @@ public sealed class AppLifecycleService : IAppLifecycleUseCase
             login.LockoutUntilUtc,
             warnings,
             Error: null);
+    }
+
+    private async Task TryStopHeartbeatAsync()
+    {
+        try
+        {
+            await _heartbeat.StopAsync(CancellationToken.None);
+        }
+        catch (Exception ex)
+        {
+            _logger.Error(
+                LogCategories.Session,
+                "Could not stop the study-session heartbeat during Windows shutdown.",
+                ex);
+        }
     }
 
     private async Task TryWriteAuditAsync(

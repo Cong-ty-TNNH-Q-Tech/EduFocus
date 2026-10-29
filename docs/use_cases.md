@@ -433,6 +433,13 @@
 
 **Business rules:** BR-11, BR-12, BR-17.
 
+> **Triển khai (issue #25):** `StudySessionHeartbeatService` chạy beat mỗi 10 giây bằng `PeriodicTimer`,
+> độc lập với activity sample. `ActiveSeconds` cộng theo monotonic clock và chặn tối đa 60 giây mỗi beat;
+> wall clock lùi được clamp về `LastHeartbeatAtUtc`, nên sleep/tắt máy hoặc đổi giờ không làm sai thời gian.
+> Repository ghi heartbeat bằng `UPDATE` có điều kiện (chỉ session `Active`, không lùi timestamp); lỗi DB
+> được log và thử lại ở beat sau. Heartbeat dừng trước khi session `Complete`/`Interrupt` và tự dừng khi
+> session không còn `Active`.
+
 ---
 
 ### UC08 — Ước lượng mức độ tập trung
@@ -838,6 +845,11 @@
 - Không còn block mồ côi.
 
 **Business rules:** BR-17, BR-20.
+
+> **Triển khai (issue #25):** `ReconcileAsync` dừng heartbeat, đóng session cũ tại `LastHeartbeatAtUtc`
+> (`Interrupted`) rồi tạo phiên `Recovery` từ thời điểm hiện tại và khởi động lại heartbeat. Mọi thao tác
+> enable/disable/reconcile được serialize bằng semaphore để hai luồng không tạo hai session hoặc hai
+> heartbeat; unique partial index vẫn là chốt cuối ở tầng DB.
 
 ---
 

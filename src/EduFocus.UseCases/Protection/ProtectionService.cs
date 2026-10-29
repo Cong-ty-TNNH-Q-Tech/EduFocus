@@ -31,17 +31,20 @@ public sealed class ProtectionService : IProtectionUseCase
     private readonly IStudySessionRepository _sessions;
     private readonly IScheduleWindowRepository _scheduleWindows;
     private readonly IProtectionEnginePort _engine;
+    private readonly IStudySessionHeartbeatUseCase _heartbeat;
     private readonly IParentAuthorizer _authorizer;
     private readonly IAuditLogRepository _auditLogs;
     private readonly ICorrelationContext _correlation;
     private readonly IAppLogger _logger;
     private readonly TimeProvider _timeProvider;
+    private readonly SemaphoreSlim _stateGate = new(1, 1);
 
     public ProtectionService(
         IAppSettingsRepository settings,
         IStudySessionRepository sessions,
         IScheduleWindowRepository scheduleWindows,
         IProtectionEnginePort engine,
+        IStudySessionHeartbeatUseCase heartbeat,
         IParentAuthorizer authorizer,
         IAuditLogRepository auditLogs,
         ICorrelationContext correlation,
@@ -52,6 +55,7 @@ public sealed class ProtectionService : IProtectionUseCase
         _sessions = sessions ?? throw new ArgumentNullException(nameof(sessions));
         _scheduleWindows = scheduleWindows ?? throw new ArgumentNullException(nameof(scheduleWindows));
         _engine = engine ?? throw new ArgumentNullException(nameof(engine));
+        _heartbeat = heartbeat ?? throw new ArgumentNullException(nameof(heartbeat));
         _authorizer = authorizer ?? throw new ArgumentNullException(nameof(authorizer));
         _auditLogs = auditLogs ?? throw new ArgumentNullException(nameof(auditLogs));
         _correlation = correlation ?? throw new ArgumentNullException(nameof(correlation));
@@ -74,20 +78,24 @@ public sealed class ProtectionService : IProtectionUseCase
     {
         _authorizer.EnsureAuthorized("enable protection");
 
-        return await EnableCoreAsync(
-            ProtectionSource.Manual,
-            AuditActor.Parent,
-            "Parent enabled protection.",
-            allowTakingOwnership: true,
+        return await RunSerializedAsync(
+            () => EnableCoreAsync(
+                ProtectionSource.Manual,
+                AuditActor.Parent,
+                "Parent enabled protection.",
+                allowTakingOwnership: true,
+                cancellationToken),
             cancellationToken);
     }
 
     public Task<ProtectionOperationResult> EnableForScheduleAsync(CancellationToken cancellationToken = default) =>
-        EnableCoreAsync(
-            ProtectionSource.Schedule,
-            AuditActor.System,
-            "Protection enabled by the schedule.",
-            allowTakingOwnership: false,
+        RunSerializedAsync(
+            () => EnableCoreAsync(
+                ProtectionSource.Schedule,
+                AuditActor.System,
+                "Protection enabled by the schedule.",
+                allowTakingOwnership: false,
+                cancellationToken),
             cancellationToken);
 
     private async Task<ProtectionOperationResult> EnableCoreAsync(
@@ -114,6 +122,7 @@ public sealed class ProtectionService : IProtectionUseCase
             return new ProtectionOperationResult(CreateStatus(settings, active), Changed: false, []);
 
         var warnings = wasEnabled ? [] : await ApplyEngineAsync(cancellationToken);
+        now = UtcNow();
         var createdSession = false;
 
         try
@@ -130,6 +139,11 @@ public sealed class ProtectionService : IProtectionUseCase
                 createdSession = true;
             }
 
+            // The heartbeat starts before the persisted flag flips so an
+            // enabled state is never left without a cadence.
+            if (createdSession || !wasEnabled)
+                await _heartbeat.StartAsync(active.Id, active.LastHeartbeatAtUtc, cancellationToken);
+
             settings.EnableProtection(now, source);
             await _settings.UpdateAsync(settings, cancellationToken);
             await WriteAuditAsync(
@@ -141,6 +155,8 @@ public sealed class ProtectionService : IProtectionUseCase
         }
         catch
         {
+            await TryStopHeartbeatAsync();
+
             if (createdSession)
                 await TryAbortSessionAsync(active!);
 
@@ -160,12 +176,14 @@ public sealed class ProtectionService : IProtectionUseCase
     {
         _authorizer.EnsureAuthorized("disable protection");
 
-        return await DisableCoreAsync(
-            AuditActor.Parent,
-            "Parent disabled protection.",
-            createScheduleOverride: true,
-            scheduleOwnedOnly: false,
-            clearScheduleOverride: false,
+        return await RunSerializedAsync(
+            () => DisableCoreAsync(
+                AuditActor.Parent,
+                "Parent disabled protection.",
+                createScheduleOverride: true,
+                scheduleOwnedOnly: false,
+                clearScheduleOverride: false,
+                cancellationToken),
             cancellationToken);
     }
 
@@ -173,22 +191,26 @@ public sealed class ProtectionService : IProtectionUseCase
     {
         _authorizer.EnsureAuthorized("exit EduFocus");
 
-        return await DisableCoreAsync(
-            AuditActor.Parent,
-            "Parent exited EduFocus and disabled protection.",
-            createScheduleOverride: false,
-            scheduleOwnedOnly: false,
-            clearScheduleOverride: true,
+        return await RunSerializedAsync(
+            () => DisableCoreAsync(
+                AuditActor.Parent,
+                "Parent exited EduFocus and disabled protection.",
+                createScheduleOverride: false,
+                scheduleOwnedOnly: false,
+                clearScheduleOverride: true,
+                cancellationToken),
             cancellationToken);
     }
 
     public Task<ProtectionOperationResult> DisableForScheduleAsync(CancellationToken cancellationToken = default) =>
-        DisableCoreAsync(
-            AuditActor.System,
-            "Protection disabled at the end of the scheduled window.",
-            createScheduleOverride: false,
-            scheduleOwnedOnly: true,
-            clearScheduleOverride: false,
+        RunSerializedAsync(
+            () => DisableCoreAsync(
+                AuditActor.System,
+                "Protection disabled at the end of the scheduled window.",
+                createScheduleOverride: false,
+                scheduleOwnedOnly: true,
+                clearScheduleOverride: false,
+                cancellationToken),
             cancellationToken);
 
     private async Task<ProtectionOperationResult> DisableCoreAsync(
@@ -229,15 +251,29 @@ public sealed class ProtectionService : IProtectionUseCase
             : null;
 
         var wasEnabled = settings.ProtectionEnabled;
-        var warnings = await RemoveEngineAsync(cancellationToken);
+        IReadOnlyList<string> warnings;
 
         try
         {
+            // Flush the last beat before the engine is torn down, then reload
+            // the row so completion cannot overwrite the final heartbeat.
+            await _heartbeat.StopAsync(CancellationToken.None);
+            active = await _sessions.GetActiveAsync(cancellationToken) ?? active;
+
+            warnings = await RemoveEngineAsync(cancellationToken);
+
+            var endedAt = UtcNow();
+
+            if (active is not null && endedAt < active.LastHeartbeatAtUtc)
+                endedAt = active.LastHeartbeatAtUtc;
+
             if (active is not null)
             {
-                active.Complete(now);
+                active.Complete(endedAt);
                 await _sessions.UpdateAsync(active, cancellationToken);
             }
+
+            now = endedAt;
 
             if (wasEnabled)
             {
@@ -265,6 +301,7 @@ public sealed class ProtectionService : IProtectionUseCase
             if (wasEnabled)
                 await TryReapplyEngineAsync();
 
+            await TryRestartHeartbeatAsync();
             throw;
         }
 
@@ -295,7 +332,10 @@ public sealed class ProtectionService : IProtectionUseCase
         return windowEndUtc > nowUtc ? windowEndUtc : null;
     }
 
-    public async Task<ProtectionOperationResult> ReconcileAsync(CancellationToken cancellationToken = default)
+    public Task<ProtectionOperationResult> ReconcileAsync(CancellationToken cancellationToken = default) =>
+        RunSerializedAsync(() => ReconcileCoreAsync(cancellationToken), cancellationToken);
+
+    private async Task<ProtectionOperationResult> ReconcileCoreAsync(CancellationToken cancellationToken)
     {
         var now = UtcNow();
         var settings = await _settings.GetAsync(cancellationToken);
@@ -305,6 +345,8 @@ public sealed class ProtectionService : IProtectionUseCase
                 new ProtectionStatus(false, null, MonitoringEnabled: true),
                 Changed: false,
                 []);
+
+        await TryStopHeartbeatAsync();
 
         var warnings = new List<string>();
         var active = await _sessions.GetActiveAsync(cancellationToken);
@@ -343,6 +385,8 @@ public sealed class ProtectionService : IProtectionUseCase
                 warnings.Add(EngineApplyWarning);
             }
 
+            now = UtcNow();
+
             var recovered = StudySession.Start(
                 now,
                 LocalDate(now),
@@ -350,6 +394,8 @@ public sealed class ProtectionService : IProtectionUseCase
                 settings.MonitoringEnabled);
 
             await _sessions.AddAsync(recovered, cancellationToken);
+            await _heartbeat.StartAsync(recovered.Id, recovered.LastHeartbeatAtUtc, cancellationToken);
+
             await WriteAuditAsync(
                 AuditActor.System,
                 AuditEventType.SessionRecovered,
@@ -449,6 +495,55 @@ public sealed class ProtectionService : IProtectionUseCase
         catch (Exception ex)
         {
             _logger.Error(LogCategories.Protection, "Protection rollback could not abort the new session.", ex);
+        }
+    }
+
+    private async Task TryStopHeartbeatAsync()
+    {
+        try
+        {
+            await _heartbeat.StopAsync(CancellationToken.None);
+        }
+        catch (Exception ex)
+        {
+            _logger.Error(LogCategories.Session, "Could not stop the study-session heartbeat.", ex);
+        }
+    }
+
+    private async Task TryRestartHeartbeatAsync()
+    {
+        try
+        {
+            if (_heartbeat.IsRunning)
+                return;
+
+            var active = await _sessions.GetActiveAsync(CancellationToken.None);
+
+            if (active is not null)
+                await _heartbeat.StartAsync(active.Id, active.LastHeartbeatAtUtc, CancellationToken.None);
+        }
+        catch (Exception ex)
+        {
+            _logger.Error(
+                LogCategories.Session,
+                "Could not restart the study-session heartbeat after a failed protection change.",
+                ex);
+        }
+    }
+
+    private async Task<ProtectionOperationResult> RunSerializedAsync(
+        Func<Task<ProtectionOperationResult>> operation,
+        CancellationToken cancellationToken)
+    {
+        await _stateGate.WaitAsync(cancellationToken);
+
+        try
+        {
+            return await operation();
+        }
+        finally
+        {
+            _stateGate.Release();
         }
     }
 

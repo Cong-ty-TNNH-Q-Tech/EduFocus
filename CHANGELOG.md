@@ -181,6 +181,14 @@ và dự án tuân theo [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 - **Giới hạn:** thay đổi rule khi Protection ON chưa tự áp dụng lại engine — cần tắt/bật bảo vệ hoặc khởi động lại; live reload thuộc issue sau (UC05).
 - **Tests:** 22 test `ProtectionEngineTests` với adapter/clock/logger giả — thứ tự apply/remove, lọc rule allow/expired/protected, warning cổng bận, idempotent, rollback hosts/page/watcher, reconcile + self-heal, ghi attempt domain/app kèm session count, debounce, bỏ qua observation khi OFF, lỗi ghi DB và dispose; 1 test `BlockedAttemptRepositoryTests` round-trip domain/app kèm `SessionId`; tổng **503 test pass**, build Release 0 warning.
 
+### Added (Phase 4 — Session heartbeat, issue #25)
+- **Heartbeat độc lập sampling:** `IStudySessionHeartbeatUseCase`/`StudySessionHeartbeatService` chạy `PeriodicTimer` 10 giây, tách khỏi activity sample; mỗi beat cộng `ActiveSeconds` theo **monotonic clock** và chặn tối đa 60 giây, nên sleep/tắt máy hoặc chỉnh đồng hồ không làm phồng thời gian; wall clock lùi được clamp về `LastHeartbeatAtUtc`.
+- **Ghi có điều kiện:** `IStudySessionRepository.RecordHeartbeatAsync` và `IncrementBlockedAttemptCountAsync` dùng `ExecuteUpdateAsync` chỉ trên session `Active`, không lùi `LastHeartbeatAtUtc`/`UpdatedAtUtc`; heartbeat không hồi sinh session đã kết thúc và không đè lên `BlockedAttemptCount`. `ProtectionEngine` chuyển sang targeted increment thay vì full-entity update.
+- **Vòng đời và concurrency:** `ProtectionService` serialize enable/disable/reconcile bằng semaphore; heartbeat khởi động trước khi lưu `ProtectionEnabled = true`, dừng trước khi kết thúc session và được khởi động lại nếu disable thất bại. Reconcile đóng session cũ tại `LastHeartbeatAtUtc` rồi tạo phiên `Recovery` từ thời điểm hiện tại, không cộng downtime.
+- **Thoát và shutdown:** thoát sạch dừng heartbeat trước khi `Complete`; Windows shutdown dừng heartbeat trước khi `Interrupt`; `App.OnExit` dispose `ServiceProvider` bất đồng bộ để service ghi beat cuối và nhả timer.
+- **DI:** đăng ký `StudySessionHeartbeatOptions` + singleton `IStudySessionHeartbeatUseCase`; thêm log category `Session`.
+- **Tests:** 9 test heartbeat (cadence monotonic, clamp đồng hồ, biên 60 giây, lỗi DB retry, start/stop lặp), 10 test `ProtectionService` (heartbeat, concurrency, rollback, recovery), 2 test lifecycle shutdown và 6 test SQLite (heartbeat có điều kiện, chống hồi sinh, increment active, unique active, retention giữ summary); tổng **529 test pass**, build Release 0 warning.
+
 ### Removed (khỏi phạm vi EduFocus)
 - Quản lý task, profile học tập, quote động lực và Gemini AI.
 - Cơ chế "friction" bắt gõ câu xác nhận bỏ cuộc.

@@ -12,6 +12,7 @@ using EduFocus.UseCases.Lifecycle;
 using EduFocus.UseCases.Onboarding;
 using EduFocus.UseCases.Protection;
 using EduFocus.UseCases.Schedule;
+using EduFocus.UseCases.Sessions;
 using EduFocus.WPF.Services;
 using EduFocus.WPF.ViewModels;
 using Microsoft.Extensions.DependencyInjection;
@@ -121,6 +122,8 @@ public partial class App : Application
         services.AddSingleton<IScheduleWindowRepository, SqliteScheduleWindowRepository>();
         services.AddSingleton<IBlockRuleRepository, SqliteBlockRuleRepository>();
         services.AddSingleton<IBlockedAttemptRepository, SqliteBlockedAttemptRepository>();
+        services.AddSingleton(new StudySessionHeartbeatOptions());
+        services.AddSingleton<IStudySessionHeartbeatUseCase, StudySessionHeartbeatService>();
         services.AddSingleton(BuiltInRuleCatalog.Default);
         services.AddSingleton<IBlockRuleSeedUseCase, BlockRuleSeedService>();
         services.AddSingleton<IBlockRuleUseCase, BlockRuleService>();
@@ -186,11 +189,27 @@ public partial class App : Application
             Services?.GetService<IAppLogger>()?.Info(LogCategories.App, "====== EduFocus exited ======");
         }
         catch { /* best effort */ }
+
+        try
+        {
+            // The engine and the heartbeat only implement IAsyncDisposable, so
+            // the synchronous ServiceProvider.Dispose() would throw.
+            if (Services is { } services)
+                services.DisposeAsync().AsTask().GetAwaiter().GetResult();
+        }
+        catch (Exception ex)
+        {
+            try
+            {
+                Services?.GetService<IAppLogger>()?.Error(LogCategories.App, "Service disposal failed on exit.", ex);
+            }
+            catch { }
+        }
         finally
         {
             _correlationScope?.Dispose();
         }
-        Services?.Dispose();
+
         _mutex?.ReleaseMutex();
         _mutex?.Dispose();
         base.OnExit(e);
