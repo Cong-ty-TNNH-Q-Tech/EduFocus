@@ -99,6 +99,7 @@ public partial class App : Application
         services.AddSingleton<IAuditLogRepository, SqliteAuditLogRepository>();
         services.AddSingleton<IStudySessionRepository, SqliteStudySessionRepository>();
         services.AddSingleton<IScheduleWindowRepository, SqliteScheduleWindowRepository>();
+        services.AddSingleton<IBlockRuleRepository, SqliteBlockRuleRepository>();
         services.AddSingleton<IParentAuthUseCase, ParentAuthUseCase>();
         services.AddSingleton<ParentSessionState>();
         services.AddSingleton<IParentAuthorizer>(provider => provider.GetRequiredService<ParentSessionState>());

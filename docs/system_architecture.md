@@ -463,6 +463,13 @@ Thứ tự:
 
 `BlockRules` cho phép tồn tại đồng thời Allow và Block cùng domain; unique key gồm `Effect`.
 
+> **Triển khai (issue #19):** `BlockRuleEvaluator` là hàm thuần cho domain/app; `BlockRuleSet` là
+> snapshot bất biến dựng từ `IBlockRuleRepository.ListAsync()`. Snapshot bỏ rule `IsEnabled = false`
+> và `NotEnforced` khi tạo, kiểm tra `ExpiresAtUtc` theo `nowUtc` mỗi lần gọi, trả `Allow` cho domain
+> trong `ProtectedDomains` và so khớp `Exact` bằng `Ordinal` — không substring, không suffix. Engine
+> giữ một snapshot và dựng lại sau mỗi thay đổi rule (issue #24), nên vòng lặp matching không truy vấn
+> DB.
+
 ### 6.2. Website blocking
 
 - Ghi block vào `%SystemRoot%\System32\drivers\etc\hosts` giữa marker riêng:

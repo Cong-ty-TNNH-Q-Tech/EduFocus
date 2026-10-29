@@ -57,6 +57,8 @@
 | Rule hiệu lực = enabled + enforced + chưa hết hạn | `IsEffective` |
 | Suffix khớp theo ranh giới domain; Contains khớp theo segment | `Matches` |
 | Allow thắng Block (BR-08) | `BlockRuleEvaluator` |
+| Snapshot matching không truy vấn DB | `BlockRuleSet.Create` bỏ rule disabled/`NotEnforced`; hết hạn kiểm tra mỗi lần đánh giá |
+| Domain thiết yếu luôn `Allow` | `BlockRuleSet.EvaluateDomain` → `ProtectedDomains` |
 
 `google.com` và `microsoft.com` chỉ được bảo vệ ở đúng host apex; các dịch vụ cụ thể như `gemini.google.com`, `copilot.microsoft.com` vẫn chặn được. Các domain dịch vụ (`meet.google.com`, `zoom.us`, …) được bảo vệ cả subdomain.
 
@@ -180,7 +182,7 @@ Các rule cần quyền phụ huynh (BR-05), watchdog (BR-28), block page (BR-26
 |---|---|
 | `AppSettingsTests` | Protection state, override, retention, UTC/monotonic |
 | `ParentCredentialTests`, `ParentPinPolicyTests` | Hash shape, lockout, PIN yếu |
-| `BlockRuleTests` | Chuẩn hóa, protected domains, matching, allow-wins, expiry |
+| `BlockRuleTests`, `BlockRuleSetTests` | Chuẩn hóa, protected domains, matching, allow-wins, expiry, snapshot |
 | `ScheduleWindowTests` | Biên giờ, overlap, validator |
 | `StudySessionTests` | Lifecycle, counters, percentage, interrupt |
 | `ActivitySampleTests` | URL/title privacy, source consistency |

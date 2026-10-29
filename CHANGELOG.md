@@ -135,6 +135,11 @@ và dự án tuân theo [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 - **UI:** đóng cửa sổ luôn ẩn xuống tray kèm balloon nhắc bảo vệ đang chạy; menu tray thêm "Thoát EduFocus..." mở `ExitWindow` — cảnh báo đỏ và checkbox xác nhận lần hai khi bảo vệ ON, hiển thị lockout/số lần thử còn lại, xóa ô PIN sau mỗi lần gửi, chặn đóng dialog khi đang xử lý. `AppExitState` chỉ cho phép thoát thật sau khi use case đồng ý; `App.OnSessionEnding` ghi nhận tối đa 2 giây và không bao giờ hủy shutdown.
 - **Tests:** 11 test `AppLifecycleService` (sai PIN/lockout, thoát sạch, thoát khi OFF, xóa override, lỗi gỡ engine, lỗi ghi marker, shutdown có/không session, phục hồi sau shutdown, lỗi DB khi shutdown) và 2 test `ProtectionService` cho `DisableForExitAsync`; tổng **392 test pass**, build Release 0 warning.
 
+### Added (Phase 3 — BlockRule matching, issue #19)
+- **Snapshot matching:** `BlockRuleSet` là snapshot bất biến dựng từ danh sách rule đã lưu — bỏ rule `IsEnabled = false` và `NotEnforced` khi tạo, kiểm tra hết hạn theo `nowUtc` mỗi lần đánh giá, coi domain thiết yếu (`ProtectedDomains`) là `Allow` và so khớp `Exact` bằng `Ordinal` (không substring/suffix: `chatgpt.com.evil.test` không khớp `chatgpt.com`). Engine giữ snapshot và dựng lại sau khi rule thay đổi, nên vòng lặp matching không truy vấn DB.
+- **Persistence:** `IBlockRuleRepository` + `SqliteBlockRuleRepository` (list/get/add/update/delete), đăng ký DI; unique key cho phép Allow và Block cùng domain tồn tại song song, rule URL/path được lưu với `EnforcementStatus = NotEnforced`.
+- **Tests:** 7 test `BlockRuleSet` (exact-only, allow-wins, disabled/not-enforced/expired, protected domains, process name, snapshot cũ không tự bật rule mới) và 5 test repository (round-trip chuẩn hóa/hiệu lực, allow+block cùng domain, update/delete, URL `NotEnforced`, xóa id không tồn tại); tổng **404 test pass**, build Release 0 warning.
+
 ### Removed (khỏi phạm vi EduFocus)
 - Quản lý task, profile học tập, quote động lực và Gemini AI.
 - Cơ chế "friction" bắt gõ câu xác nhận bỏ cuộc.

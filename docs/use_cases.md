@@ -316,6 +316,14 @@
 
 **Business rules:** BR-08, BR-09, BR-23, BR-24, BR-25.
 
+> **Hiện trạng (issue #19):** domain đã có `BlockRule` (chuẩn hóa domain/app/URL, đánh dấu
+> `NotEnforced` cho rule chưa hỗ trợ), `BlockRuleEvaluator` (allow thắng block) và `BlockRuleSet` —
+> snapshot bất biến bỏ rule disabled/`NotEnforced` lúc tạo, kiểm tra hết hạn mỗi lần đánh giá, coi
+> domain thiết yếu là `Allow` và so khớp `Exact` nên `chatgpt.com.evil.test` không khớp
+> `chatgpt.com`. `IBlockRuleRepository`/`SqliteBlockRuleRepository` lưu rule; engine nạp snapshot
+> khi bật bảo vệ và nạp lại sau khi rule thay đổi (issue #24), nên vòng lặp matching không truy vấn
+> DB. UI quản lý rule và seed mặc định thuộc issue #20.
+
 ---
 
 ### UC06 — Cấu hình lịch bảo vệ
