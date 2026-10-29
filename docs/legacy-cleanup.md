@@ -83,5 +83,6 @@ tray icon và logic chặn thoát khi có phiên.
 - Issue #18: thoát bằng PIN, ẩn xuống tray khi đóng cửa sổ và xử lý Windows shutdown — đã hoàn tất.
 - Issue #19: `BlockRuleSet` snapshot, matching `Exact` và repository BlockRules — đã hoàn tất.
 - Issue #20: `BuiltInRuleCatalog`, seed idempotent và thẻ quản lý blocklist trong Parent Mode — đã hoàn tất.
+- Issue #21: adapter hosts file `HostsFileBlocker` (marker, backup/journal, restore/self-heal, lỗi có kiểu) — đã hoàn tất; engine nối hosts + block page thuộc issue #24.
 - Các phase sau: ProtectionEngine/BlockPageServer, session/activity,
   attention monitoring, dashboard/reports, installer hoàn chỉnh.

@@ -484,16 +484,27 @@ Thứ tự:
   ```text
   ### EDUFOCUS BLOCK START ###
   127.0.0.1 chatgpt.com
-  127.0.0.1 www.chatgpt.com
+  ::1 chatgpt.com
   ...
   ### EDUFOCUS BLOCK END ###
   ```
-- Chỉ chặn domain exact; không dùng wildcard/suffix. Thêm biến thể `www.` khi phù hợp, trừ khi có rule Allow cho chính biến thể đó.
+- Chỉ chặn domain exact; không dùng wildcard/suffix và không tự thêm biến thể `www.` — muốn chặn `www.` phải có rule riêng.
 - Không sửa các dòng khác của hosts; chỉ xóa block trong marker EduFocus.
 - Flush DNS sau khi thay đổi.
 - Self-heal: xóa block mồ côi của EduFocus khi khởi động.
 - `BlockPageServer` bind `127.0.0.1:80`, chỉ phục vụ HTTP, trả HTML tĩnh; kiểm tra Host header thuộc domain bị chặn, escape output, không tải tài nguyên ngoài. Nếu port 80 bị chiếm, protection vẫn ON nhưng block page không khả dụng.
 - Retry khi file bị antivirus khóa; báo lỗi rõ nếu thất bại.
+
+> **Triển khai hosts file (issue #21):** `IHostsFileBlocker`/`HostsFileBlocker` sở hữu khối marker,
+> chỉ nhận domain exact (chuẩn hóa lowercase/trailing dot; từ chối scheme/path/port/wildcard/IP) và
+> ghi cặp `127.0.0.1` + `::1`. Ghi bằng temp file + replace, thử tối đa 3 lần; lỗi được phân loại
+> `NotFound`/`AccessDenied`/`Locked`/`WriteFailed` qua `HostsFileException` để use case giữ nguyên
+> trạng thái thay vì coi là OFF. Trước lần ghi đầu, bản gốc được backup vào
+> `%ProgramData%\EduFocus\hosts-backup` kèm `journal.json`; restore trả lại đúng byte gốc nếu ngoài
+> marker chưa bị sửa, ngược lại chỉ gỡ marker để giữ chỉnh sửa của người dùng. `SelfHealAsync` xử lý
+> journal sau crash và marker mồ côi. `IpconfigDnsFlusher` flush DNS best-effort (timeout 5 giây);
+> log chỉ ghi số domain, không ghi nội dung hosts. Engine nối hosts + block page + process watcher
+> thuộc issue #22–#24.
 
 ### 6.3. App blocking (MVP)
 

@@ -24,6 +24,9 @@ public static class InfrastructureServiceCollectionExtensions
         services.AddSingleton<IPasswordHasher, Pbkdf2PasswordHasher>();
         services.AddSingleton<IRecoveryCodeGenerator, RecoveryCodeGenerator>();
         services.AddSingleton<IProtectionEnginePort, DeferredProtectionEngine>();
+        services.AddSingleton(new HostsFileOptions());
+        services.AddSingleton<IDnsFlusher, IpconfigDnsFlusher>();
+        services.AddSingleton<IHostsFileBlocker, HostsFileBlocker>();
 
         return services;
     }

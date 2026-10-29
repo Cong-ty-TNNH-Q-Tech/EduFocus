@@ -147,6 +147,14 @@ và dự án tuân theo [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 - **Không cần migration:** seed version là hằng số trong catalog; schema vẫn giữ 9 bảng.
 - **Tests:** 5 test `BuiltInRuleCatalog` (tập rule mặc định, allowlist không bị chặn, không chứa domain bảo vệ, từ chối trùng/version sai), 5 test `BlockRuleSeedService` (fresh install + audit, idempotent, giữ rule bị tắt, rule phụ huynh thắng, version bump cập nhật metadata) và 6 test `BlockRuleService` (quyền Parent Mode, nhóm/thứ tự, toggle + audit, no-op, id không tồn tại); tổng **420 test pass**, build Release 0 warning.
 
+### Added (Phase 3 — Hosts file sync, issue #21)
+- **Adapter hosts file:** port `IHostsFileBlocker` + `HostsFileBlocker` ghi khối `### EDUFOCUS BLOCK START ###`/`### EDUFOCUS BLOCK END ###` trong `%SystemRoot%\System32\drivers\etc\hosts`; mỗi domain có đúng một bản ghi `127.0.0.1` và một bản ghi `::1`. Adapter chỉ nhận domain exact (chuẩn hóa lowercase/trailing dot; từ chối scheme, path, port, wildcard, IP, `localhost`) và **không tự thêm biến thể `www.`** — muốn chặn `www.` phải có rule riêng. Nội dung ngoài marker không bị sửa.
+- **Ghi an toàn:** ghi qua temp file rồi replace, thử tối đa 3 lần; lỗi được phân loại `NotFound`/`AccessDenied`/`Locked`/`WriteFailed` bằng `HostsFileException`, nên tầng use case không coi lỗi ghi hosts là "đã tắt" và giữ nguyên trạng thái bảo vệ. Flush DNS best-effort qua `IpconfigDnsFlusher` (timeout 5 giây); lỗi flush chỉ ghi cảnh báo.
+- **Backup, restore và self-heal:** trước lần ghi đầu, hosts được backup vào `%ProgramData%\EduFocus\hosts-backup` kèm `journal.json`. `RestoreAsync` khôi phục đúng byte gốc khi ngoài marker không bị sửa; nếu người dùng đã chỉnh sửa ngoài marker thì chỉ gỡ marker và giữ chỉnh sửa đó (`RestoredExact = false`). `SelfHealAsync` xử lý journal còn sót sau crash và marker mồ côi khi khởi động.
+- **Không log nội dung:** logger chỉ nhận số domain đã ghi; không ghi danh sách domain, nội dung hosts hoặc đường dẫn đầy đủ vào log kỹ thuật.
+- **Chưa nối vào engine:** DI đăng ký adapter nhưng `IProtectionEnginePort` vẫn là `DeferredProtectionEngine`; engine thật thuộc issue #24 để block page được bind trước khi hosts trỏ domain về loopback.
+- **Tests:** 24 test `HostsFileBlockerTests` chạy trong sandbox (thư mục tạm, không cần elevation) — marker IPv4/IPv6, chuẩn hóa/sắp xếp, idempotent, backup, restore exact và khi có chỉnh sửa ngoài, self-heal marker mồ côi/journal sau crash, từ chối domain sai, hosts thiếu/khóa/chỉ đọc, lỗi flush không fatal và log không chứa domain; tổng **444 test pass**, build Release 0 warning.
+
 ### Removed (khỏi phạm vi EduFocus)
 - Quản lý task, profile học tập, quote động lực và Gemini AI.
 - Cơ chế "friction" bắt gõ câu xác nhận bỏ cuộc.

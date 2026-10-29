@@ -149,6 +149,7 @@
 | Đánh giá schedule | `Covers`, `Overlaps` | Bảng `ScheduleWindows` | Scheduler local time |
 | Xóa theo retention | Không | — | Retention use case |
 | Khôi phục Protection sau crash | Cờ `ProtectionEnabled` | Bảng `AppSettings` | Startup/recovery use case |
+| Sở hữu hosts file | Không (domain thuần) | `HostsFileBlocker` chỉ sửa khối marker, backup/journal và restore exact khi ngoài marker không đổi; lỗi ném `HostsFileException` | Engine (issue #24) gọi apply/restore; lỗi ghi giữ nguyên trạng thái bảo vệ |
 | PIN gate cho thao tác nhạy cảm | Không (domain thuần) | — | `IParentAuthorizer` |
 | Clean shutdown (BR-30) | Chỉ `RecordCleanShutdown` đặt `LastCleanShutdownAtUtc`; timestamp UTC và không lùi | Bảng `AppSettings` | `AppLifecycleService` sau khi gỡ chặn thành công; Windows shutdown chỉ interrupt session, không đặt cờ |
 
@@ -195,3 +196,6 @@ Các rule cần quyền phụ huynh (BR-05), watchdog (BR-28), block page (BR-26
 | `DomainNameTests`, `PrivacySanitizerTests` | Normalization và privacy helper |
 
 Chạy: `dotnet test src/EduFocus.Domain.Tests/EduFocus.Domain.Tests.csproj -c Release`.
+
+Adapter hạ tầng như `HostsFileBlockerTests` nằm trong `EduFocus.Infrastructure.Tests`, chạy sandbox
+với thư mục tạm (không cần elevation): `dotnet test src/EduFocus.Infrastructure.Tests/EduFocus.Infrastructure.Tests.csproj -c Release`.

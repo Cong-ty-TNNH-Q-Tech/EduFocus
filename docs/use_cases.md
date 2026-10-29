@@ -508,7 +508,7 @@
 - Hoặc app bị chặn được phát hiện ở foreground/process start.
 
 **Luồng chính**
-1. Hosts file trỏ domain về `127.0.0.1` (kèm biến thể `www.` nếu có).
+1. Hosts file trỏ domain về `127.0.0.1` và `::1`; chỉ áp domain exact của rule đang bật — không tự thêm biến thể `www.`.
 2. `BlockPageServer` bind `127.0.0.1:80`, chỉ nhận request HTTP và trả HTML tĩnh.
 3. Trang chặn hiển thị:
    - "Trang này không nằm trong môi trường học tập."
@@ -553,6 +553,14 @@
 - App bị chặn đã đóng hoặc bị kill; process hệ thống/EduFocus/Allow không bị tác động.
 
 **Business rules:** BR-09, BR-10, BR-23, BR-24, BR-26, BR-29.
+
+> **Triển khai (issue #21):** `HostsFileBlocker` sở hữu khối marker trong hosts; chỉ chấp nhận
+> domain exact và ghi cả IPv4 `127.0.0.1` lẫn IPv6 `::1`, không tự sinh biến thể `www.`. Backup +
+> `journal.json` nằm trong `%ProgramData%\EduFocus\hosts-backup`; restore khôi phục exact khi ngoài
+> marker chưa bị sửa, ngược lại chỉ gỡ marker để giữ chỉnh sửa của người dùng. Lỗi quyền/khóa file
+> được báo bằng `HostsFileException` để use case không coi là đã tắt; log chỉ ghi số domain. Block
+> page (issue #22), process watcher (issue #23) và engine nối các thành phần (issue #24) chưa có
+> trong bản dựng này.
 
 ---
 
