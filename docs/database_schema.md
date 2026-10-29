@@ -501,6 +501,7 @@ Giả định:
 - Migration đầu tiên: `InitialEduFocusSchema` — đã tạo trong `src/EduFocus.SqliteDataAccess/Migrations` (issue #9), gồm 9 bảng, index, check constraint, FK và generated column.
 - Migration `AddOnboardingConsent` (issue #15) thêm hai cột nullable `PrivacyAcceptedAtUtc` và `GuardianAcknowledgedAtUtc` vào `AppSettings`; DB cũ được backup tự động trước khi nâng cấp.
 - Migration `AddProtectionSource` (issue #17) thêm cột `ProtectionSource` vào `AppSettings` và backfill `Manual` cho các hàng đang có `ProtectionEnabled = 1`.
+- Issue #20 không thêm migration: seed version của rule mặc định là hằng số trong `BuiltInRuleCatalog` và được ghi vào audit metadata; rule seed vào bảng `BlockRules` theo unique key sẵn có.
 - Mỗi migration có backup tự động trước khi chạy — `SqliteBackupStore` backup bằng SQLite backup API, kiểm tra `PRAGMA integrity_check` và chỉ tiếp tục khi bản backup hợp lệ; giữ tối đa 3 bản gần nhất.
 - Tên backup `edufocus-{UTC}-{nn}.db` là duy nhất, không ghi đè bản cũ; retention chỉ xóa bản cũ nhất.
 - Nếu migration thất bại:

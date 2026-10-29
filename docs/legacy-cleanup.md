@@ -82,5 +82,6 @@ tray icon và logic chặn thoát khi có phiên.
 - Issue #17: lịch bảo vệ, scheduler 30 giây, override và UI Parent Mode — đã hoàn tất.
 - Issue #18: thoát bằng PIN, ẩn xuống tray khi đóng cửa sổ và xử lý Windows shutdown — đã hoàn tất.
 - Issue #19: `BlockRuleSet` snapshot, matching `Exact` và repository BlockRules — đã hoàn tất.
+- Issue #20: `BuiltInRuleCatalog`, seed idempotent và thẻ quản lý blocklist trong Parent Mode — đã hoàn tất.
 - Các phase sau: ProtectionEngine/BlockPageServer, session/activity,
   attention monitoring, dashboard/reports, installer hoàn chỉnh.

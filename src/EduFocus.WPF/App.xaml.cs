@@ -1,4 +1,5 @@
 using System.Windows;
+using EduFocus.Domain.Protection;
 using EduFocus.Infrastructure;
 using EduFocus.Ports.Inbound;
 using EduFocus.Ports.Outbound.Persistence;
@@ -6,6 +7,7 @@ using EduFocus.Ports.Outbound.Services;
 using EduFocus.SqliteDataAccess.Persistence;
 using EduFocus.SqliteDataAccess.Repositories;
 using EduFocus.UseCases.Auth;
+using EduFocus.UseCases.Blocking;
 using EduFocus.UseCases.Lifecycle;
 using EduFocus.UseCases.Onboarding;
 using EduFocus.UseCases.Protection;
@@ -56,6 +58,24 @@ public partial class App : Application
             return;
         }
 
+        // Install or upgrade the built-in rules before protection starts so the
+        // first reconcile already sees the default blocklist.
+        try
+        {
+            var seed = await Services.GetRequiredService<IBlockRuleSeedUseCase>().EnsureSeededAsync();
+            if (seed.Changed)
+            {
+                logger.Info(
+                    LogCategories.Protection,
+                    FormattableString.Invariant(
+                        $"Built-in block rules v{seed.SeedVersion} seeded: {seed.Added} added, {seed.Updated} updated."));
+            }
+        }
+        catch (Exception ex)
+        {
+            logger.Error(LogCategories.Protection, "Built-in block rule seeding failed.", ex);
+        }
+
         // Restore protection before any UI shows so the tray, window and
         // persisted state never disagree after a crash or restart.
         var protectionMonitor = Services.GetRequiredService<ProtectionStatusViewModel>();
@@ -100,6 +120,9 @@ public partial class App : Application
         services.AddSingleton<IStudySessionRepository, SqliteStudySessionRepository>();
         services.AddSingleton<IScheduleWindowRepository, SqliteScheduleWindowRepository>();
         services.AddSingleton<IBlockRuleRepository, SqliteBlockRuleRepository>();
+        services.AddSingleton(BuiltInRuleCatalog.Default);
+        services.AddSingleton<IBlockRuleSeedUseCase, BlockRuleSeedService>();
+        services.AddSingleton<IBlockRuleUseCase, BlockRuleService>();
         services.AddSingleton<IParentAuthUseCase, ParentAuthUseCase>();
         services.AddSingleton<ParentSessionState>();
         services.AddSingleton<IParentAuthorizer>(provider => provider.GetRequiredService<ParentSessionState>());
@@ -114,6 +137,7 @@ public partial class App : Application
         services.AddSingleton<UpdateViewModel>();
         services.AddSingleton<ProtectionStatusViewModel>();
         services.AddSingleton<ScheduleViewModel>();
+        services.AddSingleton<BlocklistViewModel>();
         services.AddSingleton<MainWindowViewModel>();
         services.AddSingleton<TrayIconService>();
         services.AddSingleton<ScheduleSchedulerService>();

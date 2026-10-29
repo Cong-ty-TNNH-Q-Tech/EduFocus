@@ -469,6 +469,14 @@ Thứ tự:
 > trong `ProtectedDomains` và so khớp `Exact` bằng `Ordinal` — không substring, không suffix. Engine
 > giữ một snapshot và dựng lại sau mỗi thay đổi rule (issue #24), nên vòng lặp matching không truy vấn
 > DB.
+>
+> **Seed mặc định (issue #20):** `BuiltInRuleCatalog` phiên bản 1 cung cấp 21 rule (14 chatbot/AI,
+> 7 allowlist học tập). `BlockRuleSeedService` chạy sau onboarding và trước reconcile: seed theo
+> identity `(RuleType, MatchType, NormalizedValue, Effect)` nên idempotent, không ghi đè rule phụ
+> huynh, giữ trạng thái bật/tắt và hạn dùng của rule mặc định, chỉ cập nhật `Category` khi catalog
+> đổi; lần seed có thay đổi ghi audit `BlockRuleChanged` (actor System) với metadata `seedVersion`.
+> Thẻ "Danh sách chặn" trong Parent Mode dùng `IBlockRuleUseCase`, nhóm theo category và cho bật/tắt
+> rule; thao tác yêu cầu phiên Parent Mode và được audit với actor Parent.
 
 ### 6.2. Website blocking
 

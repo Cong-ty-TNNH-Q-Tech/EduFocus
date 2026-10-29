@@ -322,7 +322,15 @@
 > domain thiết yếu là `Allow` và so khớp `Exact` nên `chatgpt.com.evil.test` không khớp
 > `chatgpt.com`. `IBlockRuleRepository`/`SqliteBlockRuleRepository` lưu rule; engine nạp snapshot
 > khi bật bảo vệ và nạp lại sau khi rule thay đổi (issue #24), nên vòng lặp matching không truy vấn
-> DB. UI quản lý rule và seed mặc định thuộc issue #20.
+> DB.
+>
+> **Hiện trạng (issue #20):** `BuiltInRuleCatalog` phiên bản 1 cung cấp 14 domain chatbot/AI và 7
+> allowlist học tập (Meet, Teams, Classroom, Zoom, trang đăng nhập Google/Microsoft).
+> `BlockRuleSeedService` chạy lúc khởi động, sau onboarding và trước reconcile: seed idempotent theo
+> `(RuleType, MatchType, NormalizedValue, Effect)`, không ghi đè rule phụ huynh và giữ trạng thái
+> bật/tắt của rule mặc định; mỗi lần có thay đổi ghi audit kèm `seedVersion`. Thẻ "Danh sách chặn"
+> trong Parent Mode nhóm rule theo danh mục và cho bật/tắt (kể cả rule mặc định) với audit actor
+> Parent. UI thêm/sửa rule tùy chỉnh và reset mặc định chưa triển khai.
 
 ---
 

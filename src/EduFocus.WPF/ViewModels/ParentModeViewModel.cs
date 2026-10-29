@@ -35,6 +35,7 @@ public partial class ParentModeViewModel : ObservableObject
     private readonly IParentModeUseCase _mode;
     private readonly ProtectionStatusViewModel _protection;
     private readonly ScheduleViewModel _schedule;
+    private readonly BlocklistViewModel _blocklist;
     private readonly DatabaseBootstrapper _database;
     private readonly IAppLogger _logger;
     private readonly TimeProvider _timeProvider;
@@ -67,6 +68,8 @@ public partial class ParentModeViewModel : ObservableObject
 
     public ScheduleViewModel Schedule => _schedule;
 
+    public BlocklistViewModel Blocklist => _blocklist;
+
     public event EventHandler? PasswordBoxesShouldClear;
     public event EventHandler? CloseRequested;
 
@@ -74,6 +77,7 @@ public partial class ParentModeViewModel : ObservableObject
         IParentModeUseCase mode,
         ProtectionStatusViewModel protection,
         ScheduleViewModel schedule,
+        BlocklistViewModel blocklist,
         DatabaseBootstrapper database,
         IAppLogger logger,
         TimeProvider timeProvider)
@@ -81,6 +85,7 @@ public partial class ParentModeViewModel : ObservableObject
         _mode = mode ?? throw new ArgumentNullException(nameof(mode));
         _protection = protection ?? throw new ArgumentNullException(nameof(protection));
         _schedule = schedule ?? throw new ArgumentNullException(nameof(schedule));
+        _blocklist = blocklist ?? throw new ArgumentNullException(nameof(blocklist));
         _database = database ?? throw new ArgumentNullException(nameof(database));
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
         _timeProvider = timeProvider ?? throw new ArgumentNullException(nameof(timeProvider));
@@ -121,6 +126,7 @@ public partial class ParentModeViewModel : ObservableObject
             {
                 await _protection.RefreshAsync();
                 await _schedule.RefreshAsync();
+                await _blocklist.RefreshAsync();
                 View = ParentModeView.Management;
                 SetStatus("Parent Mode đang mở. Phiên tự khóa sau 5 phút không hoạt động.", false);
             }
@@ -442,6 +448,7 @@ public partial class ParentModeViewModel : ObservableObject
                 _lockoutUntilUtc = null;
                 await _protection.RefreshAsync();
                 await _schedule.RefreshAsync();
+                await _blocklist.RefreshAsync();
                 View = ParentModeView.Management;
                 SetStatus("Đã mở Parent Mode. Phiên tự khóa sau 5 phút không hoạt động.", false);
                 break;

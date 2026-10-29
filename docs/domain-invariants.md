@@ -59,6 +59,8 @@
 | Allow thắng Block (BR-08) | `BlockRuleEvaluator` |
 | Snapshot matching không truy vấn DB | `BlockRuleSet.Create` bỏ rule disabled/`NotEnforced`; hết hạn kiểm tra mỗi lần đánh giá |
 | Domain thiết yếu luôn `Allow` | `BlockRuleSet.EvaluateDomain` → `ProtectedDomains` |
+| Catalog mặc định hợp lệ và không trùng | `BuiltInRuleCatalog` từ chối version ≤ 0 và definition trùng `(RuleType, Value, Effect)` |
+| Rule mặc định không chứa domain bảo vệ | `BuiltInRuleCatalogTests` kiểm tra từng rule qua `ProtectedDomains` |
 
 `google.com` và `microsoft.com` chỉ được bảo vệ ở đúng host apex; các dịch vụ cụ thể như `gemini.google.com`, `copilot.microsoft.com` vẫn chặn được. Các domain dịch vụ (`meet.google.com`, `zoom.us`, …) được bảo vệ cả subdomain.
 
@@ -142,7 +144,7 @@
 |---|---|---|---|
 | Một session Active | Không kiểm tra toàn cục | Unique partial index (issue #9) | Điều phối start/stop |
 | PBKDF2 hash/salt | Kiểm tra shape, iterations | Cột hash/salt | Hashing trong Infrastructure |
-| Built-in allowlist | `ProtectedDomains` chặn block | Seed rule ở issue #9 | Seeding adapter |
+| Built-in allowlist | `ProtectedDomains` chặn block; `BuiltInRuleCatalog` định nghĩa rule | Unique key `(RuleType, MatchType, NormalizedValue, Effect)` | `BlockRuleSeedService` seed sau onboarding: idempotent, không ghi đè rule phụ huynh, giữ trạng thái bật/tắt |
 | Debounce blocked attempt | Không | — | 30 giây |
 | Đánh giá schedule | `Covers`, `Overlaps` | Bảng `ScheduleWindows` | Scheduler local time |
 | Xóa theo retention | Không | — | Retention use case |
@@ -183,6 +185,7 @@ Các rule cần quyền phụ huynh (BR-05), watchdog (BR-28), block page (BR-26
 | `AppSettingsTests` | Protection state, override, retention, UTC/monotonic |
 | `ParentCredentialTests`, `ParentPinPolicyTests` | Hash shape, lockout, PIN yếu |
 | `BlockRuleTests`, `BlockRuleSetTests` | Chuẩn hóa, protected domains, matching, allow-wins, expiry, snapshot |
+| `BuiltInRuleCatalogTests` | Catalog mặc định 21 rule, allowlist học tập, không trùng, version hợp lệ |
 | `ScheduleWindowTests` | Biên giờ, overlap, validator |
 | `StudySessionTests` | Lifecycle, counters, percentage, interrupt |
 | `ActivitySampleTests` | URL/title privacy, source consistency |
