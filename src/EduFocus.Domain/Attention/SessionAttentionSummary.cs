@@ -24,6 +24,9 @@ public sealed record SessionAttentionSummary(
 
     public int MonitoredSeconds => FocusedSeconds + DistractedSeconds + AbsentSeconds + DrowsySeconds;
 
+    /// <summary>Eligible time the camera could not observe; reports show it next to coverage.</summary>
+    public int UnobservedSeconds => Math.Max(0, MonitoringEligibleSeconds - MonitoredSeconds);
+
     public double? AttentionPercent =>
         MonitoredSeconds > 0 ? FocusedSeconds * 100.0 / MonitoredSeconds : null;
 

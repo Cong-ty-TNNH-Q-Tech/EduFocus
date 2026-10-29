@@ -189,12 +189,13 @@
                         <Border Margin="0,20,0,0" Padding="14" CornerRadius="8"
                                 Background="#F7F8FC" BorderBrush="#E1E4EC" BorderThickness="1">
                             <StackPanel>
-                                <TextBlock Text="Quyền camera" FontWeight="SemiBold" FontSize="14"
+                                <TextBlock Text="Kiểm tra camera" FontWeight="SemiBold" FontSize="14"
                                            Foreground="#1F2430" />
                                 <TextBlock Text="{Binding CameraStatusText}" Style="{StaticResource BodyText}"
                                            Margin="0,6,0,0" />
                                 <Button Content="Kiểm tra lại" Style="{StaticResource QuietButton}"
-                                        Margin="0,10,0,0" Command="{Binding CheckCameraCommand}" />
+                                        Margin="0,10,0,0" Command="{Binding CheckCameraCommand}"
+                                        IsEnabled="{Binding CanCheckCamera}" />
                             </StackPanel>
                         </Border>
 

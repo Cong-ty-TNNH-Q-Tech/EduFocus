@@ -38,6 +38,7 @@ public sealed class CameraSessionServiceTests
 
         result.Success.Should().BeTrue();
         harness.Camera.OpenRequests.Should().Equal((string?)null);
+        harness.Service.StoredDeviceSubstituted.Should().BeTrue();
         harness.Logger.Warnings.Should().Contain(
             message => message.Contains("stored camera device is no longer connected"));
     }
@@ -53,6 +54,7 @@ public sealed class CameraSessionServiceTests
         result.Success.Should().BeTrue();
         harness.Camera.OpenRequests.Should().Equal((string?)null);
         harness.Service.State.Should().Be(CameraSessionState.Active);
+        harness.Service.StoredDeviceSubstituted.Should().BeFalse();
     }
 
     [Fact]
@@ -159,6 +161,37 @@ public sealed class CameraSessionServiceTests
 
         retried.Captured.Should().BeTrue();
         harness.Camera.OpenRequests.Should().HaveCount(3);
+        harness.Service.State.Should().Be(CameraSessionState.Active);
+    }
+
+    [Fact]
+    public async Task A_missing_device_suppresses_retries_until_the_camera_is_started_again()
+    {
+        var harness = new Harness();
+        harness.Camera.OpenResults.Enqueue(CameraOpenResult.Failed(CameraFailureKind.NotFound, "no device"));
+
+        var opened = await harness.Service.StartAsync();
+
+        opened.Success.Should().BeFalse();
+        opened.Failure.Should().Be(CameraFailureKind.NotFound);
+        harness.Service.State.Should().Be(CameraSessionState.Unavailable);
+
+        var gated = await harness.Service.CaptureAsync();
+
+        gated.Failure.Should().Be(CameraFailureKind.NotFound);
+        gated.Error.Should().Contain("no retry");
+        harness.Camera.OpenRequests.Should().ContainSingle();
+        harness.Camera.CaptureCalls.Should().Be(0);
+
+        harness.Clock.Advance(TimeSpan.FromMinutes(30));
+        (await harness.Service.CaptureAsync()).Failure.Should().Be(CameraFailureKind.NotFound);
+        harness.Camera.OpenRequests.Should().ContainSingle();
+
+        harness.Camera.OpenResults.Enqueue(CameraOpenResult.Opened("cam-a"));
+        var restarted = await harness.Service.StartAsync();
+
+        restarted.Success.Should().BeTrue();
+        harness.Camera.OpenRequests.Should().HaveCount(2);
         harness.Service.State.Should().Be(CameraSessionState.Active);
     }
 

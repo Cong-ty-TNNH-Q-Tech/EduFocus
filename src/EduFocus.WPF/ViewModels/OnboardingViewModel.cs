@@ -1,6 +1,7 @@
 using System.Windows;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
+using EduFocus.Domain.Attention;
 using EduFocus.Domain.Security;
 using EduFocus.Ports.DTOs;
 using EduFocus.Ports.Inbound;
@@ -33,6 +34,8 @@ public partial class OnboardingViewModel : ObservableObject
         "PIN phải có 6–8 chữ số, không lặp lại một chữ số và không tăng/giảm liên tiếp.";
 
     private readonly IOnboardingUseCase _onboarding;
+    private readonly Func<ICameraCheckUseCase> _cameraCheckFactory;
+    private readonly ICameraPlatformInfo _platform;
     private readonly DatabaseBootstrapper _database;
     private readonly IAppLogger _logger;
 
@@ -45,8 +48,10 @@ public partial class OnboardingViewModel : ObservableObject
     [ObservableProperty] private bool _guardianAcknowledged;
     [ObservableProperty] private bool _monitoringEnabled = true;
     [ObservableProperty] private bool _startWithWindows = true;
-    [ObservableProperty] private string _cameraStatusText = string.Empty;
+    [ObservableProperty] private string _cameraStatusText =
+        "EduFocus sẽ kiểm tra nhanh camera trước khi bật giám sát.";
     [ObservableProperty] private bool _cameraStatusIsWarning;
+    [ObservableProperty] private bool _isCheckingCamera;
     [ObservableProperty] private string _issuedRecoveryCode = string.Empty;
     [ObservableProperty] private bool _recoveryCodeSaved;
 
@@ -65,6 +70,7 @@ public partial class OnboardingViewModel : ObservableObject
 
     public bool CanContinuePrivacy => PrivacyAccepted && GuardianAcknowledged;
     public bool CanFinish => RecoveryCodeSaved && IssuedRecoveryCode.Length > 0;
+    public bool CanCheckCamera => !IsCheckingCamera;
 
     public string StepLabel => View switch
     {
@@ -84,10 +90,14 @@ public partial class OnboardingViewModel : ObservableObject
 
     public OnboardingViewModel(
         IOnboardingUseCase onboarding,
+        Func<ICameraCheckUseCase> cameraCheckFactory,
+        ICameraPlatformInfo platform,
         DatabaseBootstrapper database,
         IAppLogger logger)
     {
         _onboarding = onboarding ?? throw new ArgumentNullException(nameof(onboarding));
+        _cameraCheckFactory = cameraCheckFactory ?? throw new ArgumentNullException(nameof(cameraCheckFactory));
+        _platform = platform ?? throw new ArgumentNullException(nameof(platform));
         _database = database ?? throw new ArgumentNullException(nameof(database));
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
     }
@@ -99,6 +109,8 @@ public partial class OnboardingViewModel : ObservableObject
     partial void OnRecoveryCodeSavedChanged(bool value) => OnPropertyChanged(nameof(CanFinish));
 
     partial void OnIssuedRecoveryCodeChanged(string value) => OnPropertyChanged(nameof(CanFinish));
+
+    partial void OnIsCheckingCameraChanged(bool value) => OnPropertyChanged(nameof(CanCheckCamera));
 
     partial void OnViewChanged(OnboardingStep value)
     {
@@ -152,8 +164,8 @@ public partial class OnboardingViewModel : ObservableObject
             }
 
             View = OnboardingStep.Preferences;
-            UpdateCameraStatus();
             SetStatus("Chọn tuỳ chọn phù hợp với gia đình.", false);
+            await CheckCameraAsync();
         }
         catch (Exception ex)
         {
@@ -195,8 +207,8 @@ public partial class OnboardingViewModel : ObservableObject
             }
 
             View = OnboardingStep.Preferences;
-            UpdateCameraStatus();
             SetStatus("Chọn tuỳ chọn phù hợp với gia đình.", false);
+            await CheckCameraAsync();
         }
         catch (Exception ex)
         {
@@ -368,7 +380,37 @@ public partial class OnboardingViewModel : ObservableObject
     }
 
     [RelayCommand]
-    private void CheckCamera() => UpdateCameraStatus();
+    private async Task CheckCameraAsync()
+    {
+        if (IsCheckingCamera)
+            return;
+
+        IsCheckingCamera = true;
+        CameraStatusText = "Đang kiểm tra camera trong vài giây...";
+        CameraStatusIsWarning = false;
+
+        try
+        {
+            var result = await _cameraCheckFactory().RunAsync();
+            var guidance = CameraGuidance.Describe(result, _platform.SupportsMultiAppCamera);
+
+            CameraStatusText = guidance is null
+                ? CameraGuidance.Summary(result)
+                : $"{CameraGuidance.Summary(result)} {guidance}";
+            CameraStatusIsWarning = !result.IsReady;
+        }
+        catch (Exception ex)
+        {
+            _logger.Error(LogCategories.Attention, "The onboarding camera check failed.", ex);
+            CameraStatusText =
+                "Không thể kiểm tra camera lúc này. Bạn vẫn có thể tiếp tục và kiểm tra lại trong Parent Mode.";
+            CameraStatusIsWarning = true;
+        }
+        finally
+        {
+            IsCheckingCamera = false;
+        }
+    }
 
     [RelayCommand]
     private void Exit()
@@ -381,28 +423,6 @@ public partial class OnboardingViewModel : ObservableObject
     {
         IssuedRecoveryCode = string.Empty;
         ClearInputs();
-    }
-
-    private void UpdateCameraStatus()
-    {
-        switch (CameraPermissionProbe.Check())
-        {
-            case CameraPermissionState.Denied:
-                CameraStatusText =
-                    "Windows đang chặn ứng dụng dùng camera. Mở Settings → Privacy & security → Camera để cho phép trước khi bật giám sát.";
-                CameraStatusIsWarning = true;
-                break;
-            case CameraPermissionState.Allowed:
-                CameraStatusText =
-                    "Windows đã cho phép camera. EduFocus sẽ kiểm tra thiết bị khi phiên giám sát bắt đầu.";
-                CameraStatusIsWarning = false;
-                break;
-            default:
-                CameraStatusText =
-                    "Chưa xác định được quyền camera. EduFocus sẽ kiểm tra lại khi phiên giám sát bắt đầu.";
-                CameraStatusIsWarning = false;
-                break;
-        }
     }
 
     private static string LockoutMessage(DateTime? lockoutUntilUtc)

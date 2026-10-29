@@ -176,6 +176,43 @@ public class AttentionMonitorServiceTests
     }
 
     [Fact]
+    public async Task A_busy_camera_never_creates_focused_or_distracted_time()
+    {
+        await using var h = new Harness();
+        await h.StartAsync();
+        h.Session.AddMonitoringEligibleSeconds(10, Start.UtcDateTime);
+
+        for (var second = 0; second <= 5; second++)
+        {
+            await h.Monitor.ProcessAsync(new AttentionSample(
+                Start.AddSeconds(second),
+                CameraFailureKind.Busy,
+                Observation: null,
+                Luminance: 0,
+                CaptureMs: 0,
+                DetectMs: 0,
+                Error: "camera busy"));
+        }
+
+        await h.Monitor.StopAsync();
+
+        h.Events.Events.Should().ContainSingle();
+        h.Events.Events[0].State.Should().Be(AttentionState.CameraUnavailable);
+        h.Session.FocusedSeconds.Should().Be(0);
+        h.Session.DistractedSeconds.Should().Be(0);
+        h.Session.AbsentSeconds.Should().Be(0);
+        h.Session.DrowsySeconds.Should().Be(0);
+        h.Session.MonitoredSeconds.Should().Be(0);
+        h.Session.CameraUnavailableSeconds.Should().Be(5);
+
+        var summary = SessionAttentionSummary.From(h.Session);
+        summary.CoveragePercent.Should().Be(0);
+        summary.CameraUnavailableSeconds.Should().Be(5);
+        summary.UnobservedSeconds.Should().Be(10);
+        summary.IsCoverageLow.Should().BeTrue();
+    }
+
+    [Fact]
     public async Task Inference_errors_are_not_counted_as_absence()
     {
         await using var h = new Harness();

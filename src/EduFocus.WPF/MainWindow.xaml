@@ -51,6 +51,9 @@
                                    FontSize="12" Foreground="#5B6270" TextWrapping="Wrap"
                                    VerticalAlignment="Center" />
                     </StackPanel>
+                    <TextBlock Text="{Binding Camera.GuidanceText}" Margin="0,6,0,0" FontSize="12"
+                               Foreground="#B42318" TextWrapping="Wrap"
+                               Visibility="{Binding Camera.HasGuidance, Converter={StaticResource BoolToVisibility}}" />
 
                     <TextBlock Text="Trạng thái bản dựng" Margin="0,24,0,0" FontSize="18" FontWeight="SemiBold"
                                Foreground="#1F2430" />

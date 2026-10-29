@@ -148,6 +148,17 @@
 | `EyesClosed = null` không suy đoán Drowsy | `AttentionClassifier` |
 | Mỗi tick chỉ cộng thời gian khi state đã xác định; gap > `MaxSampleGap` bị bỏ | `AttentionMonitorService` (issue #32) |
 
+**Kiểm tra camera (`CameraHealthEvaluator`, issue #34):**
+
+| Invariant | Thực thi |
+|---|---|
+| Không có khung phân tích được → `NoImage`, không suy đoán trạng thái học tập | `CameraHealthEvaluator` |
+| Luminance trung bình < ngưỡng hoặc tỷ lệ khung đủ sáng < 60% → `TooDark` | `CameraHealthEvaluator` |
+| Đủ sáng nhưng không khung nào thấy mặt → `NoFace`; đủ sáng + có mặt → `Ready` | `CameraHealthEvaluator` |
+| Problem từ lớp capture (`Busy`/`PermissionDenied`/`NotFound`/`Disconnected`/`Timeout`) thắng kết quả đọc khung | `CameraHealthEvaluator.Evaluate` |
+| Check tối đa 5 khung, không lưu frame, luôn đóng camera và từ chối khi pipeline đang chạy | `CameraCheckService` (issue #34) |
+| Camera outage không vào monitored; `UnobservedSeconds` = eligible − monitored | `SessionAttentionSummary` (issue #34) |
+
 ### 2.8. `BlockedAttempt`
 
 | Invariant | Thực thi |

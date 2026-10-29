@@ -36,6 +36,7 @@ public partial class ParentModeViewModel : ObservableObject
     private readonly ProtectionStatusViewModel _protection;
     private readonly ScheduleViewModel _schedule;
     private readonly BlocklistViewModel _blocklist;
+    private readonly CameraStatusViewModel _camera;
     private readonly DatabaseBootstrapper _database;
     private readonly IAppLogger _logger;
     private readonly TimeProvider _timeProvider;
@@ -70,6 +71,8 @@ public partial class ParentModeViewModel : ObservableObject
 
     public BlocklistViewModel Blocklist => _blocklist;
 
+    public CameraStatusViewModel Camera => _camera;
+
     public event EventHandler? PasswordBoxesShouldClear;
     public event EventHandler? CloseRequested;
 
@@ -78,6 +81,7 @@ public partial class ParentModeViewModel : ObservableObject
         ProtectionStatusViewModel protection,
         ScheduleViewModel schedule,
         BlocklistViewModel blocklist,
+        CameraStatusViewModel camera,
         DatabaseBootstrapper database,
         IAppLogger logger,
         TimeProvider timeProvider)
@@ -86,6 +90,7 @@ public partial class ParentModeViewModel : ObservableObject
         _protection = protection ?? throw new ArgumentNullException(nameof(protection));
         _schedule = schedule ?? throw new ArgumentNullException(nameof(schedule));
         _blocklist = blocklist ?? throw new ArgumentNullException(nameof(blocklist));
+        _camera = camera ?? throw new ArgumentNullException(nameof(camera));
         _database = database ?? throw new ArgumentNullException(nameof(database));
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
         _timeProvider = timeProvider ?? throw new ArgumentNullException(nameof(timeProvider));
@@ -127,6 +132,7 @@ public partial class ParentModeViewModel : ObservableObject
                 await _protection.RefreshAsync();
                 await _schedule.RefreshAsync();
                 await _blocklist.RefreshAsync();
+                await RefreshCameraAsync();
                 View = ParentModeView.Management;
                 SetStatus("Parent Mode đang mở. Phiên tự khóa sau 5 phút không hoạt động.", false);
             }
@@ -449,6 +455,7 @@ public partial class ParentModeViewModel : ObservableObject
                 await _protection.RefreshAsync();
                 await _schedule.RefreshAsync();
                 await _blocklist.RefreshAsync();
+                await RefreshCameraAsync();
                 View = ParentModeView.Management;
                 SetStatus("Đã mở Parent Mode. Phiên tự khóa sau 5 phút không hoạt động.", false);
                 break;
@@ -463,6 +470,12 @@ public partial class ParentModeViewModel : ObservableObject
                 SetStatus($"PIN không đúng. Còn {result.RemainingAttempts} lần thử.", true);
                 break;
         }
+    }
+
+    private async Task RefreshCameraAsync()
+    {
+        _camera.Refresh();
+        await _camera.LoadDevicesAsync();
     }
 
     private void ApplyLockout(DateTime? lockoutUntilUtc)

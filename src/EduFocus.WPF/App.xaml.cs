@@ -144,6 +144,13 @@ public partial class App : Application
         services.AddSingleton<ICameraPort, OpenCvCameraPort>();
         services.AddSingleton(new CameraOptions());
         services.AddSingleton<ICameraSessionUseCase, CameraSessionService>();
+        services.AddSingleton<ICameraPlatformInfo, WindowsCameraPlatformInfo>();
+        services.AddSingleton(new CameraCheckOptions());
+        services.AddSingleton<ICameraCheckUseCase, CameraCheckService>();
+        // The check needs the inference model; resolve it only when a parent
+        // actually runs a check so a missing model cannot break startup.
+        services.AddSingleton<Func<ICameraCheckUseCase>>(provider =>
+            () => provider.GetRequiredService<ICameraCheckUseCase>());
         services.AddSingleton(new AttentionAnalyzerOptions());
         services.AddSingleton(AttentionPipelineOptions.Default);
         services.AddSingleton<IAttentionFrameAnalyzer>(provider =>

@@ -124,8 +124,8 @@ public sealed class OpenCvCameraPort : ICameraPort
 
         // OpenCV usually reports a bare open failure. No enumerated device means
         // the camera is disconnected; otherwise the device is present but could
-        // not be opened (commonly another application holding it).
-        return _devices.Count == 0 ? CameraFailureKind.NotFound : CameraFailureKind.Unknown;
+        // not be opened, which in practice means another application holds it.
+        return _devices.Count == 0 ? CameraFailureKind.NotFound : CameraFailureKind.Busy;
     }
 
     private static bool Contains(string value, string fragment) =>

@@ -30,6 +30,7 @@ public class SessionAttentionSummaryTests
         summary.CameraUnavailableSeconds.Should().Be(40);
         summary.AttentionPercent.Should().BeApproximately(80, 0.0001);
         summary.CoveragePercent.Should().BeApproximately(50, 0.0001);
+        summary.UnobservedSeconds.Should().Be(100);
         summary.ConfidenceAvg.Should().BeApproximately(0.8, 0.0001);
         summary.IsCoverageLow.Should().BeFalse();
         summary.Warning.Should().BeNull();
@@ -53,6 +54,7 @@ public class SessionAttentionSummaryTests
         var summary = Summary(monitoredSeconds: 0, eligibleSeconds: 0);
 
         summary.MonitoredSeconds.Should().Be(0);
+        summary.UnobservedSeconds.Should().Be(0);
         summary.AttentionPercent.Should().BeNull();
         summary.CoveragePercent.Should().BeNull();
         summary.IsCoverageLow.Should().BeFalse();
@@ -81,6 +83,8 @@ public class SessionAttentionSummaryTests
 
         summary.MonitoredSeconds.Should().Be(40);
         summary.CoveragePercent.Should().BeApproximately(40, 0.0001);
+        summary.CameraUnavailableSeconds.Should().Be(60);
+        summary.UnobservedSeconds.Should().Be(60);
         summary.AttentionPercent.Should().Be(100);
         summary.IsCoverageLow.Should().BeTrue();
     }

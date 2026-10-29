@@ -16,6 +16,12 @@ public interface ICameraSessionUseCase
 
     CameraFailureKind LastFailure { get; }
 
+    /// <summary>
+    /// True when the stored device was missing and the default camera was used
+    /// instead, so the parent is told to pick the device again.
+    /// </summary>
+    bool StoredDeviceSubstituted { get; }
+
     IReadOnlyList<CameraDeviceInfo> Devices { get; }
 
     event EventHandler? StateChanged;

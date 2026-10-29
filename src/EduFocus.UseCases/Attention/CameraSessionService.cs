@@ -15,6 +15,7 @@ public sealed class CameraSessionService : ICameraSessionUseCase
 {
     private const string NotStartedMessage = "The camera session is not running.";
     private const string RetryScheduledMessage = "The camera is unavailable; a retry is scheduled.";
+    private const string RetrySuppressedMessage = "The camera is unavailable; no retry is scheduled for this session.";
     private const string OpenTimeoutMessage = "Opening the camera timed out.";
     private const string CaptureTimeoutMessage = "Capturing a camera frame timed out.";
     private const string CaptureEmptyMessage = "The camera returned no frame.";
@@ -30,6 +31,8 @@ public sealed class CameraSessionService : ICameraSessionUseCase
     private CameraFailureKind _lastFailure = CameraFailureKind.NotStarted;
     private string? _activeDeviceId;
     private IReadOnlyList<CameraDeviceInfo> _devices = [];
+    private bool _storedDeviceSubstituted;
+    private bool _retrySuppressed;
     private int _consecutiveCaptureFailures;
     private TimeSpan _retryDelay;
     private DateTime? _retryAtUtc;
@@ -66,6 +69,8 @@ public sealed class CameraSessionService : ICameraSessionUseCase
     public string? ActiveDeviceId => _activeDeviceId;
 
     public CameraFailureKind LastFailure => _lastFailure;
+
+    public bool StoredDeviceSubstituted => _storedDeviceSubstituted;
 
     public IReadOnlyList<CameraDeviceInfo> Devices => _devices;
 
@@ -161,6 +166,9 @@ public sealed class CameraSessionService : ICameraSessionUseCase
 
         if (_state != CameraSessionState.Active)
         {
+            if (_retrySuppressed)
+                return CameraCaptureResult.Unavailable(_lastFailure, RetrySuppressedMessage);
+
             if (_retryAtUtc is { } retryAt && UtcNow() < retryAt)
                 return CameraCaptureResult.Unavailable(_lastFailure, RetryScheduledMessage);
 
@@ -224,6 +232,7 @@ public sealed class CameraSessionService : ICameraSessionUseCase
     private async Task<CameraOpenResult> OpenCoreAsync(CancellationToken cancellationToken)
     {
         _consecutiveCaptureFailures = 0;
+        _retrySuppressed = false;
 
         await RefreshDevicesCoreAsync(cancellationToken).ConfigureAwait(false);
 
@@ -264,7 +273,11 @@ public sealed class CameraSessionService : ICameraSessionUseCase
         _activeDeviceId = null;
         _lastFailure = result.Failure;
         SetState(CameraSessionState.Unavailable);
-        ScheduleRetry();
+
+        if (ShouldRetry(result.Failure))
+            ScheduleRetry();
+        else
+            SuppressRetry();
 
         _logger.Warning(LogCategories.Attention, $"Camera could not be opened: {result.Failure}.");
         return result;
@@ -317,6 +330,8 @@ public sealed class CameraSessionService : ICameraSessionUseCase
 
     private string? ResolveDeviceId(string? storedDeviceId)
     {
+        _storedDeviceSubstituted = false;
+
         if (string.IsNullOrWhiteSpace(storedDeviceId))
             return null;
 
@@ -331,6 +346,7 @@ public sealed class CameraSessionService : ICameraSessionUseCase
         if (_devices.Any(device => string.Equals(device.Id, storedDeviceId, StringComparison.OrdinalIgnoreCase)))
             return storedDeviceId;
 
+        _storedDeviceSubstituted = true;
         _logger.Warning(
             LogCategories.Attention,
             "The stored camera device is no longer connected; using the default camera.");
@@ -374,17 +390,32 @@ public sealed class CameraSessionService : ICameraSessionUseCase
         _activeDeviceId = null;
         _lastFailure = CameraFailureKind.NotStarted;
         _consecutiveCaptureFailures = 0;
+        _storedDeviceSubstituted = false;
         ResetBackoff();
         SetState(CameraSessionState.Off);
     }
 
     private void ScheduleRetry()
     {
+        _retrySuppressed = false;
         var delay = _retryDelay > TimeSpan.Zero ? _retryDelay : _options.InitialRetryDelay;
 
         _retryAtUtc = UtcNow() + delay;
         _retryDelay = TimeSpan.FromTicks(Math.Min(delay.Ticks * 2, _options.MaxRetryDelay.Ticks));
     }
+
+    private void SuppressRetry()
+    {
+        _retrySuppressed = true;
+        _retryAtUtc = null;
+        _retryDelay = TimeSpan.Zero;
+    }
+
+    // A missing device cannot appear without the OS re-enumerating; retrying
+    // every few seconds would only wake the driver. An explicit StartAsync (for
+    // example from the camera check) always attempts a fresh open.
+    private static bool ShouldRetry(CameraFailureKind failure) =>
+        failure != CameraFailureKind.NotFound;
 
     private void ResetBackoff()
     {

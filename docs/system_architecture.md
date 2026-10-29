@@ -780,6 +780,7 @@ AttentionPercent =
   - Quyết định bởi `MonitoringEligibility.IsEligible`: monitoring phải bật; nếu `MonitorOnlyDuringClasses` thì chỉ cộng khi `IsOnlineClass` (issue #27).
 - Báo cáo luôn hiển thị:
   - `Coverage = MonitoredSeconds / MonitoringEligibleSeconds`; null nếu eligible = 0.
+  - `UnobservedSeconds = MonitoringEligibleSeconds − MonitoredSeconds`: thời gian camera không quan sát được, gồm cả `CameraUnavailable` (issue #34).
   - `ConfidenceAvg` trung bình có trọng số theo thời lượng event, dựa trên face detection score, ánh sáng, số khuôn mặt.
 - Nếu coverage < 50%, dashboard hiển thị cảnh báo "Dữ liệu chưa đủ tin cậy".
 - Khi crash, mọi `AttentionEvent` đang mở được đóng tại `LastHeartbeatAtUtc`; khi session/monitoring dừng bình thường, đóng tại thời điểm dừng.
@@ -819,6 +820,20 @@ AttentionPercent =
 > `Observation = null`; pipeline không tự suy đoán `Absent` khi không có frame hay khi inference lỗi. #32
 > chuyển sample lỗi thành event `CameraUnavailable` ngay và bỏ qua khi inference lỗi; #33 tính coverage từ
 > mẫu số độc lập nên outage không bị tính là mất tập trung.
+
+> **Triển khai issue #34:** `CameraHealthEvaluator` + `CameraGuidance` (Domain) đánh giá ảnh kiểm tra
+> (quá tối/không thấy mặt/không có ảnh/không khả dụng) và giữ một bộ câu hướng dẫn dùng chung cho status bar
+> lẫn kết quả kiểm tra. `CameraCheckService` chạy preflight tối đa 5 khung hình trong bộ nhớ, luôn đóng
+> camera trong `finally` và từ chối khi pipeline đang chạy (`MonitoringActive`) để không tranh thiết bị;
+> kiểm tra không cần quyền quản trị. Khi mở camera thất bại nhưng thiết bị vẫn hiện diện,
+> `OpenCvCameraPort` phân loại `Busy` (Meet/Teams/Zoom đang giữ camera); Windows 11 22H2+ được phát hiện
+> qua `WindowsCameraPlatformInfo` để hướng dẫn bật Multi-App Camera. Thiết bị đã lưu không còn kết nối →
+> `StoredDeviceSubstituted`, UI nhắc chọn lại; `NotFound` dừng retry cho phiên (mở lại tường minh khi phụ
+> huynh bấm kiểm tra), `PermissionDenied` vẫn retry có backoff để tự phục hồi sau khi cấp quyền. Parent Mode
+> có thẻ Camera (trạng thái, hướng dẫn, kiểm tra, chọn camera/mặc định); onboarding chạy cùng preflight
+> trước khi lưu tùy chọn. `SessionAttentionSummary.UnobservedSeconds` bổ sung thời gian eligible nhưng
+> không quan sát được để báo cáo (#35–#38) hiển thị cạnh coverage. Camera bận/không quyền chỉ tạo
+> `CameraUnavailable` và giảm coverage, không tạo `Focused`/`Distracted` giả.
 
 ### 8.5. Privacy
 

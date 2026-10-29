@@ -11,6 +11,8 @@ internal sealed class FakeCameraSessionUseCase : ICameraSessionUseCase
 
     public CameraFailureKind LastFailure { get; set; } = CameraFailureKind.NotStarted;
 
+    public bool StoredDeviceSubstituted { get; set; }
+
     public IReadOnlyList<CameraDeviceInfo> Devices { get; set; } = [];
 
     public event EventHandler? StateChanged;
