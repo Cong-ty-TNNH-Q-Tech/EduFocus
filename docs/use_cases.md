@@ -726,6 +726,16 @@
 > coverage < 50%, thời gian camera không khả dụng, thời gian không quan sát được, blocked attempts best-effort
 > và số phiên. Empty/loading/error state có retry, không crash khi DB trống. Báo cáo 7/30 ngày, timeline, CSV
 > và xóa dữ liệu thuộc #36–#38.
+>
+> **Triển khai báo cáo (issue #36):** `ReportViewModel` trong Parent Mode cho chọn **Hôm nay**, **Tuần này**
+> (Thứ 2–Chủ nhật chứa ngày hiện tại) và **30 ngày gần nhất**; báo cáo đọc theo yêu cầu khi mở Parent Mode
+> hoặc bấm Làm mới. `ReportService` lấy session theo `StartLocalDate`, sample/event theo session id với cap
+> (50 session, 100.000 sample, 100 event trong service; UI hiển thị 20 session/24 khung giờ/10 event) và dựng
+> `StudyReport`: tổng hợp (kèm coverage và confidence trung bình có trọng số), một dòng mỗi ngày có phiên,
+> timeline theo giờ local (UTC→local lúc đọc nên xử lý
+> đúng DST), top domain/app và attention event. Chi tiết đã hết retention chỉ tạo cảnh báo, summary vẫn
+> hiển thị; báo cáo chỉ dùng app name và domain đã làm sạch, không có window title/URL đầy đủ/process name.
+> Bộ lọc 90/365 ngày chỉ summary và xuất CSV thuộc #37; xóa dữ liệu thuộc #38.
 
 ---
 

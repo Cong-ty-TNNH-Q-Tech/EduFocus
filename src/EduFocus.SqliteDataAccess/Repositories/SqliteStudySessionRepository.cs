@@ -92,6 +92,29 @@ public sealed class SqliteStudySessionRepository : IStudySessionRepository
         };
     }
 
+    public async Task<IReadOnlyList<StudySession>> ListByLocalDateRangeAsync(
+        DateOnly startLocalDate,
+        DateOnly endLocalDate,
+        CancellationToken cancellationToken = default)
+    {
+        if (startLocalDate == default)
+            throw new ArgumentException("Local date is required.", nameof(startLocalDate));
+        if (endLocalDate == default)
+            throw new ArgumentException("Local date is required.", nameof(endLocalDate));
+        if (endLocalDate < startLocalDate)
+            throw new ArgumentException("The range end must not precede its start.", nameof(endLocalDate));
+
+        await using var context = new EduFocusDbContext(_dbContextOptions);
+
+        // IX_StudySessions_StartLocalDate keeps this range cheap even on a
+        // multi-year database; raw samples are never touched here.
+        return await context.StudySessions
+            .AsNoTracking()
+            .Where(x => x.StartLocalDate >= startLocalDate && x.StartLocalDate <= endLocalDate)
+            .OrderBy(x => x.StartedAtUtc)
+            .ToListAsync(cancellationToken);
+    }
+
     public async Task AddAsync(StudySession session, CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(session);

@@ -1,6 +1,7 @@
 using EduFocus.Domain.Entities;
 using EduFocus.Domain.Enums;
 using EduFocus.Domain.ValueObjects;
+using EduFocus.Ports.DTOs;
 using EduFocus.SqliteDataAccess.Repositories;
 using EduFocus.SqliteDataAccess.Tests.TestSupport;
 using FluentAssertions;
@@ -56,6 +57,112 @@ public sealed class ActivitySampleRepositoryTests
         stored.IsForeground.Should().BeTrue();
         stored.IsOnlineClass.Should().BeFalse();
         stored.IdleSeconds.Should().Be(2);
+    }
+
+    [Fact]
+    public async Task Report_query_skips_idle_time_and_exposes_only_app_and_domain()
+    {
+        await using var db = new TempDatabase();
+        await db.CreateInitializer().InitializeAsync();
+
+        var sessions = new SqliteStudySessionRepository(db.Options);
+        var session = StudySession.Start(Now, new DateOnly(2026, 10, 30), SessionTrigger.Manual, true);
+        var other = StudySession.Start(Now.AddMinutes(1), new DateOnly(2026, 10, 30), SessionTrigger.Manual, true);
+        await sessions.AddAsync(session);
+        other.Complete(Now.AddMinutes(2));
+        await sessions.AddAsync(other);
+
+        var repository = new SqliteActivitySampleRepository(db.Options);
+
+        await repository.AddAsync(ActivitySample.Capture(
+            session.Id,
+            Now.AddSeconds(15),
+            durationSeconds: 15,
+            ActivityCategory.Study,
+            isForeground: true,
+            isOnlineClass: false,
+            appName: "Notepad"));
+        await repository.AddAsync(ActivitySample.Capture(
+            session.Id,
+            Now.AddSeconds(30),
+            durationSeconds: 20,
+            ActivityCategory.Neutral,
+            isForeground: true,
+            isOnlineClass: false,
+            idleSeconds: 20,
+            appName: "Desktop"));
+        await repository.AddAsync(ActivitySample.Capture(
+            session.Id,
+            Now.AddSeconds(45),
+            durationSeconds: 30,
+            ActivityCategory.Distraction,
+            isForeground: true,
+            isOnlineClass: false,
+            idleSeconds: 5,
+            appName: "Google Chrome",
+            processName: "chrome",
+            windowTitle: "Secret video title",
+            url: "https://youtube.com/watch?v=secret#fragment",
+            urlSource: UrlSource.UIA));
+        await repository.AddAsync(ActivitySample.Capture(
+            other.Id,
+            Now.AddMinutes(2),
+            durationSeconds: 10,
+            ActivityCategory.Study,
+            isForeground: true,
+            isOnlineClass: false,
+            appName: "Notepad"));
+
+        var samples = await repository.ListForReportAsync([session.Id], maxCount: 10);
+
+        samples.Should().HaveCount(2);
+        samples[0].SampledAtUtc.Should().Be(Now.AddSeconds(45));
+        samples[0].ActiveSeconds.Should().Be(25);
+        samples[0].Category.Should().Be(ActivityCategory.Distraction);
+        samples[0].AppName.Should().Be("Google Chrome");
+        samples[0].Domain.Should().Be(DomainName.Parse("youtube.com"));
+        samples[1].SampledAtUtc.Should().Be(Now.AddSeconds(15));
+        samples[1].ActiveSeconds.Should().Be(15);
+
+        typeof(ReportActivitySample).GetProperties()
+            .Select(property => property.Name)
+            .Should().NotContain(new[] { "WindowTitle", "Url", "ProcessName" });
+    }
+
+    [Fact]
+    public async Task Report_query_respects_the_limit_and_handles_empty_sessions()
+    {
+        await using var db = new TempDatabase();
+        await db.CreateInitializer().InitializeAsync();
+
+        var sessions = new SqliteStudySessionRepository(db.Options);
+        var session = StudySession.Start(Now, new DateOnly(2026, 10, 30), SessionTrigger.Manual, true);
+        await sessions.AddAsync(session);
+
+        var repository = new SqliteActivitySampleRepository(db.Options);
+
+        foreach (var offset in new[] { 15, 30, 45 })
+        {
+            await repository.AddAsync(ActivitySample.Capture(
+                session.Id,
+                Now.AddSeconds(offset),
+                durationSeconds: 10,
+                ActivityCategory.Study,
+                isForeground: true,
+                isOnlineClass: false,
+                appName: "Notepad"));
+        }
+
+        var limited = await repository.ListForReportAsync([session.Id], maxCount: 2);
+        limited.Should().HaveCount(2);
+        limited[0].SampledAtUtc.Should().Be(Now.AddSeconds(45));
+        limited[1].SampledAtUtc.Should().Be(Now.AddSeconds(30));
+
+        var empty = await repository.ListForReportAsync([], maxCount: 10);
+        empty.Should().BeEmpty();
+
+        var invalid = () => repository.ListForReportAsync([session.Id], maxCount: 0);
+        await invalid.Should().ThrowAsync<ArgumentOutOfRangeException>();
     }
 
     [Fact]

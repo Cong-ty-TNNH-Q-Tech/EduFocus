@@ -170,6 +170,19 @@
 | Nhiều session: `MonitoredSeconds` vẫn là tổng bốn counter, `CameraUnavailable` ngoài mẫu số | `DailyStudySummary.Attention` |
 | Chỉ một session `Active`; dashboard trả `ActiveSessionStartedAtUtc` của session đó | Unique partial index + aggregate |
 
+**Báo cáo ngày/tuần (`ReportPeriod`/`StudyReport`, issue #36):**
+
+| Invariant | Thực thi |
+|---|---|
+| Khoảng ngày local inclusive; tuần bắt đầu Thứ 2; tối đa 31 ngày chi tiết | `ReportPeriod` |
+| Mỗi ngày trong kỳ có đúng một dòng; session nhóm theo `StartLocalDate` đã lưu | `ReportService.BuildDays` |
+| Timeline chuyển UTC → local lúc đọc; giờ lặp DST gộp, giờ khuyết không xuất hiện | `ReportService.BuildTimeline` + `TimeProvider.LocalTimeZone` |
+| Top ưu tiên domain đã làm sạch, rồi app, cuối cùng "Không rõ"; bỏ sample fully idle | `ReportService.BuildTopActivities` |
+| Tổng số liệu trên mọi session; danh sách hiển thị cap 50 session/100 event/10 top | `ReportService` |
+| Detail hết retention chỉ cảnh báo (không mất summary), và không cảnh báo khi list đã truncation | `ActivityDetailsExpired`/`AttentionDetailsExpired` |
+| Attention/coverage dùng lại bốn counter, `CameraUnavailable` ngoài mẫu số | `StudyReport.Attention` → `SessionAttentionSummary` |
+| Projection sample không có window title, URL đầy đủ hay process name | `ReportActivitySample` + reflection test |
+
 ### 2.8. `BlockedAttempt`
 
 | Invariant | Thực thi |

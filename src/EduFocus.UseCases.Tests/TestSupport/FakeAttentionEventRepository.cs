@@ -14,6 +14,14 @@ internal sealed class FakeAttentionEventRepository : IAttentionEventRepository
 
     public bool ThrowOnCloseOpen { get; set; }
 
+    public bool ThrowOnReport { get; set; }
+
+    public int ReportCalls { get; private set; }
+
+    public int LastReportMaxCount { get; private set; }
+
+    public IReadOnlyCollection<StudySessionId>? LastReportSessionIds { get; private set; }
+
     public int AddCalls { get; private set; }
 
     public int UpdateCalls { get; private set; }
@@ -60,6 +68,28 @@ internal sealed class FakeAttentionEventRepository : IAttentionEventRepository
                 .Where(x => x.SessionId == sessionId)
                 .OrderBy(x => x.StartedAtUtc)
                 .ToList());
+
+    public Task<IReadOnlyList<AttentionEvent>> ListForReportAsync(
+        IReadOnlyCollection<StudySessionId> sessionIds,
+        int maxCount,
+        CancellationToken cancellationToken = default)
+    {
+        ReportCalls++;
+        LastReportMaxCount = maxCount;
+        LastReportSessionIds = sessionIds;
+
+        if (ThrowOnReport)
+            throw new InvalidOperationException("The attention event store is unavailable.");
+
+        var ids = sessionIds.ToHashSet();
+        IReadOnlyList<AttentionEvent> result = Events
+            .Where(x => ids.Contains(x.SessionId))
+            .OrderByDescending(x => x.StartedAtUtc)
+            .Take(maxCount)
+            .ToList();
+
+        return Task.FromResult(result);
+    }
 
     public Task<int> CloseOpenAsync(
         StudySessionId sessionId,

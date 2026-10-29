@@ -71,6 +71,29 @@ public sealed class SqliteAttentionEventRepository : IAttentionEventRepository
             .ToListAsync(cancellationToken);
     }
 
+    public async Task<IReadOnlyList<AttentionEvent>> ListForReportAsync(
+        IReadOnlyCollection<StudySessionId> sessionIds,
+        int maxCount,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(sessionIds);
+
+        if (maxCount <= 0)
+            throw new ArgumentOutOfRangeException(nameof(maxCount), maxCount, "The event limit must be positive.");
+        if (sessionIds.Count == 0)
+            return [];
+
+        var ids = sessionIds.Distinct().ToArray();
+
+        await using var context = new EduFocusDbContext(_dbContextOptions);
+        return await context.AttentionEvents
+            .AsNoTracking()
+            .Where(x => ids.Contains(x.SessionId))
+            .OrderByDescending(x => x.StartedAtUtc)
+            .Take(maxCount)
+            .ToListAsync(cancellationToken);
+    }
+
     public async Task<int> CloseOpenAsync(
         StudySessionId sessionId,
         DateTime endedAtUtc,

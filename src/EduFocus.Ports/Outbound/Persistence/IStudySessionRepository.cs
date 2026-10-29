@@ -26,6 +26,17 @@ public interface IStudySessionRepository
         DateOnly localDate,
         CancellationToken cancellationToken = default);
 
+    /// <summary>
+    /// Lists every session whose stored local start date falls inside the
+    /// inclusive range, ordered by start time (issue #36). Grouping stays on
+    /// <see cref="StudySession.StartLocalDate"/>, so DST changes never move a
+    /// session between report days and no raw samples are read.
+    /// </summary>
+    Task<IReadOnlyList<StudySession>> ListByLocalDateRangeAsync(
+        DateOnly startLocalDate,
+        DateOnly endLocalDate,
+        CancellationToken cancellationToken = default);
+
     Task AddAsync(StudySession session, CancellationToken cancellationToken = default);
 
     Task UpdateAsync(StudySession session, CancellationToken cancellationToken = default);

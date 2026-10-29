@@ -23,6 +23,17 @@ public interface IAttentionEventRepository
         CancellationToken cancellationToken = default);
 
     /// <summary>
+    /// Lists at most <paramref name="maxCount"/> events for the supplied
+    /// sessions, newest first (issue #36). Events stay grouped by their
+    /// session's local start date, matching session summaries; no frame,
+    /// landmark or image data is ever returned (BR-13).
+    /// </summary>
+    Task<IReadOnlyList<AttentionEvent>> ListForReportAsync(
+        IReadOnlyCollection<StudySessionId> sessionIds,
+        int maxCount,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
     /// Closes every event still open for the session at the supplied instant.
     /// Crash recovery passes the session's last heartbeat so downtime is never
     /// attributed to attention. Returns the number of events closed.

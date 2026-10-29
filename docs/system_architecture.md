@@ -808,6 +808,17 @@ AttentionPercent =
 > `SemaphoreSlim`, giữ số liệu cũ khi query lỗi và chỉ hiện loading lần đầu; Student Mode chỉ bind thời gian
 > học/phiên đang hoạt động, Parent Mode bind toàn bộ counter nên PIN/cấu hình không xuất hiện ở cửa sổ chính.
 > MainWindow dừng polling khi ẩn xuống tray; Parent Mode tái dùng timer 1 giây và đọc dữ liệu mỗi 15 tick.
+>
+> **Triển khai issue #36:** `ReportService.GetAsync(ReportPeriod)` đọc session theo khoảng `StartLocalDate`
+> (index sẵn có), rồi sample/event theo danh sách session id với `maxCount + 1` để phát hiện truncation; không
+> quét toàn bộ sample của năm. `ReportPeriod` giới hạn 31 ngày chi tiết và tuần bắt đầu Thứ 2.
+> `StudyReport` giữ projection tổng hợp + `DailyStudySummary` mỗi ngày + timeline + top + event; session được
+> nhóm theo `StartLocalDate` đã lưu nên DST không làm session nhảy ngày, còn timeline chuyển `SampledAtUtc`
+> bằng `TimeProvider.LocalTimeZone` tại thời điểm đọc. `SqliteActivitySampleRepository.ListForReportAsync`
+> chỉ trả `AppName`/`Domain` đã làm sạch (không `WindowTitle`, URL đầy đủ, `ProcessName`) và bỏ sample fully
+> idle. Session có counter nhưng không còn sample/event bị đánh dấu detail hết retention thay vì báo lỗi.
+> `ReportViewModel` trong Parent Mode đọc theo yêu cầu (mở Parent Mode, đổi kỳ, nút Làm mới) và cap hiển thị
+> 20 session/24 khung giờ/10 event; Student Mode không bị ảnh hưởng.
 
 ### 8.4. Camera contention
 

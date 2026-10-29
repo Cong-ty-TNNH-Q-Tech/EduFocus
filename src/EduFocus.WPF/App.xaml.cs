@@ -173,6 +173,7 @@ public partial class App : Application
         services.AddSingleton<IOnboardingUseCase, OnboardingService>();
         services.AddSingleton<IProtectionUseCase, ProtectionService>();
         services.AddSingleton<IDashboardUseCase, DashboardService>();
+        services.AddSingleton<IReportUseCase, ReportService>();
         services.AddSingleton<IScheduleUseCase, ScheduleService>();
         services.AddSingleton(new RetentionOptions());
         services.AddSingleton<IRetentionUseCase, RetentionService>();
@@ -184,6 +185,7 @@ public partial class App : Application
         services.AddSingleton<ProtectionStatusViewModel>();
         services.AddSingleton<CameraStatusViewModel>();
         services.AddSingleton<DashboardViewModel>();
+        services.AddSingleton<ReportViewModel>();
         services.AddSingleton<ScheduleViewModel>();
         services.AddSingleton<BlocklistViewModel>();
         services.AddSingleton<MainWindowViewModel>();

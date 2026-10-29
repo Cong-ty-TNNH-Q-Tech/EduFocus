@@ -199,6 +199,274 @@
                         <Border Margin="0,16,0,0" Padding="14" CornerRadius="10" Background="#F8F9FC"
                                 BorderBrush="#DDE1EA" BorderThickness="1">
                             <StackPanel>
+                                <Grid>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="Auto" />
+                                        <ColumnDefinition Width="*" />
+                                    </Grid.ColumnDefinitions>
+                                    <TextBlock Grid.Column="0" Text="Báo cáo học tập" FontSize="14"
+                                               FontWeight="SemiBold" Foreground="#1F2430" />
+                                    <TextBlock Grid.Column="1" Text="{Binding Report.PeriodLabel}"
+                                               FontSize="11.5" Foreground="#8A909C"
+                                               HorizontalAlignment="Right" VerticalAlignment="Center"
+                                               Margin="10,0,0,0" TextWrapping="Wrap"
+                                               TextAlignment="Right" />
+                                </Grid>
+
+                                <Grid Margin="0,10,0,0">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="Auto" />
+                                    </Grid.ColumnDefinitions>
+                                    <ComboBox Grid.Column="0" ItemsSource="{Binding Report.Ranges}"
+                                              SelectedItem="{Binding Report.SelectedRange, Mode=TwoWay}"
+                                              DisplayMemberPath="Title" Padding="8,6" />
+                                    <Button Grid.Column="1" Content="Làm mới"
+                                            Style="{StaticResource SecondaryButton}"
+                                            Margin="8,0,0,0" VerticalAlignment="Center"
+                                            Command="{Binding Report.ReloadCommand}"
+                                            IsEnabled="{Binding Report.IsNotLoading}" />
+                                </Grid>
+
+                                <ProgressBar IsIndeterminate="True" Height="4" Margin="0,10,0,0"
+                                             Visibility="{Binding Report.IsLoading, Converter={StaticResource BoolToVisibility}}" />
+
+                                <TextBlock Text="{Binding Report.ErrorMessage}" Margin="0,10,0,0"
+                                           FontSize="12" Foreground="#B42318" TextWrapping="Wrap"
+                                           Visibility="{Binding Report.HasError, Converter={StaticResource BoolToVisibility}}" />
+
+                                <TextBlock Text="Chưa có phiên học nào trong khoảng thời gian này."
+                                           Margin="0,10,0,0" FontSize="12.5" Foreground="#8A909C"
+                                           TextWrapping="Wrap"
+                                           Visibility="{Binding Report.ShowEmptyState, Converter={StaticResource BoolToVisibility}}" />
+
+                                <StackPanel Visibility="{Binding Report.ShowSummary, Converter={StaticResource BoolToVisibility}}">
+                                    <UniformGrid Columns="2" Margin="0,4,0,0">
+                                        <StackPanel Margin="0,8,12,0">
+                                            <TextBlock Text="Thời gian học" FontSize="11.5" Foreground="#8A909C" />
+                                            <TextBlock Text="{Binding Report.StudyTimeText}" FontSize="15"
+                                                       FontWeight="SemiBold" Foreground="#1F2430" Margin="0,2,0,0" />
+                                        </StackPanel>
+                                        <StackPanel Margin="0,8,0,0">
+                                            <TextBlock Text="Thời gian hoạt động" FontSize="11.5" Foreground="#8A909C" />
+                                            <TextBlock Text="{Binding Report.ActiveTimeText}" FontSize="15"
+                                                       FontWeight="SemiBold" Foreground="#1F2430" Margin="0,2,0,0" />
+                                        </StackPanel>
+                                        <StackPanel Margin="0,8,12,0">
+                                            <TextBlock Text="Tập trung" FontSize="11.5" Foreground="#8A909C" />
+                                            <TextBlock Text="{Binding Report.AttentionText}" FontSize="15"
+                                                       FontWeight="SemiBold" Foreground="#1F2430" Margin="0,2,0,0" />
+                                        </StackPanel>
+                                        <StackPanel Margin="0,8,0,0">
+                                            <TextBlock Text="Độ phủ camera" FontSize="11.5" Foreground="#8A909C" />
+                                            <TextBlock Text="{Binding Report.CoverageText}" FontSize="15"
+                                                       FontWeight="SemiBold" Foreground="#1F2430" Margin="0,2,0,0" />
+                                        </StackPanel>
+                                        <StackPanel Margin="0,8,12,0">
+                                            <TextBlock Text="Độ tin cậy" FontSize="11.5" Foreground="#8A909C" />
+                                            <TextBlock Text="{Binding Report.ConfidenceText}" FontSize="15"
+                                                       FontWeight="SemiBold" Foreground="#1F2430" Margin="0,2,0,0" />
+                                        </StackPanel>
+                                        <StackPanel Margin="0,8,0,0">
+                                            <TextBlock Text="Thời gian quan sát" FontSize="11.5"
+                                                       Foreground="#8A909C" />
+                                            <TextBlock Text="{Binding Report.MonitoredTimeText}" FontSize="15"
+                                                       FontWeight="SemiBold" Foreground="#1F2430" Margin="0,2,0,0" />
+                                        </StackPanel>
+                                        <StackPanel Margin="0,8,12,0">
+                                            <TextBlock Text="Mất tập trung (thời lượng)" FontSize="11.5"
+                                                       Foreground="#8A909C" />
+                                            <TextBlock Text="{Binding Report.DistractionTimeText}" FontSize="15"
+                                                       FontWeight="SemiBold" Foreground="#1F2430" Margin="0,2,0,0" />
+                                        </StackPanel>
+                                        <StackPanel Margin="0,8,0,0">
+                                            <TextBlock Text="Lớp học trực tuyến" FontSize="11.5" Foreground="#8A909C" />
+                                            <TextBlock Text="{Binding Report.OnlineClassTimeText}" FontSize="15"
+                                                       FontWeight="SemiBold" Foreground="#1F2430" Margin="0,2,0,0" />
+                                        </StackPanel>
+                                        <StackPanel Margin="0,8,12,0">
+                                            <TextBlock Text="Phiên học" FontSize="11.5" Foreground="#8A909C" />
+                                            <TextBlock Text="{Binding Report.SessionCountText}" FontSize="15"
+                                                       FontWeight="SemiBold" Foreground="#1F2430" Margin="0,2,0,0" />
+                                        </StackPanel>
+                                        <StackPanel Margin="0,8,0,0">
+                                            <TextBlock Text="Bị chặn (best-effort)" FontSize="11.5"
+                                                       Foreground="#8A909C" />
+                                            <TextBlock Text="{Binding Report.BlockedAttemptsText}" FontSize="15"
+                                                       FontWeight="SemiBold" Foreground="#1F2430" Margin="0,2,0,0" />
+                                        </StackPanel>
+                                    </UniformGrid>
+
+                                    <TextBlock Text="{Binding Report.WarningText}" Margin="0,10,0,0"
+                                               FontSize="12" FontWeight="SemiBold" Foreground="#B42318"
+                                               TextWrapping="Wrap"
+                                               Visibility="{Binding Report.HasWarnings, Converter={StaticResource BoolToVisibility}}" />
+
+                                    <TextBlock Text="{Binding Report.LastUpdatedText}" Margin="0,8,0,0"
+                                               FontSize="11" Foreground="#8A909C" />
+
+                                    <TextBlock Text="{Binding Report.DaysHeader}" Margin="0,12,0,0"
+                                               FontSize="12.5" FontWeight="SemiBold" Foreground="#5B6270" />
+                                    <ItemsControl ItemsSource="{Binding Report.DayRows}" Margin="0,6,0,0"
+                                                  Visibility="{Binding Report.HasDayRows, Converter={StaticResource BoolToVisibility}}">
+                                        <ItemsControl.ItemTemplate>
+                                            <DataTemplate>
+                                                <Border Margin="0,0,0,4" Padding="10,7" CornerRadius="8"
+                                                        Background="White" BorderBrush="#E1E4EC"
+                                                        BorderThickness="1">
+                                                    <Grid>
+                                                        <Grid.ColumnDefinitions>
+                                                            <ColumnDefinition Width="*" />
+                                                            <ColumnDefinition Width="Auto" />
+                                                        </Grid.ColumnDefinitions>
+                                                        <StackPanel Grid.Column="0">
+                                                            <TextBlock Text="{Binding TitleText}" FontSize="12.5"
+                                                                       FontWeight="SemiBold" Foreground="#1F2430" />
+                                                            <TextBlock Text="{Binding StudyText}" FontSize="11.5"
+                                                                       Foreground="#5B6270" Margin="0,2,0,0" />
+                                                        </StackPanel>
+                                                        <TextBlock Grid.Column="1" Text="{Binding AttentionText}"
+                                                                   FontSize="11.5" Foreground="#5B6270"
+                                                                   VerticalAlignment="Center" Margin="10,0,0,0"
+                                                                   MaxWidth="170" TextWrapping="Wrap"
+                                                                   TextAlignment="Right" />
+                                                    </Grid>
+                                                </Border>
+                                            </DataTemplate>
+                                        </ItemsControl.ItemTemplate>
+                                    </ItemsControl>
+
+                                    <TextBlock Text="{Binding Report.SessionsHeader}" Margin="0,12,0,0"
+                                               FontSize="12.5" FontWeight="SemiBold" Foreground="#5B6270" />
+                                    <ItemsControl ItemsSource="{Binding Report.SessionRows}" Margin="0,6,0,0"
+                                                  Visibility="{Binding Report.HasSessionRows, Converter={StaticResource BoolToVisibility}}">
+                                        <ItemsControl.ItemTemplate>
+                                            <DataTemplate>
+                                                <Border Margin="0,0,0,4" Padding="10,7" CornerRadius="8"
+                                                        Background="White" BorderBrush="#E1E4EC"
+                                                        BorderThickness="1">
+                                                    <Grid>
+                                                        <Grid.ColumnDefinitions>
+                                                            <ColumnDefinition Width="*" />
+                                                            <ColumnDefinition Width="Auto" />
+                                                        </Grid.ColumnDefinitions>
+                                                        <StackPanel Grid.Column="0">
+                                                            <TextBlock Text="{Binding TimeText}" FontSize="12.5"
+                                                                       FontWeight="SemiBold" Foreground="#1F2430" />
+                                                            <TextBlock Text="{Binding ActivityText}" FontSize="11.5"
+                                                                       Foreground="#5B6270" Margin="0,2,0,0"
+                                                                       TextWrapping="Wrap" />
+                                                            <TextBlock Text="{Binding AttentionText}" FontSize="11.5"
+                                                                       Foreground="#5B6270" Margin="0,2,0,0"
+                                                                       TextWrapping="Wrap" />
+                                                        </StackPanel>
+                                                        <TextBlock Grid.Column="1" Text="{Binding StatusText}"
+                                                                   FontSize="11" Foreground="#8A909C"
+                                                                   VerticalAlignment="Top" Margin="10,0,0,0"
+                                                                   MaxWidth="130" TextWrapping="Wrap"
+                                                                   TextAlignment="Right" />
+                                                    </Grid>
+                                                </Border>
+                                            </DataTemplate>
+                                        </ItemsControl.ItemTemplate>
+                                    </ItemsControl>
+
+                                    <TextBlock Text="{Binding Report.TimelineHeader}" Margin="0,12,0,0"
+                                               FontSize="12.5" FontWeight="SemiBold" Foreground="#5B6270" />
+                                    <ItemsControl ItemsSource="{Binding Report.TimelineRows}" Margin="0,6,0,0"
+                                                  Visibility="{Binding Report.HasTimelineRows, Converter={StaticResource BoolToVisibility}}">
+                                        <ItemsControl.ItemTemplate>
+                                            <DataTemplate>
+                                                <Border Margin="0,0,0,4" Padding="10,6" CornerRadius="8"
+                                                        Background="White" BorderBrush="#E1E4EC"
+                                                        BorderThickness="1">
+                                                    <Grid>
+                                                        <Grid.ColumnDefinitions>
+                                                            <ColumnDefinition Width="*" />
+                                                            <ColumnDefinition Width="Auto" />
+                                                        </Grid.ColumnDefinitions>
+                                                        <StackPanel Grid.Column="0">
+                                                            <TextBlock Text="{Binding TimeText}" FontSize="12"
+                                                                       Foreground="#1F2430" />
+                                                            <TextBlock Text="{Binding ActivityText}" FontSize="11.5"
+                                                                       Foreground="#5B6270" Margin="0,2,0,0"
+                                                                       TextWrapping="Wrap" />
+                                                        </StackPanel>
+                                                        <TextBlock Grid.Column="1" Text="{Binding TotalText}"
+                                                                   FontSize="11.5" Foreground="#5B6270"
+                                                                   VerticalAlignment="Center" Margin="10,0,0,0" />
+                                                    </Grid>
+                                                </Border>
+                                            </DataTemplate>
+                                        </ItemsControl.ItemTemplate>
+                                    </ItemsControl>
+
+                                    <TextBlock Text="Tên miền / ứng dụng nổi bật" Margin="0,12,0,0"
+                                               FontSize="12.5" FontWeight="SemiBold" Foreground="#5B6270" />
+                                    <ItemsControl ItemsSource="{Binding Report.TopActivities}" Margin="0,6,0,0"
+                                                  Visibility="{Binding Report.HasTopActivities, Converter={StaticResource BoolToVisibility}}">
+                                        <ItemsControl.ItemTemplate>
+                                            <DataTemplate>
+                                                <Border Margin="0,0,0,4" Padding="10,6" CornerRadius="8"
+                                                        Background="White" BorderBrush="#E1E4EC"
+                                                        BorderThickness="1">
+                                                    <Grid>
+                                                        <Grid.ColumnDefinitions>
+                                                            <ColumnDefinition Width="*" />
+                                                            <ColumnDefinition Width="Auto" />
+                                                        </Grid.ColumnDefinitions>
+                                                        <TextBlock Grid.Column="0" Text="{Binding Name}" FontSize="12"
+                                                                   Foreground="#1F2430"
+                                                                   TextTrimming="CharacterEllipsis" />
+                                                        <TextBlock Grid.Column="1" Text="{Binding DetailText}"
+                                                                   FontSize="11.5" Foreground="#5B6270"
+                                                                   Margin="10,0,0,0" />
+                                                    </Grid>
+                                                </Border>
+                                            </DataTemplate>
+                                        </ItemsControl.ItemTemplate>
+                                    </ItemsControl>
+
+                                    <TextBlock Text="{Binding Report.AttentionHeader}" Margin="0,12,0,0"
+                                               FontSize="12.5" FontWeight="SemiBold" Foreground="#5B6270" />
+                                    <ItemsControl ItemsSource="{Binding Report.AttentionEventRows}" Margin="0,6,0,0"
+                                                  Visibility="{Binding Report.HasAttentionEventRows, Converter={StaticResource BoolToVisibility}}">
+                                        <ItemsControl.ItemTemplate>
+                                            <DataTemplate>
+                                                <Border Margin="0,0,0,4" Padding="10,6" CornerRadius="8"
+                                                        Background="White" BorderBrush="#E1E4EC"
+                                                        BorderThickness="1">
+                                                    <Grid>
+                                                        <Grid.ColumnDefinitions>
+                                                            <ColumnDefinition Width="*" />
+                                                            <ColumnDefinition Width="Auto" />
+                                                        </Grid.ColumnDefinitions>
+                                                        <StackPanel Grid.Column="0">
+                                                            <TextBlock Text="{Binding TimeText}" FontSize="12"
+                                                                       Foreground="#1F2430" />
+                                                            <TextBlock Text="{Binding DetailText}" FontSize="11.5"
+                                                                       Foreground="#5B6270" Margin="0,2,0,0"
+                                                                       TextWrapping="Wrap" />
+                                                        </StackPanel>
+                                                        <TextBlock Grid.Column="1" Text="{Binding StateText}"
+                                                                   FontSize="11.5" FontWeight="SemiBold"
+                                                                   Foreground="#5B6270" VerticalAlignment="Center"
+                                                                   Margin="10,0,0,0" />
+                                                    </Grid>
+                                                </Border>
+                                            </DataTemplate>
+                                        </ItemsControl.ItemTemplate>
+                                    </ItemsControl>
+
+                                    <TextBlock Text="{Binding Report.DataNote}" Margin="0,10,0,0"
+                                               FontSize="11" Foreground="#8A909C" TextWrapping="Wrap" />
+                                </StackPanel>
+                            </StackPanel>
+                        </Border>
+
+                        <Border Margin="0,16,0,0" Padding="14" CornerRadius="10" Background="#F8F9FC"
+                                BorderBrush="#DDE1EA" BorderThickness="1">
+                            <StackPanel>
                                 <TextBlock Text="Bảo vệ học tập" FontSize="14" FontWeight="SemiBold"
                                            Foreground="#1F2430" />
                                 <TextBlock Text="{Binding Protection.StatusText}" Margin="0,6,0,0"

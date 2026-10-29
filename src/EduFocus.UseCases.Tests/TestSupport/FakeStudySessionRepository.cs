@@ -25,9 +25,13 @@ internal sealed class FakeStudySessionRepository : IStudySessionRepository
 
     public bool ThrowOnDailySummary { get; set; }
 
+    public bool ThrowOnRangeList { get; set; }
+
     public DailyStudySummary? DailySummary { get; set; }
 
     public List<DateOnly> DailySummaryRequests { get; } = [];
+
+    public List<(DateOnly Start, DateOnly End)> RangeRequests { get; } = [];
 
     public int IncrementBlockedCalls { get; private set; }
 
@@ -50,6 +54,25 @@ internal sealed class FakeStudySessionRepository : IStudySessionRepository
             throw new InvalidOperationException("The session store is unavailable.");
 
         return Task.FromResult(DailySummary);
+    }
+
+    public Task<IReadOnlyList<StudySession>> ListByLocalDateRangeAsync(
+        DateOnly startLocalDate,
+        DateOnly endLocalDate,
+        CancellationToken cancellationToken = default)
+    {
+        RangeRequests.Add((startLocalDate, endLocalDate));
+
+        if (ThrowOnRangeList)
+            throw new InvalidOperationException("The session store is unavailable.");
+
+        IReadOnlyList<StudySession> result = Sessions
+            .Where(session => session.StartLocalDate >= startLocalDate
+                && session.StartLocalDate <= endLocalDate)
+            .OrderBy(session => session.StartedAtUtc)
+            .ToList();
+
+        return Task.FromResult(result);
     }
 
     public Task AddAsync(StudySession session, CancellationToken cancellationToken = default)

@@ -456,6 +456,12 @@ ORDER BY HourLocal;
 ```
 
 > `localtime` dùng timezone của máy; với báo cáo dài hạn ưu tiên `StartLocalDate` để tránh DST.
+>
+> **Triển khai issue #36:** không dùng `strftime(..., 'localtime')` cho báo cáo. Repository trả
+> `SampledAtUtc` (UTC) cùng `DurationSeconds - IdleSeconds`, `Category`, `AppName`, `Domain`; `ReportService`
+> chuyển từng sample sang giờ local bằng `TimeProvider.LocalTimeZone` rồi gộp bucket `(LocalDate, LocalHour)`,
+> nên giờ lặp khi fall-back được cộng vào cùng bucket và giờ khuyết khi spring-forward không xuất hiện.
+> Sample fully idle (`DurationSeconds = IdleSeconds`) bị loại khỏi timeline và top.
 
 ### 13.3. Top app/domain
 
@@ -470,6 +476,11 @@ ORDER BY Seconds DESC
 LIMIT 10;
 ```
 
+> **Triển khai issue #36:** `ListForReportAsync` nhận danh sách session id (một khoảng ngày, cap 31 ngày) và
+> `maxCount`; projection chỉ gồm `SessionId`, `SampledAtUtc`, `ActiveSeconds`, `Category`, `AppName`, `Domain`
+> — không đọc `WindowTitle`, URL đầy đủ hay `ProcessName`. Top ưu tiên `Domain` đã chuẩn hóa, sau đó `AppName`,
+> cuối cùng là "Không rõ"; tổng `ActiveSeconds` thay vì `DurationSeconds` để idle không được tính là hoạt động.
+
 ### 13.4. Attention events
 
 ```sql
@@ -478,6 +489,11 @@ FROM AttentionEvents
 WHERE SessionId = @sessionId
 ORDER BY StartedAtUtc;
 ```
+
+> **Triển khai issue #36:** `ListForReportAsync` lọc theo danh sách session id, sắp xếp `StartedAtUtc` giảm dần
+> và cap 100 event (đọc 101 để biết truncation). Session có `MonitoredSeconds`/`CameraUnavailableSeconds` > 0
+> nhưng không còn event nào bị coi là detail đã hết retention → `StudyReport.AttentionDetailsExpired` tạo
+> cảnh báo, không phải lỗi; cờ này bị bỏ qua khi danh sách event đã bị truncation để tránh báo nhầm.
 
 ---
 

@@ -519,6 +519,58 @@ public sealed class StudySessionRepositoryTests
         summary.HasActiveSession.Should().BeFalse();
     }
 
+    [Fact]
+    public async Task List_by_local_date_range_returns_only_sessions_inside_the_period()
+    {
+        await using var db = new TempDatabase();
+        await db.CreateInitializer().InitializeAsync();
+
+        var repository = new SqliteStudySessionRepository(db.Options);
+
+        var before = BuildSession(Now.AddDays(-4), new DateOnly(2026, 10, 25), 60, 60, 0, 0, 0);
+        before.Complete(Now.AddDays(-4).AddHours(1));
+        var first = BuildSession(Now, new DateOnly(2026, 10, 29), 900, 900, 0, 0, 0);
+        first.Complete(Now.AddHours(1));
+        var second = BuildSession(Now.AddDays(1), new DateOnly(2026, 10, 30), 600, 600, 0, 0, 0);
+        second.Complete(Now.AddDays(1).AddHours(1));
+        var after = BuildSession(Now.AddDays(4), new DateOnly(2026, 11, 2), 60, 60, 0, 0, 0);
+        after.Complete(Now.AddDays(4).AddHours(1));
+
+        await repository.AddAsync(first);
+        await repository.AddAsync(before);
+        await repository.AddAsync(after);
+        await repository.AddAsync(second);
+
+        var sessions = await repository.ListByLocalDateRangeAsync(
+            new DateOnly(2026, 10, 29),
+            new DateOnly(2026, 10, 30));
+
+        sessions.Should().HaveCount(2);
+        sessions[0].Id.Should().Be(first.Id);
+        sessions[1].Id.Should().Be(second.Id);
+        sessions.Should().OnlyContain(session => session.StartLocalDate >= new DateOnly(2026, 10, 29));
+        sessions.Should().OnlyContain(session => session.StartLocalDate <= new DateOnly(2026, 10, 30));
+    }
+
+    [Fact]
+    public async Task List_by_local_date_range_rejects_invalid_periods()
+    {
+        await using var db = new TempDatabase();
+        await db.CreateInitializer().InitializeAsync();
+
+        var repository = new SqliteStudySessionRepository(db.Options);
+
+        var backwards = () => repository.ListByLocalDateRangeAsync(
+            new DateOnly(2026, 10, 30),
+            new DateOnly(2026, 10, 29));
+        await backwards.Should().ThrowAsync<ArgumentException>();
+
+        var missing = () => repository.ListByLocalDateRangeAsync(
+            default,
+            new DateOnly(2026, 10, 29));
+        await missing.Should().ThrowAsync<ArgumentException>();
+    }
+
     private static StudySession BuildSession(
         DateTime startedAtUtc,
         DateOnly localDate,

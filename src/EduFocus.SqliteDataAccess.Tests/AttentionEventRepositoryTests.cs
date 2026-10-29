@@ -167,6 +167,35 @@ public sealed class AttentionEventRepositoryTests
         await localTime.Should().ThrowAsync<ArgumentException>();
     }
 
+    [Fact]
+    public async Task Report_list_returns_newest_events_for_requested_sessions_with_limit()
+    {
+        await using var db = new TempDatabase();
+        await db.CreateInitializer().InitializeAsync();
+        var session = await SeedSessionAsync(db);
+        var other = await SeedSessionAsync(db, Now.AddMinutes(5), active: false);
+
+        var repository = new SqliteAttentionEventRepository(db.Options);
+        await repository.AddAsync(AttentionEvent.Open(session.Id, AttentionState.Focused, Now.AddSeconds(1)));
+        await repository.AddAsync(AttentionEvent.Open(session.Id, AttentionState.Absent, Now.AddSeconds(30)));
+        await repository.AddAsync(AttentionEvent.Open(other.Id, AttentionState.Distracted, Now.AddSeconds(10)));
+
+        var events = await repository.ListForReportAsync([session.Id], maxCount: 10);
+
+        events.Should().HaveCount(2);
+        events[0].State.Should().Be(AttentionState.Absent);
+        events[0].StartedAtUtc.Should().Be(Now.AddSeconds(30));
+        events[1].State.Should().Be(AttentionState.Focused);
+
+        var limited = await repository.ListForReportAsync([session.Id], maxCount: 1);
+        limited.Should().ContainSingle().Which.State.Should().Be(AttentionState.Absent);
+
+        (await repository.ListForReportAsync([], maxCount: 10)).Should().BeEmpty();
+
+        var invalid = () => repository.ListForReportAsync([session.Id], maxCount: 0);
+        await invalid.Should().ThrowAsync<ArgumentOutOfRangeException>();
+    }
+
     private static async Task<StudySession> SeedSessionAsync(
         TempDatabase db,
         DateTime? startedAt = null,

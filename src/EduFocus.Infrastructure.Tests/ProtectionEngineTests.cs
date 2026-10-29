@@ -742,6 +742,23 @@ public sealed class ProtectionEngineTests
             CancellationToken cancellationToken = default) =>
             Task.FromResult<DailyStudySummary?>(null);
 
+        public Task<IReadOnlyList<StudySession>> ListByLocalDateRangeAsync(
+            DateOnly startLocalDate,
+            DateOnly endLocalDate,
+            CancellationToken cancellationToken = default)
+        {
+            lock (_lock)
+            {
+                IReadOnlyList<StudySession> result = Sessions
+                    .Where(session => session.StartLocalDate >= startLocalDate
+                        && session.StartLocalDate <= endLocalDate)
+                    .OrderBy(session => session.StartedAtUtc)
+                    .ToList();
+
+                return Task.FromResult(result);
+            }
+        }
+
         public Task AddAsync(StudySession session, CancellationToken cancellationToken = default)
         {
             lock (_lock)
