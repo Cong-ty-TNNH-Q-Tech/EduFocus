@@ -379,6 +379,65 @@ public sealed class ParentAuthUseCaseTests
     }
 
     [Fact]
+    public async Task RegenerateRecoveryCode_returns_a_new_code_and_invalidates_the_old_one()
+    {
+        var harness = await AuthHarness.WithCredentialAsync();
+
+        var result = await harness.UseCase.RegenerateRecoveryCodeAsync(AuthHarness.InitialPin);
+
+        result.Status.Should().Be(ParentAuthStatus.Success);
+        result.RecoveryCode.Should().Be(AuthHarness.SecondRecoveryCode);
+        harness.Hasher.Verify(
+                AuthHarness.SecondRecoveryCode,
+                new SecretHash(
+                    harness.Credential.RecoveryCodeHash,
+                    harness.Credential.RecoveryCodeSalt,
+                    harness.Credential.RecoveryCodeIterations))
+            .Should()
+            .BeTrue();
+        harness.Hasher.Verify(
+                AuthHarness.FirstRecoveryCode,
+                new SecretHash(
+                    harness.Credential.RecoveryCodeHash,
+                    harness.Credential.RecoveryCodeSalt,
+                    harness.Credential.RecoveryCodeIterations))
+            .Should()
+            .BeFalse();
+        harness.Audits.Entries.Should()
+            .ContainSingle(x => x.EventType == AuditEventType.RecoveryCodeRegenerated);
+        harness.Audits.Entries.Select(x => $"{x.Description} {x.MetadataJson}")
+            .Should().NotContain(text => text!.Contains(AuthHarness.SecondRecoveryCode));
+    }
+
+    [Fact]
+    public async Task RegenerateRecoveryCode_with_a_wrong_pin_uses_the_shared_lockout()
+    {
+        var harness = await AuthHarness.WithCredentialAsync();
+        var previousHash = harness.Credential.RecoveryCodeHash;
+
+        var result = await harness.UseCase.RegenerateRecoveryCodeAsync("482916");
+
+        result.Status.Should().Be(ParentAuthStatus.InvalidCredential);
+        result.RemainingAttempts.Should().Be(4);
+        result.RecoveryCode.Should().BeNull();
+        harness.Credential.FailedAttempts.Should().Be(1);
+        harness.Credential.RecoveryCodeHash.Should().Be(previousHash);
+        harness.Audits.Entries.Should().ContainSingle(x => x.EventType == AuditEventType.AuthenticationFailed);
+    }
+
+    [Fact]
+    public async Task RegenerateRecoveryCode_reports_not_configured_without_a_credential()
+    {
+        var harness = new AuthHarness();
+
+        var result = await harness.UseCase.RegenerateRecoveryCodeAsync(AuthHarness.InitialPin);
+
+        result.Status.Should().Be(ParentAuthStatus.NotConfigured);
+        result.RecoveryCode.Should().BeNull();
+        harness.Audits.Entries.Should().BeEmpty();
+    }
+
+    [Fact]
     public async Task Audit_entries_never_contain_secrets()
     {
         var harness = await AuthHarness.WithCredentialAsync();

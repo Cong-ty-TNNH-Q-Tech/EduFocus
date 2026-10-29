@@ -6,6 +6,7 @@ using EduFocus.Ports.Outbound.Services;
 using EduFocus.SqliteDataAccess.Persistence;
 using EduFocus.SqliteDataAccess.Repositories;
 using EduFocus.UseCases.Auth;
+using EduFocus.UseCases.Onboarding;
 using EduFocus.WPF.Services;
 using EduFocus.WPF.ViewModels;
 using Microsoft.Extensions.DependencyInjection;
@@ -38,15 +39,24 @@ public partial class App : Application
         ConfigureServices(serviceCollection);
         Services = serviceCollection.BuildServiceProvider();
 
-        var mainWindow = Services.GetRequiredService<MainWindow>();
-        MainWindow = mainWindow;
-        mainWindow.Show();
-
         var correlation = Services.GetRequiredService<ICorrelationContext>();
         _correlationScope = correlation.BeginScope(Guid.NewGuid());
 
         var logger = Services.GetRequiredService<IAppLogger>();
         logger.Info(LogCategories.App, "====== EduFocus started ======");
+
+        var onboardingWindow = Services.GetRequiredService<OnboardingWindow>();
+        if (onboardingWindow.ShowDialog() != true)
+        {
+            logger.Info(LogCategories.App, "Onboarding was not completed; exiting.");
+            Shutdown();
+            return;
+        }
+
+        var mainWindow = Services.GetRequiredService<MainWindow>();
+        MainWindow = mainWindow;
+        ShutdownMode = ShutdownMode.OnMainWindowClose;
+        mainWindow.Show();
 
         // Background update check — non-blocking, silent on failure
         _ = Services.GetRequiredService<UpdateViewModel>().CheckForUpdateAsync();
@@ -58,12 +68,14 @@ public partial class App : Application
 
         services.AddSingleton(new EduFocusDatabaseOptions());
         services.AddSingleton<SqliteDatabaseInitializer>();
+        services.AddSingleton<IAppSettingsRepository, SqliteAppSettingsRepository>();
         services.AddSingleton<IParentCredentialRepository, SqliteParentCredentialRepository>();
         services.AddSingleton<IAuditLogRepository, SqliteAuditLogRepository>();
         services.AddSingleton<IParentAuthUseCase, ParentAuthUseCase>();
         services.AddSingleton<ParentSessionState>();
         services.AddSingleton<IParentAuthorizer>(provider => provider.GetRequiredService<ParentSessionState>());
         services.AddSingleton<IParentModeUseCase, ParentModeService>();
+        services.AddSingleton<IOnboardingUseCase, OnboardingService>();
         services.AddSingleton<DatabaseBootstrapper>();
 
         services.AddSingleton<UpdaterService>();
@@ -71,6 +83,8 @@ public partial class App : Application
         services.AddSingleton<MainWindow>();
         services.AddTransient<ParentModeViewModel>();
         services.AddTransient<ParentModeWindow>();
+        services.AddTransient<OnboardingViewModel>();
+        services.AddTransient<OnboardingWindow>();
         services.AddSingleton<Func<ParentModeWindow>>(provider =>
             () => provider.GetRequiredService<ParentModeWindow>());
     }

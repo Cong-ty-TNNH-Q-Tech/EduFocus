@@ -24,5 +24,12 @@ public sealed record ParentPinResetResult(
     DateTime? LockoutUntilUtc,
     string? RecoveryCode);
 
+/// <summary>Returned once after regenerating a recovery code; the new code is not retrievable later.</summary>
+public sealed record ParentRecoveryCodeResult(
+    ParentAuthStatus Status,
+    int RemainingAttempts,
+    DateTime? LockoutUntilUtc,
+    string? RecoveryCode);
+
 /// <summary>Returned once after setup so the parent can store the recovery code.</summary>
 public sealed record ParentCredentialSetupResult(string RecoveryCode);

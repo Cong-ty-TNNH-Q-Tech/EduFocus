@@ -63,41 +63,51 @@
 **Mô tả:** Lần chạy đầu tiên, ứng dụng hướng dẫn phụ huynh thiết lập PIN và giải thích phạm vi giám sát.
 
 **Tiền điều kiện**
-- Ứng dụng chưa có `ParentCredential`.
+- Ứng dụng chưa có `ParentCredential`, hoặc onboarding trước đó đang dang dở (`OnboardingCompleted = false`).
 - Database EduFocus mới đã được tạo; không có dữ liệu migrate từ 1.x.
 
 **Trigger**
-- Người dùng mở app lần đầu sau khi cài.
+- Người dùng mở app và `OnboardingCompleted = false`.
 
 **Luồng chính**
 1. Hệ thống hiển thị màn hình giới thiệu EduFocus: mục đích, dữ liệu thu thập, giới hạn và cam kết local-only.
 2. Hệ thống yêu cầu phụ huynh xác nhận:
-   - Đã đọc chính sách quyền riêng tư.
-   - Đã thông báo cho học sinh về việc giám sát.
-3. Phụ huynh nhập PIN 6–8 chữ số và xác nhận lại.
-4. Hệ thống kiểm tra:
+   - Đã đọc thông báo quyền riêng tư.
+   - Đã thông báo cho học sinh/gia đình về việc giám sát.
+3. Hệ thống lưu hai mốc `PrivacyAcceptedAtUtc` và `GuardianAcknowledgedAtUtc` vào `AppSettings`.
+4. Hệ thống hiển thị tuỳ chọn an toàn và lưu ngay:
+   - Giám sát attention (mặc định bật).
+   - Ưu tiên khởi động cùng Windows (mặc định bật; việc đăng ký thực tế thuộc issue release).
+   - Kiểm tra quyền camera ở mức Windows consent store; bị từ chối chỉ hiển thị cảnh báo, không chặn thiết lập.
+5. Phụ huynh nhập PIN 6–8 chữ số và xác nhận lại.
+6. Hệ thống kiểm tra:
    - Độ dài 6–8.
    - Chỉ gồm chữ số.
    - Hai lần nhập khớp nhau.
    - Không nằm trong danh sách PIN yếu phổ biến (000000, 111111, 123456, 654321…).
-5. Hệ thống tạo `ParentCredential`:
+7. Hệ thống tạo `ParentCredential`:
    - Salt ngẫu nhiên 16 byte.
    - PBKDF2-SHA256, 600.000 iterations.
    - Recovery code 12 ký tự ngẫu nhiên, hash tương tự PIN.
-6. Hệ thống hiển thị recovery code **một lần**, yêu cầu phụ huynh lưu lại.
-7. Hệ thống đánh dấu `OnboardingCompleted = true`, đăng nhập Parent Mode và mở dashboard.
+8. Hệ thống hiển thị recovery code **một lần** kèm nút sao chép và cảnh báo không chia sẻ; phụ huynh xác nhận đã lưu mã.
+9. Hệ thống đánh dấu `OnboardingCompleted = true` và mở dashboard. Parent Mode không tự mở sau onboarding.
 
 **Luồng thay thế**
-- **PIN yếu:** Hiển thị cảnh báo và yêu cầu chọn PIN khác.
-- **Không xác nhận đồng ý:** Không cho tạo PIN; chỉ có thể thoát app.
+- **PIN yếu hoặc không khớp:** Hiển thị lỗi ngay tại bước PIN và yêu cầu chọn PIN khác; chưa tạo credential.
+- **Không xác nhận đồng ý:** Nút tiếp tục bị vô hiệu hoá; phụ huynh chỉ có thể thoát app.
+- **Đóng app giữa onboarding:** Các bước đã lưu được giữ nguyên. Lần mở sau:
+  - Chưa có PIN → tiếp tục từ bước tuỳ chọn/PIN, không hỏi lại consent đã xác nhận.
+  - Đã có PIN nhưng chưa hoàn tất → yêu cầu nhập PIN để tạo lại recovery code mới (mã cũ không thể hiển thị lại), sau đó hoàn tất.
+- **Camera bị Windows từ chối:** Hiển thị cảnh báo kèm hướng dẫn mở Settings → Privacy & security → Camera; phụ huynh vẫn có thể tiếp tục và cấp quyền sau.
 
 **Ngoại lệ**
-- Ghi file thất bại: hiển thị lỗi quyền truy cập, hướng dẫn chạy với quyền Administrator.
-- Recovery code chỉ lưu hash: phụ huynh có thể tạo lại sau khi đăng nhập; mã cũ bị vô hiệu. Hệ thống không thể hiển thị lại mã cũ.
+- Ghi file thất bại: hiển thị lỗi quyền truy cập, hướng dẫn chạy với quyền Administrator và cho phép thử lại; dữ liệu đã lưu không bị mất.
+- Recovery code chỉ lưu hash: phụ huynh có thể tạo lại sau khi đăng nhập Parent Mode (UC13) hoặc ngay tại bước resume bằng PIN; mã cũ bị vô hiệu.
+- PIN sai khi resume dùng chung lockout 5 lần/15 phút với UC02/UC13.
 
 **Hậu điều kiện**
-- `ParentCredential` tồn tại; `OnboardingCompleted = true`.
-- PIN và recovery code không lưu plaintext.
+- `ParentCredential` tồn tại; hai mốc consent có giá trị; `OnboardingCompleted = true`.
+- PIN và recovery code không lưu plaintext; audit ghi `PrivacyConsentRecorded`, `PinSetup`, `RecoveryCodeRegenerated` (nếu resume) và `OnboardingCompleted`.
 
 **Business rules:** BR-01, BR-02, BR-22.
 

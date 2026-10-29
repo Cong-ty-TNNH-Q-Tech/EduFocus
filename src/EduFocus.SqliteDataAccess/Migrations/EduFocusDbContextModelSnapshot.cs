@@ -131,6 +131,9 @@ namespace EduFocus.SqliteDataAccess.Migrations
                         .HasColumnType("INTEGER")
                         .HasDefaultValue(90);
 
+                    b.Property<string>("GuardianAcknowledgedAtUtc")
+                        .HasColumnType("TEXT(28)");
+
                     b.Property<string>("Language")
                         .IsRequired()
                         .HasMaxLength(8)
@@ -151,6 +154,9 @@ namespace EduFocus.SqliteDataAccess.Migrations
                     b.Property<bool>("OnboardingCompleted")
                         .HasColumnType("INTEGER")
                         .HasDefaultValue(false);
+
+                    b.Property<string>("PrivacyAcceptedAtUtc")
+                        .HasColumnType("TEXT(28)");
 
                     b.Property<bool>("ProtectionEnabled")
                         .HasColumnType("INTEGER")

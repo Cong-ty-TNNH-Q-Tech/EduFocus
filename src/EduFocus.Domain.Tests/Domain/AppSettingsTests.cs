@@ -27,6 +27,9 @@ public class AppSettingsTests
         settings.Theme.Should().Be(AppTheme.Dark);
         settings.Language.Should().Be(AppLanguage.Vi);
         settings.OnboardingCompleted.Should().BeFalse();
+        settings.HasPrivacyConsent.Should().BeFalse();
+        settings.PrivacyAcceptedAtUtc.Should().BeNull();
+        settings.GuardianAcknowledgedAtUtc.Should().BeNull();
         settings.ScheduleOverrideUntilUtc.Should().BeNull();
         settings.LastCleanShutdownAtUtc.Should().BeNull();
         settings.CreatedAtUtc.Should().Be(Now);
@@ -162,13 +165,40 @@ public class AppSettingsTests
     {
         var settings = AppSettings.CreateDefault(Now);
 
+        settings.RecordPrivacyConsent(Now.AddSeconds(30));
         settings.CompleteOnboarding(Now.AddMinutes(1));
         settings.RecordCleanShutdown(Now.AddMinutes(2));
 
         settings.OnboardingCompleted.Should().BeTrue();
+        settings.HasPrivacyConsent.Should().BeTrue();
+        settings.PrivacyAcceptedAtUtc.Should().Be(Now.AddSeconds(30));
+        settings.GuardianAcknowledgedAtUtc.Should().Be(Now.AddSeconds(30));
         settings.LastCleanShutdownAtUtc.Should().Be(Now.AddMinutes(2));
 
         settings.ClearCleanShutdown(Now.AddMinutes(3));
         settings.LastCleanShutdownAtUtc.Should().BeNull();
+    }
+
+    [Fact]
+    public void Onboarding_cannot_complete_without_privacy_consent()
+    {
+        var settings = AppSettings.CreateDefault(Now);
+
+        var act = () => settings.CompleteOnboarding(Now.AddMinutes(1));
+
+        act.Should().Throw<InvalidOperationException>();
+        settings.OnboardingCompleted.Should().BeFalse();
+    }
+
+    [Fact]
+    public void Recording_privacy_consent_keeps_the_first_timestamp()
+    {
+        var settings = AppSettings.CreateDefault(Now);
+
+        settings.RecordPrivacyConsent(Now.AddMinutes(1));
+        settings.RecordPrivacyConsent(Now.AddMinutes(5));
+
+        settings.PrivacyAcceptedAtUtc.Should().Be(Now.AddMinutes(1));
+        settings.GuardianAcknowledgedAtUtc.Should().Be(Now.AddMinutes(1));
     }
 }

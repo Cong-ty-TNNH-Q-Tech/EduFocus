@@ -31,6 +31,8 @@ public sealed class AppSettings
         Theme = AppTheme.Dark;
         Language = AppLanguage.Vi;
         OnboardingCompleted = false;
+        PrivacyAcceptedAtUtc = null;
+        GuardianAcknowledgedAtUtc = null;
         ScheduleOverrideUntilUtc = null;
         LastCleanShutdownAtUtc = null;
         CreatedAtUtc = createdAtUtc;
@@ -68,6 +70,15 @@ public sealed class AppSettings
     public AppLanguage Language { get; private set; }
 
     public bool OnboardingCompleted { get; private set; }
+
+    /// <summary>Set when the parent confirms the privacy notice during onboarding.</summary>
+    public DateTime? PrivacyAcceptedAtUtc { get; private set; }
+
+    /// <summary>Set when the parent confirms the student was informed about monitoring.</summary>
+    public DateTime? GuardianAcknowledgedAtUtc { get; private set; }
+
+    public bool HasPrivacyConsent =>
+        PrivacyAcceptedAtUtc is not null && GuardianAcknowledgedAtUtc is not null;
 
     public DateTime? ScheduleOverrideUntilUtc { get; private set; }
 
@@ -191,8 +202,22 @@ public sealed class AppSettings
         Touch(nowUtc);
     }
 
+    /// <summary>
+    /// Records both mandatory privacy confirmations. The first timestamp is kept
+    /// so a resumed onboarding does not overwrite when consent was first given.
+    /// </summary>
+    public void RecordPrivacyConsent(DateTime nowUtc)
+    {
+        PrivacyAcceptedAtUtc ??= nowUtc;
+        GuardianAcknowledgedAtUtc ??= nowUtc;
+        Touch(nowUtc);
+    }
+
     public void CompleteOnboarding(DateTime nowUtc)
     {
+        if (!HasPrivacyConsent)
+            throw new InvalidOperationException("Privacy consent must be recorded before onboarding can complete.");
+
         OnboardingCompleted = true;
         Touch(nowUtc);
     }

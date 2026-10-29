@@ -23,4 +23,9 @@ public interface IParentAuthUseCase
         string recoveryCode,
         string newPin,
         CancellationToken cancellationToken = default);
+
+    /// <summary>Issues a new recovery code after verifying the current PIN (UC01 exception).</summary>
+    Task<ParentRecoveryCodeResult> RegenerateRecoveryCodeAsync(
+        string pin,
+        CancellationToken cancellationToken = default);
 }

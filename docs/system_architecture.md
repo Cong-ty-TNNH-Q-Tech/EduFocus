@@ -99,6 +99,7 @@ Chỉ chứa interface và DTO.
 
 **Inbound**
 ```text
+IOnboardingUseCase
 IParentAuthUseCase
 IParentModeUseCase
 IProtectionUseCase
@@ -142,8 +143,9 @@ IProcessWatchdogPort
 
 | UseCase | Chức năng |
 |---|---|
-| `ParentAuthUseCase` | Setup PIN, login, lockout, đổi PIN, recovery |
+| `ParentAuthUseCase` | Setup PIN, login, lockout, đổi PIN, recovery, tạo lại recovery code sau khi xác thực PIN |
 | `ParentModeService` | Parent session: login mở phiên, đổi PIN/reset kết thúc phiên |
+| `OnboardingService` | First-run: consent, tuỳ chọn an toàn, PIN, resume và hoàn tất UC01 |
 | `ProtectionUseCase` | Bật/tắt bảo vệ, áp dụng/gỡ rule, phục hồi trạng thái |
 | `StudySessionUseCase` | Bắt đầu/kết thúc session, tổng hợp thời gian |
 | `ActivityUseCase` | Ghi sample, phân loại app/URL, phát hiện lớp online |
@@ -180,12 +182,13 @@ Triển khai outbound ports, tương tác Windows.
 ### 3.5. Data Access (`EduFocus.SqliteDataAccess`)
 
 - `EduFocusDbContext` với 9 DbSet mới; Fluent API cấu hình index, unique constraint, converter và check constraint.
-- Migration `InitialEduFocusSchema`; **không migrate** dữ liệu từ `DontBeLazy` 1.x.
+- Migration `InitialEduFocusSchema` + `AddOnboardingConsent` (hai mốc consent nullable trên `AppSettings`); **không migrate** dữ liệu từ `DontBeLazy` 1.x.
 - DB path: `%ProgramData%\EduFocus\edufocus.db` (mặc định trong `EduFocusDatabaseOptions`).
 - `SqliteDatabaseInitializer`: tạo/khóa thư mục dữ liệu, kiểm tra integrity DB hiện có, backup trước migration (verified, giữ 3 bản), giữ DB nếu lỗi và ghi log hướng dẫn khôi phục.
 - `SqliteBackupStore`: tạo/verify/rotate backup và `Restore` an toàn (snapshot trước khi thay thế).
 - `DataDirectorySecurity`: ACL Administrators/SYSTEM, kế thừa cho file DB và backup.
 - `SqliteParentCredentialRepository`: đọc/ghi singleton `ParentCredentials` (hash + lockout state), không lưu plaintext.
+- `SqliteAppSettingsRepository`: đọc/ghi singleton `AppSettings`, gồm consent onboarding và tuỳ chọn an toàn.
 - `SqliteAuditLogRepository`: ghi audit event kèm `CorrelationId`, tách khỏi file log kỹ thuật.
 - `SqlitePragmaInterceptor`: `PRAGMA foreign_keys = ON` mỗi kết nối; WAL và `auto_vacuum` do initializer thiết lập.
 - Các repository còn lại sẽ được thêm ở các issue sau.
@@ -216,8 +219,14 @@ Views/
 
 Triển khai (issue #14): `ParentModeWindow` + `ParentModeViewModel` cung cấp đăng nhập PIN,
 trạng thái phiên, đổi PIN, reset bằng recovery code và hiển thị mã khôi phục mới đúng một lần.
-`DatabaseBootstrapper` khởi tạo DB lazily khi mở Parent Mode; lỗi dữ liệu hiển thị trong cửa sổ
-và có thể thử lại. Onboarding tạo PIN lần đầu chưa thuộc issue này (issue #15).
+`DatabaseBootstrapper` khởi tạo DB lazily; lỗi dữ liệu hiển thị trong cửa sổ và có thể thử lại.
+
+Triển khai (issue #15): `OnboardingWindow` + `OnboardingViewModel` là wizard 5 bước (giới thiệu,
+quyền riêng tư, tuỳ chọn an toàn, PIN, mã khôi phục) và là cửa sổ đầu tiên khi app khởi động.
+App chỉ mở dashboard sau khi onboarding hoàn tất; đóng wizard trước khi xong sẽ thoát app. Wizard
+kiểm tra quyền camera qua Windows consent store (chỉ cảnh báo) và hỗ trợ copy mã khôi phục một lần.
+Các bước đã lưu cho phép resume sau restart; nếu PIN đã tạo nhưng chưa hoàn tất, phụ huynh nhập PIN
+để tạo lại mã khôi phục mới.
 
 ---
 
@@ -543,6 +552,19 @@ ON  ──Parent override────────> OFF (until current window end
 
 Trạng thái lưu trong `AppSettings.ProtectionEnabled`; session active lưu trong `StudySessions`. Khi phục hồi trong thời gian bảo vệ, tạo session mới với `Trigger = Recovery`, không cộng thời gian app tắt.
 
+### 9.4. First-run onboarding & consent
+
+- `OnboardingService` điều phối UC01 và lưu từng bước: `PrivacyAcceptedAtUtc` +
+  `GuardianAcknowledgedAtUtc`, tuỳ chọn `MonitoringEnabled`/`StartWithWindows`, `ParentCredential`,
+  cuối cùng là `OnboardingCompleted`.
+- Không thể tạo PIN trước khi consent được lưu; không thể hoàn tất nếu thiếu PIN hoặc consent.
+  `AppSettings.CompleteOnboarding` cũng từ chối khi thiếu consent.
+- Wizard chỉ hiển thị mã khôi phục một lần và yêu cầu phụ huynh xác nhận đã lưu. Nếu app đóng sau
+  khi tạo PIN, lần mở sau yêu cầu PIN để xoay mã mới (`RecoveryCodeRegenerated`), vì mã cũ chỉ tồn tại
+  dưới dạng hash.
+- PIN sai khi resume dùng chung lockout 5 lần/15 phút; audit ghi `PrivacyConsentRecorded` và
+  `OnboardingCompleted`, không chứa PIN/recovery code.
+
 ---
 
 ## 10. Persistence & Privacy
@@ -638,9 +660,11 @@ AddViews()
 - Scoped/transient: repositories, use cases (trừ stateful).
 - `IProtectionEnginePort` được bọc bởi `LoggingProtectionEngineDecorator`.
 
-> **Hiện trạng sau issue #7:** composition root chỉ gọi `AddInfrastructureServices()`
-> (logger + monotonic clock) và đăng ký updater/update view model. Các nhóm đăng ký trên
-> sẽ được thêm lại theo từng issue của Phase 2–7.
+> **Hiện trạng sau issue #15:** composition root gọi `AddInfrastructureServices()` (logger +
+> monotonic clock), đăng ký SQLite repositories (`IParentCredentialRepository`,
+> `IAppSettingsRepository`, `IAuditLogRepository`), `ParentAuthUseCase`, `ParentSessionState`,
+> `ParentModeService`, `OnboardingService`, `DatabaseBootstrapper` và các cửa sổ/ViewModel.
+> Onboarding được mở trước dashboard ở mỗi lần khởi động để đọc trạng thái hoàn tất.
 
 ---
 
@@ -708,8 +732,9 @@ EduFocus/
 > quy trình verify/restore backup; issue #11 cập nhật CI; issue #12 thêm structured logging,
 > correlation id và audit repository; issue #13 thêm `ParentAuthUseCase`, PBKDF2 hasher,
 > recovery-code generator và credential repository; issue #14 thêm `ParentSessionState`,
-> `ParentModeService` và cửa sổ Parent Mode trong WPF (login, lockout, đổi/reset PIN).
-> Onboarding tạo PIN lần đầu thuộc issue #15.
+> `ParentModeService` và cửa sổ Parent Mode trong WPF (login, lockout, đổi/reset PIN);
+> issue #15 thêm consent/repository AppSettings, migration `AddOnboardingConsent`, use case
+> onboarding có resume và wizard first-run chặn dashboard đến khi hoàn tất.
 > Inventory 1.x ở [legacy-cleanup.md](./legacy-cleanup.md), invariant domain ở
 > [domain-invariants.md](./domain-invariants.md).
 

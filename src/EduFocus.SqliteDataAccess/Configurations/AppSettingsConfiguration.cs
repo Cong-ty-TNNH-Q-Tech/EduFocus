@@ -59,6 +59,14 @@ internal sealed class AppSettingsConfiguration : IEntityTypeConfiguration<AppSet
 
         builder.Property(x => x.OnboardingCompleted).HasDefaultValue(false).ValueGeneratedNever();
 
+        builder.Property(x => x.PrivacyAcceptedAtUtc)
+            .HasConversion<NullableUtcDateTimeConverter>()
+            .HasColumnType("TEXT(28)");
+
+        builder.Property(x => x.GuardianAcknowledgedAtUtc)
+            .HasConversion<NullableUtcDateTimeConverter>()
+            .HasColumnType("TEXT(28)");
+
         builder.Property(x => x.ScheduleOverrideUntilUtc)
             .HasConversion<NullableUtcDateTimeConverter>()
             .HasColumnType("TEXT(28)");

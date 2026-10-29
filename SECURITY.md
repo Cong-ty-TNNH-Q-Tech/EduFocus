@@ -34,6 +34,10 @@ EduFocus là ứng dụng desktop **local-first** dành cho phụ huynh giám s�
 - Log kỹ thuật nằm trong `%LocalAppData%\EduFocus\logs`, tối đa 10 MB/file và giữ 14 ngày. PIN, recovery code, token và URL đầy đủ được redact trước khi ghi; audit event quan trọng nằm trong `AuditLogs` của DB, không ghi vào file log.
 - PIN/recovery code chỉ lưu dưới dạng hash PBKDF2-SHA256 600.000 iterations, salt 16 byte, hash 32 byte; so sánh constant-time; dùng chung lockout 5 lần/15 phút. Recovery code 12 ký tự chỉ hiển thị một lần và được xoay sau khi dùng để reset PIN. Mỗi lần sai PIN/recovery code được ghi audit `AuthenticationFailed`; lần thứ 5 ghi thêm `LockoutTriggered`.
 - Parent Mode session chỉ nằm trong bộ nhớ, tự khóa sau 5 phút idle hoặc khi đóng cửa sổ Parent Mode, và không được khôi phục sau khi app khởi động lại; đổi PIN thành công buộc đăng nhập lại.
+- Onboarding lần chạy đầu là cổng bắt buộc: app chỉ mở cửa sổ chính sau khi phụ huynh xác nhận quyền riêng tư/trách nhiệm, thiết lập PIN và xác nhận đã lưu recovery code. Timestamp consent (`PrivacyAcceptedAtUtc`, `GuardianAcknowledgedAtUtc`) lưu trong `AppSettings` và không bị ghi đè khi lặp lại. Không có đường bỏ qua bước nào từ UI; domain từ chối hoàn tất onboarding khi thiếu consent.
+- Onboarding chỉ **lưu** tùy chọn `StartWithWindows` và `MonitoringEnabled`; đăng ký auto-start thật và mở webcam thuộc issue #39/#30. Tiền kiểm tra camera chỉ đọc consent store của Windows, không mở thiết bị và không lưu frame.
+- Recovery code lần đầu và mã tái phát hành khi tiếp tục onboarding đều chỉ hiển thị một lần; mã cũ bị vô hiệu hóa. Nút sao chép đưa mã vào clipboard của phiên Windows hiện tại — clipboard do người dùng kiểm soát và nằm ngoài phạm vi bảo vệ của EduFocus, nên hướng dẫn lưu mã ở nơi an toàn.
+- Không có PIN, recovery code hay nội dung clipboard nào được ghi vào DB, audit hay file log; ô mật khẩu được xóa sau mỗi lần gửi và khi đóng wizard.
 - Retention mặc định: sample 30 ngày, event/blocked attempt 90 ngày, session summary/audit 365 ngày.
 
 ### Giới hạn đã biết (không phải lỗ hổng)

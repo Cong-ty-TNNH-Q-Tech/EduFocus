@@ -101,6 +101,16 @@ và dự án tuân theo [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 - **Khởi tạo DB lazy:** `DatabaseBootstrapper` khởi tạo SQLite khi mở Parent Mode; lỗi dữ liệu hiển thị trong cửa sổ và có thể thử lại, không làm sập shell. Onboarding tạo PIN lần đầu thuộc issue #15.
 - **Tests:** session hết hạn/khóa phiên, login/đổi PIN/reset kết thúc phiên, lockout đọc từ DB sau khi "restart" và hết hạn sau 15 phút; tổng 306 test pass, build Release 0 warning.
 
+### Added (Phase 2 — Onboarding, issue #15)
+- **Wizard lần chạy đầu:** `OnboardingWindow`/`OnboardingViewModel` gồm 5 bước — chào mừng → xác nhận quyền riêng tư và trách nhiệm phụ huynh → lưu tùy chọn an toàn → thiết lập PIN và nhận recovery code một lần → xác nhận đã lưu mã. Không thể bỏ qua bước bắt buộc; `OnboardingCompleted` chỉ được đặt khi privacy consent, PIN và xác nhận mã đều hoàn tất.
+- **Consent lưu bền vững:** `AppSettings.PrivacyAcceptedAtUtc`/`GuardianAcknowledgedAtUtc` (migration `AddOnboardingConsent`, nullable, giữ mốc thời gian đầu tiên); `CompleteOnboarding` ném lỗi nghiệp vụ nếu chưa có consent nên UI không thể lách.
+- **Use case:** `IOnboardingUseCase`/`OnboardingService` lưu từng bước ngay khi hoàn thành, nên tắt app giữa chừng vẫn giữ consent, tùy chọn và PIN; khi mở lại, wizard vào đúng bước còn thiếu. Credential đã có mà chưa hoàn tất thì xác minh PIN và phát hành recovery code mới (`RegenerateRecoveryCodeAsync`, dùng chung lockout, audit `RecoveryCodeRegenerated`) thay vì giả định mã cũ còn.
+- **Mặc định theo BA:** wizard cho phép bật/tắt giám sát attention và “khởi động cùng Windows”, mặc định bật như tài liệu UC01 và giải thích hệ quả; chỉ lưu lựa chọn (đăng ký auto-start thực tế thuộc issue #39, quyền camera thuộc issue #30).
+- **Tiền kiểm tra camera:** `CameraPermissionProbe` đọc consent store webcam của Windows và hiển thị cảnh báo kèm nút “Kiểm tra lại” khi bị từ chối; không mở thiết bị, không lưu ảnh.
+- **Trạng thái lỗi rõ ràng:** lỗi PIN yếu/không khớp, lockout (kèm số phút còn lại), từ chối camera và lỗi lưu cấu hình đều hiển thị bằng chữ “Lỗi:” (không chỉ dựa vào màu); ô PIN dùng `PasswordBox`, label trỏ đúng điều khiển và có `AutomationProperties.Name`.
+- **Khởi động có cổng onboarding:** app chạy `ShutdownMode=OnExplicitShutdown`, hiển thị wizard modal trước `MainWindow`; đóng wizard giữa chừng thì app thoát và lần sau tiếp tục đúng bước.
+- **Tests:** 9 test `OnboardingService` (mặc định an toàn, consent idempotent + audit, chặn PIN khi chưa consent, hủy giữa chừng, restart rồi hoàn tất, sai PIN, hoàn tất hai lần) và 3 test tái phát hành recovery code; 3 test repository mới; test upgrade migration giữ nguyên settings cũ; 2 test consent trong domain. Tổng **324 test pass**, build Release 0 warning.
+
 ### Removed (khỏi phạm vi EduFocus)
 - Quản lý task, profile học tập, quote động lực và Gemini AI.
 - Cơ chế "friction" bắt gõ câu xác nhận bỏ cuộc.

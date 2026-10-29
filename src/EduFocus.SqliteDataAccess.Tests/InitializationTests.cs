@@ -3,6 +3,8 @@ using EduFocus.SqliteDataAccess.Tests.TestSupport;
 using FluentAssertions;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 
 namespace EduFocus.SqliteDataAccess.Tests;
 
@@ -16,8 +18,9 @@ public sealed class InitializationTests
         var result = await db.CreateInitializer().InitializeAsync();
 
         result.WasCreated.Should().BeTrue();
-        result.AppliedMigrations.Should().ContainSingle()
-            .Which.Should().EndWith("_InitialEduFocusSchema");
+        result.AppliedMigrations.Should().HaveCount(2)
+            .And.Contain(migration => migration.EndsWith("_InitialEduFocusSchema"))
+            .And.Contain(migration => migration.EndsWith("_AddOnboardingConsent"));
         result.BackupPath.Should().BeNull();
         File.Exists(db.DatabasePath).Should().BeTrue();
         db.Logger.Errors.Should().BeEmpty();
@@ -114,6 +117,44 @@ public sealed class InitializationTests
         remaining.Should().Contain(oldBackups[2]);
         remaining.Should().NotContain(oldBackups[0]);
         remaining.Should().NotContain(oldBackups[1]);
+    }
+
+    [Fact]
+    public async Task Upgrade_adds_consent_columns_and_preserves_existing_settings()
+    {
+        await using var db = new TempDatabase();
+
+        await using (var context = db.CreateContext())
+        {
+            await context.GetService<IMigrator>()
+                .MigrateAsync("20261029140816_InitialEduFocusSchema");
+        }
+
+        using (var connection = db.OpenConnectionWithPragmas())
+        {
+            TempDatabase.ExecuteNonQuery(connection, """
+                INSERT INTO AppSettings
+                    (Id, ProtectionEnabled, MonitoringEnabled, ScheduleEnabled, MonitorOnlyDuringClasses,
+                     DistractionThresholdSeconds, AbsenceThresholdSeconds, SampleIntervalSeconds,
+                     ActivityRetentionDays, EventRetentionDays, SessionRetentionDays, StartWithWindows,
+                     Theme, Language, OnboardingCompleted, CreatedAtUtc, UpdatedAtUtc)
+                VALUES
+                    ('11111111-1111-1111-1111-111111111111', 1, 1, 0, 0, 20, 30, 15, 30, 90, 365, 1,
+                     'dark', 'vi', 0, '2026-10-29T00:00:00.000Z', '2026-10-29T00:00:00.000Z');
+                """);
+        }
+
+        var result = await db.CreateInitializer().InitializeAsync();
+
+        result.AppliedMigrations.Should().ContainSingle()
+            .Which.Should().EndWith("_AddOnboardingConsent");
+        result.BackupPath.Should().NotBeNullOrEmpty();
+        File.Exists(result.BackupPath!).Should().BeTrue();
+
+        using var upgraded = db.OpenConnection();
+        TempDatabase.Scalar(upgraded, "SELECT ProtectionEnabled FROM AppSettings;").Should().Be(1L);
+        TempDatabase.Scalar(upgraded, "SELECT PrivacyAcceptedAtUtc FROM AppSettings;").Should().Be(DBNull.Value);
+        TempDatabase.Scalar(upgraded, "SELECT GuardianAcknowledgedAtUtc FROM AppSettings;").Should().Be(DBNull.Value);
     }
 
     [Fact]

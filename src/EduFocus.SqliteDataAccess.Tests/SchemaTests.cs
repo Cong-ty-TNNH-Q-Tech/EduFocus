@@ -58,7 +58,7 @@ public sealed class SchemaTests
     }
 
     [Fact]
-    public async Task Migration_is_recorded_once_in_history()
+    public async Task Migrations_are_recorded_once_in_history()
     {
         await using var db = new TempDatabase();
         await db.CreateInitializer().InitializeAsync();
@@ -67,10 +67,11 @@ public sealed class SchemaTests
 
         var migrations = TempDatabase.QueryStrings(
             connection,
-            "SELECT MigrationId FROM __EFMigrationsHistory;");
+            "SELECT MigrationId FROM __EFMigrationsHistory ORDER BY MigrationId;");
 
-        migrations.Should().ContainSingle()
-            .Which.Should().EndWith("_InitialEduFocusSchema");
+        migrations.Should().HaveCount(2)
+            .And.Contain(migration => migration.EndsWith("_InitialEduFocusSchema"))
+            .And.Contain(migration => migration.EndsWith("_AddOnboardingConsent"));
     }
 
     [Fact]
@@ -128,6 +129,10 @@ public sealed class SchemaTests
         settings["Theme"].DefaultValue.Should().Be("'dark'");
         settings["Language"].DefaultValue.Should().Be("'vi'");
         settings["SampleIntervalSeconds"].DefaultValue.Should().Be("15");
+        settings["PrivacyAcceptedAtUtc"].Type.Should().Be("TEXT(28)");
+        settings["PrivacyAcceptedAtUtc"].NotNull.Should().BeFalse();
+        settings["GuardianAcknowledgedAtUtc"].Type.Should().Be("TEXT(28)");
+        settings["GuardianAcknowledgedAtUtc"].NotNull.Should().BeFalse();
 
         var rules = ReadColumns(connection, "BlockRules");
         rules["IsEnabled"].DefaultValue.Should().Be("1");

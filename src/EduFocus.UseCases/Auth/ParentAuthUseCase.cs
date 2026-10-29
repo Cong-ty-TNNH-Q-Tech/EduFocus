@@ -224,6 +224,62 @@ public sealed class ParentAuthUseCase : IParentAuthUseCase
             replacementCode);
     }
 
+    public async Task<ParentRecoveryCodeResult> RegenerateRecoveryCodeAsync(
+        string pin,
+        CancellationToken cancellationToken = default)
+    {
+        var now = UtcNow();
+        var credential = await _credentials.GetAsync(cancellationToken);
+        if (credential is null)
+            return NotConfiguredRecoveryCode();
+
+        var lockedOut = LockoutResult(credential, now);
+        if (lockedOut is not null)
+        {
+            return new ParentRecoveryCodeResult(
+                lockedOut.Status,
+                lockedOut.RemainingAttempts,
+                lockedOut.LockoutUntilUtc,
+                RecoveryCode: null);
+        }
+
+        if (string.IsNullOrEmpty(pin) || !_hasher.Verify(pin, ToSecretHash(
+                credential.PinHash, credential.PinSalt, credential.PinIterations)))
+        {
+            var failure = await RegisterAuthenticationFailureAsync(credential, "PIN", now, cancellationToken);
+
+            return new ParentRecoveryCodeResult(
+                failure.Status,
+                failure.RemainingAttempts,
+                failure.LockoutUntilUtc,
+                RecoveryCode: null);
+        }
+
+        var replacementCode = _recoveryCodes.Generate();
+        var recoveryHash = _hasher.Hash(ParentRecoveryCode.Normalize(replacementCode));
+
+        credential.RegisterSuccessfulAuthentication(now);
+        credential.ChangeRecoveryCode(
+            recoveryHash.HashBase64,
+            recoveryHash.SaltBase64,
+            recoveryHash.Iterations,
+            now);
+
+        await _credentials.UpdateAsync(credential, cancellationToken);
+        await WriteAuditAsync(
+            AuditEventType.RecoveryCodeRegenerated,
+            "Parent recovery code regenerated after PIN verification.",
+            now,
+            metadataJson: null,
+            cancellationToken);
+
+        return new ParentRecoveryCodeResult(
+            ParentAuthStatus.Success,
+            ParentCredential.MaxFailedAttempts,
+            LockoutUntilUtc: null,
+            replacementCode);
+    }
+
     private async Task<ParentAuthResult> RegisterAuthenticationFailureAsync(
         ParentCredential credential,
         string secretKind,
@@ -276,6 +332,9 @@ public sealed class ParentAuthUseCase : IParentAuthUseCase
         new(ParentAuthStatus.NotConfigured, 0, LockoutUntilUtc: null);
 
     private static ParentPinResetResult NotConfiguredReset() =>
+        new(ParentAuthStatus.NotConfigured, 0, LockoutUntilUtc: null, RecoveryCode: null);
+
+    private static ParentRecoveryCodeResult NotConfiguredRecoveryCode() =>
         new(ParentAuthStatus.NotConfigured, 0, LockoutUntilUtc: null, RecoveryCode: null);
 
     private async Task WriteAuditAsync(
