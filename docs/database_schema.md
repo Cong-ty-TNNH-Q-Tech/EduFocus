@@ -252,9 +252,13 @@ Singleton.
 - Nếu Protection vẫn ON khi phục hồi, tạo session mới `Trigger = Recovery`, không cộng thời gian gián đoạn.
 - `AttentionPercent` chỉ tính khi `MonitoredSeconds > 0`.
 - `CoveragePercent` chỉ tính khi `MonitoringEligibleSeconds > 0`; nếu bằng 0 thì NULL.
+- `MonitoringEligibleSeconds` chỉ tăng trong cùng `UPDATE` với category/idle/online-class của activity sample
+  (`AddActivitySecondsAsync`), theo policy monitoring đọc lúc start; idle vẫn là thời gian kỳ vọng trừ khi
+  `MonitorOnlyDuringClasses`. Mẫu số này độc lập với tick camera nên camera outage làm coverage giảm
+  (issue #33).
 - `MonitoredSeconds`, `AttentionPercent`, `CoveragePercent` là **stored generated columns**: SQLite tự tính từ các cột đếm khi ghi, EF Core chỉ đọc. EF SQLite provider bỏ kiểu khai báo trong DDL generated column (SQLite không bắt buộc), nên `PRAGMA table_xinfo` trả `type = ''`; giá trị vẫn là INTEGER/REAL theo biểu thức.
 - `OnlineClassSeconds` là overlay (thời gian được đánh dấu lớp online), không cộng vào `StudySeconds + DistractionSeconds + NeutralSeconds`.
-- Nếu `CoveragePercent < 50`, báo cáo hiển thị cảnh báo.
+- Nếu `CoveragePercent < 50`, `SessionAttentionSummary.Warning` trả "Dữ liệu chưa đủ tin cậy" để báo cáo hiển thị (issue #33).
 - `BlockedAttemptCount` chỉ phản ánh attempt quan sát được; báo cáo phải ghi rõ best-effort.
 - Session summary không bị xóa khi xóa sample/event chi tiết (trừ khi phụ huynh xóa toàn bộ).
 

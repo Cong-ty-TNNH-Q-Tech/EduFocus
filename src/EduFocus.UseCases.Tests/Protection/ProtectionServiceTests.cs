@@ -460,6 +460,116 @@ public sealed class ProtectionServiceTests
     }
 
     [Fact]
+    public async Task Enabling_starts_attention_monitoring_for_the_new_session()
+    {
+        var harness = new ProtectionHarness();
+        harness.Session.Authenticate();
+
+        await harness.Service.EnableAsync();
+
+        var session = harness.Sessions.Active;
+        session.Should().NotBeNull();
+        session!.MonitoringEnabled.Should().BeTrue();
+        harness.AttentionMonitor.Started.Should().ContainSingle().Which.Should().Be(session.Id);
+        harness.AttentionMonitor.IsRunning.Should().BeTrue();
+        harness.AttentionPipeline.StartCalls.Should().Be(1);
+        harness.AttentionPipeline.IsRunning.Should().BeTrue();
+        harness.AttentionMonitor.StopCalls.Should().Be(0);
+        harness.AttentionPipeline.StopCalls.Should().Be(0);
+    }
+
+    [Fact]
+    public async Task Monitoring_disabled_does_not_start_the_camera()
+    {
+        var harness = new ProtectionHarness();
+        harness.SettingsRow.UpdateMonitoring(
+            monitoringEnabled: false,
+            monitorOnlyDuringClasses: false,
+            ProtectionHarness.Start.UtcDateTime);
+        harness.Session.Authenticate();
+
+        await harness.Service.EnableAsync();
+
+        harness.Sessions.Active!.MonitoringEnabled.Should().BeFalse();
+        harness.AttentionMonitor.Started.Should().BeEmpty();
+        harness.AttentionMonitor.IsRunning.Should().BeFalse();
+        harness.AttentionPipeline.StartCalls.Should().Be(0);
+        harness.AttentionPipeline.IsRunning.Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task Attention_start_failure_does_not_block_protection()
+    {
+        var harness = new ProtectionHarness();
+        harness.AttentionMonitor.ThrowOnStart = true;
+        harness.Session.Authenticate();
+
+        var result = await harness.Service.EnableAsync();
+
+        result.Changed.Should().BeTrue();
+        harness.SettingsRow.ProtectionEnabled.Should().BeTrue();
+        harness.Sessions.Active.Should().NotBeNull();
+        harness.Heartbeat.IsRunning.Should().BeTrue();
+        harness.Activity.IsRunning.Should().BeTrue();
+        harness.AttentionPipeline.StartCalls.Should().Be(0);
+        harness.Logger.Errors.Should().Contain(error =>
+            error.Contains("Could not start attention monitoring"));
+    }
+
+    [Fact]
+    public async Task Pipeline_start_failure_stops_the_monitor_and_keeps_protection_on()
+    {
+        var harness = new ProtectionHarness();
+        harness.AttentionPipeline.ThrowOnStart = true;
+        harness.Session.Authenticate();
+
+        await harness.Service.EnableAsync();
+
+        harness.SettingsRow.ProtectionEnabled.Should().BeTrue();
+        harness.Sessions.Active.Should().NotBeNull();
+        harness.AttentionMonitor.IsRunning.Should().BeFalse();
+        harness.AttentionMonitor.StopCalls.Should().Be(1);
+        harness.AttentionPipeline.IsRunning.Should().BeFalse();
+        harness.Logger.Errors.Should().Contain(error =>
+            error.Contains("Could not start attention monitoring"));
+    }
+
+    [Fact]
+    public async Task Disabling_stops_attention_before_completing_the_session()
+    {
+        var harness = new ProtectionHarness();
+        harness.Session.Authenticate();
+        await harness.Service.EnableAsync();
+        harness.Session.Authenticate();
+
+        await harness.Service.DisableAsync();
+
+        harness.AttentionPipeline.StopCalls.Should().Be(1);
+        harness.AttentionPipeline.IsRunning.Should().BeFalse();
+        harness.AttentionMonitor.StopCalls.Should().Be(1);
+        harness.AttentionMonitor.IsRunning.Should().BeFalse();
+        harness.Sessions.Active.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task Attention_stop_failure_does_not_block_disabling()
+    {
+        var harness = new ProtectionHarness();
+        harness.Session.Authenticate();
+        await harness.Service.EnableAsync();
+        harness.AttentionMonitor.ThrowOnStop = true;
+        harness.Session.Authenticate();
+
+        await harness.Service.DisableAsync();
+
+        harness.SettingsRow.ProtectionEnabled.Should().BeFalse();
+        harness.Sessions.Active.Should().BeNull();
+        harness.AttentionPipeline.StopCalls.Should().Be(1);
+        harness.Logger.Errors.Should().Contain(error =>
+            error.Contains("Could not stop attention monitoring"));
+    }
+
+    [Fact]
     public async Task Disabling_stops_the_heartbeat_before_completing_the_session()
     {
         var harness = new ProtectionHarness();
@@ -497,6 +607,10 @@ public sealed class ProtectionServiceTests
         harness.Activity.StopCalls.Should().Be(1);
         harness.Activity.Started.Should().HaveCount(2);
         harness.Activity.IsRunning.Should().BeTrue();
+        harness.AttentionMonitor.StopCalls.Should().Be(1);
+        harness.AttentionMonitor.Started.Should().HaveCount(2);
+        harness.AttentionMonitor.IsRunning.Should().BeTrue();
+        harness.AttentionPipeline.IsRunning.Should().BeTrue();
     }
 
     [Fact]
@@ -522,6 +636,25 @@ public sealed class ProtectionServiceTests
         harness.Activity.Started.Should().ContainSingle().Which.Should().Be(recovered.Id);
         harness.Activity.IsRunning.Should().BeTrue();
         harness.Activity.StopCalls.Should().Be(1);
+        harness.AttentionMonitor.StopCalls.Should().Be(1);
+        harness.AttentionMonitor.Started.Should().ContainSingle().Which.Should().Be(recovered.Id);
+        harness.AttentionMonitor.IsRunning.Should().BeTrue();
+        harness.AttentionPipeline.StartCalls.Should().Be(1);
+        harness.AttentionPipeline.IsRunning.Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task Reconcile_with_protection_off_does_not_start_the_camera()
+    {
+        var harness = new ProtectionHarness();
+
+        await harness.Service.ReconcileAsync();
+
+        harness.AttentionMonitor.Started.Should().BeEmpty();
+        harness.AttentionMonitor.IsRunning.Should().BeFalse();
+        harness.AttentionMonitor.StopCalls.Should().Be(1);
+        harness.AttentionPipeline.StartCalls.Should().Be(0);
+        harness.AttentionPipeline.IsRunning.Should().BeFalse();
     }
 
     [Fact]

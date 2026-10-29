@@ -527,31 +527,34 @@
 **Business rules:** BR-12, BR-13, BR-14, BR-15.
 
 > **Triển khai (issue #27):** policy `MonitoringEligibility.IsEligible(monitoringEnabled,
-> monitorOnlyDuringClasses, isOnlineClass)` đã có trong domain để UC08 quyết định mỗi tick attention có cộng
-> `MonitoringEligibleSeconds` hay không. Việc cộng eligible/monitored theo tick và tính coverage thuộc
-> issue #33; policy được test với cùng 40 giây monitored cho coverage 20% (mọi lúc) và 80% (chỉ trong lớp).
+> monitorOnlyDuringClasses, isOnlineClass)` là nguồn quyết định duy nhất cho `MonitoringEligibleSeconds`.
+> Issue #33 cộng eligible theo sample foreground trong `ActivityTrackingService` (không theo tick camera), nên
+> camera outage làm coverage giảm chứ không làm mẫu số ngừng tăng; policy được test với cùng 40 giây monitored
+> cho coverage 20% (mọi lúc) và 80% (chỉ trong lớp).
 
 > **Triển khai (issue #30):** `ICameraSessionUseCase`/`CameraSessionService` chọn camera đã lưu trong
 > `AppSettings.CameraDeviceId` hoặc camera mặc định, mở/đóng tuần tự và bọc open/list/capture trong timeout
 > 5 giây. Camera bận/không quyền/mất kết nối → `CameraUnavailable`, tự mở lại sau 30 giây (backoff nhân đôi
 > tới 5 phút); lỗi capture lẻ không kết luận mất tập trung, chỉ 3 lỗi liên tiếp hoặc `Disconnected` mới đóng
 > thiết bị. `CameraStatusViewModel` hiển thị trạng thái và hướng dẫn quyền trong cửa sổ chính/tray. Việc
-> phân tích frame, ghi `AttentionEvent`/`CameraUnavailable` và cộng thời gian monitored thuộc #31–#33.
+> phân tích frame, ghi `AttentionEvent`/`CameraUnavailable`, cộng thời gian monitored và coverage đã hoàn tất
+> ở #31–#33.
 
 > **Triển khai (issue #32):** `AttentionMonitorService` biến `AttentionSample` thành state ổn định qua
 > `AttentionStateWindow` (cửa sổ 6 giây, tối thiểu 3 mẫu, majority ≥ 60%) rồi `AttentionStateMachine`
 > (Focused ngay, Distracted > 20 giây, Absent > 30 giây, Drowsy > 2 giây). `AttentionEvent` chỉ mở/đóng khi
 > state đổi; `CameraUnavailable` ghi nhận ngay và không vào mẫu số attention; inference lỗi không bị tính là
 > `Absent`; gap > 5 giây không cộng thời gian. `ConfidenceAvg` được cập nhật trọng số trong cùng `UPDATE`
-> với counter. Crash đóng event đang mở tại `LastHeartbeatAtUtc`. Việc start/stop monitor theo phiên học,
-> cộng `MonitoringEligibleSeconds` và tính coverage thuộc #33.
+> với counter. Crash đóng event đang mở tại `LastHeartbeatAtUtc`. Issue #33 start/stop monitor + pipeline
+> theo phiên học, cộng `MonitoringEligibleSeconds` từ activity sample và tính coverage/cảnh báo qua
+> `SessionAttentionSummary`.
 
 > **Triển khai (issue #31):** `AttentionPipelineService` chạy vòng sampling 1 FPS qua `ICameraSessionUseCase`,
 > gọi `IAttentionFrameAnalyzer` trên từng `CameraFrame` và phát `AttentionSample` sau khi đã dispose frame.
 > Sample camera lỗi có `CameraFailure` + `Observation = null`; sample inference lỗi có `Error` nhưng giữ
 > `CameraFailure = None`, để monitor (#32) không biến lỗi kỹ thuật thành `Absent`. `OpenCvAttentionFrameAnalyzer`
 > không còn mở camera; nó chỉ nhận frame BGR24 managed, tính luminance và chạy YuNet/Haar. Classifier,
-> state machine và `AttentionEvent` đã có ở #32; coverage/eligibility thuộc #33.
+> state machine và `AttentionEvent` đã có ở #32; coverage/eligibility đã nối ở #33.
 
 ---
 
@@ -701,6 +704,10 @@
 - Không thay đổi dữ liệu (trừ export).
 
 **Business rules:** BR-15, BR-21.
+
+> **Triển khai một phần (issue #33):** `SessionAttentionSummary` cung cấp `MonitoredSeconds`,
+> `AttentionPercent`, `CoveragePercent` và cảnh báo "Dữ liệu chưa đủ tin cậy" khi coverage < 50% để dashboard
+> dùng lại. UI dashboard/báo cáo chi tiết thuộc #35–#38.
 
 ---
 

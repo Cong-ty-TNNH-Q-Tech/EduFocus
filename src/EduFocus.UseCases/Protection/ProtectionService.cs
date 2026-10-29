@@ -37,6 +37,8 @@ public sealed class ProtectionService : IProtectionUseCase
     private readonly IProtectionEnginePort _engine;
     private readonly IStudySessionHeartbeatUseCase _heartbeat;
     private readonly IActivityUseCase _activity;
+    private readonly IAttentionPipelineUseCase _attentionPipeline;
+    private readonly IAttentionMonitorUseCase _attentionMonitor;
     private readonly IParentAuthorizer _authorizer;
     private readonly IAuditLogRepository _auditLogs;
     private readonly ICorrelationContext _correlation;
@@ -52,6 +54,8 @@ public sealed class ProtectionService : IProtectionUseCase
         IProtectionEnginePort engine,
         IStudySessionHeartbeatUseCase heartbeat,
         IActivityUseCase activity,
+        IAttentionPipelineUseCase attentionPipeline,
+        IAttentionMonitorUseCase attentionMonitor,
         IParentAuthorizer authorizer,
         IAuditLogRepository auditLogs,
         ICorrelationContext correlation,
@@ -65,6 +69,8 @@ public sealed class ProtectionService : IProtectionUseCase
         _engine = engine ?? throw new ArgumentNullException(nameof(engine));
         _heartbeat = heartbeat ?? throw new ArgumentNullException(nameof(heartbeat));
         _activity = activity ?? throw new ArgumentNullException(nameof(activity));
+        _attentionPipeline = attentionPipeline ?? throw new ArgumentNullException(nameof(attentionPipeline));
+        _attentionMonitor = attentionMonitor ?? throw new ArgumentNullException(nameof(attentionMonitor));
         _authorizer = authorizer ?? throw new ArgumentNullException(nameof(authorizer));
         _auditLogs = auditLogs ?? throw new ArgumentNullException(nameof(auditLogs));
         _correlation = correlation ?? throw new ArgumentNullException(nameof(correlation));
@@ -150,11 +156,13 @@ public sealed class ProtectionService : IProtectionUseCase
 
             // The heartbeat starts before the persisted flag flips so an
             // enabled state is never left without a cadence. Activity sampling
-            // is best-effort and never blocks protection.
+            // and attention monitoring are best-effort and never block
+            // protection.
             if (createdSession || !wasEnabled)
             {
                 await _heartbeat.StartAsync(active.Id, active.LastHeartbeatAtUtc, cancellationToken);
                 await TryStartActivityAsync(active);
+                await TryStartAttentionAsync(active);
             }
 
             settings.EnableProtection(now, source);
@@ -168,6 +176,7 @@ public sealed class ProtectionService : IProtectionUseCase
         }
         catch
         {
+            await TryStopAttentionAsync();
             await TryStopActivityAsync();
             await TryStopHeartbeatAsync();
 
@@ -271,6 +280,7 @@ public sealed class ProtectionService : IProtectionUseCase
         {
             // Flush the final sample and beat before the engine is torn down,
             // then reload the row so completion cannot overwrite them.
+            await TryStopAttentionAsync();
             await TryStopActivityAsync();
             await _heartbeat.StopAsync(CancellationToken.None);
             active = await _sessions.GetActiveAsync(cancellationToken) ?? active;
@@ -318,6 +328,7 @@ public sealed class ProtectionService : IProtectionUseCase
 
             await TryRestartActivityAsync();
             await TryRestartHeartbeatAsync();
+            await TryRestartAttentionAsync();
             throw;
         }
 
@@ -362,6 +373,7 @@ public sealed class ProtectionService : IProtectionUseCase
                 Changed: false,
                 []);
 
+        await TryStopAttentionAsync();
         await TryStopActivityAsync();
         await TryStopHeartbeatAsync();
 
@@ -441,6 +453,7 @@ public sealed class ProtectionService : IProtectionUseCase
             await _sessions.AddAsync(recovered, cancellationToken);
             await _heartbeat.StartAsync(recovered.Id, recovered.LastHeartbeatAtUtc, cancellationToken);
             await TryStartActivityAsync(recovered);
+            await TryStartAttentionAsync(recovered);
 
             await WriteAuditAsync(
                 AuditActor.System,
@@ -622,6 +635,80 @@ public sealed class ProtectionService : IProtectionUseCase
             _logger.Error(
                 LogCategories.Session,
                 "Could not restart the study-session heartbeat after a failed protection change.",
+                ex);
+        }
+    }
+
+    private async Task TryStartAttentionAsync(StudySession session)
+    {
+        try
+        {
+            if (!session.MonitoringEnabled)
+            {
+                await TryStopAttentionAsync();
+                return;
+            }
+
+            // Subscribe the monitor before the pipeline produces its first
+            // sample; a failing pipeline is stopped again below.
+            await _attentionMonitor.StartAsync(session.Id, CancellationToken.None);
+
+            try
+            {
+                await _attentionPipeline.StartAsync(CancellationToken.None);
+            }
+            catch
+            {
+                await TryStopAttentionAsync();
+                throw;
+            }
+        }
+        catch (Exception ex)
+        {
+            // Camera monitoring is an overlay; protection must stay ON even
+            // when the camera or the inference model is unavailable.
+            _logger.Error(LogCategories.Attention, "Could not start attention monitoring.", ex);
+        }
+    }
+
+    private async Task TryStopAttentionAsync()
+    {
+        try
+        {
+            if (_attentionPipeline.IsRunning)
+                await _attentionPipeline.StopAsync(CancellationToken.None);
+        }
+        catch (Exception ex)
+        {
+            _logger.Error(LogCategories.Attention, "Could not stop the attention pipeline.", ex);
+        }
+
+        try
+        {
+            // Always stop the monitor: it drains queued samples and closes the
+            // open attention event even when the pipeline already stopped.
+            await _attentionMonitor.StopAsync(CancellationToken.None);
+        }
+        catch (Exception ex)
+        {
+            _logger.Error(LogCategories.Attention, "Could not stop attention monitoring.", ex);
+        }
+    }
+
+    private async Task TryRestartAttentionAsync()
+    {
+        try
+        {
+            var active = await _sessions.GetActiveAsync(CancellationToken.None);
+
+            if (active is not null)
+                await TryStartAttentionAsync(active);
+        }
+        catch (Exception ex)
+        {
+            _logger.Error(
+                LogCategories.Attention,
+                "Could not restart attention monitoring after a failed protection change.",
                 ex);
         }
     }

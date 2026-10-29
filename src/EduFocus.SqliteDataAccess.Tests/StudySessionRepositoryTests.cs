@@ -192,6 +192,7 @@ public sealed class StudySessionRepositoryTests
             categorySeconds: 12,
             idleSeconds: 3,
             onlineClassSeconds: 12,
+            monitoringEligibleSeconds: 15,
             Now.AddSeconds(15));
 
         written.Should().BeTrue();
@@ -200,6 +201,7 @@ public sealed class StudySessionRepositoryTests
         reloaded.StudySeconds.Should().Be(12);
         reloaded.IdleSeconds.Should().Be(3);
         reloaded.OnlineClassSeconds.Should().Be(12);
+        reloaded.MonitoringEligibleSeconds.Should().Be(15);
         reloaded.NeutralSeconds.Should().Be(0);
         reloaded.UpdatedAtUtc.Should().Be(Now.AddSeconds(15));
 
@@ -209,11 +211,13 @@ public sealed class StudySessionRepositoryTests
             categorySeconds: 10,
             idleSeconds: 0,
             onlineClassSeconds: 0,
+            monitoringEligibleSeconds: 0,
             Now.AddSeconds(30));
 
         reloaded = await ReadSessionAsync(db, session.Id.Value);
         reloaded.NeutralSeconds.Should().Be(10);
         reloaded.StudySeconds.Should().Be(12);
+        reloaded.MonitoringEligibleSeconds.Should().Be(15);
     }
 
     [Fact]
@@ -235,6 +239,7 @@ public sealed class StudySessionRepositoryTests
             categorySeconds: 15,
             idleSeconds: 0,
             onlineClassSeconds: 0,
+            monitoringEligibleSeconds: 15,
             Now.AddMinutes(31));
 
         written.Should().BeFalse();

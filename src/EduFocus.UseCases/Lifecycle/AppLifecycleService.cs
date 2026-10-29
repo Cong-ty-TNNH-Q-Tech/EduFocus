@@ -36,6 +36,8 @@ public sealed class AppLifecycleService : IAppLifecycleUseCase
     private readonly IStudySessionRepository _sessions;
     private readonly IStudySessionHeartbeatUseCase _heartbeat;
     private readonly IActivityUseCase _activity;
+    private readonly IAttentionPipelineUseCase _attentionPipeline;
+    private readonly IAttentionMonitorUseCase _attentionMonitor;
     private readonly IAppSettingsRepository _settings;
     private readonly IAuditLogRepository _auditLogs;
     private readonly ICorrelationContext _correlation;
@@ -48,6 +50,8 @@ public sealed class AppLifecycleService : IAppLifecycleUseCase
         IStudySessionRepository sessions,
         IStudySessionHeartbeatUseCase heartbeat,
         IActivityUseCase activity,
+        IAttentionPipelineUseCase attentionPipeline,
+        IAttentionMonitorUseCase attentionMonitor,
         IAppSettingsRepository settings,
         IAuditLogRepository auditLogs,
         ICorrelationContext correlation,
@@ -59,6 +63,8 @@ public sealed class AppLifecycleService : IAppLifecycleUseCase
         _sessions = sessions ?? throw new ArgumentNullException(nameof(sessions));
         _heartbeat = heartbeat ?? throw new ArgumentNullException(nameof(heartbeat));
         _activity = activity ?? throw new ArgumentNullException(nameof(activity));
+        _attentionPipeline = attentionPipeline ?? throw new ArgumentNullException(nameof(attentionPipeline));
+        _attentionMonitor = attentionMonitor ?? throw new ArgumentNullException(nameof(attentionMonitor));
         _settings = settings ?? throw new ArgumentNullException(nameof(settings));
         _auditLogs = auditLogs ?? throw new ArgumentNullException(nameof(auditLogs));
         _correlation = correlation ?? throw new ArgumentNullException(nameof(correlation));
@@ -115,6 +121,7 @@ public sealed class AppLifecycleService : IAppLifecycleUseCase
 
         // Stop the cadence first and reload the row so the shutdown interrupt
         // closes at the flushed heartbeat instead of a stale snapshot.
+        await TryStopAttentionAsync();
         await TryStopActivityAsync();
         await TryStopHeartbeatAsync();
 
@@ -239,6 +246,34 @@ public sealed class AppLifecycleService : IAppLifecycleUseCase
             _logger.Error(
                 LogCategories.Session,
                 "Could not stop activity sampling during Windows shutdown.",
+                ex);
+        }
+    }
+
+    private async Task TryStopAttentionAsync()
+    {
+        try
+        {
+            if (_attentionPipeline.IsRunning)
+                await _attentionPipeline.StopAsync(CancellationToken.None);
+        }
+        catch (Exception ex)
+        {
+            _logger.Error(
+                LogCategories.Attention,
+                "Could not stop the attention pipeline during Windows shutdown.",
+                ex);
+        }
+
+        try
+        {
+            await _attentionMonitor.StopAsync(CancellationToken.None);
+        }
+        catch (Exception ex)
+        {
+            _logger.Error(
+                LogCategories.Attention,
+                "Could not stop attention monitoring during Windows shutdown.",
                 ex);
         }
     }

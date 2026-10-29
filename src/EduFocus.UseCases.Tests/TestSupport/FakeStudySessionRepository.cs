@@ -104,6 +104,7 @@ internal sealed class FakeStudySessionRepository : IStudySessionRepository
         int categorySeconds,
         int idleSeconds,
         int onlineClassSeconds,
+        int monitoringEligibleSeconds,
         DateTime nowUtc,
         CancellationToken cancellationToken = default)
     {
@@ -121,6 +122,8 @@ internal sealed class FakeStudySessionRepository : IStudySessionRepository
             session.AddIdleSeconds(idleSeconds, stamp);
         if (onlineClassSeconds > 0)
             session.AddOnlineClassSeconds(onlineClassSeconds, stamp);
+        if (monitoringEligibleSeconds > 0)
+            session.AddMonitoringEligibleSeconds(monitoringEligibleSeconds, stamp);
 
         ActivityWrites.Add(new ActivityWriteCall(
             sessionId,
@@ -128,6 +131,7 @@ internal sealed class FakeStudySessionRepository : IStudySessionRepository
             categorySeconds,
             idleSeconds,
             onlineClassSeconds,
+            monitoringEligibleSeconds,
             nowUtc));
         return Task.FromResult(true);
     }
@@ -179,6 +183,7 @@ internal sealed class FakeStudySessionRepository : IStudySessionRepository
         int CategorySeconds,
         int IdleSeconds,
         int OnlineClassSeconds,
+        int MonitoringEligibleSeconds,
         DateTime NowUtc);
 
     public readonly record struct AttentionWriteCall(

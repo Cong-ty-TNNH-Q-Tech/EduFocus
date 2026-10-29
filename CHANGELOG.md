@@ -250,6 +250,12 @@ và dự án tuân theo [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 - **DI & stop:** composition root đăng ký `IAttentionEventRepository`/`SqliteAttentionEventRepository`, `AttentionThresholds`, `AttentionMonitoringOptions.Default`, `IAttentionMonitorUseCase`/`AttentionMonitorService`; monitor chưa start ở startup (thuộc #33).
 - **Tests:** +40 test — sliding window, classifier/state machine/Drowsy, 16 hành vi monitor (event đầu tiên, không event trùng, noise, Drowsy, camera, inference lỗi, confidence trọng số, lỗi DB/event retry, session kết thúc, restart/stop, options), repository attention event và counter/weighted confidence; tổng **709 test pass**, build Release 0 warning.
 
+### Added (Phase 5 — Coverage & session integration, issue #33)
+- **Summary attention nhất quán:** `SessionAttentionSummary` tính `MonitoredSeconds` từ bốn counter, `AttentionPercent`/`CoveragePercent` (NULL khi mẫu số 0) và trả cảnh báo "Dữ liệu chưa đủ tin cậy" khi coverage < 50%; `CameraUnavailableSeconds` nằm ngoài mẫu số attention.
+- **Coverage denominator:** `MonitoringEligibleSeconds` được cộng theo activity sample trong cùng `UPDATE` với category/idle/online-class (`AddActivitySecondsAsync`), dùng `MonitoringEligibility.IsEligible` với policy đọc lúc start; idle vẫn là thời gian kỳ vọng trừ khi `MonitorOnlyDuringClasses`, nên camera outage làm coverage giảm chứ không làm attention giảm.
+- **Vòng đời attention theo phiên:** `ProtectionService` start monitor trước rồi pipeline khi bật bảo vệ/recovery, stop pipeline trước rồi monitor khi tắt/reconcile; session `MonitoringEnabled = false` không mở camera. `AppLifecycleService` stop pipeline/monitor trước activity/heartbeat khi Windows shutdown. Mọi lỗi camera/attention chỉ log, không chặn bảo vệ.
+- **Tests:** +19 test — 6 domain summary (biên 0/50/100%, camera outage), 4 eligible (mọi lúc/chỉ lớp/tắt monitoring/idle), 7 vòng đời protection (start/stop/rollback/skip khi tắt monitoring), shutdown attention và tích hợp event → counter → summary; tổng **728 test pass**, build Release 0 warning.
+
 ### Removed (khỏi phạm vi EduFocus)
 - Quản lý task, profile học tập, quote động lực và Gemini AI.
 - Cơ chế "friction" bắt gõ câu xác nhận bỏ cuộc.

@@ -158,7 +158,7 @@ IProcessWatchdogPort
 | `ActivityUseCase` | Ghi sample, phân loại app/URL, phát hiện lớp online |
 | `CameraSessionService` | Chọn/mở/đóng camera, báo lỗi quyền/bận/mất kết nối, retry backoff (issue #30) |
 | `AttentionPipelineService` | Sampling camera 1 FPS qua camera supervisor, inference trên frame managed, dispose frame trước khi phát `AttentionSample` (issue #31) |
-| `AttentionMonitorService` | Nhận `AttentionSample`, làm mượt 5–10 giây, chạy state machine, mở/đóng `AttentionEvent` và cộng giây attention (issue #32); coverage/eligibility và nối phiên học thuộc #33 |
+| `AttentionMonitorService` | Nhận `AttentionSample`, làm mượt 5–10 giây, chạy state machine, mở/đóng `AttentionEvent` và cộng giây attention (issue #32); `ProtectionService` start/stop monitor + pipeline theo phiên học (issue #33) |
 | `BlockRuleUseCase` | CRUD rule, validate, allowlist override |
 | `ScheduleService` | CRUD khung giờ, đánh giá 30 giây, auto ON/OFF và override |
 | `ReportUseCase` | Query dashboard, timeline, export |
@@ -255,8 +255,9 @@ lỗi liên tiếp 3 lần hoặc `Disconnected` mới đóng camera và chuyể
 kết nối. `CameraOptions` validate timeout/backoff/ngưỡng. Adapter `OpenCvCameraPort` copy `Mat` sang
 `CameraFrame` BGR24 managed và giải phóng native buffer trước khi trả về; `WindowsCameraDeviceCatalog` liệt
 kê PNP camera qua WMI (best effort). `CameraStatusViewModel` hiển thị trạng thái và hướng dẫn quyền trong
-cửa sổ chính/tray. Camera **chưa tự bật**; #33 sẽ nối vòng đời phiên học để gọi `StartAsync`/`StopAsync`,
-còn `AttentionMonitorService` (#32) đã ghi `AttentionEvent`/`CameraUnavailable` từ sample.
+cửa sổ chính/tray. Camera **chưa tự bật**; #33 nối vòng đời phiên học: `ProtectionService` start monitor rồi
+pipeline khi bật bảo vệ/phục hồi và stop pipeline rồi monitor khi tắt/reconcile, còn `AttentionMonitorService`
+(#32) đã ghi `AttentionEvent`/`CameraUnavailable` từ sample.
 
 **Hiện trạng issue #31:** `IAttentionPipelineUseCase`/`AttentionPipelineService` chạy vòng sampling mặc định
 1 giây (validate 0–5 giây), `StartAsync` mở camera qua `ICameraSessionUseCase` và tick đầu tiên chạy ngay.
@@ -266,7 +267,7 @@ Mỗi tick lấy `CameraFrame`, gọi `IAttentionFrameAnalyzer.Analyze`, dispose
 `Absent`. Lỗi camera chỉ log khi loại lỗi đổi, lỗi inference lặp được gộp; exception của subscriber không làm
 dừng loop. `OpenCvAttentionFrameAnalyzer` không còn sở hữu camera: nó nhận `CameraFrame` BGR24, copy sang
 `Mat`, tính luminance và chạy detector. Phân loại trạng thái và ghi `AttentionEvent` đã có ở #32; cộng
-coverage và start pipeline theo phiên học thuộc #33.
+coverage và start pipeline theo phiên học đã nối ở #33.
 
 ### 3.4. Infrastructure (`EduFocus.Infrastructure`)
 
@@ -428,7 +429,9 @@ Timer 1–2s
 > **Triển khai issue #31:** `AttentionPipelineService` là nửa đầu của luồng trên: timer 1 giây → camera
 > supervisor → `IAttentionFrameAnalyzer` → `AttentionSample` → frame disposed. **Issue #32** nối nửa sau:
 > classifier + cửa sổ trượt 5–10 giây + state machine → `AttentionEvent` khi state đổi → cộng giây attention.
-> Aggregate coverage 10 giây và nối vòng đời phiên học thuộc #33.
+> **Issue #33** nối vòng đời phiên học: monitor subscribe pipeline trước, pipeline start sau; stop pipeline
+> trước rồi monitor drain/đóng event. Coverage và cảnh báo độ tin cậy tính từ counter session, không cần
+> aggregate riêng mỗi 10 giây.
 
 ### 4.4. Schedule
 
@@ -715,6 +718,12 @@ Không lưu query string/fragment trong `ActivitySamples`; chỉ lưu domain và
 > Forward wall clock không đổi `DurationSeconds`/`ActiveSeconds` vì cả hai tính bằng monotonic clock; wall
 > clock lùi vẫn clamp timestamp. Gap không có sự kiện và vượt ngưỡng bị bỏ thay vì cộng dồn.
 
+> **Triển khai issue #33:** `ActivityTrackingService` đọc policy monitoring (`MonitoringEnabled`,
+> `MonitorOnlyDuringClasses`) một lần khi start và cộng `MonitoringEligibleSeconds` cùng transaction với
+> category/idle/online-class qua `AddActivitySecondsAsync`. Idle vẫn là thời gian monitoring được kỳ vọng
+> (trừ khi chỉ-monitor-trong-lớp); `IdleSeconds`/`OnlineClassSeconds` vẫn là overlay nên không cộng trùng.
+> Lỗi đọc settings giữ coverage là unknown thay vì chặn sampling.
+
 ---
 
 ## 8. Attention Monitor
@@ -781,6 +790,14 @@ AttentionPercent =
 > truyền confidence `null` và không vào mẫu số. Thời gian chỉ cộng khi state đã xác định; gap >
 > `MaxSampleGap` (5 giây) bị bỏ, không cộng dồn. Reconcile sau crash đóng event mở tại `LastHeartbeatAtUtc`;
 > stop bình thường đóng tại mẫu cuối.
+>
+> **Triển khai issue #33:** `SessionAttentionSummary` là view tự nhất quán cho báo cáo: `MonitoredSeconds`
+> luôn là tổng bốn counter, `AttentionPercent`/`CoveragePercent` null khi mẫu số 0, `CoveragePercent < 50`
+> trả `Warning = "Dữ liệu chưa đủ tin cậy"`. `MonitoringEligibleSeconds` do `ActivityTrackingService` cộng
+> theo sample foreground (kể cả idle nếu không giới hạn lớp), nên camera outage làm coverage giảm chứ không
+> làm attention giảm. `ProtectionService` start monitor rồi pipeline khi bật/phục hồi bảo vệ và stop
+> pipeline rồi monitor khi tắt, reconcile hoặc Windows shutdown; mọi lỗi camera/attention chỉ log và không
+> tắt bảo vệ.
 
 ### 8.4. Camera contention
 
@@ -795,12 +812,13 @@ AttentionPercent =
 > **Triển khai issue #30:** `CameraSessionService` coi camera bận/không quyền/mất kết nối là `Unavailable`
 > và tự mở lại sau 30 giây (backoff nhân đôi tới 5 phút); chỉ `Disconnected` hoặc 3 lỗi capture liên tiếp
 > mới đóng thiết bị. `CameraStatusViewModel` hiển thị trạng thái và hướng dẫn bật quyền Camera trong cửa
-> sổ chính/tray. Việc ghi event `CameraUnavailable` đã có ở #32; cộng `MonitoringEligibleSeconds`/coverage
-> thuộc #33.
+> sổ chính/tray. Việc ghi event `CameraUnavailable` đã có ở #32; #33 cộng `MonitoringEligibleSeconds` độc
+> lập với sample attention nên thời gian camera bận làm giảm coverage và hiện cảnh báo dữ liệu chưa đủ tin cậy.
 
 > **Triển khai issue #31:** camera bận/không quyền vẫn tạo sample mỗi giây với `CameraFailure` và
 > `Observation = null`; pipeline không tự suy đoán `Absent` khi không có frame hay khi inference lỗi. #32
-> chuyển sample lỗi thành event `CameraUnavailable` ngay và bỏ qua khi inference lỗi; coverage thuộc #33.
+> chuyển sample lỗi thành event `CameraUnavailable` ngay và bỏ qua khi inference lỗi; #33 tính coverage từ
+> mẫu số độc lập nên outage không bị tính là mất tập trung.
 
 ### 8.5. Privacy
 
@@ -1023,21 +1041,26 @@ AddViews()
 > `CameraPortOptions` (MSMF 640×480), `ICameraPort`/`OpenCvCameraPort`, `CameraOptions` (timeout 5 giây,
 > retry 30 giây → 5 phút, ngưỡng 3 lỗi capture), `ICameraSessionUseCase`/`CameraSessionService` và
 > `CameraStatusViewModel`; WPF tham chiếu project `EduFocus.Infrastructure.Attention`. `ServiceProvider.DisposeAsync()`
-> đóng camera qua `OpenCvCameraPort.Dispose()`. Camera chưa được start ở composition root — #33 sẽ gọi
-> `StartAsync`/`StopAsync` theo vòng đời phiên học.
+> đóng camera qua `OpenCvCameraPort.Dispose()`. Camera chỉ được start/stop theo vòng đời phiên học ở #33.
 
 > **Bổ sung sau issue #31:** composition root đăng ký `AttentionAnalyzerOptions`,
 > `AttentionPipelineOptions.Default` (1 giây), `IAttentionFrameAnalyzer` qua `AttentionAnalyzerFactory` với
 > backend YuNet và thư mục `models/` cạnh executable, cùng singleton `IAttentionPipelineUseCase`/
-> `AttentionPipelineService`. Pipeline **chưa được resolve/start** ở startup: model ONNX được tải khi
-> analyzer được resolve, nên #33 phải nối vòng đời phiên học và xử lý thiếu model trước khi start.
-> `ServiceProvider.DisposeAsync()` dừng sampling và đóng camera nếu pipeline đã start.
+> `AttentionPipelineService`. Pipeline **không được resolve/start** ở startup: model ONNX chỉ được tải khi
+> `ProtectionService` start camera theo phiên học (#33); thiếu model hoặc lỗi camera chỉ log và không chặn
+> bảo vệ. `ServiceProvider.DisposeAsync()` dừng sampling và đóng camera nếu pipeline đã start.
 
 > **Bổ sung sau issue #32:** composition root đăng ký `IAttentionEventRepository`/
 > `SqliteAttentionEventRepository`, `AttentionThresholds`, `AttentionMonitoringOptions.Default` (cửa sổ 6
 > giây, 3 mẫu tối thiểu, majority 0.6, gap tối đa 5 giây) và singleton `IAttentionMonitorUseCase`/
-> `AttentionMonitorService`. Monitor **chưa được start** ở startup; #33 sẽ start/stop theo phiên học và
-> coverage. `ServiceProvider.DisposeAsync()` đóng event đang mở nếu monitor đã start.
+> `AttentionMonitorService`. Monitor **chưa được start** ở startup; #33 start/stop theo phiên học.
+> `ServiceProvider.DisposeAsync()` đóng event đang mở nếu monitor đã start.
+
+> **Bổ sung sau issue #33:** `ProtectionService` và `AppLifecycleService` nhận thêm
+> `IAttentionPipelineUseCase` + `IAttentionMonitorUseCase`. Khi bật bảo vệ hoặc phục hồi sau crash, monitor
+> start trước (subscribe sample) rồi pipeline; khi tắt, reconcile hoặc Windows shutdown, pipeline stop trước
+> rồi monitor drain và đóng event. Session có `MonitoringEnabled = false` không mở camera. `ActivityTrackingService`
+> nhận `IAppSettingsRepository` để cộng `MonitoringEligibleSeconds` theo policy tại thời điểm start.
 
 ---
 

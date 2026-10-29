@@ -116,6 +116,7 @@ public sealed class SqliteStudySessionRepository : IStudySessionRepository
         int categorySeconds,
         int idleSeconds,
         int onlineClassSeconds,
+        int monitoringEligibleSeconds,
         DateTime nowUtc,
         CancellationToken cancellationToken = default)
     {
@@ -127,6 +128,11 @@ public sealed class SqliteStudySessionRepository : IStudySessionRepository
             throw new ArgumentOutOfRangeException(nameof(idleSeconds), idleSeconds, "Seconds cannot be negative.");
         if (onlineClassSeconds < 0)
             throw new ArgumentOutOfRangeException(nameof(onlineClassSeconds), onlineClassSeconds, "Seconds cannot be negative.");
+        if (monitoringEligibleSeconds < 0)
+            throw new ArgumentOutOfRangeException(
+                nameof(monitoringEligibleSeconds),
+                monitoringEligibleSeconds,
+                "Seconds cannot be negative.");
         if (nowUtc.Kind != DateTimeKind.Utc)
             throw new ArgumentException("The timestamp must be UTC.", nameof(nowUtc));
 
@@ -143,6 +149,9 @@ public sealed class SqliteStudySessionRepository : IStudySessionRepository
                     .SetProperty(x => x.IdleSeconds, x => x.IdleSeconds + idleSeconds)
                     .SetProperty(x => x.OnlineClassSeconds, x => x.OnlineClassSeconds + onlineClassSeconds)
                     .SetProperty(
+                        x => x.MonitoringEligibleSeconds,
+                        x => x.MonitoringEligibleSeconds + monitoringEligibleSeconds)
+                    .SetProperty(
                         x => x.UpdatedAtUtc,
                         x => x.UpdatedAtUtc < nowUtc ? nowUtc : x.UpdatedAtUtc),
                 cancellationToken),
@@ -152,6 +161,9 @@ public sealed class SqliteStudySessionRepository : IStudySessionRepository
                     .SetProperty(x => x.IdleSeconds, x => x.IdleSeconds + idleSeconds)
                     .SetProperty(x => x.OnlineClassSeconds, x => x.OnlineClassSeconds + onlineClassSeconds)
                     .SetProperty(
+                        x => x.MonitoringEligibleSeconds,
+                        x => x.MonitoringEligibleSeconds + monitoringEligibleSeconds)
+                    .SetProperty(
                         x => x.UpdatedAtUtc,
                         x => x.UpdatedAtUtc < nowUtc ? nowUtc : x.UpdatedAtUtc),
                 cancellationToken),
@@ -160,6 +172,9 @@ public sealed class SqliteStudySessionRepository : IStudySessionRepository
                     .SetProperty(x => x.NeutralSeconds, x => x.NeutralSeconds + categorySeconds)
                     .SetProperty(x => x.IdleSeconds, x => x.IdleSeconds + idleSeconds)
                     .SetProperty(x => x.OnlineClassSeconds, x => x.OnlineClassSeconds + onlineClassSeconds)
+                    .SetProperty(
+                        x => x.MonitoringEligibleSeconds,
+                        x => x.MonitoringEligibleSeconds + monitoringEligibleSeconds)
                     .SetProperty(
                         x => x.UpdatedAtUtc,
                         x => x.UpdatedAtUtc < nowUtc ? nowUtc : x.UpdatedAtUtc),

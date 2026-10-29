@@ -42,9 +42,12 @@ public interface IStudySessionRepository
 
     /// <summary>
     /// Adds foreground-activity totals to an Active session with targeted
-    /// increments: category seconds, the separate idle overlay and the online
-    /// class overlay. Returns false when the session already ended. No other
-    /// counters, including the heartbeat, are rewritten.
+    /// increments: category seconds, the separate idle overlay, the online
+    /// class overlay and the monitoring-eligible denominator. Eligibility is
+    /// decided by the caller from the current monitoring policy, so idle time
+    /// can still be expected monitoring time. Returns false when the session
+    /// already ended. No other counters, including the heartbeat, are
+    /// rewritten.
     /// </summary>
     Task<bool> AddActivitySecondsAsync(
         StudySessionId sessionId,
@@ -52,6 +55,7 @@ public interface IStudySessionRepository
         int categorySeconds,
         int idleSeconds,
         int onlineClassSeconds,
+        int monitoringEligibleSeconds,
         DateTime nowUtc,
         CancellationToken cancellationToken = default);
 

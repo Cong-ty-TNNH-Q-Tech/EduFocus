@@ -802,6 +802,7 @@ public sealed class ProtectionEngineTests
             int categorySeconds,
             int idleSeconds,
             int onlineClassSeconds,
+            int monitoringEligibleSeconds,
             DateTime nowUtc,
             CancellationToken cancellationToken = default)
         {
@@ -818,6 +819,8 @@ public sealed class ProtectionEngineTests
                     session.AddIdleSeconds(idleSeconds, stamp);
                 if (onlineClassSeconds > 0)
                     session.AddOnlineClassSeconds(onlineClassSeconds, stamp);
+                if (monitoringEligibleSeconds > 0)
+                    session.AddMonitoringEligibleSeconds(monitoringEligibleSeconds, stamp);
 
                 return Task.FromResult(true);
             }

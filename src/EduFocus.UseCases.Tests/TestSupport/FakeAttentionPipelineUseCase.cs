@@ -11,10 +11,17 @@ internal sealed class FakeAttentionPipelineUseCase : IAttentionPipelineUseCase
 
     public int StopCalls { get; private set; }
 
+    public bool ThrowOnStart { get; set; }
+
+    public bool ThrowOnStop { get; set; }
+
     public event EventHandler<AttentionSample>? SampleProduced;
 
     public Task StartAsync(CancellationToken cancellationToken = default)
     {
+        if (ThrowOnStart)
+            throw new InvalidOperationException("The camera pipeline is unavailable.");
+
         StartCalls++;
         IsRunning = true;
         return Task.CompletedTask;
@@ -23,6 +30,10 @@ internal sealed class FakeAttentionPipelineUseCase : IAttentionPipelineUseCase
     public Task StopAsync(CancellationToken cancellationToken = default)
     {
         StopCalls++;
+
+        if (ThrowOnStop)
+            throw new InvalidOperationException("The camera pipeline cannot stop.");
+
         IsRunning = false;
         return Task.CompletedTask;
     }

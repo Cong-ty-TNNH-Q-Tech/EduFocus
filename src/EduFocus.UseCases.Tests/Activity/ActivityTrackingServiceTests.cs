@@ -193,6 +193,70 @@ public sealed class ActivityTrackingServiceTests
     }
 
     [Fact]
+    public async Task Eligible_time_accrues_for_the_whole_session_when_monitoring_is_always_on()
+    {
+        await using var harness = new ActivityHarness();
+        await harness.StartAsync();
+
+        harness.Foreground = harness.Snapshot("discord", "Discord | friends");
+
+        await harness.WriteSampleAsync();
+
+        harness.Session.MonitoringEligibleSeconds.Should().Be(17);
+        harness.Session.MonitoredSeconds.Should().Be(0);
+        harness.Session.CoveragePercent.Should().Be(0);
+        harness.Sessions.ActivityWrites.Should().ContainSingle()
+            .Which.MonitoringEligibleSeconds.Should().Be(17);
+    }
+
+    [Fact]
+    public async Task Monitor_only_during_classes_counts_only_online_class_windows()
+    {
+        await using var harness = new ActivityHarness();
+        harness.Settings.Stored = AppSettings.CreateDefault(Now);
+        harness.SettingsRow.UpdateMonitoring(monitoringEnabled: true, monitorOnlyDuringClasses: true, Now);
+        await harness.StartAsync();
+
+        harness.Foreground = harness.Snapshot("discord", "Discord | friends");
+        await harness.WriteSampleAsync();
+        harness.Session.MonitoringEligibleSeconds.Should().Be(0);
+
+        harness.Foreground = harness.Snapshot("chrome", "Google Meet – Lớp Vật lý");
+        await harness.WriteSampleAsync();
+
+        harness.Session.MonitoringEligibleSeconds.Should().Be(17);
+        harness.Session.OnlineClassSeconds.Should().Be(17);
+    }
+
+    [Fact]
+    public async Task Idle_time_is_eligible_when_monitoring_is_not_limited_to_classes()
+    {
+        await using var harness = new ActivityHarness();
+        await harness.StartAsync();
+
+        harness.Foreground = harness.Snapshot("chrome", "Docs", idleSeconds: 301);
+
+        (await harness.SampleAfterAsync(TimeSpan.FromSeconds(15))).Should().BeTrue();
+
+        harness.Session.IdleSeconds.Should().Be(15);
+        harness.Session.MonitoringEligibleSeconds.Should().Be(15);
+    }
+
+    [Fact]
+    public async Task Disabled_monitoring_does_not_accrue_eligible_time()
+    {
+        await using var harness = new ActivityHarness();
+        harness.SettingsRow.UpdateMonitoring(monitoringEnabled: false, monitorOnlyDuringClasses: false, Now);
+        await harness.StartAsync();
+
+        harness.Foreground = harness.Snapshot("chrome", "Docs");
+
+        await harness.WriteSampleAsync();
+
+        harness.Session.MonitoringEligibleSeconds.Should().Be(0);
+    }
+
+    [Fact]
     public async Task Idle_class_window_is_not_marked_as_online_class()
     {
         await using var harness = new ActivityHarness();
@@ -447,9 +511,11 @@ public sealed class ActivityTrackingServiceTests
                 monitoringEnabled: true);
 
             Sessions.Sessions.Add(Session);
+            Settings.Stored = AppSettings.CreateDefault(Now);
             Service = new ActivityTrackingService(
                 Samples,
                 Sessions,
+                Settings,
                 Rules,
                 ForegroundPort,
                 Urls,
@@ -471,6 +537,10 @@ public sealed class ActivityTrackingServiceTests
         public FakeSystemPowerEventPort Power { get; } = new();
 
         public FakeStudySessionRepository Sessions { get; } = new();
+
+        public FakeAppSettingsRepository Settings { get; } = new();
+
+        public AppSettings SettingsRow => Settings.Stored!;
 
         public FakeActivitySampleRepository Samples { get; } = new();
 

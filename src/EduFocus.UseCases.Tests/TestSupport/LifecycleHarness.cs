@@ -28,6 +28,8 @@ internal sealed class LifecycleHarness
             Engine,
             Heartbeat,
             Activity,
+            AttentionPipeline,
+            AttentionMonitor,
             Session,
             Audits,
             Correlation,
@@ -39,6 +41,8 @@ internal sealed class LifecycleHarness
             Sessions,
             Heartbeat,
             Activity,
+            AttentionPipeline,
+            AttentionMonitor,
             Settings,
             Audits,
             Correlation,
@@ -59,6 +63,10 @@ internal sealed class LifecycleHarness
     public FakeStudySessionHeartbeatUseCase Heartbeat { get; } = new();
 
     public FakeActivityUseCase Activity { get; } = new();
+
+    public FakeAttentionPipelineUseCase AttentionPipeline { get; } = new();
+
+    public FakeAttentionMonitorUseCase AttentionMonitor { get; } = new();
 
     public RecordingAuditLogRepository Audits { get; } = new();
 

@@ -213,6 +213,29 @@ public class AttentionMonitorServiceTests
     }
 
     [Fact]
+    public async Task Persisted_attention_time_feeds_the_session_summary_with_coverage()
+    {
+        await using var h = new Harness();
+        await h.StartAsync();
+        h.Session.AddMonitoringEligibleSeconds(10, Start.UtcDateTime);
+
+        for (var second = 0; second <= 5; second++)
+            await h.SampleAsync(second, Frontal);
+
+        await h.Monitor.StopAsync();
+
+        var summary = SessionAttentionSummary.From(h.Session);
+        summary.FocusedSeconds.Should().Be(4);
+        summary.MonitoredSeconds.Should().Be(4);
+        summary.AttentionPercent.Should().Be(100);
+        summary.CoveragePercent.Should().Be(40);
+        summary.IsCoverageLow.Should().BeTrue();
+        summary.Warning.Should().Be(SessionAttentionSummary.LowCoverageWarning);
+        h.Events.Events.Should().ContainSingle()
+            .Which.IsOpen.Should().BeFalse();
+    }
+
+    [Fact]
     public async Task Stop_closes_the_open_event_and_unsubscribes()
     {
         await using var h = new Harness();

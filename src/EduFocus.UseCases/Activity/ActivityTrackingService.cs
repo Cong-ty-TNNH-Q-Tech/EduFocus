@@ -1,4 +1,5 @@
 using EduFocus.Domain.Activity;
+using EduFocus.Domain.Attention;
 using EduFocus.Domain.Entities;
 using EduFocus.Domain.Enums;
 using EduFocus.Domain.Privacy;
@@ -28,8 +29,12 @@ public sealed class ActivityTrackingService : IActivityUseCase, IAsyncDisposable
     private const string WriteWarning =
         "Could not persist an activity sample; the next beat will retry.";
 
+    private const string MonitoringPolicyWarning =
+        "Could not read monitoring settings; coverage stays unknown for this session.";
+
     private readonly IActivitySampleRepository _samples;
     private readonly IStudySessionRepository _sessions;
+    private readonly IAppSettingsRepository _settings;
     private readonly IBlockRuleRepository _rules;
     private readonly IForegroundActivityPort _foreground;
     private readonly IBrowserUrlProviderPort _urls;
@@ -45,6 +50,8 @@ public sealed class ActivityTrackingService : IActivityUseCase, IAsyncDisposable
     private Task? _loop;
     private StudySessionId? _sessionId;
     private BlockRuleSet _ruleSnapshot = BlockRuleSet.Create([]);
+    private bool _monitoringEnabled;
+    private bool _monitorOnlyDuringClasses;
     private TimeSpan _lastSampleTick;
     private DateTime _lastSampleUtc;
     private string? _candidateKey;
@@ -60,6 +67,7 @@ public sealed class ActivityTrackingService : IActivityUseCase, IAsyncDisposable
     public ActivityTrackingService(
         IActivitySampleRepository samples,
         IStudySessionRepository sessions,
+        IAppSettingsRepository settings,
         IBlockRuleRepository rules,
         IForegroundActivityPort foreground,
         IBrowserUrlProviderPort urls,
@@ -71,6 +79,7 @@ public sealed class ActivityTrackingService : IActivityUseCase, IAsyncDisposable
     {
         _samples = samples ?? throw new ArgumentNullException(nameof(samples));
         _sessions = sessions ?? throw new ArgumentNullException(nameof(sessions));
+        _settings = settings ?? throw new ArgumentNullException(nameof(settings));
         _rules = rules ?? throw new ArgumentNullException(nameof(rules));
         _foreground = foreground ?? throw new ArgumentNullException(nameof(foreground));
         _urls = urls ?? throw new ArgumentNullException(nameof(urls));
@@ -135,6 +144,7 @@ public sealed class ActivityTrackingService : IActivityUseCase, IAsyncDisposable
             throw new ArgumentException("A session id is required.", nameof(sessionId));
 
         var rules = await LoadRulesAsync(cancellationToken).ConfigureAwait(false);
+        var policy = await LoadMonitoringPolicyAsync(cancellationToken).ConfigureAwait(false);
 
         await _lifecycleGate.WaitAsync(cancellationToken).ConfigureAwait(false);
         try
@@ -145,6 +155,8 @@ public sealed class ActivityTrackingService : IActivityUseCase, IAsyncDisposable
 
             _sessionId = sessionId;
             _ruleSnapshot = rules;
+            _monitoringEnabled = policy.MonitoringEnabled;
+            _monitorOnlyDuringClasses = policy.MonitorOnlyDuringClasses;
             _lastSampleTick = _clock.GetTickCount();
             _lastSampleUtc = now;
             _candidateKey = null;
@@ -236,6 +248,8 @@ public sealed class ActivityTrackingService : IActivityUseCase, IAsyncDisposable
         _candidateKey = null;
         _idleSampleWritten = false;
         _sessionEnded = false;
+        _monitoringEnabled = false;
+        _monitorOnlyDuringClasses = false;
         _running = false;
     }
 
@@ -357,6 +371,16 @@ public sealed class ActivityTrackingService : IActivityUseCase, IAsyncDisposable
             isOnlineClass,
             now);
 
+        // Coverage measures expected monitoring time, not active input: an
+        // idle window is still eligible unless monitoring is limited to
+        // online classes. The duration already excludes suspend gaps.
+        var monitoringEligibleSeconds = MonitoringEligibility.IsEligible(
+            _monitoringEnabled,
+            _monitorOnlyDuringClasses,
+            isOnlineClass)
+            ? duration
+            : 0;
+
         ActivitySample sample;
         try
         {
@@ -394,6 +418,7 @@ public sealed class ActivityTrackingService : IActivityUseCase, IAsyncDisposable
                     categorySeconds,
                     idleForSample,
                     isOnlineClass ? categorySeconds : 0,
+                    monitoringEligibleSeconds,
                     now,
                     cancellationToken)
                 .ConfigureAwait(false);
@@ -535,6 +560,33 @@ public sealed class ActivityTrackingService : IActivityUseCase, IAsyncDisposable
                 LogCategories.Session,
                 $"Could not load block rules for activity classification ({ex.GetType().Name}).");
             return BlockRuleSet.Create([]);
+        }
+    }
+
+    private async Task<(bool MonitoringEnabled, bool MonitorOnlyDuringClasses)> LoadMonitoringPolicyAsync(
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            var settings = await _settings.GetAsync(cancellationToken).ConfigureAwait(false);
+
+            if (settings is null)
+                return (MonitoringEnabled: false, MonitorOnlyDuringClasses: false);
+
+            return (settings.MonitoringEnabled, settings.MonitorOnlyDuringClasses);
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            // Without the policy the denominator cannot be trusted, so leave
+            // coverage unknown instead of guessing it.
+            _logger.Warning(
+                LogCategories.Attention,
+                $"{MonitoringPolicyWarning} ({ex.GetType().Name})");
+            return (MonitoringEnabled: false, MonitorOnlyDuringClasses: false);
         }
     }
 

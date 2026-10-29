@@ -257,10 +257,34 @@ public sealed class AppLifecycleServiceTests
         harness.Heartbeat.IsRunning.Should().BeFalse();
         harness.Activity.StopCalls.Should().Be(1);
         harness.Activity.IsRunning.Should().BeFalse();
+        harness.AttentionPipeline.StopCalls.Should().Be(1);
+        harness.AttentionPipeline.IsRunning.Should().BeFalse();
+        harness.AttentionMonitor.StopCalls.Should().Be(1);
+        harness.AttentionMonitor.IsRunning.Should().BeFalse();
 
         var session = harness.Sessions.Sessions.Should().ContainSingle().Subject;
         session.Status.Should().Be(StudySessionStatus.Interrupted);
         session.EndedAtUtc.Should().Be(LifecycleHarness.Start.UtcDateTime);
+    }
+
+    [Fact]
+    public async Task System_shutdown_survives_attention_stop_failures()
+    {
+        var harness = await LifecycleHarness.WithPinAsync();
+        await harness.EnableProtectionAsync();
+        harness.AttentionPipeline.ThrowOnStop = true;
+        harness.AttentionMonitor.ThrowOnStop = true;
+
+        var act = () => harness.Lifecycle.NotifySystemShutdownAsync();
+
+        await act.Should().NotThrowAsync();
+        harness.Sessions.Sessions.Should().ContainSingle()
+            .Which.Status.Should().Be(StudySessionStatus.Interrupted);
+        harness.Heartbeat.IsRunning.Should().BeFalse();
+        harness.Logger.Errors.Should().Contain(error =>
+            error.Contains("Could not stop the attention pipeline"));
+        harness.Logger.Errors.Should().Contain(error =>
+            error.Contains("Could not stop attention monitoring"));
     }
 
     [Fact]
@@ -277,6 +301,8 @@ public sealed class AppLifecycleServiceTests
         harness.Heartbeat.IsRunning.Should().BeFalse();
         harness.Activity.StopCalls.Should().Be(1);
         harness.Activity.IsRunning.Should().BeFalse();
+        harness.AttentionPipeline.StopCalls.Should().Be(1);
+        harness.AttentionMonitor.StopCalls.Should().Be(1);
         harness.Sessions.Sessions.Should().ContainSingle()
             .Which.Status.Should().Be(StudySessionStatus.Completed);
     }

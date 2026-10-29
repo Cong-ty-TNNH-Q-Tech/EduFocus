@@ -88,7 +88,8 @@
 | `MonitoredSeconds = Focused + Distracted + Absent + Drowsy` | Computed property |
 | `CameraUnavailableSeconds` tách riêng, không tính monitored (BR-15) | `AddAttentionSeconds` |
 | `AttentionPercent`/`CoveragePercent` NULL khi mẫu số 0 | Computed property |
-| `MonitoringEligibleSeconds` chỉ tăng khi monitoring bật; nếu `MonitorOnlyDuringClasses` thì chỉ khi đang trong lớp online | `MonitoringEligibility.IsEligible` (issue #27); attention cộng theo tick (#33) |
+| `MonitoringEligibleSeconds` chỉ tăng khi monitoring bật; nếu `MonitorOnlyDuringClasses` thì chỉ khi đang trong lớp online | `MonitoringEligibility.IsEligible` (issue #27); activity sample cộng (#33) |
+| Summary attention nhất quán với counter và cảnh báo khi coverage < 50% | `SessionAttentionSummary` (issue #33) |
 | `Unknown` và `Neutral` cộng vào `NeutralSeconds` | `AddCategorySeconds` |
 | `OnlineClassSeconds` là overlay, không cộng trùng category | `AddOnlineClassSeconds` |
 | Thời gian sleep/lock không cộng vào `ActiveSeconds`; resume chỉ cộng phần trước suspend | Use case (issue #28), không thuộc domain |
@@ -226,6 +227,7 @@ Các rule cần quyền phụ huynh (BR-05), watchdog (BR-28), block page (BR-26
 | `ActivityClassifierTests`, `OnlineClassDetectorTests` | Rule snapshot, online class overlay, block/allow precedence, Unknown/Neutral, nhận diện Meet/Teams/Zoom và âm bản chat |
 | `MonitoringEligibilityTests` | Truth table monitoring/only-class/online-class và mẫu số coverage |
 | `AttentionClassifierTests`, `AttentionStateMachineTests`, `AttentionStateWindowTests` | Phân loại Drowsy/eyes-closed, debounce 20/30/2 giây, majority/prune/camera bypass |
+| `SessionAttentionSummaryTests` | Monitored/attention/coverage, mẫu số 0, biên 50%, camera outage giảm coverage nhưng không giảm attention |
 | `AuditLogTests` | Kích thước, correlation, timestamp |
 | `DomainNameTests`, `PrivacySanitizerTests` | Normalization và privacy helper |
 
@@ -240,8 +242,10 @@ Use case tests trong `EduFocus.UseCases.Tests` phủ heartbeat (monotonic, clamp
 lỗi DB retry, suspend/resume, dừng khi suspended, DST), serialize enable/disable/reconcile, rollback và phục hồi `Recovery`; `ActivityTrackingServiceTests`
 phủ debounce foreground, cadence 15 giây, một sample idle/chuỗi, sanitize URL, phân loại, Teams/title Meet
 đa ngôn ngữ/chat/idle cho overlay lớp online, bỏ gap suspend, reset cửa sổ sau resume, forward/backward clock,
-lỗi port/DB và dừng khi session kết thúc.
+lỗi port/DB, eligible theo policy (mọi lúc/chỉ trong lớp/tắt monitoring/idle) và dừng khi session kết thúc.
+`ProtectionService`/`AppLifecycleService` test attention start/stop theo phiên, rollback và shutdown; monitor
+test event → counter → `SessionAttentionSummary`.
 `EduFocus.SqliteDataAccess.Tests` phủ heartbeat có điều kiện, chống hồi sinh session, unique active,
 retention job (bảng quá hạn, session `Active`, event còn mở, batch session + cascade/SET NULL, vacuum),
 round-trip `ActivitySample` (kể cả `IsOnlineClass`) và
-`AddActivitySecondsAsync` (targeted, chỉ session `Active`).
+`AddActivitySecondsAsync` (targeted, chỉ session `Active`, cộng `MonitoringEligibleSeconds`).

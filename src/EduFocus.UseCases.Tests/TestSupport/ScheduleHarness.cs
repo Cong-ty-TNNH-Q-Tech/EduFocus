@@ -24,6 +24,8 @@ internal sealed class ScheduleHarness
             Engine,
             Heartbeat,
             Activity,
+            AttentionPipeline,
+            AttentionMonitor,
             Session,
             Audits,
             Correlation,
@@ -54,6 +56,10 @@ internal sealed class ScheduleHarness
     public FakeStudySessionHeartbeatUseCase Heartbeat { get; } = new();
 
     public FakeActivityUseCase Activity { get; } = new();
+
+    public FakeAttentionPipelineUseCase AttentionPipeline { get; } = new();
+
+    public FakeAttentionMonitorUseCase AttentionMonitor { get; } = new();
 
     public FakeMonotonicClock Monotonic { get; } = new();
 

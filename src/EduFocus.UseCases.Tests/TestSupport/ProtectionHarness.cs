@@ -32,6 +32,10 @@ internal sealed class ProtectionHarness
 
     public FakeActivityUseCase Activity { get; } = new();
 
+    public FakeAttentionPipelineUseCase AttentionPipeline { get; } = new();
+
+    public FakeAttentionMonitorUseCase AttentionMonitor { get; } = new();
+
     public RecordingAuditLogRepository Audits { get; } = new();
 
     public RecordingLogger Logger { get; } = new();
@@ -55,6 +59,8 @@ internal sealed class ProtectionHarness
             Engine,
             Heartbeat,
             Activity,
+            AttentionPipeline,
+            AttentionMonitor,
             Session,
             Audits,
             Correlation,
