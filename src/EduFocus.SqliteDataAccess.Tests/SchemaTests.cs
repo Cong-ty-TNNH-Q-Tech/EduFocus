@@ -58,6 +58,33 @@ public sealed class SchemaTests
     }
 
     [Fact]
+    public async Task Schema_has_no_binary_or_camera_data_columns()
+    {
+        await using var db = new TempDatabase();
+        await db.CreateInitializer().InitializeAsync();
+
+        using var connection = db.OpenConnection();
+        var tables = TempDatabase.GetTableNames(connection)
+            .Where(name => !name.StartsWith("__", StringComparison.Ordinal));
+
+        var columns = tables
+            .SelectMany(table => ReadColumns(connection, table)
+                .Select(column => new ColumnRef(table, column.Key, column.Value.Type)))
+            .ToList();
+
+        columns.Should().NotBeEmpty();
+        columns.Should().OnlyContain(
+            column => !column.Type.Contains("BLOB", StringComparison.OrdinalIgnoreCase),
+            "camera frames and embeddings must never reach the database");
+        columns.Should().NotContain(
+            column => column.Name.Contains("image", StringComparison.OrdinalIgnoreCase)
+                || column.Name.Contains("frame", StringComparison.OrdinalIgnoreCase)
+                || column.Name.Contains("landmark", StringComparison.OrdinalIgnoreCase)
+                || column.Name.Contains("embedding", StringComparison.OrdinalIgnoreCase)
+                || column.Name.Contains("pixel", StringComparison.OrdinalIgnoreCase));
+    }
+
+    [Fact]
     public async Task Migrations_are_recorded_once_in_history()
     {
         await using var db = new TempDatabase();
@@ -211,6 +238,8 @@ public sealed class SchemaTests
 
         return columns;
     }
+
+    private sealed record ColumnRef(string Table, string Name, string Type);
 
     private sealed record ColumnInfo(
         string Type,

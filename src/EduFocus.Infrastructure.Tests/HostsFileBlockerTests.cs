@@ -1,4 +1,5 @@
 using System.Text;
+using System.Text.Json;
 using EduFocus.Infrastructure.Protection;
 using EduFocus.Ports.Outbound.Services;
 using EduFocus.Ports.Protection;
@@ -102,6 +103,7 @@ public sealed class HostsFileBlockerTests : IDisposable
         restore.RestoredExact.Should().BeTrue();
         ReadHosts().Should().Equal(originalBytes);
         ReadHostsText().Should().NotContain("EDUFOCUS BLOCK");
+        BackupFiles().Should().BeEmpty();
         _dns.FlushCount.Should().Be(2);
     }
 
@@ -122,6 +124,32 @@ public sealed class HostsFileBlockerTests : IDisposable
         text.Should().Contain("10.0.0.5 manual.local");
         text.Should().Contain("# sample hosts");
         text.Should().Contain("127.0.0.1 localhost");
+    }
+
+    [Fact]
+    public async Task Restore_does_not_delete_a_file_outside_the_backup_directory()
+    {
+        WriteHosts(SampleHosts);
+        await CreateBlocker().ApplyAsync(["example.com"]);
+
+        var external = Path.Combine(_root, "outside.bak");
+        await File.WriteAllTextAsync(external, "keep me");
+        await File.WriteAllTextAsync(
+            Path.Combine(_backupDirectory, "journal.json"),
+            JsonSerializer.Serialize(new
+            {
+                HostsPath = _hostsPath,
+                BackupPath = external,
+                CreatedUtc = DateTimeOffset.UtcNow
+            }));
+
+        var restore = await CreateBlocker().RestoreAsync();
+
+        restore.BlockRemoved.Should().BeTrue();
+        File.Exists(external).Should().BeTrue();
+        File.ReadAllText(external).Should().Be("keep me");
+        _logger.Warnings.Should()
+            .Contain(message => message.Contains("outside the EduFocus backup directory"));
     }
 
     [Fact]
@@ -168,6 +196,7 @@ public sealed class HostsFileBlockerTests : IDisposable
         result.FromJournal.Should().BeTrue();
         ReadHosts().Should().Equal(originalBytes);
         File.Exists(Path.Combine(_backupDirectory, "journal.json")).Should().BeFalse();
+        BackupFiles().Should().BeEmpty();
         _dns.FlushCount.Should().Be(2);
     }
 
@@ -321,6 +350,11 @@ public sealed class HostsFileBlockerTests : IDisposable
     private byte[] ReadHosts() => File.ReadAllBytes(_hostsPath);
 
     private string ReadHostsText() => Encoding.Latin1.GetString(ReadHosts());
+
+    private string[] BackupFiles() =>
+        Directory.Exists(_backupDirectory)
+            ? Directory.GetFiles(_backupDirectory, "hosts-*.bak")
+            : [];
 
     private sealed class FakeDnsFlusher : IDnsFlusher
     {

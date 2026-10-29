@@ -21,6 +21,28 @@ public class LogSanitizerTests
         result.Should().NotContainAny("123456", "4821", "ABCD-EFGH", "abc123", "sk-live-123", "hunter2");
     }
 
+    [Theory]
+    [InlineData("parent PIN 482915 rejected", "parent PIN=*** rejected", "482915")]
+    [InlineData("PIN is 482915", "PIN=***", "482915")]
+    [InlineData("recovery code ABCDEFGHJKLM used", "recovery code=*** used", "ABCDEFGHJKLM")]
+    [InlineData("recovery code is ABCD-EFGH-JKLM", "recovery code=***", "ABCD-EFGH-JKLM")]
+    [InlineData("Recovery-Code 23456789ABCD", "Recovery-Code=***", "23456789ABCD")]
+    public void Redact_RemovesSecretValueWithoutSeparator(string input, string expected, string secret)
+    {
+        var result = LogSanitizer.Redact(input);
+
+        result.Should().Be(expected);
+        result.Should().NotContain(secret);
+    }
+
+    [Fact]
+    public void Redact_KeepsHarmlessTextThatMentionsPins()
+    {
+        var result = LogSanitizer.Redact("Review the parent PIN policy before setup.");
+
+        result.Should().Be("Review the parent PIN policy before setup.");
+    }
+
     [Fact]
     public void Redact_RemovesAuthorizationHeaderValue()
     {

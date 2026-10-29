@@ -63,6 +63,35 @@ public sealed class FileLoggerTests : IDisposable
     }
 
     [Fact]
+    public void Write_redacts_whitespace_secrets_nested_exceptions_and_url_details()
+    {
+        var logger = CreateLogger();
+
+        logger.Error(
+            LogCategories.Security,
+            "Parent PIN 482915 rejected; recovery code is ABCDEFGHJKLM; see https://example.com/reset?token=abc#frag",
+            new InvalidOperationException(
+                "outer token=secret-value",
+                new Exception("password: hunter2")));
+
+        var content = string.Join(Environment.NewLine, ReadLogLines());
+
+        content.Should().Contain("Parent PIN=***");
+        content.Should().Contain("recovery code=***");
+        content.Should().Contain("[url:example.com]");
+        content.Should().NotContainAny(
+            "482915",
+            "ABCDEFGHJKLM",
+            "token=abc",
+            "secret-value",
+            "hunter2",
+            "reset",
+            "frag");
+        content.Should().Contain("outer token=***");
+        content.Should().Contain("password=***");
+    }
+
+    [Fact]
     public void Write_rolls_files_when_size_limit_is_reached()
     {
         var logger = CreateLogger(fileSizeLimitBytes: 4096);

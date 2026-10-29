@@ -1199,6 +1199,7 @@ EduFocus/
 │   ├── domain-invariants.md
 │   ├── installer.md
 │   ├── release-process.md
+│   ├── security-e2e-checklist.md
 │   └── legacy-cleanup.md
 └── .github/workflows/
 ```
@@ -1228,6 +1229,11 @@ EduFocus/
 > `signtool verify`, checksum SHA-256, release notes bắt buộc `### Breaking changes`,
 > tách job build (`contents: read`) và job công bố (`contents: write`). Chi tiết:
 > [release-process.md](./release-process.md).
+> Issue #42 bổ sung hardening bảo mật và checklist E2E: redaction PIN/recovery khi không có dấu
+> phân cách, xóa file hosts backup sau restore/self-heal (chỉ trong thư mục backup), test quét
+> DB/WAL/backup cho plaintext secret, test ACL file kế thừa, test schema không có cột ảnh/BLOB,
+> và ma trận Host header/path/query cho block page. Checklist và findings:
+> [security-e2e-checklist.md](./security-e2e-checklist.md).
 > Inventory 1.x ở [legacy-cleanup.md](./legacy-cleanup.md), invariant domain ở
 > [domain-invariants.md](./domain-invariants.md).
 

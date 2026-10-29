@@ -141,6 +141,32 @@ public sealed class BlockPageServerTests
         response.Body.Should().NotContain("<img");
     }
 
+    [Theory]
+    [InlineData("CHATGPT.COM", 200)]
+    [InlineData("chatgpt.com.", 200)]
+    [InlineData("chatgpt.com:80", 200)]
+    [InlineData("sub.chatgpt.com", 404)]
+    [InlineData("chatgpt.com.evil.test", 404)]
+    [InlineData("evilchatgpt.com", 404)]
+    [InlineData("user@chatgpt.com", 404)]
+    [InlineData("chatgpt.com@evil.test", 404)]
+    [InlineData("chatgpt.com:evil", 404)]
+    [InlineData("chatgpt.com%2eevil.test", 404)]
+    public async Task Host_matching_is_exact_for_the_blocked_domain(string host, int expectedStatus)
+    {
+        await using var server = CreateServer();
+        var start = await server.StartAsync(["chatgpt.com"]);
+
+        var response = await SendAsync(start.Port, Request("GET", host));
+
+        response.StatusCode.Should().Be(expectedStatus);
+        if (expectedStatus == 404)
+        {
+            response.Body.Should().Contain("Không tìm thấy trang.");
+            response.Body.Should().NotContain(host);
+        }
+    }
+
     [Fact]
     public async Task Unknown_host_returns_generic_not_found_without_echo()
     {

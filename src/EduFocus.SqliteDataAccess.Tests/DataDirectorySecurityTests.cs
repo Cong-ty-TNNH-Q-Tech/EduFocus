@@ -53,6 +53,45 @@ public sealed class DataDirectorySecurityTests
 
     [Fact]
     [SupportedOSPlatform("windows")]
+    public void Files_inside_a_secured_directory_carry_only_the_restricted_acl()
+    {
+        if (!OperatingSystem.IsWindows())
+            return;
+
+        var directory = Path.Combine(
+            Path.GetTempPath(),
+            "edufocus-acl-tests",
+            Guid.NewGuid().ToString("N"));
+        var file = Path.Combine(directory, "edufocus.db-wal");
+
+        Directory.CreateDirectory(directory);
+        File.WriteAllText(file, "wal");
+
+        try
+        {
+            DataDirectorySecurity.Apply(directory);
+
+            var security = new FileInfo(file).GetAccessControl();
+
+            AllowedSids(security).Should().BeEquivalentTo(AdministratorsSid, SystemSid);
+            security
+                .GetAccessRules(includeExplicit: true, includeInherited: true, targetType: typeof(SecurityIdentifier))
+                .Cast<FileSystemAccessRule>()
+                .Where(rule => rule.AccessControlType == AccessControlType.Allow)
+                .Should()
+                .OnlyContain(
+                    rule => rule.IsInherited,
+                    "database, WAL and backup files must take their access from the directory ACL");
+        }
+        finally
+        {
+            RestoreInheritance(new DirectoryInfo(directory));
+            TryDeleteDirectory(directory);
+        }
+    }
+
+    [Fact]
+    [SupportedOSPlatform("windows")]
     public void EnsureSecure_creates_a_missing_directory_with_the_restricted_acl()
     {
         if (!OperatingSystem.IsWindows())
@@ -85,7 +124,7 @@ public sealed class DataDirectorySecurityTests
     }
 
     [SupportedOSPlatform("windows")]
-    private static IEnumerable<string> AllowedSids(DirectorySecurity security) =>
+    private static IEnumerable<string> AllowedSids(FileSystemSecurity security) =>
         security
             .GetAccessRules(includeExplicit: true, includeInherited: true, targetType: typeof(SecurityIdentifier))
             .Cast<FileSystemAccessRule>()

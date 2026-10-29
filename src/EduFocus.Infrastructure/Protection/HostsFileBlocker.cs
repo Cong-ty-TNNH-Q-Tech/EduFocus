@@ -162,14 +162,14 @@ public sealed class HostsFileBlocker : IHostsFileBlocker
         var currentBytes = await ReadHostsIfPresentAsync(operation, cancellationToken).ConfigureAwait(false);
         if (currentBytes is null)
         {
-            DeleteJournalBestEffort();
+            DeleteJournalAndBackupBestEffort(await LoadJournalAsync().ConfigureAwait(false));
             return new HostsRestoreResult(BlockRemoved: false, RestoredExact: false);
         }
 
         var currentText = FileEncoding.GetString(currentBytes);
         if (!ContainsBlockSection(currentText))
         {
-            DeleteJournalBestEffort();
+            DeleteJournalAndBackupBestEffort(await LoadJournalAsync().ConfigureAwait(false));
             return new HostsRestoreResult(BlockRemoved: false, RestoredExact: true);
         }
 
@@ -208,7 +208,7 @@ public sealed class HostsFileBlocker : IHostsFileBlocker
                 "EduFocus block section removed from the hosts file.");
         }
 
-        DeleteJournalBestEffort();
+        DeleteJournalAndBackupBestEffort(journal);
         return new HostsRestoreResult(BlockRemoved: true, RestoredExact: exact);
     }
 
@@ -485,17 +485,59 @@ public sealed class HostsFileBlocker : IHostsFileBlocker
     private Task SaveJournalAsync(HostsJournal journal) =>
         File.WriteAllTextAsync(_journalPath, JsonSerializer.Serialize(journal));
 
-    private void DeleteJournalBestEffort()
+    private bool DeleteJournalBestEffort()
     {
         try
         {
             if (File.Exists(_journalPath))
                 File.Delete(_journalPath);
+            return true;
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
             _logger.Warning(LogCategories.Protection, "Could not delete the hosts backup journal.");
+            return false;
         }
+    }
+
+    private void DeleteJournalAndBackupBestEffort(HostsJournal? journal)
+    {
+        if (DeleteJournalBestEffort())
+            DeleteBackupBestEffort(journal);
+    }
+
+    private void DeleteBackupBestEffort(HostsJournal? journal)
+    {
+        if (journal is null || string.IsNullOrWhiteSpace(journal.BackupPath))
+            return;
+
+        try
+        {
+            var backupPath = Path.GetFullPath(journal.BackupPath);
+            if (!IsInsideBackupDirectory(backupPath))
+            {
+                _logger.Warning(
+                    LogCategories.Protection,
+                    "The hosts journal points outside the EduFocus backup directory; the backup file was left untouched.");
+                return;
+            }
+
+            if (File.Exists(backupPath))
+                File.Delete(backupPath);
+        }
+        catch (Exception ex) when (ex is IOException
+                                       or UnauthorizedAccessException
+                                       or ArgumentException
+                                       or NotSupportedException)
+        {
+            _logger.Warning(LogCategories.Protection, "Could not delete the hosts backup file.");
+        }
+    }
+
+    private bool IsInsideBackupDirectory(string path)
+    {
+        var root = Path.TrimEndingDirectorySeparator(_backupDirectory) + Path.DirectorySeparatorChar;
+        return path.StartsWith(root, StringComparison.OrdinalIgnoreCase);
     }
 
     private static void TryDelete(string path)

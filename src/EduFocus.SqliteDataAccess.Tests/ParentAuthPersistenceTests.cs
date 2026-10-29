@@ -1,9 +1,12 @@
+using System.Text;
 using EduFocus.Domain.Entities;
 using EduFocus.Domain.Enums;
 using EduFocus.Domain.Security;
 using EduFocus.Infrastructure.Auth;
 using EduFocus.Infrastructure.Logging;
 using EduFocus.Ports.DTOs;
+using EduFocus.Ports.Outbound.Services;
+using EduFocus.SqliteDataAccess.Persistence;
 using EduFocus.SqliteDataAccess.Repositories;
 using EduFocus.SqliteDataAccess.Tests.TestSupport;
 using EduFocus.UseCases.Auth;
@@ -87,6 +90,54 @@ public sealed class ParentAuthPersistenceTests
     }
 
     [Fact]
+    public async Task Database_wal_and_backup_files_never_contain_plaintext_secrets()
+    {
+        await using var db = new TempDatabase();
+        await db.CreateInitializer().InitializeAsync();
+
+        var recoveryCodes = new DeterministicRecoveryCodeGenerator(
+            "ZZZZZZZZZZZZ",
+            "YYYYYYYYYYYY");
+        var useCase = CreateUseCase(
+            db,
+            new CorrelationContext(),
+            recoveryCodeGenerator: recoveryCodes);
+
+        var setup = await useCase.SetupAsync("91827364");
+        setup.RecoveryCode.Should().Be("ZZZZZZZZZZZZ");
+        (await useCase.VerifyPinAsync("91827364")).Status.Should().Be(ParentAuthStatus.Success);
+        (await useCase.VerifyPinAsync("57392018")).Status.Should().Be(ParentAuthStatus.InvalidCredential);
+        (await useCase.ChangePinAsync("91827364", "57392018")).Status.Should().Be(ParentAuthStatus.Success);
+
+        var reset = await useCase.ResetPinWithRecoveryCodeAsync("ZZZZZZZZZZZZ", "60492731");
+        reset.Status.Should().Be(ParentAuthStatus.Success);
+        reset.RecoveryCode.Should().Be("YYYYYYYYYYYY");
+
+        // Keep a connection open so the WAL file exists while it is inspected.
+        using var keepAlive = db.OpenConnectionWithPragmas();
+        var backupPath = new SqliteBackupStore(db.Options, db.Logger).CreateBackup();
+
+        var files = Directory
+            .GetFiles(db.RootPath, "*", SearchOption.AllDirectories)
+            .ToList();
+        files.Should().Contain(Path.GetFullPath(db.DatabasePath));
+        files.Should().Contain(Path.GetFullPath(backupPath));
+        File.Exists(db.DatabasePath + "-wal").Should().BeTrue(
+            "the test must inspect the write-ahead log as well as the main database");
+
+        string[] secrets = ["91827364", "57392018", "60492731", "ZZZZZZZZZZZZ", "YYYYYYYYYYYY"];
+        foreach (var file in files)
+        {
+            var bytes = await ReadSharedAsync(file);
+            foreach (var secret in secrets)
+            {
+                ContainsAscii(bytes, secret).Should().BeFalse(
+                    $"{Path.GetFileName(file)} must not contain a plaintext PIN or recovery code");
+            }
+        }
+    }
+
+    [Fact]
     public async Task Lockout_survives_a_restart_and_expires_after_fifteen_minutes()
     {
         await using var db = new TempDatabase();
@@ -140,15 +191,39 @@ public sealed class ParentAuthPersistenceTests
     private static ParentAuthUseCase CreateUseCase(
         TempDatabase db,
         CorrelationContext correlation,
-        TimeProvider? timeProvider = null) =>
+        TimeProvider? timeProvider = null,
+        IRecoveryCodeGenerator? recoveryCodeGenerator = null) =>
         new(
             CreateRepository(db),
             new Pbkdf2PasswordHasher(),
-            new RecoveryCodeGenerator(),
+            recoveryCodeGenerator ?? new RecoveryCodeGenerator(),
             new SqliteAuditLogRepository(db.Options),
             correlation,
             timeProvider ?? TimeProvider.System);
 
     private static SqliteParentCredentialRepository CreateRepository(TempDatabase db) =>
         new(db.Options);
+
+    private static bool ContainsAscii(byte[] bytes, string value) =>
+        bytes.AsSpan().IndexOf(Encoding.ASCII.GetBytes(value)) >= 0;
+
+    private static async Task<byte[]> ReadSharedAsync(string path)
+    {
+        await using var stream = new FileStream(
+            path,
+            FileMode.Open,
+            FileAccess.Read,
+            FileShare.ReadWrite | FileShare.Delete);
+        using var buffer = new MemoryStream();
+        await stream.CopyToAsync(buffer);
+        return buffer.ToArray();
+    }
+
+    private sealed class DeterministicRecoveryCodeGenerator(params string[] codes)
+        : IRecoveryCodeGenerator
+    {
+        private int _index;
+
+        public string Generate() => codes[_index++ % codes.Length];
+    }
 }

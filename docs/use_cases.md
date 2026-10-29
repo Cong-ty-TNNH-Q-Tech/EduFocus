@@ -631,9 +631,11 @@
 > **Triển khai (issue #21):** `HostsFileBlocker` sở hữu khối marker trong hosts; chỉ chấp nhận
 > domain exact và ghi cả IPv4 `127.0.0.1` lẫn IPv6 `::1`, không tự sinh biến thể `www.`. Backup +
 > `journal.json` nằm trong `%ProgramData%\EduFocus\hosts-backup`; restore khôi phục exact khi ngoài
-> marker chưa bị sửa, ngược lại chỉ gỡ marker để giữ chỉnh sửa của người dùng. Lỗi quyền/khóa file
-> được báo bằng `HostsFileException` để use case không coi là đã tắt; log chỉ ghi số domain.
-> `ProtectionEngine` (issue #24) gọi apply/restore/self-heal adapter này khi bật, tắt và reconcile.
+> marker chưa bị sửa, ngược lại chỉ gỡ marker để giữ chỉnh sửa của người dùng. Sau restore/self-heal
+> thành công, journal và file `.bak` được xóa (chỉ trong thư mục backup) để không để lại bản hosts cũ.
+> Lỗi quyền/khóa file được báo bằng `HostsFileException` để use case không coi là đã tắt; log chỉ ghi
+> số domain. `ProtectionEngine` (issue #24) gọi apply/restore/self-heal adapter này khi bật, tắt và
+> reconcile.
 >
 > **Triển khai block page (issue #22):** `BlockPageServer` dùng `TcpListener` bind `127.0.0.1:80`
 > (cổng 0 cho test) thay vì `HttpListener` nên không cần URL ACL; chỉ phục vụ GET/HEAD và chỉ trả

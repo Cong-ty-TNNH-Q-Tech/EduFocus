@@ -216,6 +216,8 @@ Hash khớp chưa đủ nếu bản phát hành được ký: kiểm tra thêm c
 - [ ] Secret ký số đã cấu hình và `REQUIRE_CODE_SIGNING = true` (nếu chính thức).
 - [ ] Tag đúng SemVer và khớp section CHANGELOG.
 - [ ] Đã chạy checklist máy sạch trong [installer.md](./installer.md) §7.
+- [ ] Đã chạy checklist E2E bảo mật/quyền riêng tư trong
+      [security-e2e-checklist.md](./security-e2e-checklist.md) §4; không còn P0/P1 mở.
 
 ### Sau khi release
 

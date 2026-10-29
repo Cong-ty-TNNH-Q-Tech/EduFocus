@@ -167,6 +167,11 @@ kế thừa ACL thư mục. Standard user không đọc/ghi được dữ liệu
 
 Chưa thể chạy tự động trong CI (cần VM Windows). Checklist bắt buộc trước phát hành:
 
+> Checklist cài đặt dưới đây tập trung vào gói MSI/vòng đời cài đặt. Phần kiểm thử bảo mật và
+> quyền riêng tư (XSS, redaction, ACL file sinh ra, hosts rollback, camera, gỡ listener/watchdog)
+> nằm ở [security-e2e-checklist.md](./security-e2e-checklist.md); chạy cả hai và ghi kết quả vào
+> release checklist (#43).
+
 **Windows 10 22H2 và Windows 11 (64-bit), mỗi bản trên VM sạch:**
 
 1. Cài bằng tài khoản Administrator → thành công; shortcut Desktop + Start Menu tồn tại;

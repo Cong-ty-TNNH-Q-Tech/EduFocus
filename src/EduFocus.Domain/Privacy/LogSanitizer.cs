@@ -24,6 +24,10 @@ public static class LogSanitizer
         @"\b(?<key>[A-Za-z0-9_.-]*(?:pin|pwd|pass|password|secret|token|api[_-]?key|recovery(?:[ _-]?code)?))\b\s*[:=]\s*(?:""[^""]*""|'[^']*'|\S+)",
         RegexOptions.IgnoreCase | RegexOptions.NonBacktracking);
 
+    private static readonly Regex SecretWithoutSeparatorPattern = new(
+        @"\b(?<key>pin|recovery(?:[ _-]?code)?)\s+(?:(?:is|was)\s+)?(?<value>\d{4,12}|[A-Z2-9]{4}(?:-?[A-Z2-9]{4}){2})\b",
+        RegexOptions.IgnoreCase | RegexOptions.NonBacktracking);
+
     private static readonly Regex UrlPattern = new(
         @"\bhttps?://[^\s""'<>]+",
         RegexOptions.IgnoreCase | RegexOptions.NonBacktracking);
@@ -66,6 +70,9 @@ public static class LogSanitizer
 
         result = BearerPattern.Replace(result, "Bearer ***");
         result = SecretPattern.Replace(result, match => $"{match.Groups["key"].Value}=***");
+        result = SecretWithoutSeparatorPattern.Replace(
+            result,
+            match => $"{match.Groups["key"].Value}=***");
         result = UrlPattern.Replace(result, RedactUrl);
         return result;
     }
