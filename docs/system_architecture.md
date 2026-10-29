@@ -1191,6 +1191,8 @@ EduFocus/
 │   ├── Build-Installer.ps1
 │   ├── Sign-Artifacts.ps1
 │   └── Get-ReleaseNotes.ps1
+├── scripts/
+│   └── Measure-Soak.ps1
 ├── docs/
 │   ├── ba_document.md
 │   ├── use_cases.md
@@ -1199,7 +1201,9 @@ EduFocus/
 │   ├── domain-invariants.md
 │   ├── installer.md
 │   ├── release-process.md
+│   ├── release-checklist.md
 │   ├── security-e2e-checklist.md
+│   ├── performance-report.md
 │   └── legacy-cleanup.md
 └── .github/workflows/
 ```
@@ -1234,6 +1238,11 @@ EduFocus/
 > DB/WAL/backup cho plaintext secret, test ACL file kế thừa, test schema không có cột ảnh/BLOB,
 > và ma trận Host header/path/query cho block page. Checklist và findings:
 > [security-e2e-checklist.md](./security-e2e-checklist.md).
+> Issue #43 thêm cổng hiệu năng/độ bền trước phát hành: `PerformanceBudgetTests` (khởi tạo DB,
+> bộ dữ liệu 30 ngày, báo cáo tháng, retention và dung lượng DB một năm), `BlockPagePerformanceTests`
+> (độ trễ loopback p95, start/stop listener lặp), `scripts/Measure-Soak.ps1` (soak 8 giờ cho
+> Idle/Protection/Attention) và [release-checklist.md](./release-checklist.md) có ký duyệt; số đo
+> thực tế và ngưỡng ở [performance-report.md](./performance-report.md).
 > Inventory 1.x ở [legacy-cleanup.md](./legacy-cleanup.md), invariant domain ở
 > [domain-invariants.md](./domain-invariants.md).
 

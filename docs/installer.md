@@ -170,7 +170,7 @@ Chưa thể chạy tự động trong CI (cần VM Windows). Checklist bắt bu�
 > Checklist cài đặt dưới đây tập trung vào gói MSI/vòng đời cài đặt. Phần kiểm thử bảo mật và
 > quyền riêng tư (XSS, redaction, ACL file sinh ra, hosts rollback, camera, gỡ listener/watchdog)
 > nằm ở [security-e2e-checklist.md](./security-e2e-checklist.md); chạy cả hai và ghi kết quả vào
-> release checklist (#43).
+> [release-checklist.md](./release-checklist.md).
 
 **Windows 10 22H2 và Windows 11 (64-bit), mỗi bản trên VM sạch:**
 
@@ -192,8 +192,9 @@ Chưa thể chạy tự động trong CI (cần VM Windows). Checklist bắt bu�
 8. Với bản tải từ GitHub Release: đối chiếu SHA-256 với `SHA256SUMS.txt` và chạy
    `Get-AuthenticodeSignature` trên MSI (khi bản phát hành được ký) trước khi cài.
 
-Kết quả từng lần chạy ghi vào release checklist (issue #43). Quy trình tag, ký số,
-checksum và dry run nằm ở [release-process.md](./release-process.md).
+Kết quả từng lần chạy ghi vào [release-checklist.md](./release-checklist.md) §2.4. Quy trình tag,
+ký số, checksum và dry run nằm ở [release-process.md](./release-process.md); ngưỡng hiệu năng và
+soak 8 giờ nằm ở [performance-report.md](./performance-report.md).
 
 ---
 

@@ -218,6 +218,13 @@ Hash khớp chưa đủ nếu bản phát hành được ký: kiểm tra thêm c
 - [ ] Đã chạy checklist máy sạch trong [installer.md](./installer.md) §7.
 - [ ] Đã chạy checklist E2E bảo mật/quyền riêng tư trong
       [security-e2e-checklist.md](./security-e2e-checklist.md) §4; không còn P0/P1 mở.
+- [ ] Đã chạy bộ đo hiệu năng tự động
+      (`PerformanceBudgetTests`, `BlockPagePerformanceTests`) và soak 8 giờ cho
+      Idle/Protection/Attention theo [performance-report.md](./performance-report.md);
+      mọi ngưỡng PASS hoặc finding đã được ghi thành issue P1/P2.
+- [ ] [release-checklist.md](./release-checklist.md) đã điền đủ, ký duyệt và được lưu
+      cùng artifact `edufocus-release-<version>` (kèm TRX, số đo hiệu năng, soak và bằng
+      chứng đã khử dữ liệu nhạy cảm).
 
 ### Sau khi release
 
@@ -252,6 +259,10 @@ Hash khớp chưa đủ nếu bản phát hành được ký: kiểm tra thêm c
 
 Trong phạm vi issue #41: workflow tag/dry run, versioning, ký số qua GitHub Secrets,
 checksum, release notes, quyền tối thiểu và tài liệu quy trình.
+
+Issue #43 bổ sung cổng hiệu năng/độ bền (performance test tự động, soak script, báo cáo
+đo trên máy đại diện) và [release-checklist.md](./release-checklist.md) — bản ghi bắt buộc
+được ký và lưu cùng artifact trước khi push tag.
 
 Ngoài phạm vi: mua chứng chỉ, tích hợp EV token/cloud signing, auto-update trong app
 (post-MVP).
