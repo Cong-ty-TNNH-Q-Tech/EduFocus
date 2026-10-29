@@ -1,0 +1,25 @@
+{
+  "manifest_version": 3,
+  "name": "EduFocus – Chặn web xao nhãng",
+  "version": "1.0.0",
+  "description": "Chặn URL và đường dẫn theo danh sách của phụ huynh khi EduFocus đang bảo vệ phiên học.",
+  "minimum_chrome_version": "116",
+  "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEA6Lq/FIouAKTUsoiqjpSPCmIbWagZsdlxcdF20MoVHcGDLcpQxQN3f/O2PqkEcPxvgkYA7SgE3btq8T1fI1cRHESNlF0gmcKrXJY+tGSgPw1BCL8zmEwbwfvc2gJNU2wS2eJfQcb2oz9n6kOSCV2zsZZ4EUgY8XBOO0LP23TwcqqWchYf3z74Vy/EnwHBVWiBfOkx+XwMc0yOW9v8TS4ULU8MbIL6URIGHg2SLsbY/TJcOvFj8Ea0lXlaggu672NfFXDcpZCuY1KbsLQ28Qtrgjw8y/ZOnDKzCKDE3tNp5jqpcQiUUuCbNuWe6lJflegylJEZTBKUyCFj/2kouVQIJwIDAQAB",
+  "permissions": [
+    "alarms",
+    "nativeMessaging",
+    "webNavigation"
+  ],
+  "host_permissions": [
+    "http://*/*",
+    "https://*/*"
+  ],
+  "background": {
+    "service_worker": "background.js",
+    "type": "module"
+  },
+  "action": {
+    "default_title": "EduFocus",
+    "default_popup": "popup.html"
+  }
+}

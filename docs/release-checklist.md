@@ -30,9 +30,10 @@ Tham chiếu: [release-process.md](./release-process.md),
 
 - [ ] Release workflow xanh; toàn bộ test pass (TRX đã upload).
 - [ ] Dry run trên branch thử nghiệm thành công trước khi push tag.
-- [ ] Version trong tên file, `EduFocus.exe`, MSI khớp tag.
+- [ ] Version trong tên file, `EduFocus.exe`, `EduFocus.NativeHost.exe`, MSI khớp tag.
 - [ ] `SHA256SUMS.txt` khớp và đã được đọc lại tự động.
-- [ ] Chữ ký `Valid` trên exe/MSI (nếu đã cấu hình chứng chỉ); nếu unsigned, đã ghi rõ lý do.
+- [ ] Chữ ký `Valid` trên exe/native host/MSI (nếu đã cấu hình chứng chỉ); nếu unsigned, đã ghi rõ lý do.
+- [ ] Artifact có đủ MSI, portable ZIP, browser extension ZIP và hai hướng dẫn cài đặt.
 - [ ] CHANGELOG có section của version và `### Breaking changes`.
 - [ ] Không có secret, PFX, DB/log/bak/tmp trong artifact.
 
@@ -43,6 +44,8 @@ Tham chiếu: [release-process.md](./release-process.md),
 - [ ] Không còn issue P0/P1 mở; các phát hiện P2/P3 còn lại đã có issue kèm rủi ro.
 - [ ] Không có frame/ảnh/landmark/embedding camera trong thư mục dữ liệu, log hay artifact.
 - [ ] Log không chứa PIN, recovery code, token, query string hoặc tiêu đề cửa sổ nhạy cảm.
+- [ ] Browser extension chỉ gửi URL đã khớp rule (đã làm sạch query/fragment/credentials) qua
+      named pipe cục bộ; không đọc/gửi lịch sử duyệt web, nội dung trang hay cookie.
 - [ ] Gỡ cài đặt xóa hosts marker, listener, scheduled task và thư mục runtime đúng chính sách.
 
 ### 2.3. Hiệu năng và độ tin cậy
@@ -67,6 +70,10 @@ Tham chiếu: [release-process.md](./release-process.md),
 - [ ] Standard user mở app nhận UAC dự kiến và app chạy sau khi nâng quyền.
 - [ ] Nâng cấp từ bản trước giữ DB/settings, session cũ được phục hồi, chỉ còn một entry
       trong Apps & Features.
+- [ ] Native messaging host được đăng ký cho Chrome/Edge sau khi cài (kiểm tra registry
+      `NativeMessagingHosts\com.edufocus.native_host` ở cả hai registry view) và bị xóa khi gỡ.
+- [ ] Cài browser extension từ ZIP (Load unpacked hoặc CRX), mở popup thấy trạng thái kết nối;
+      khi EduFocus tắt, duyệt web không bị ảnh hưởng (fail-open).
 - [ ] Gỡ cài đặt trả lời giữ/xóa dữ liệu đúng lựa chọn; hosts/listener/watchdog sạch.
 
 ### 2.5. Migration, backup và dữ liệu
@@ -79,7 +86,8 @@ Tham chiếu: [release-process.md](./release-process.md),
 
 ### 2.6. Tài liệu
 
-- [ ] CHANGELOG, SECURITY (phiên bản hỗ trợ), hướng dẫn cài đặt và release notes đã cập nhật.
+- [ ] CHANGELOG, SECURITY (phiên bản hỗ trợ), hướng dẫn cài đặt, hướng dẫn browser extension
+      và release notes đã cập nhật.
 - [ ] [privacy-notice.md](./privacy-notice.md) và [dpia.md](./dpia.md) của bản phát hành đã được
       duyệt và khớp tính năng; timestamp consent trong onboarding và dialog MSI hoạt động.
 - [ ] [THIRD-PARTY-NOTICES.md](../THIRD-PARTY-NOTICES.md) khớp dependency thực tế

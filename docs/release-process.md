@@ -81,18 +81,22 @@ tạo release và **không** tạo tag. Tải artifact trong trang run để ki�
 3. Xác thực SemVer và tính `version`/`numeric`/`tag`/`dry_run`.
 4. Tạo release notes từ CHANGELOG; fail sớm nếu thiếu section hoặc `### Breaking changes`.
 5. `dotnet tool restore`, restore, build Release, chạy toàn bộ test (TRX được upload).
-6. Publish self-contained single-file `win-x64`; xóa `*.pdb`/`*.lib`.
-7. Kiểm tra version trong `EduFocus.exe`.
-8. Ký `EduFocus.exe` nếu có chứng chỉ (xem §4).
+6. Publish self-contained single-file `win-x64` cho `EduFocus.exe` và
+   `publish/native-host/EduFocus.NativeHost.exe`; xóa `*.pdb`/`*.lib`.
+7. Kiểm tra version trong cả hai executable.
+8. Ký `EduFocus.exe` và `EduFocus.NativeHost.exe` nếu có chứng chỉ (xem §4).
 9. Build MSI bằng WiX 4.0.6 + `WixToolset.UI.wixext`/`WixToolset.Util.wixext`;
    `Build-Installer.ps1` quét payload để chặn secret/runtime data. Kiểm tra
    `ProductVersion` của MSI bằng Windows Installer COM.
 10. Ký MSI nếu exe đã được ký.
-11. Tạo portable ZIP và bản sao hướng dẫn cài `EduFocus-<version>-install-guide.md`.
-12. Tạo `SHA256SUMS.txt` (ASCII, LF) cho MSI/ZIP/install guide và đọc lại để xác minh hash.
+11. Tạo portable ZIP, đóng gói browser extension bằng `scripts/pack-browser-extension.ps1`
+    (`EduFocus-<version>-browser-extension.zip`) và sao chép hai hướng dẫn
+    `install-guide.md`/`browser-extension.md`.
+12. Tạo `SHA256SUMS.txt` (ASCII, LF) cho MSI/portable ZIP/extension ZIP/hai install guide và đọc
+    lại để xác minh hash.
 13. Quét toàn workspace: fail nếu còn `.pfx/.p12/.snk/.key/.pem/.cer/.crt`, file secret
     hoặc dữ liệu runtime `.db/.log/.bak/.tmp`.
-14. Upload artifact `edufocus-release-<version>` gồm MSI, ZIP, install guide,
+14. Upload artifact `edufocus-release-<version>` gồm MSI, hai ZIP, hai install guide,
     `SHA256SUMS.txt` và release notes; ghi GitHub Actions summary.
 
 ### Job `release` — quyền `contents: write`
@@ -102,7 +106,8 @@ Chỉ chạy khi `dry_run = false`. Job không checkout source, chỉ tải arti
 
 - tag và tên `EduFocus v<version>`;
 - body lấy từ release notes đã tạo;
-- đính kèm MSI, portable ZIP, install guide và `SHA256SUMS.txt`.
+- đính kèm MSI, portable ZIP, browser extension ZIP, hai hướng dẫn cài đặt và
+  `SHA256SUMS.txt`.
 
 Quyền `contents: write` chỉ tồn tại ở job này; mọi bước build/test/ký chạy với
 `contents: read`. Không step nào echo secret hay token.
@@ -182,7 +187,9 @@ không cần sửa workflow.
 ```text
 9f2c...  EduFocus-2.0.0-win-x64.msi
 4a71...  EduFocus-2.0.0-win-x64-portable.zip
-c0d3...  EduFocus-2.0.0-install-guide.md
+5b82...  EduFocus-2.0.0-browser-extension.zip
+d1e4...  EduFocus-2.0.0-install-guide.md
+e6f5...  EduFocus-2.0.0-browser-extension.md
 ```
 
 ```powershell
@@ -263,6 +270,9 @@ checksum, release notes, quyền tối thiểu và tài liệu quy trình.
 Issue #43 bổ sung cổng hiệu năng/độ bền (performance test tự động, soak script, báo cáo
 đo trên máy đại diện) và [release-checklist.md](./release-checklist.md) — bản ghi bắt buộc
 được ký và lưu cùng artifact trước khi push tag.
+
+Issue #45 bổ sung native messaging host và browser extension ZIP vào artifact, ký native host
+cùng `EduFocus.exe` và checklist cài/gỡ đăng ký native messaging.
 
 Ngoài phạm vi: mua chứng chỉ, tích hợp EV token/cloud signing, auto-update trong app
 (post-MVP).

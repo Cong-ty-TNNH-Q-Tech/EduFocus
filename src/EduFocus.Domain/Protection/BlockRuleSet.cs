@@ -1,6 +1,7 @@
 using EduFocus.Domain.Common;
 using EduFocus.Domain.Entities;
 using EduFocus.Domain.Enums;
+using EduFocus.Domain.Privacy;
 using EduFocus.Domain.ValueObjects;
 
 namespace EduFocus.Domain.Protection;
@@ -9,7 +10,8 @@ namespace EduFocus.Domain.Protection;
 /// Immutable snapshot of enforceable rules (BR-08, BR-09, BR-25). Build it once
 /// from persisted rules and reuse it in hot paths so matching never queries the
 /// database; rebuild the snapshot after rules change. Disabled and not-enforced
-/// rules are dropped at construction, expiry is evaluated on every call.
+/// rules are dropped at construction, expiry is evaluated on every call. URL
+/// rules in this set are evaluated by the browser extension.
 /// </summary>
 public sealed class BlockRuleSet
 {
@@ -44,5 +46,16 @@ public sealed class BlockRuleSet
     {
         Guard.Utc(nowUtc, nameof(nowUtc));
         return BlockRuleEvaluator.EvaluateApp(_rules, processName, nowUtc);
+    }
+
+    public RuleDecision EvaluateUrl(string? url, DateTime nowUtc)
+    {
+        Guard.Utc(nowUtc, nameof(nowUtc));
+
+        var domain = UrlSanitizer.DeriveDomain(url);
+        if (domain is not null && ProtectedDomains.IsProtected(domain))
+            return RuleDecision.Allow;
+
+        return BlockRuleEvaluator.EvaluateUrl(_rules, url, nowUtc);
     }
 }

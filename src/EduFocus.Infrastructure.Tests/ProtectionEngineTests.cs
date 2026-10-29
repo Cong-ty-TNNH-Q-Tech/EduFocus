@@ -22,6 +22,7 @@ public sealed class ProtectionEngineTests
     private readonly FakeBlockedAttemptRepository _attempts = new();
     private readonly FakeStudySessionRepository _sessions = new();
     private readonly FakeClock _clock = new();
+    private readonly FakeBrowserExtensionBridge _bridge = new();
     private readonly FixedTimeProvider _time = new(Now.AddMinutes(5));
     private readonly RecordingLogger _logger = new();
     private readonly List<string> _order = [];
@@ -311,6 +312,86 @@ public sealed class ProtectionEngineTests
     }
 
     [Fact]
+    public async Task Apply_starts_browser_bridge_with_effective_extension_rules()
+    {
+        _rules.Rules.Add(Rule(RuleType.Domain, "chatgpt.com"));
+        _rules.Rules.Add(Rule(RuleType.Domain, "disabled.test", enabled: false));
+        _rules.Rules.Add(UrlRule("https://www.youtube.com/shorts/"));
+        await using var engine = CreateEngine();
+
+        await engine.ApplyAsync();
+
+        _bridge.StartCalls.Should().Be(1);
+        _bridge.LastRules.Select(rule => rule.NormalizedValue)
+            .Should().BeEquivalentTo(["chatgpt.com", "https://www.youtube.com/shorts/"]);
+        _bridge.LastNowUtc.Should().Be(Now.AddMinutes(5));
+    }
+
+    [Fact]
+    public async Task Apply_keeps_os_protection_when_browser_bridge_fails()
+    {
+        _rules.Rules.Add(Rule(RuleType.Domain, "chatgpt.com"));
+        _bridge.StartException = new IOException("pipe busy");
+        await using var engine = CreateEngine();
+
+        var warnings = await engine.ApplyAsync();
+
+        warnings.Should().ContainSingle().Which.Should().Be(ProtectionEngine.BrowserBridgeWarning);
+        _hosts.Applied.Should().Equal("chatgpt.com");
+        _watcher.IsRunning.Should().BeTrue();
+        _page.IsRunning.Should().BeTrue();
+        _logger.Messages.Should().Contain("Could not start the browser extension bridge.");
+    }
+
+    [Fact]
+    public async Task Remove_stops_browser_bridge()
+    {
+        await using var engine = CreateEngine();
+        await engine.ApplyAsync();
+
+        await engine.RemoveAsync();
+
+        _bridge.StopCalls.Should().Be(1);
+    }
+
+    [Fact]
+    public async Task Browser_blocked_attempt_writes_url_attempt_with_extension_source()
+    {
+        _rules.Rules.Add(UrlRule("https://www.youtube.com/shorts/"));
+        _sessions.Active = NewSession();
+        await using var engine = CreateEngine();
+        await engine.ApplyAsync();
+
+        _bridge.RaiseBlocked(
+            "https://www.youtube.com/shorts/abc?t=12#top",
+            new DateTimeOffset(Now.AddMinutes(1), TimeSpan.Zero));
+
+        var attempt = (await _attempts.WaitForCountAsync(1))[0];
+        attempt.TargetType.Should().Be(BlockedAttemptTargetType.Url);
+        attempt.ObservedVia.Should().Be(BlockedAttemptObservedVia.Extension);
+        attempt.TargetValue.Should().Be("https://www.youtube.com/shorts/abc");
+        attempt.Url.Should().Be("https://www.youtube.com/shorts/abc");
+        attempt.Domain!.Value.Should().Be("www.youtube.com");
+        attempt.SessionId.Should().Be(_sessions.Active!.Id);
+    }
+
+    [Fact]
+    public async Task Browser_blocked_attempts_are_ignored_after_remove()
+    {
+        _sessions.Active = NewSession();
+        await using var engine = CreateEngine();
+        await engine.ApplyAsync();
+        await engine.RemoveAsync();
+
+        _bridge.RaiseBlocked(
+            "https://www.youtube.com/shorts/abc",
+            new DateTimeOffset(Now.AddMinutes(1), TimeSpan.Zero));
+        await Task.Delay(100);
+
+        _attempts.Items.Should().BeEmpty();
+    }
+
+    [Fact]
     public async Task Process_observation_writes_app_attempt_without_window_data()
     {
         _rules.Rules.Add(Rule(RuleType.App, "discord"));
@@ -422,7 +503,8 @@ public sealed class ProtectionEngineTests
         _clock,
         _logger,
         _time,
-        new ProtectionEngineOptions { Debounce = TimeSpan.FromSeconds(30) });
+        new ProtectionEngineOptions { Debounce = TimeSpan.FromSeconds(30) },
+        _bridge);
 
     private static StudySession NewSession() =>
         StudySession.Start(Now, new DateOnly(2026, 10, 30), SessionTrigger.Manual, monitoringEnabled: true);
@@ -444,6 +526,17 @@ public sealed class ProtectionEngineTests
             isBuiltIn: false,
             expiresAtUtc: expiresAt);
 
+    private static BlockRule UrlRule(string value) =>
+        BlockRule.Create(
+            RuleType.Url,
+            RuleMatchType.Contains,
+            value,
+            BlockRuleCategory.Social,
+            BlockRuleEffect.Block,
+            Now.AddDays(-2),
+            isEnabled: true,
+            isBuiltIn: false);
+
     private static async Task WaitAsync(Func<bool> condition)
     {
         var deadline = DateTime.UtcNow.AddSeconds(5);
@@ -456,6 +549,58 @@ public sealed class ProtectionEngineTests
         }
 
         throw new TimeoutException("Condition was not met within 5 seconds.");
+    }
+
+    private sealed class FakeBrowserExtensionBridge : IBrowserExtensionBridge
+    {
+        public bool IsRunning { get; private set; }
+
+        public int StartCalls { get; private set; }
+
+        public int StopCalls { get; private set; }
+
+        public IReadOnlyList<BlockRule> LastRules { get; private set; } = [];
+
+        public DateTime? LastNowUtc { get; private set; }
+
+        public Exception? StartException { get; set; }
+
+        public event EventHandler<BrowserBlockedAttempt>? BlockedAttemptObserved;
+
+        public Task StartAsync(
+            IReadOnlyList<BlockRule> rules,
+            DateTime nowUtc,
+            CancellationToken cancellationToken = default)
+        {
+            StartCalls++;
+            if (StartException is not null)
+                throw StartException;
+
+            IsRunning = true;
+            LastRules = rules;
+            LastNowUtc = nowUtc;
+            return Task.CompletedTask;
+        }
+
+        public Task UpdateRulesAsync(
+            IReadOnlyList<BlockRule> rules,
+            DateTime nowUtc,
+            CancellationToken cancellationToken = default)
+        {
+            LastRules = rules;
+            LastNowUtc = nowUtc;
+            return Task.CompletedTask;
+        }
+
+        public Task StopAsync(CancellationToken cancellationToken = default)
+        {
+            StopCalls++;
+            IsRunning = false;
+            return Task.CompletedTask;
+        }
+
+        public void RaiseBlocked(string url, DateTimeOffset observedAtUtc) =>
+            BlockedAttemptObserved?.Invoke(this, new BrowserBlockedAttempt(url, observedAtUtc));
     }
 
     private sealed class FakeRuleRepository : IBlockRuleRepository

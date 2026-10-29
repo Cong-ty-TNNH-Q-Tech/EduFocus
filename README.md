@@ -36,7 +36,7 @@ Học sinh mở máy tính để học online nhưng rất dễ bị cuốn vào
 |---|---|
 | 🔐 **PIN phụ huynh** | Chỉ phụ huynh mới bật/tắt bảo vệ, sửa blocklist, xem báo cáo hoặc thoát app |
 | 🚫 **Chặn chatbot** | Chặn domain chatbot mục tiêu (ChatGPT, Claude, Gemini, Copilot, Perplexity, Character.AI, DeepSeek…) và app được cấu hình |
-| 📋 **Blocklist linh hoạt** | Thêm domain/app tùy chỉnh, allowlist tạm thời cho bài tập được phép. URL/path cần browser extension (post-MVP) |
+| 📋 **Blocklist linh hoạt** | Thêm domain/app tùy chỉnh, allowlist tạm thời cho bài tập được phép. Rule URL/path chính xác qua browser extension Chrome/Edge |
 | 🕒 **Lịch bảo vệ** | Tự bật/tắt bảo vệ theo khung giờ học trong tuần |
 | 📊 **Theo dõi phiên học** | Ghi nhận thời gian học, ứng dụng/domain đang dùng (best-effort), số lần bị chặn quan sát được |
 | 👁️ **Ước lượng tập trung** | Dùng webcam để nhận biết có mặt, nhìn màn hình, rời màn hình hoặc buồn ngủ |
@@ -108,7 +108,7 @@ Tắt Protection bằng PIN hoặc hết khung giờ
 - ✅ **Windows 11 23H2+** (64-bit) — nền tảng chính
 - ⚠️ Windows 10 22H2: chạy được nhưng Windows 10 đã hết hỗ trợ chính thức
 - 🔜 macOS — chưa hỗ trợ
-- 🌐 Chrome, Edge, Firefox cho chặn domain qua hosts; block page chỉ với HTTP
+- 🌐 Chrome/Edge/Firefox chặn domain qua hosts; extension Chrome/Edge 116+ chặn thêm URL/path; block page chỉ với HTTP
 - 🎥 Webcam tích hợp hoặc webcam ngoài (tùy chọn, cho tính năng attention)
 
 ---
@@ -120,7 +120,7 @@ Tắt Protection bằng PIN hoặc hết khung giờ
 | **UI** | WPF .NET 10 LTS, CommunityToolkit.Mvvm (lớp UI mới ở Phase 6) |
 | **Architecture** | Clean Architecture + Ports & Adapters |
 | **Database** | SQLite + EF Core 10 |
-| **Blocking** | Windows hosts file (domain exact) + local HTTP block page |
+| **Blocking** | Windows hosts file (domain exact) + local HTTP block page + MV3 extension (URL/path) |
 | **Activity** | Win32 foreground window, WMI, UI Automation |
 | **Attention** | OpenCvSharp4 + ONNX Runtime (MediaPipe Face/Iris) |
 | **Security** | PBKDF2-SHA256; không lưu secret khác |
@@ -135,7 +135,7 @@ Tắt Protection bằng PIN hoặc hết khung giờ
 
 > EduFocus đang trong quá trình chuyển đổi từ dự án tiền nhiệm **Don't Be Lazy**. Bản phát hành MVP dự kiến sau Phase 7; các tính năng trong README chưa phải bản đã phát hành.
 
-Khi có bản phát hành, tải tại [Releases](https://github.com/Cong-ty-TNNH-Q-Tech/EduFocus/releases). Mỗi release đính kèm MSI, bản portable ZIP, hướng dẫn cài và `SHA256SUMS.txt`; hãy kiểm tra SHA-256 (và chữ ký số nếu có) trước khi cài. Yêu cầu: Windows 10 22H2/Windows 11 x64; bản MVP cần quyền Administrator. Chi tiết ở [docs/installer.md](./docs/installer.md) và [docs/release-process.md](./docs/release-process.md).
+Khi có bản phát hành, tải tại [Releases](https://github.com/Cong-ty-TNNH-Q-Tech/EduFocus/releases). Mỗi release đính kèm MSI, bản portable ZIP, browser extension ZIP, hướng dẫn cài và `SHA256SUMS.txt`; hãy kiểm tra SHA-256 (và chữ ký số nếu có) trước khi cài. Yêu cầu: Windows 10 22H2/Windows 11 x64; bản MVP cần quyền Administrator. Chi tiết ở [docs/installer.md](./docs/installer.md) và [docs/release-process.md](./docs/release-process.md).
 
 ### Chạy từ source
 
@@ -172,6 +172,7 @@ dotnet test EduFocus.slnx --configuration Release
 - [📝 Changelog](./CHANGELOG.md) — Lịch sử thay đổi
 - [🤝 Contributing](./CONTRIBUTING.md) — Hướng dẫn đóng góp
 - [🔒 Security](./SECURITY.md) — Chính sách bảo mật và báo cáo lỗ hổng
+- [🌐 Browser Extension](./docs/browser-extension.md) — Chặn URL/path, quyền, đóng gói và gỡ cài đặt
 - [🔏 Privacy Notice](./docs/privacy-notice.md) — Thông báo quyền riêng tư (bản đang áp dụng)
 - [📊 DPIA](./docs/dpia.md) — Đánh giá tác động xử lý dữ liệu cá nhân
 - [⚖️ Third-Party Notices](./THIRD-PARTY-NOTICES.md) — Giấy phép thư viện bên thứ ba
@@ -208,7 +209,8 @@ dotnet test EduFocus.slnx --configuration Release
 - Hosts không tạo log truy cập HTTPS; số blocked attempts chỉ là best-effort.
 - Trang chặn chỉ hiển thị với HTTP; HTTPS thường báo lỗi kết nối/SSL.
 - Chặn app có thể đóng/kill process và làm mất dữ liệu chưa lưu; EduFocus ưu tiên `WM_CLOSE` trước khi kill.
-- URL/path, wildcard subdomain và chặn AI sidebar chưa thuộc MVP; cần browser extension.
+- Extension Chrome/Edge chặn URL/path cấp tab; chưa hỗ trợ Firefox, iframe/subresource hay wildcard
+  subdomain. Extension có thể bị tắt bởi người dùng có quyền quản trị máy.
 - Báo cáo chi tiết chỉ có trong 30 ngày; dữ liệu dài hạn dùng session summary (365 ngày).
 - Webcam-based attention chỉ là ước lượng; không dùng để kết luận chắc chắn.
 - Google Meet/Teams có thể chiếm webcam trên máy chưa hỗ trợ Multi-App Camera.

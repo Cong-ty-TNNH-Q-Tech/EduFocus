@@ -21,7 +21,11 @@ public sealed class BlockRuleSeedServiceTests
         result.Changed.Should().BeTrue();
 
         harness.Rules.Rules.Should().HaveCount(result.Added);
-        harness.Rules.Rules.Should().OnlyContain(rule => rule.IsBuiltIn && rule.IsEnabled);
+        harness.Rules.Rules.Should().OnlyContain(rule => rule.IsBuiltIn);
+        harness.Rules.Rules.Should().Contain(rule => rule.RuleType == RuleType.Url && !rule.IsEnabled);
+        harness.Rules.Rules
+            .Where(rule => rule.RuleType != RuleType.Url)
+            .Should().OnlyContain(rule => rule.IsEnabled);
 
         var audit = harness.Audits.Entries.Should().ContainSingle().Subject;
         audit.Actor.Should().Be(AuditActor.System);

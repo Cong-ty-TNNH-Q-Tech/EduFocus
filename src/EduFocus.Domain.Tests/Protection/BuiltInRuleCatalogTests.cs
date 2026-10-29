@@ -16,7 +16,7 @@ public class BuiltInRuleCatalogTests
         var catalog = BuiltInRuleCatalog.Default;
 
         catalog.Version.Should().Be(BuiltInRuleCatalog.CurrentVersion);
-        catalog.Rules.Should().HaveCount(21);
+        catalog.Rules.Should().HaveCount(26);
 
         foreach (var definition in catalog.Rules)
         {
@@ -24,15 +24,31 @@ public class BuiltInRuleCatalogTests
 
             rule.NormalizedValue.Should().Be(definition.Value);
             rule.EnforcementStatus.Should().Be(EnforcementStatus.Enforced);
-            rule.IsEffective(Now).Should().BeTrue();
+            rule.IsEffective(Now).Should().Be(definition.IsEnabledByDefault);
         }
+    }
+
+    [Fact]
+    public void Default_catalog_ships_disabled_url_path_rules_for_the_extension()
+    {
+        var pathRules = BuiltInRuleCatalog.Default.Rules
+            .Where(rule => rule.RuleType == RuleType.Url)
+            .ToList();
+
+        pathRules.Should().NotBeEmpty();
+        pathRules.Should().OnlyContain(rule =>
+            !rule.IsEnabledByDefault
+            && rule.Effect == BlockRuleEffect.Block
+            && rule.MatchType == RuleMatchType.Contains);
+
+        pathRules.Select(rule => rule.Value).Should().Contain("https://www.youtube.com/shorts/");
     }
 
     [Fact]
     public void Default_catalog_contains_documented_chatbots()
     {
         var blocked = BuiltInRuleCatalog.Default.Rules
-            .Where(rule => rule.Effect == BlockRuleEffect.Block)
+            .Where(rule => rule.RuleType == RuleType.Domain && rule.Effect == BlockRuleEffect.Block)
             .Select(rule => rule.Value)
             .ToList();
 
@@ -106,10 +122,11 @@ public class BuiltInRuleCatalogTests
     private static BlockRule CreateRule(BuiltInRuleDefinition definition) =>
         BlockRule.Create(
             definition.RuleType,
-            RuleMatchType.Exact,
+            definition.MatchType,
             definition.Value,
             definition.Category,
             definition.Effect,
             Now,
+            isEnabled: definition.IsEnabledByDefault,
             isBuiltIn: true);
 }

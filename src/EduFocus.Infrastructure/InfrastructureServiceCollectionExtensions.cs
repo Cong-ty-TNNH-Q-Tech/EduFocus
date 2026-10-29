@@ -35,6 +35,8 @@ public static class InfrastructureServiceCollectionExtensions
         services.AddSingleton<IProcessController, WindowsProcessController>();
         services.AddSingleton<IProcessWatcher, ProcessWatcher>();
         services.AddSingleton(new ProtectionEngineOptions());
+        services.AddSingleton(new BrowserExtensionBridgeOptions());
+        services.AddSingleton<IBrowserExtensionBridge, NamedPipeBrowserExtensionBridge>();
         services.AddSingleton<IProtectionEnginePort, ProtectionEngine>();
         services.AddSingleton<IForegroundActivityPort, WindowsForegroundActivityPort>();
         services.AddSingleton(new CsvExportOptions());

@@ -2,6 +2,7 @@ using System.Collections.Concurrent;
 using System.Threading.Channels;
 using EduFocus.Domain.Entities;
 using EduFocus.Domain.Enums;
+using EduFocus.Domain.Privacy;
 using EduFocus.Domain.Protection;
 using EduFocus.Domain.ValueObjects;
 using EduFocus.Ports.Outbound.Persistence;
@@ -30,6 +31,9 @@ public sealed class ProtectionEngine : IProtectionEnginePort, IAsyncDisposable
     public const string PageStopWarning =
         "Không thể dừng block page; listener có thể vẫn mở nhưng không còn domain bị chặn.";
 
+    public const string BrowserBridgeWarning =
+        "Không thể khởi động cầu nối extension trình duyệt; chặn URL/path tạm thời không hiệu lực.";
+
     private readonly IBlockRuleRepository _rules;
     private readonly IHostsFileBlocker _hosts;
     private readonly IBlockPageServer _blockPage;
@@ -40,6 +44,7 @@ public sealed class ProtectionEngine : IProtectionEnginePort, IAsyncDisposable
     private readonly IAppLogger _logger;
     private readonly TimeProvider _timeProvider;
     private readonly ProtectionEngineOptions _options;
+    private readonly IBrowserExtensionBridge? _browserBridge;
     private readonly SemaphoreSlim _gate = new(1, 1);
     private readonly ConcurrentDictionary<string, TimeSpan> _lastRecorded =
         new(StringComparer.Ordinal);
@@ -59,7 +64,8 @@ public sealed class ProtectionEngine : IProtectionEnginePort, IAsyncDisposable
         IMonotonicClockPort clock,
         IAppLogger logger,
         TimeProvider timeProvider,
-        ProtectionEngineOptions options)
+        ProtectionEngineOptions options,
+        IBrowserExtensionBridge? browserBridge = null)
     {
         _rules = rules ?? throw new ArgumentNullException(nameof(rules));
         _hosts = hosts ?? throw new ArgumentNullException(nameof(hosts));
@@ -77,9 +83,13 @@ public sealed class ProtectionEngine : IProtectionEnginePort, IAsyncDisposable
             throw new ArgumentOutOfRangeException(nameof(options), "Debounce must be between 0 and 1 day.");
 
         _options = options;
+        _browserBridge = browserBridge;
 
         _blockPage.BlockedRequestObserved += OnBlockPageHit;
         _watcher.ProcessBlockedObserved += OnProcessBlocked;
+
+        if (_browserBridge is not null)
+            _browserBridge.BlockedAttemptObserved += OnBrowserBlocked;
     }
 
     public async Task<IReadOnlyList<string>> ApplyAsync(CancellationToken cancellationToken = default)
@@ -145,6 +155,23 @@ public sealed class ProtectionEngine : IProtectionEnginePort, IAsyncDisposable
     {
         _blockPage.BlockedRequestObserved -= OnBlockPageHit;
         _watcher.ProcessBlockedObserved -= OnProcessBlocked;
+
+        if (_browserBridge is not null)
+        {
+            _browserBridge.BlockedAttemptObserved -= OnBrowserBlocked;
+
+            try
+            {
+                await _browserBridge.StopAsync(CancellationToken.None).ConfigureAwait(false);
+            }
+            catch (Exception ex)
+            {
+                _logger.Warning(
+                    LogCategories.Protection,
+                    $"Could not stop the browser extension bridge ({ex.GetType().Name}).");
+            }
+        }
+
         _accepting = false;
 
         var queue = Interlocked.Exchange(ref _queue, null);
@@ -234,6 +261,30 @@ public sealed class ProtectionEngine : IProtectionEnginePort, IAsyncDisposable
                 ex);
         }
 
+        if (_browserBridge is not null)
+        {
+            try
+            {
+                await _browserBridge
+                    .StartAsync(effective.ExtensionRules.ToArray(), nowUtc, cancellationToken)
+                    .ConfigureAwait(false);
+            }
+            catch (OperationCanceledException)
+            {
+                await AbortApplyAsync(queue).ConfigureAwait(false);
+                throw;
+            }
+            catch (Exception ex)
+            {
+                // The extension is an additional layer; OS-level protection stays on.
+                _logger.Error(
+                    LogCategories.Protection,
+                    "Could not start the browser extension bridge.",
+                    ex);
+                warnings.Add(BrowserBridgeWarning);
+            }
+        }
+
         _active = true;
         _logger.Info(
             LogCategories.Protection,
@@ -246,6 +297,7 @@ public sealed class ProtectionEngine : IProtectionEnginePort, IAsyncDisposable
     {
         _accepting = false;
 
+        await StopBrowserBridgeAsync().ConfigureAwait(false);
         await TryAsync(() => _watcher.UpdateRules([], []), "clear watcher rules").ConfigureAwait(false);
         await TryAsync(() => _watcher.StopAsync(CancellationToken.None), "stop the process watcher")
             .ConfigureAwait(false);
@@ -264,6 +316,8 @@ public sealed class ProtectionEngine : IProtectionEnginePort, IAsyncDisposable
     private async Task<IReadOnlyList<string>> RemoveCoreAsync(CancellationToken cancellationToken)
     {
         _accepting = false;
+        await StopBrowserBridgeAsync().ConfigureAwait(false);
+
         var queue = _queue;
         var writer = _writer;
         _queue = null;
@@ -366,6 +420,10 @@ public sealed class ProtectionEngine : IProtectionEnginePort, IAsyncDisposable
             .Where(rule => rule.MatchType == RuleMatchType.Exact && rule.IsEffective(nowUtc))
             .ToList();
 
+        var extensionRules = all
+            .Where(rule => rule.IsEffective(nowUtc))
+            .ToArray();
+
         var allowedDomains = effective
             .Where(rule => rule.RuleType == RuleType.Domain && rule.Effect == BlockRuleEffect.Allow)
             .Select(rule => rule.NormalizedValue)
@@ -398,7 +456,7 @@ public sealed class ProtectionEngine : IProtectionEnginePort, IAsyncDisposable
             .Distinct(StringComparer.Ordinal)
             .ToArray();
 
-        return new EffectiveRules(domains, blockedApps, allowedApps);
+        return new EffectiveRules(domains, blockedApps, allowedApps, extensionRules);
     }
 
     private void OnBlockPageHit(BlockPageHit hit)
@@ -406,7 +464,7 @@ public sealed class ProtectionEngine : IProtectionEnginePort, IAsyncDisposable
         if (hit is null || !_accepting)
             return;
 
-        TryEnqueue(hit.Domain, hit.ObservedAtUtc, isDomain: true);
+        TryEnqueue(hit.Domain, hit.ObservedAtUtc, BlockedAttemptTargetType.Domain);
     }
 
     private void OnProcessBlocked(ProcessBlockedObservation observation)
@@ -414,10 +472,18 @@ public sealed class ProtectionEngine : IProtectionEnginePort, IAsyncDisposable
         if (observation is null || !_accepting)
             return;
 
-        TryEnqueue(observation.ProcessName, observation.ObservedAtUtc, isDomain: false);
+        TryEnqueue(observation.ProcessName, observation.ObservedAtUtc, BlockedAttemptTargetType.App);
     }
 
-    private void TryEnqueue(string value, DateTimeOffset observedAtUtc, bool isDomain)
+    private void OnBrowserBlocked(object? sender, BrowserBlockedAttempt attempt)
+    {
+        if (attempt is null || !_accepting)
+            return;
+
+        TryEnqueue(attempt.Url, attempt.ObservedAtUtc, BlockedAttemptTargetType.Url);
+    }
+
+    private void TryEnqueue(string value, DateTimeOffset observedAtUtc, BlockedAttemptTargetType targetType)
     {
         if (string.IsNullOrWhiteSpace(value))
             return;
@@ -426,12 +492,19 @@ public sealed class ProtectionEngine : IProtectionEnginePort, IAsyncDisposable
         if (queue is null)
             return;
 
-        var key = (isDomain ? "d:" : "a:") + value.Trim().ToLowerInvariant();
+        var prefix = targetType switch
+        {
+            BlockedAttemptTargetType.Domain => "d:",
+            BlockedAttemptTargetType.App => "a:",
+            _ => "u:"
+        };
+
+        var key = prefix + value.Trim().ToLowerInvariant();
         var now = _clock.GetTickCount();
         if (_lastRecorded.TryGetValue(key, out var last) && now - last < _options.Debounce)
             return;
 
-        var record = new AttemptRecord(value, observedAtUtc.UtcDateTime, isDomain);
+        var record = new AttemptRecord(value, observedAtUtc.UtcDateTime, targetType);
         if (!queue.Writer.TryWrite(record))
             return;
 
@@ -457,20 +530,29 @@ public sealed class ProtectionEngine : IProtectionEnginePort, IAsyncDisposable
     {
         var session = await _sessions.GetActiveAsync(CancellationToken.None).ConfigureAwait(false);
 
-        var attempt = record.IsDomain
-            ? BlockedAttempt.Record(
+        var attempt = record.TargetType switch
+        {
+            BlockedAttemptTargetType.Domain => BlockedAttempt.Record(
                 record.OccurredAtUtc,
                 BlockedAttemptTargetType.Domain,
                 record.Value,
                 BlockedAttemptObservedVia.BlockPage,
-                session?.Id)
-            : BlockedAttempt.Record(
+                session?.Id),
+            BlockedAttemptTargetType.App => BlockedAttempt.Record(
                 record.OccurredAtUtc,
                 BlockedAttemptTargetType.App,
                 record.Value,
                 BlockedAttemptObservedVia.ProcessWatcher,
                 session?.Id,
-                processName: record.Value);
+                processName: record.Value),
+            BlockedAttemptTargetType.Url => BlockedAttempt.Record(
+                record.OccurredAtUtc,
+                BlockedAttemptTargetType.Url,
+                record.Value,
+                BlockedAttemptObservedVia.Extension,
+                session?.Id),
+            _ => throw new InvalidOperationException("Unknown blocked attempt target type.")
+        };
 
         await _attempts.AddAsync(attempt, CancellationToken.None).ConfigureAwait(false);
 
@@ -538,13 +620,31 @@ public sealed class ProtectionEngine : IProtectionEnginePort, IAsyncDisposable
             },
             description);
 
+    private async Task StopBrowserBridgeAsync()
+    {
+        if (_browserBridge is null)
+            return;
+
+        try
+        {
+            await _browserBridge.StopAsync(CancellationToken.None).ConfigureAwait(false);
+        }
+        catch (Exception ex)
+        {
+            _logger.Warning(
+                LogCategories.Protection,
+                $"Could not stop the browser extension bridge ({ex.GetType().Name}).");
+        }
+    }
+
     private sealed record EffectiveRules(
         IReadOnlyCollection<string> Domains,
         IReadOnlyCollection<string> BlockedApps,
-        IReadOnlyCollection<string> AllowedApps);
+        IReadOnlyCollection<string> AllowedApps,
+        IReadOnlyCollection<BlockRule> ExtensionRules);
 
     private readonly record struct AttemptRecord(
         string Value,
         DateTime OccurredAtUtc,
-        bool IsDomain);
+        BlockedAttemptTargetType TargetType);
 }

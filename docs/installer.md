@@ -38,16 +38,27 @@ dotnet publish src/EduFocus.WPF/EduFocus.WPF.csproj `
   -p:EnableCompressionInSingleFile=true -p:Version=2.0.0 `
   -o publish/
 
+dotnet publish src/EduFocus.NativeHost/EduFocus.NativeHost.csproj `
+  -c Release -r win-x64 --self-contained true `
+  -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true `
+  -p:EnableCompressionInSingleFile=true -p:Version=2.0.0 `
+  -o publish/native-host/
+
 ./installer/Build-Installer.ps1 -PublishDir publish -Version 2.0.0
 ```
 
 MSI chứa:
 
 - `EduFocus.exe` (self-contained, component GUID cố định để nâng cấp thay thế file, không tạo bản cài thứ hai).
+- `native-host\EduFocus.NativeHost.exe` (self-contained; component GUID cố định) — cầu nối native
+  messaging cho extension trình duyệt. `Build-Installer.ps1` từ chối build nếu thiếu file này vì
+  `Product.wxs` tham chiếu nó cho custom action đăng ký/gỡ đăng ký.
 - Shortcut **Desktop** và **Start Menu** dùng chung cho mọi người dùng (`CommonDesktopFolder`, `CommonProgramsFolder`).
 - Registry `HKLM\Software\ThanhTrunggDEV\EduFocus` với `InstallLocation` và `Version` (keypath của component shortcut/registry).
 - `docs\privacy-notice.md`, `THIRD-PARTY-NOTICES.md` và `LICENSE` (bản sao chỉ đọc từ repo) trong thư mục cài.
-- Không có database, log, file cấu hình hay secret.
+- Không có database, log, file cấu hình hay secret. Extension trình duyệt **không** nằm trong MSI;
+  nó được phát hành dưới dạng
+  `EduFocus-<version>-browser-extension.zip` (xem [browser-extension.md](./browser-extension.md)).
 
 `Package/@Codepage` là `65001` (UTF-8) để toàn bộ text tiếng Việt trong UI cài đặt hiển thị đúng;
 codepage 1252/1258 không biểu diễn hoặc không round-trip được chữ Việt precomposed.
@@ -76,7 +87,18 @@ Trình tự MSI thực hiện:
 4. Chạy deferred custom action `--prepare-data-directory` **as SYSTEM**:
    tạo `%ProgramData%\EduFocus` và áp ACL chỉ Administrators + SYSTEM (kế thừa cho file con).
    Nếu bước này lỗi, cài đặt thất bại và rollback — app sẽ không có thư mục dữ liệu hở quyền.
-5. Tạo shortcut và registry entry.
+5. Chạy deferred custom action `--register --scope machine --manifest-dir [INSTALLFOLDER]native-host`
+   **as SYSTEM**: ghi `com.edufocus.native_host.json` cạnh host và tạo registry
+   `HKLM\Software\Google\Chrome\NativeMessagingHosts\com.edufocus.native_host` +
+   `HKLM\Software\Microsoft\Edge\NativeMessagingHosts\com.edufocus.native_host` (cả view 64-bit và
+   `WOW6432Node`). Đăng ký là best-effort: lỗi được ghi vào MSI log nhưng không chặn cài đặt vì
+   phần chặn hosts/app vẫn hoạt động; có thể đăng ký lại thủ công bằng
+   `scripts/register-browser-extension.ps1`.
+6. Tạo shortcut và registry entry.
+
+Extension vẫn phải được cài một lần trong trình duyệt (Chrome Web Store, giải nén ZIP và
+**Load unpacked**, hoặc enterprise policy). Quy trình và kiểm tra quyền nằm ở
+[browser-extension.md](./browser-extension.md).
 
 Sau khi cài, người dùng mở EduFocus từ shortcut. Lần chạy đầu:
 
@@ -127,7 +149,9 @@ Sau bước xác nhận gỡ, hộp thoại **Remove EduFocus** hỏi rõ:
 - Tùy chọn: **xóa toàn bộ dữ liệu EduFocus** (không thể hoàn tác). Nếu chọn, MSI chạy
   `--uninstall-watchdog --delete-user-data` và xóa `%ProgramData%\EduFocus`.
 
-Trước `RemoveFiles`, MSI chạy `--uninstall-watchdog` (deferred, SYSTEM, best effort):
+Trước `RemoveFiles`, MSI chạy `--unregister --scope machine` (deferred, SYSTEM, best effort) để
+xóa registry native messaging và manifest `native-host\com.edufocus.native_host.json`, rồi chạy
+`--uninstall-watchdog` (deferred, SYSTEM, best effort):
 
 1. gỡ scheduled task `EduFocusLogon`/`EduFocusWatchdog`;
 2. yêu cầu watchdog dừng và chờ tối đa 5 giây (kill app đang chạy do `CloseApplication` đã xử lý);
@@ -163,7 +187,7 @@ Sau khi gỡ, còn lại tối đa:
 
 | Đường dẫn | Nội dung | ACL |
 |---|---|---|
-| `%ProgramFiles%\EduFocus` | binary | mặc định Program Files (admin ghi, user đọc/chạy) |
+| `%ProgramFiles%\EduFocus` | binary, `native-host\EduFocus.NativeHost.exe`, manifest native messaging | mặc định Program Files (admin ghi, user đọc/chạy) |
 | `%ProgramData%\EduFocus` | `edufocus.db`, `backups/`, `runtime/`, `hosts-backup/` | Administrators + SYSTEM full control, protected, kế thừa |
 | `%LocalAppData%\EduFocus\logs` | log kỹ thuật (redacted) | theo tài khoản người dùng |
 | `%LocalAppData%\EduFocus\exports` | CSV phụ huynh tự xuất | theo tài khoản người dùng |
@@ -206,6 +230,11 @@ Chưa thể chạy tự động trong CI (cần VM Windows). Checklist bắt bu�
    `Get-AuthenticodeSignature` trên MSI (khi bản phát hành được ký) trước khi cài.
 9. Cài silent (`msiexec /i "EduFocus-2.0.0-win-x64.msi" /qn`) → thành công, không UI; mở app lần
    đầu vẫn bắt buộc onboarding consent trước khi vào dashboard.
+10. Cài browser extension, bật bảo vệ → popup **Đang bảo vệ**; rule URL/path chặn đúng; blocked
+    attempt ghi URL đã làm sạch; tắt EduFocus → trình duyệt không bị chặn (fail-open). Chi tiết
+    từng bước ở [browser-extension.md](./browser-extension.md) §7.
+11. Gỡ cài đặt → registry `NativeMessagingHosts` của Chrome/Edge và
+    `native-host\com.edufocus.native_host.json` bị xóa; không còn native host mồ côi.
 
 Kết quả từng lần chạy ghi vào [release-checklist.md](./release-checklist.md) §2.4. Quy trình tag,
 ký số, checksum và dry run nằm ở [release-process.md](./release-process.md); ngưỡng hiệu năng và
@@ -230,9 +259,13 @@ kill process bị chặn và quản lý scheduled task.
 ## 9. Build cục bộ và CI
 
 - CI release (`.github/workflows/release.yml`) chạy test trước khi publish self-contained,
-  xóa `*.pdb/*.lib`, ký exe/MSI nếu có chứng chỉ trong GitHub Secrets, cài WiX 4.0.6 +
+  publish thêm native host vào `publish/native-host`, xóa `*.pdb/*.lib`, ký cả `EduFocus.exe` và
+  `EduFocus.NativeHost.exe` cùng MSI nếu có chứng chỉ trong GitHub Secrets, cài WiX 4.0.6 +
   `WixToolset.UI.wixext` + `WixToolset.Util.wixext`, gọi `installer/Build-Installer.ps1`
-  với version lấy từ tag, tạo `SHA256SUMS.txt` và release notes từ CHANGELOG.
+  với version lấy từ tag, đóng gói browser extension, tạo `SHA256SUMS.txt` và release notes từ
+  CHANGELOG.
+- CI thường (`.github/workflows/ci.yml`) chạy `node --test browser-extension/tests` và smoke-test
+  `scripts/pack-browser-extension.ps1` bên cạnh build/test .NET.
 - Workflow hỗ trợ `workflow_dispatch` với `dry_run = true` để chạy đầy đủ trên branch thử
   nghiệm mà không tạo release. Chi tiết signing, secret và checklist:
   [release-process.md](./release-process.md).

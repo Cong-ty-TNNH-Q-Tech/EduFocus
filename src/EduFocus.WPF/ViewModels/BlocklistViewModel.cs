@@ -155,7 +155,9 @@ public sealed class BlockRuleRow
         DetailText = $"{effect} · {SourceText} · {state}";
 
         if (info.EnforcementStatus == EnforcementStatus.NotEnforced)
-            DetailText += " · Chưa áp dụng trong MVP";
+            DetailText += " · Chưa được hỗ trợ";
+        else if (info.RuleType == RuleType.Url || info.MatchType != RuleMatchType.Exact)
+            DetailText += " · Cần extension trình duyệt";
     }
 
     public Guid Id { get; }

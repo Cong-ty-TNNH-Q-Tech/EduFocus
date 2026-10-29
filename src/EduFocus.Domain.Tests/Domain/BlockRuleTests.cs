@@ -79,8 +79,8 @@ public class BlockRuleTests
     {
         var rule = Create(RuleType.Domain, "example.com", matchType: RuleMatchType.Suffix);
 
-        rule.EnforcementStatus.Should().Be(EnforcementStatus.NotEnforced);
-        rule.IsEffective(Now).Should().BeFalse();
+        rule.EnforcementStatus.Should().Be(EnforcementStatus.Enforced);
+        rule.IsEffective(Now).Should().BeTrue();
         rule.Matches(DomainName.Parse("example.com")).Should().BeTrue();
         rule.Matches(DomainName.Parse("sub.example.com")).Should().BeTrue();
         rule.Matches(DomainName.Parse("notexample.com")).Should().BeFalse();
@@ -98,12 +98,89 @@ public class BlockRuleTests
     }
 
     [Fact]
-    public void UrlRule_IsSanitizedAndNotEnforcedInMvp()
+    public void UrlRule_IsSanitizedAndEnforced()
     {
         var rule = Create(RuleType.Url, "https://chat.openai.com/chat?token=abc#x");
 
-        rule.NormalizedValue.Should().Be("https://chat.openai.com/chat");
-        rule.EnforcementStatus.Should().Be(EnforcementStatus.NotEnforced);
+        rule.NormalizedValue.Should().Be("https://chat.openai.com/chat/");
+        rule.EnforcementStatus.Should().Be(EnforcementStatus.Enforced);
+        rule.IsEffective(Now).Should().BeTrue();
+    }
+
+    [Fact]
+    public void UrlRule_BlockingAProtectedHostIsRejected()
+    {
+        var act = () => Create(RuleType.Url, "https://meet.google.com/abc-defg-hij");
+
+        act.Should().Throw<ArgumentException>().WithParameterName("value");
+
+        var allow = Create(
+            RuleType.Url,
+            "https://meet.google.com/abc-defg-hij",
+            effect: BlockRuleEffect.Allow);
+
+        allow.Effect.Should().Be(BlockRuleEffect.Allow);
+    }
+
+    [Theory]
+    [InlineData(RuleMatchType.Exact, "https://example.com/chat/", true)]
+    [InlineData(RuleMatchType.Exact, "https://example.com/chat", true)]
+    [InlineData(RuleMatchType.Exact, "https://example.com/chat/extra", false)]
+    [InlineData(RuleMatchType.Suffix, "https://example.com/chat/", true)]
+    [InlineData(RuleMatchType.Suffix, "https://example.com/other-chat/", false)]
+    [InlineData(RuleMatchType.Contains, "https://example.com/chat/room", true)]
+    [InlineData(RuleMatchType.Contains, "https://example.com/other-chat/room", false)]
+    public void UrlRule_MatchesSanitizedUrl(RuleMatchType matchType, string candidate, bool expected)
+    {
+        var rule = Create(RuleType.Url, "https://example.com/chat", matchType: matchType);
+
+        rule.MatchesUrl(candidate).Should().Be(expected);
+    }
+
+    [Fact]
+    public void UrlRule_IgnoresQueryStringFragmentAndCaseOfTheHost()
+    {
+        var rule = Create(RuleType.Url, "https://www.youtube.com/shorts/", matchType: RuleMatchType.Contains);
+
+        rule.MatchesUrl("HTTPS://WWW.YOUTUBE.COM/shorts/abc?feature=share#top").Should().BeTrue();
+        rule.MatchesUrl("https://www.youtube.com/shortsie").Should().BeFalse();
+        rule.MatchesUrl("https://m.youtube.com/shorts/abc").Should().BeFalse();
+    }
+
+    [Fact]
+    public void DomainAndAppRules_MatchUrls()
+    {
+        var domainRule = Create(RuleType.Domain, "example.com", matchType: RuleMatchType.Suffix);
+        var appRule = Create(RuleType.App, "game", category: BlockRuleCategory.Game);
+
+        domainRule.MatchesUrl("https://sub.example.com/page").Should().BeTrue();
+        domainRule.MatchesUrl("https://notexample.com/page").Should().BeFalse();
+        appRule.MatchesUrl("https://example.com/page").Should().BeFalse();
+        domainRule.MatchesUrl("file:///c:/page").Should().BeFalse();
+        domainRule.MatchesUrl(null).Should().BeFalse();
+    }
+
+    [Fact]
+    public void Evaluator_UrlAllowWinsOverDomainAndUrlBlocks()
+    {
+        var domainBlock = Create(RuleType.Domain, "example.com", matchType: RuleMatchType.Suffix);
+        var pathBlock = Create(RuleType.Url, "https://example.com/chat");
+        var allow = Create(RuleType.Url, "https://sub.example.com/chat", effect: BlockRuleEffect.Allow);
+
+        BlockRuleEvaluator.EvaluateUrl(
+                [domainBlock, pathBlock],
+                "https://example.com/chat",
+                Now)
+            .Should().Be(RuleDecision.Block);
+
+        BlockRuleEvaluator.EvaluateUrl(
+                [domainBlock, pathBlock, allow],
+                "https://sub.example.com/chat",
+                Now)
+            .Should().Be(RuleDecision.Allow);
+
+        BlockRuleEvaluator.EvaluateUrl([domainBlock], "not a url", Now)
+            .Should().Be(RuleDecision.None);
     }
 
     [Fact]
@@ -175,7 +252,7 @@ public class BlockRuleTests
 
         var expired = Create(RuleType.Domain, "claude.ai", expiresAtUtc: Now.AddMinutes(5));
 
-        var notEnforced = Create(RuleType.Domain, "gemini.google.com", matchType: RuleMatchType.Suffix);
+        var notEnforced = Create(RuleType.App, "notepad", matchType: RuleMatchType.Contains);
 
         var decision = BlockRuleEvaluator.EvaluateDomain(
             [disabled, expired, notEnforced],
@@ -187,7 +264,8 @@ public class BlockRuleTests
         BlockRuleEvaluator.EvaluateDomain([expired], DomainName.Parse("claude.ai"), Now.AddMinutes(6))
             .Should().Be(RuleDecision.None);
 
-        BlockRuleEvaluator.EvaluateDomain([notEnforced], DomainName.Parse("gemini.google.com"), Now)
+        notEnforced.EnforcementStatus.Should().Be(EnforcementStatus.NotEnforced);
+        BlockRuleEvaluator.EvaluateApp([notEnforced], "notepad", Now)
             .Should().Be(RuleDecision.None);
     }
 

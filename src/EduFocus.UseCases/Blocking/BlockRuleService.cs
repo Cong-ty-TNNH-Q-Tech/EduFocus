@@ -21,6 +21,7 @@ public sealed class BlockRuleService : IBlockRuleUseCase
     private readonly ICorrelationContext _correlation;
     private readonly IAppLogger _logger;
     private readonly TimeProvider _timeProvider;
+    private readonly IBrowserExtensionBridge _browserBridge;
 
     public BlockRuleService(
         IBlockRuleRepository rules,
@@ -28,7 +29,8 @@ public sealed class BlockRuleService : IBlockRuleUseCase
         IAuditLogRepository auditLogs,
         ICorrelationContext correlation,
         IAppLogger logger,
-        TimeProvider timeProvider)
+        TimeProvider timeProvider,
+        IBrowserExtensionBridge browserBridge)
     {
         _rules = rules ?? throw new ArgumentNullException(nameof(rules));
         _authorizer = authorizer ?? throw new ArgumentNullException(nameof(authorizer));
@@ -36,6 +38,7 @@ public sealed class BlockRuleService : IBlockRuleUseCase
         _correlation = correlation ?? throw new ArgumentNullException(nameof(correlation));
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
         _timeProvider = timeProvider ?? throw new ArgumentNullException(nameof(timeProvider));
+        _browserBridge = browserBridge ?? throw new ArgumentNullException(nameof(browserBridge));
     }
 
     public async Task<IReadOnlyList<BlockRuleInfo>> ListAsync(CancellationToken cancellationToken = default)
@@ -74,7 +77,31 @@ public sealed class BlockRuleService : IBlockRuleUseCase
             now,
             cancellationToken);
 
+        await RefreshBrowserRulesAsync(now, cancellationToken);
+
         return new BlockRuleOperationResult(Changed: true, ToInfo(rule));
+    }
+
+    private async Task RefreshBrowserRulesAsync(DateTime nowUtc, CancellationToken cancellationToken)
+    {
+        if (!_browserBridge.IsRunning)
+            return;
+
+        try
+        {
+            var rules = await _rules.ListAsync(cancellationToken);
+            await _browserBridge.UpdateRulesAsync(rules, nowUtc, cancellationToken);
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            _logger.Warning(
+                LogCategories.Protection,
+                $"Could not refresh browser extension rules ({ex.GetType().Name}).");
+        }
     }
 
     private async Task WriteAuditAsync(
@@ -108,6 +135,7 @@ public sealed class BlockRuleService : IBlockRuleUseCase
         new(
             rule.Id.Value,
             rule.RuleType,
+            rule.MatchType,
             rule.Category,
             rule.Effect,
             rule.NormalizedValue,

@@ -70,7 +70,8 @@ của phụ huynh, nhắc phụ huynh thông báo cho trẻ, không hỗ trợ g
 | Phiên học | start/end, heartbeat, counters, confidence, blocked count, note | App | Báo cáo thời gian học | `StudySessions` | 365 ngày (cấu hình) | Parent Mode | Không | Trung bình |
 | Mẫu hoạt động | app, process, window title đã làm sạch, domain/URL đã làm sạch, category, idle, online class | Hệ điều hành/UIA | Phân loại và báo cáo | `ActivitySamples` | 30 ngày (cấu hình) | Parent Mode/CSV | Không | **Cao** (title có thể chứa tên tài liệu) |
 | Sự kiện tập trung | state, start/end, confidence, app/domain, note | Camera + activity | Ước lượng tập trung | `AttentionEvents` | 90 ngày (cấu hình) | Parent Mode/CSV | Không | **Cao** (dữ liệu trẻ em) |
-| Lần truy cập bị chặn | target type/value, domain/URL đã làm sạch, process, window title, observed via | Block page/watcher | Minh bạch nỗ lực truy cập | `BlockedAttempts` | 90 ngày (cấu hình) | Parent Mode | Không | **Cao** |
+| Lần truy cập bị chặn | target type/value, domain/URL đã làm sạch, process, window title, observed via | Block page/watcher/browser extension | Minh bạch nỗ lực truy cập | `BlockedAttempts` | 90 ngày (cấu hình) | Parent Mode | Không | **Cao** |
+| URL điều hướng (tạm thời) | URL đã bỏ query/fragment/credentials, tối đa 2048 ký tự | Browser extension | So khớp rule chặn cục bộ | RAM trình duyệt; chỉ URL khớp rule mới đi qua native messaging tới app | Không lưu ở extension | Không | Không | **Cao** khi khớp rule |
 | Audit | actor, event type, description, correlation id | App | Truy vết thay đổi nhạy cảm | `AuditLogs` | 365 ngày | Hỗ trợ/điều tra | Không | Trung bình |
 | Log kỹ thuật | timestamp, level, category, correlation id, message đã redact | App | Chẩn đoán lỗi | `%LocalAppData%\EduFocus\logs` | 14 ngày, 10 MB/tệp | Người dùng máy | Không | Trung bình |
 | Backup/khôi phục | bản sao DB, bản sao hosts, journal | App | Chống mất dữ liệu/khôi phục chặn | `%ProgramData%\EduFocus\backups`, `hosts-backup`, `runtime` | 3 bản backup; hosts xóa sau restore | SYSTEM/Administrators | Không | Trung bình |
@@ -138,6 +139,7 @@ Thang điểm: Khả năng (L) và Tác động (I) 1–5; mức = L×I (1–6 t
 | R11 | Update check tiết lộ IP cho GitHub | 2 | 1 | 2 | Mặc định tắt; UI giải thích; không gửi dữ liệu học tập | Thấp |
 | R12 | Thư viện bên thứ ba có license không phù hợp phát hành thương mại | 2 | 4 | 8 | Inventory tại [THIRD-PARTY-NOTICES.md](../THIRD-PARTY-NOTICES.md) + hạ FluentAssertions về 7.2.0 Apache-2.0; rà soát mỗi release | Thấp |
 | R13 | Sự cố không được phát hiện/kéo dài | 2 | 5 | 10 | Kênh báo cáo riêng tư; quy trình §8; audit cục bộ | Trung bình — cần diễn tập |
+| R14 | Browser extension thu thập/lộ URL ngoài phạm vi rule | 2 | 3 | 6 | Chỉ xử lý URL trong RAM; bỏ query/fragment/credentials; chỉ URL khớp rule đi qua named pipe cục bộ; không storage/telemetry/content script; test quyền và DOM sink mỗi CI | Thấp |
 
 Rủi ro cao nhất còn lại là R1/R2/R5 (truy cập gia đình, CSV, đồng thuận). Các biện pháp bổ sung:
 khuyến nghị BitLocker, hướng dẫn phụ huynh dùng tài khoản Windows riêng cho trẻ, nhắc không gửi CSV

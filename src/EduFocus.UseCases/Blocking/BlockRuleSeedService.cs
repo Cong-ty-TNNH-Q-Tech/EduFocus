@@ -52,11 +52,12 @@ public sealed class BlockRuleSeedService : IBlockRuleSeedUseCase
         {
             var candidate = BlockRule.Create(
                 definition.RuleType,
-                RuleMatchType.Exact,
+                definition.MatchType,
                 definition.Value,
                 definition.Category,
                 definition.Effect,
                 now,
+                isEnabled: definition.IsEnabledByDefault,
                 isBuiltIn: true);
 
             if (!byIdentity.TryGetValue(Identity(candidate), out var stored))

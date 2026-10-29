@@ -37,6 +37,12 @@ public static class ProtectedDomains
 
     public static IReadOnlyCollection<string> All => AllProtected;
 
+    /// <summary>Apex hosts protected only as exact matches (shared services stay blockable).</summary>
+    public static IReadOnlyCollection<string> SharedApexDomains => SharedApex;
+
+    /// <summary>Service hosts protected together with all subdomains.</summary>
+    public static IReadOnlyCollection<string> ServiceDomains => Services;
+
     public static bool IsProtected(DomainName domain)
     {
         ArgumentNullException.ThrowIfNull(domain);

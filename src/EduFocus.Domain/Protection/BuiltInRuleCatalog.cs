@@ -2,12 +2,17 @@ using EduFocus.Domain.Enums;
 
 namespace EduFocus.Domain.Protection;
 
-/// <summary>A default rule shipped with the application (BA §6.1, F04).</summary>
+/// <summary>
+/// A default rule shipped with the application (BA §6.1, F04). URL path rules
+/// ship disabled because they need the browser extension.
+/// </summary>
 public sealed record BuiltInRuleDefinition(
     RuleType RuleType,
     string Value,
     BlockRuleCategory Category,
-    BlockRuleEffect Effect);
+    BlockRuleEffect Effect,
+    RuleMatchType MatchType = RuleMatchType.Exact,
+    bool IsEnabledByDefault = true);
 
 /// <summary>
 /// Versioned set of default rules. Seeding is idempotent and never overwrites
@@ -15,7 +20,7 @@ public sealed record BuiltInRuleDefinition(
 /// </summary>
 public sealed class BuiltInRuleCatalog
 {
-    public const int CurrentVersion = 1;
+    public const int CurrentVersion = 2;
 
     public static BuiltInRuleCatalog Default { get; } = new(CurrentVersion, CreateDefaultRules());
 
@@ -31,7 +36,7 @@ public sealed class BuiltInRuleCatalog
         _rules = rules.ToArray();
 
         var duplicates = _rules
-            .GroupBy(rule => (rule.RuleType, rule.Value, rule.Effect))
+            .GroupBy(rule => (rule.RuleType, rule.MatchType, rule.Value, rule.Effect))
             .Where(group => group.Count() > 1)
             .Select(group => group.Key)
             .ToList();
@@ -53,6 +58,15 @@ public sealed class BuiltInRuleCatalog
 
         BuiltInRuleDefinition Allow(string value) =>
             new(RuleType.Domain, value, BlockRuleCategory.Study, BlockRuleEffect.Allow);
+
+        BuiltInRuleDefinition BlockPath(string value) =>
+            new(
+                RuleType.Url,
+                value,
+                BlockRuleCategory.Social,
+                BlockRuleEffect.Block,
+                RuleMatchType.Contains,
+                IsEnabledByDefault: false);
 
         return
         [
@@ -77,7 +91,13 @@ public sealed class BuiltInRuleCatalog
             Allow("accounts.google.com"),
             Allow("login.microsoftonline.com"),
             Allow("login.live.com"),
-            Allow("zoom.us")
+            Allow("zoom.us"),
+
+            BlockPath("https://www.youtube.com/shorts/"),
+            BlockPath("https://m.youtube.com/shorts/"),
+            BlockPath("https://www.facebook.com/reel/"),
+            BlockPath("https://www.instagram.com/reel/"),
+            BlockPath("https://www.instagram.com/reels/")
         ];
     }
 }

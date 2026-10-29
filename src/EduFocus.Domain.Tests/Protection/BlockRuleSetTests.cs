@@ -33,19 +33,44 @@ public class BlockRuleSetTests
     }
 
     [Fact]
-    public void Snapshot_drops_disabled_and_not_enforced_rules()
+    public void Snapshot_drops_disabled_rules_but_keeps_suffix_and_url_rules()
     {
         var disabled = Create(RuleType.Domain, "chatgpt.com");
         disabled.SetEnabled(false, Now.AddMinutes(1));
         var suffix = Create(RuleType.Domain, "example.com", matchType: RuleMatchType.Suffix);
         var url = Create(RuleType.Url, "https://claude.ai/chat");
+        var unsupported = Create(RuleType.App, "notepad", matchType: RuleMatchType.Contains);
 
-        var set = BlockRuleSet.Create([disabled, suffix, url]);
+        var set = BlockRuleSet.Create([disabled, suffix, url, unsupported]);
 
-        set.Count.Should().Be(0);
+        set.Count.Should().Be(2);
         set.EvaluateDomain(DomainName.Parse("chatgpt.com"), Now).Should().Be(RuleDecision.None);
-        set.EvaluateDomain(DomainName.Parse("sub.example.com"), Now).Should().Be(RuleDecision.None);
+        set.EvaluateDomain(DomainName.Parse("sub.example.com"), Now).Should().Be(RuleDecision.Block);
         set.EvaluateDomain(DomainName.Parse("claude.ai"), Now).Should().Be(RuleDecision.None);
+        set.EvaluateUrl("https://claude.ai/chat", Now).Should().Be(RuleDecision.Block);
+        set.EvaluateApp("notepad", Now).Should().Be(RuleDecision.None);
+    }
+
+    [Fact]
+    public void Snapshot_evaluates_urls_with_domain_and_url_rules()
+    {
+        var domain = Create(RuleType.Domain, "example.com", matchType: RuleMatchType.Suffix);
+        var path = Create(RuleType.Url, "https://example.com/chat");
+        var set = BlockRuleSet.Create([domain, path]);
+
+        set.EvaluateUrl("https://sub.example.com/home", Now).Should().Be(RuleDecision.Block);
+        set.EvaluateUrl("https://example.com/chat?x=1", Now).Should().Be(RuleDecision.Block);
+        set.EvaluateUrl("https://example.com/home", Now).Should().Be(RuleDecision.Block);
+        set.EvaluateUrl("https://unrelated.test/chat", Now).Should().Be(RuleDecision.None);
+        set.EvaluateUrl("not a url", Now).Should().Be(RuleDecision.None);
+    }
+
+    [Fact]
+    public void Snapshot_treats_protected_url_hosts_as_allow()
+    {
+        var set = BlockRuleSet.Create([Create(RuleType.Domain, "example.com", matchType: RuleMatchType.Suffix)]);
+
+        set.EvaluateUrl("https://meet.google.com/abc-defg-hij", Now).Should().Be(RuleDecision.Allow);
     }
 
     [Fact]

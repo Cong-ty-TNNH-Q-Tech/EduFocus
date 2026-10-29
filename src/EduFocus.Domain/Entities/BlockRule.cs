@@ -7,9 +7,10 @@ using EduFocus.Domain.ValueObjects;
 namespace EduFocus.Domain.Entities;
 
 /// <summary>
-/// A block or allow rule for a domain, application or (post-MVP) URL.
-/// MVP enforces only <see cref="RuleType.Domain"/> and <see cref="RuleType.App"/>
-/// with exact matching; other combinations are stored as not enforced (BR-09, BR-25).
+/// A block or allow rule for a domain, application or URL. Domains match hosts
+/// (exact, suffix or segment contains) and URLs match sanitized absolute URLs
+/// with path rules enforced by the browser extension; application rules match
+/// process names exactly (BR-09, BR-25).
 /// </summary>
 public sealed class BlockRule
 {
@@ -102,9 +103,8 @@ public sealed class BlockRule
         var trimmed = value.Trim();
         var normalized = Normalize(ruleType, trimmed);
 
-        if (ruleType == RuleType.Domain
-            && effect == BlockRuleEffect.Block
-            && ProtectedDomains.IsProtected(DomainName.Parse(normalized)))
+        if (effect == BlockRuleEffect.Block && ResolveProtectedDomain(ruleType, normalized) is { } protectedDomain
+            && ProtectedDomains.IsProtected(protectedDomain))
         {
             throw new ArgumentException(
                 "Essential study and sign-in domains cannot be blocked.",
@@ -163,6 +163,38 @@ public sealed class BlockRule
             && normalized.Equals(NormalizedValue, StringComparison.Ordinal);
     }
 
+    /// <summary>
+    /// URL matching for the browser extension. Query strings and fragments are
+    /// stripped first (BR-13); a domain rule matches the URL host, a URL rule
+    /// compares the sanitized URL. Paths are compared with a virtual trailing
+    /// slash so <c>/shorts</c> and <c>/shorts/</c> behave the same.
+    /// </summary>
+    public bool MatchesUrl(string? url)
+    {
+        var sanitized = UrlSanitizer.Sanitize(url);
+        if (sanitized is null)
+            return false;
+
+        if (RuleType == RuleType.Domain)
+        {
+            var domain = UrlSanitizer.DeriveDomain(sanitized);
+            return domain is not null && Matches(domain);
+        }
+
+        if (RuleType != RuleType.Url)
+            return false;
+
+        var candidate = EnsureTrailingSlash(sanitized);
+
+        return MatchType switch
+        {
+            RuleMatchType.Exact => candidate.Equals(NormalizedValue, StringComparison.OrdinalIgnoreCase),
+            RuleMatchType.Suffix => candidate.EndsWith(NormalizedValue, StringComparison.OrdinalIgnoreCase),
+            RuleMatchType.Contains => candidate.Contains(NormalizedValue, StringComparison.OrdinalIgnoreCase),
+            _ => false
+        };
+    }
+
     public void SetEnabled(bool isEnabled, DateTime nowUtc)
     {
         IsEnabled = isEnabled;
@@ -195,13 +227,21 @@ public sealed class BlockRule
         Touch(nowUtc);
     }
 
-    private static EnforcementStatus ResolveEnforcement(RuleType ruleType, RuleMatchType matchType)
-    {
-        var supportedType = ruleType is RuleType.Domain or RuleType.App;
-        return supportedType && matchType == RuleMatchType.Exact
-            ? EnforcementStatus.Enforced
-            : EnforcementStatus.NotEnforced;
-    }
+    private static EnforcementStatus ResolveEnforcement(RuleType ruleType, RuleMatchType matchType) =>
+        ruleType switch
+        {
+            RuleType.Domain or RuleType.Url => EnforcementStatus.Enforced,
+            RuleType.App when matchType == RuleMatchType.Exact => EnforcementStatus.Enforced,
+            _ => EnforcementStatus.NotEnforced
+        };
+
+    private static DomainName? ResolveProtectedDomain(RuleType ruleType, string normalizedValue) =>
+        ruleType switch
+        {
+            RuleType.Domain => DomainName.Parse(normalizedValue),
+            RuleType.Url => UrlSanitizer.DeriveDomain(normalizedValue),
+            _ => null
+        };
 
     private static string Normalize(RuleType ruleType, string value)
     {
@@ -211,8 +251,9 @@ public sealed class BlockRule
                 return DomainName.Parse(value).Value;
 
             case RuleType.Url:
-                return UrlSanitizer.Sanitize(value)
+                var sanitized = UrlSanitizer.Sanitize(value)
                     ?? throw new ArgumentException("Value must be an absolute http/https URL.", nameof(value));
+                return EnsureTrailingSlash(sanitized);
 
             case RuleType.App:
                 if (!TryNormalizeProcessName(value, out var processName))
@@ -223,6 +264,9 @@ public sealed class BlockRule
                 throw new ArgumentOutOfRangeException(nameof(ruleType), ruleType, "Unknown rule type.");
         }
     }
+
+    private static string EnsureTrailingSlash(string url) =>
+        url.EndsWith('/') ? url : url + "/";
 
     private static bool TryNormalizeProcessName(string? value, out string normalized)
     {

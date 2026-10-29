@@ -50,6 +50,13 @@ if (-not (Test-Path -LiteralPath $mainExe -PathType Leaf)) {
     throw "Publish folder '$publish' does not contain EduFocus.exe. Run dotnet publish first."
 }
 
+# Product.wxs references this file by a fixed component id for native messaging
+# registration custom actions.
+$nativeHostExe = Join-Path $publish "native-host\EduFocus.NativeHost.exe"
+if (-not (Test-Path -LiteralPath $nativeHostExe -PathType Leaf)) {
+    throw "Publish folder '$publish' does not contain native-host\EduFocus.NativeHost.exe. Publish the native host into the payload first."
+}
+
 if ([string]::IsNullOrWhiteSpace($OutputPath)) {
     $OutputPath = Join-Path (Join-Path $repoRoot "artifacts") ("EduFocus-{0}-win-x64.msi" -f $Version)
 }
@@ -214,6 +221,11 @@ foreach ($assignment in $directoryAssignments) {
         $componentId = 'MainExe'
         $fileId = 'MainExeFile'
         $guid = 'A1B2C3D4-E5F6-7890-ABCD-EF1234567890'
+    }
+    elseif ($file.Relative -ieq 'native-host\EduFocus.NativeHost.exe') {
+        $componentId = 'NativeHostExe'
+        $fileId = 'NativeHostExeFile'
+        $guid = 'F1E2D3C4-B5A6-4978-8C9D-0E1F2A3B4C5D'
     }
 
     $escapedSource = ConvertTo-XmlText $file.FullName

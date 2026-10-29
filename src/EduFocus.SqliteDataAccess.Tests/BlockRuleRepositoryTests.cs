@@ -120,22 +120,23 @@ public sealed class BlockRuleRepositoryTests
     }
 
     [Fact]
-    public async Task Url_rule_round_trips_as_not_enforced()
+    public async Task Url_rule_round_trips_as_enforced_and_sanitized()
     {
         await using var db = new TempDatabase();
         await db.CreateInitializer().InitializeAsync();
 
         var repository = new SqliteBlockRuleRepository(db.Options);
         var rule = BlockRule.Create(
-            RuleType.Url, RuleMatchType.Exact, "https://chat.openai.com/chat?token=abc",
+            RuleType.Url, RuleMatchType.Contains, "https://chat.openai.com/chat?token=abc",
             BlockRuleCategory.Chatbot, BlockRuleEffect.Block, Now);
 
         await repository.AddAsync(rule);
 
         var loaded = await repository.GetAsync(rule.Id);
         loaded!.RuleType.Should().Be(RuleType.Url);
-        loaded.NormalizedValue.Should().Be("https://chat.openai.com/chat");
-        loaded.EnforcementStatus.Should().Be(EnforcementStatus.NotEnforced);
+        loaded.MatchType.Should().Be(RuleMatchType.Contains);
+        loaded.NormalizedValue.Should().Be("https://chat.openai.com/chat/");
+        loaded.EnforcementStatus.Should().Be(EnforcementStatus.Enforced);
     }
 
     [Fact]

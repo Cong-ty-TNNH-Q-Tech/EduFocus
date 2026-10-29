@@ -81,6 +81,8 @@ Các test dưới đây là bằng chứng hồi quy cho từng kiểm soát. T�
 | Thoát bằng PIN, gỡ chặn thất bại thì không thoát | `AppLifecycleServiceTests.Exit_with_pin_cleans_state_and_records_a_clean_shutdown`, `Exit_without_removing_the_engine_keeps_the_app_running` | Đạt |
 | Watchdog restart có budget, tôn trọng clean exit, không log dữ liệu người dùng | `WatchdogServiceTests.Tick_does_not_restart_after_a_clean_exit_marker`, `Tick_gives_up_after_the_budget_and_audits_once`, `Tick_audits_only_reason_attempt_and_pids` | Đạt |
 | CLI gỡ cài đặt chỉ xóa dữ liệu khi được yêu cầu | `WatchdogCommandLineTests.Uninstall_mode_deletes_user_data_only_when_requested` | Đạt |
+| Extension chống XSS/URL injection, redirect chain và chỉ gửi URL khớp rule | `browser-extension/tests/matcher.test.mjs` (`HTML-looking paths...`, `server redirect chains...`), `static.test.mjs` (`the block page never reads or renders...`, `the service worker reports only blocked URLs...`); `BrowserExtensionBridgeTests.Verified_blocked_message_raises_attempt_with_sanitized_url`, `Blocked_message_that_does_not_match_the_snapshot_is_ignored` | Đạt |
+| MSI đăng ký native messaging và native host đọc đúng manifest | `NativeMessagingRegistrationTests`, `NativeHostOptionsTests`; kiểm tra COM trong quy trình install | Đạt |
 | Migration lỗi giữ DB và backup, restore được | `InitializationTests.Failed_upgrade_rolls_back_and_the_backup_restores_the_previous_data`, `BackupRestoreTests.Restore_rejects_missing_or_corrupt_backup_without_touching_database` | Đạt |
 
 > Các test trên chạy trên Windows runner/local. Chúng chứng minh logic và adapter trong sandbox,
@@ -103,6 +105,8 @@ và một tài khoản standard user để chạy thử. Ghi mã build/MSI SHA-2
 | SEC-E2E-06 | Truy cập domain bị chặn qua HTTP và HTTPS | HTTP hiển thị trang chặn; HTTPS báo lỗi kết nối/SSL nhưng domain vẫn bị chặn; không có path/query trong `BlockedAttempts`/log | Ảnh chụp trang chặn; query DB/log đã lọc | ⬜ | ⬜ |
 | SEC-E2E-07 | Mở app bị chặn có dữ liệu chưa lưu | App nhận `WM_CLOSE` trước; quá 2 giây mới bị kill; cảnh báo mất dữ liệu được ghi trong tài liệu | Ảnh chụp + log không có window title | ⬜ | ⬜ |
 | SEC-E2E-08 | Thêm app vào allowlist khi đang bị chặn | Allowlist thắng blocklist; process hệ thống/EduFocus không bị tác động | Quan sát + DB `BlockedAttempts` | ⬜ | ⬜ |
+| SEC-E2E-20 | Cài extension, bật rule URL/path, mở URL khớp rule (kèm query/fragment) | Tab chuyển tới trang chặn không lộ URL; `BlockedAttempts` ghi URL đã bỏ query/fragment/credentials; rule allow/protected domain thắng | Ảnh chụp popup/trang chặn; query DB đã lọc | ⬜ | ⬜ |
+| SEC-E2E-21 | Tắt bảo vệ hoặc thoát EduFocus khi extension đang chạy | Không còn chặn (fail-open), popup **Chưa kết nối EduFocus**; bật lại thì chặn có hiệu lực trong vài giây, không cần khởi động lại trình duyệt | Ảnh chụp popup + timeline | ⬜ | ⬜ |
 | SEC-E2E-09 | Kill app khi Protection ON; sau đó kill watchdog | App được khôi phục ≤ 30 giây; watchdog được task khôi phục trong tối đa ~60 giây; audit `WatchdogRestart` không có dữ liệu người dùng | Timeline + audit | ⬜ | ⬜ |
 | SEC-E2E-10 | Sửa hosts ngoài marker, sau đó tắt bảo vệ | Chỉ mất khối marker; chỉnh sửa ngoài marker còn nguyên; `hosts-backup\journal.json` và `.bak` không còn | Diff hosts trước/sau, `Get-ChildItem hosts-backup` | ⬜ | ⬜ |
 | SEC-E2E-11 | Ép crash giữa lúc apply (kill app sau khi có journal) rồi khởi động lại | `SelfHealAsync` khôi phục đúng byte gốc; không còn marker/journal/backup | So sánh hash hosts | ⬜ | ⬜ |

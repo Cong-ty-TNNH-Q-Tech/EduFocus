@@ -6,6 +6,7 @@ namespace EduFocus.Ports.DTOs;
 public sealed record BlockRuleInfo(
     Guid Id,
     RuleType RuleType,
+    RuleMatchType MatchType,
     BlockRuleCategory Category,
     BlockRuleEffect Effect,
     string Value,

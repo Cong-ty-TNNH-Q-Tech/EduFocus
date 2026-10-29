@@ -36,7 +36,7 @@ Students open their computers for online classes but easily get pulled into AI c
 |---|---|
 | 🔐 **Parent PIN** | Only parents can enable/disable protection, edit the blocklist, view reports, or exit the app |
 | 🚫 **Chatbot blocking** | Blocks target chatbot domains (ChatGPT, Claude, Gemini, Copilot, Perplexity, Character.AI, DeepSeek…) and configured apps |
-| 📋 **Flexible blocklist** | Add custom domains/apps, temporary allowlists for permitted homework. URL/path rules require a browser extension (post-MVP) |
+| 📋 **Flexible blocklist** | Add custom domains/apps, temporary allowlists for permitted homework. Precise URL/path rules through the Chrome/Edge extension |
 | 🕒 **Protection schedule** | Automatically enable/disable protection by weekly study hours |
 | 📊 **Study session tracking** | Records study time, active apps/domains (best-effort), and observed blocked attempts |
 | 👁️ **Attention estimate** | Uses the webcam to detect presence, screen-facing gaze, absence, or drowsiness |
@@ -109,7 +109,7 @@ Protection turns off with PIN or when the schedule window ends
 - ✅ **Windows 11 23H2+** (64-bit) — primary platform
 - ⚠️ Windows 10 22H2: may run, but Windows 10 is out of official support
 - 🔜 macOS — not supported
-- 🌐 Chrome, Edge, Firefox for domain blocking via hosts; block page over HTTP only
+- 🌐 Chrome/Edge/Firefox for domain blocking via hosts; Chrome/Edge 116+ extension adds URL/path blocking; block page over HTTP only
 - 🎥 Built-in or external webcam (optional, for attention)
 
 ---
@@ -121,7 +121,7 @@ Protection turns off with PIN or when the schedule window ends
 | **UI** | WPF .NET 10 LTS, CommunityToolkit.Mvvm (new UI in Phase 6) |
 | **Architecture** | Clean Architecture + Ports & Adapters |
 | **Database** | SQLite + EF Core 10 |
-| **Blocking** | Windows hosts file (exact domains) + local HTTP block page |
+| **Blocking** | Windows hosts file (exact domains) + local HTTP block page + MV3 extension (URL/path) |
 | **Activity** | Win32 foreground window, WMI, UI Automation |
 | **Attention** | OpenCvSharp4 + ONNX Runtime (MediaPipe Face/Iris) |
 | **Security** | PBKDF2-SHA256; no other secrets stored |
@@ -136,7 +136,7 @@ Protection turns off with PIN or when the schedule window ends
 
 > EduFocus is being migrated from the predecessor project **Don't Be Lazy**. The MVP release is planned after Phase 7; features described here are not released yet.
 
-Once released, download from [Releases](https://github.com/Cong-ty-TNNH-Q-Tech/EduFocus/releases). Each release ships an MSI, a portable ZIP, an install guide and `SHA256SUMS.txt`; verify SHA-256 (and the code signature when present) before installing. Requirements: Windows 10 22H2/Windows 11 x64; the MVP requires Administrator. See [docs/installer.md](./docs/installer.md) and [docs/release-process.md](./docs/release-process.md) for details.
+Once released, download from [Releases](https://github.com/Cong-ty-TNNH-Q-Tech/EduFocus/releases). Each release ships an MSI, a portable ZIP, a browser extension ZIP, an install guide and `SHA256SUMS.txt`; verify SHA-256 (and the code signature when present) before installing. Requirements: Windows 10 22H2/Windows 11 x64; the MVP requires Administrator. See [docs/installer.md](./docs/installer.md) and [docs/release-process.md](./docs/release-process.md) for details.
 
 ### Run from source
 
@@ -173,6 +173,7 @@ dotnet test EduFocus.slnx --configuration Release
 - [📝 Changelog](./CHANGELOG.md)
 - [🤝 Contributing](./CONTRIBUTING.md)
 - [🔒 Security](./SECURITY.md)
+- [🌐 Browser Extension](./docs/browser-extension.md) — URL/path blocking, permissions, packaging and removal (Vietnamese)
 - [🔏 Privacy Notice](./docs/privacy-notice.md) — current privacy notice (Vietnamese)
 - [📊 DPIA](./docs/dpia.md) — data protection impact assessment (Vietnamese)
 - [⚖️ Third-Party Notices](./THIRD-PARTY-NOTICES.md) — third-party license inventory
@@ -209,7 +210,8 @@ dotnet test EduFocus.slnx --configuration Release
 - Hosts does not log HTTPS access; blocked-attempt counts are best-effort only.
 - The block page only appears over HTTP; HTTPS usually shows a connection/SSL error.
 - App blocking may close/kill a process and lose unsaved data; EduFocus sends `WM_CLOSE` before killing.
-- URL/path, wildcard subdomains, and AI sidebars are not in the MVP; they require a browser extension.
+- The Chrome/Edge extension blocks top-level URL/path navigations; Firefox, iframes/subresources and
+  wildcard subdomains are not covered. A user with administrator rights can disable the extension.
 - Detailed reports are limited to 30 days; long-range data uses session summaries (365 days).
 - Webcam-based attention is an estimate and must not be treated as certain.
 - Google Meet/Teams may hold the camera on machines without Multi-App Camera support.

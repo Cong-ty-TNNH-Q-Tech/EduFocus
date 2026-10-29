@@ -50,11 +50,29 @@ jobs:
           --logger trx
           --results-directory "${{ github.workspace }}/artifacts/test-results"
 
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Test browser extension
+        run: node --test browser-extension/tests
+
+      - name: Package browser extension (smoke)
+        shell: pwsh
+        run: ./scripts/pack-browser-extension.ps1 -OutputDir "${{ github.workspace }}/artifacts/extension"
+
       - name: Publish (framework-dependent)
         run: >
           dotnet publish src/EduFocus.WPF/EduFocus.WPF.csproj
           --configuration Release
           --output "${{ github.workspace }}/artifacts/publish"
+
+      - name: Publish native messaging host
+        run: >
+          dotnet publish src/EduFocus.NativeHost/EduFocus.NativeHost.csproj
+          --configuration Release
+          --output "${{ github.workspace }}/artifacts/publish/native-host"
 
       - name: Upload test results
         if: always()
