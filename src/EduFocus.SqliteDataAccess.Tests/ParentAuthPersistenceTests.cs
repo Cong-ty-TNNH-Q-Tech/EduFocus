@@ -1,3 +1,4 @@
+using EduFocus.Domain.Entities;
 using EduFocus.Domain.Enums;
 using EduFocus.Domain.Security;
 using EduFocus.Infrastructure.Auth;
@@ -85,14 +86,68 @@ public sealed class ParentAuthPersistenceTests
         auditText.Should().NotContain(setup.RecoveryCode);
     }
 
-    private static ParentAuthUseCase CreateUseCase(TempDatabase db, CorrelationContext correlation) =>
+    [Fact]
+    public async Task Lockout_survives_a_restart_and_expires_after_fifteen_minutes()
+    {
+        await using var db = new TempDatabase();
+        await db.CreateInitializer().InitializeAsync();
+
+        var correlation = new CorrelationContext();
+        var clock = new AdjustableTimeProvider(new DateTime(2026, 10, 29, 8, 0, 0, DateTimeKind.Utc));
+        var useCase = CreateUseCase(db, correlation, clock);
+        await useCase.SetupAsync("482915");
+
+        ParentAuthResult? lastFailure = null;
+        for (var attempt = 1; attempt <= ParentCredential.MaxFailedAttempts; attempt++)
+        {
+            lastFailure = await useCase.VerifyPinAsync("482916");
+            lastFailure.Status.Should().Be(
+                attempt == ParentCredential.MaxFailedAttempts
+                    ? ParentAuthStatus.LockedOut
+                    : ParentAuthStatus.InvalidCredential);
+        }
+
+        lastFailure!.RemainingAttempts.Should().Be(0);
+        lastFailure.LockoutUntilUtc.Should()
+            .Be(clock.GetUtcNow().UtcDateTime.Add(ParentCredential.LockoutDuration));
+
+        // A new process keeps only the database, so a second clock instance
+        // set to the same wall time proves the lockout comes from storage.
+        var restartedClock = new AdjustableTimeProvider(clock.GetUtcNow().UtcDateTime.AddMinutes(5));
+        var restarted = CreateUseCase(db, correlation, restartedClock);
+
+        var stillLocked = await restarted.VerifyPinAsync("482915");
+        stillLocked.Status.Should().Be(ParentAuthStatus.LockedOut);
+        stillLocked.RemainingAttempts.Should().Be(0);
+
+        restartedClock.Advance(TimeSpan.FromMinutes(10));
+        var afterExpiry = await restarted.VerifyPinAsync("482915");
+        afterExpiry.Status.Should().Be(ParentAuthStatus.Success);
+
+        await using var context = db.CreateContext();
+        var stored = await context.ParentCredentials.AsNoTracking().SingleAsync();
+        stored.FailedAttempts.Should().Be(0);
+        stored.LockoutUntilUtc.Should().BeNull();
+
+        var events = await context.AuditLogs.AsNoTracking()
+            .Select(x => x.EventType)
+            .ToListAsync();
+        events.Count(x => x == AuditEventType.AuthenticationFailed).Should()
+            .Be(ParentCredential.MaxFailedAttempts);
+        events.Count(x => x == AuditEventType.LockoutTriggered).Should().Be(1);
+    }
+
+    private static ParentAuthUseCase CreateUseCase(
+        TempDatabase db,
+        CorrelationContext correlation,
+        TimeProvider? timeProvider = null) =>
         new(
             CreateRepository(db),
             new Pbkdf2PasswordHasher(),
             new RecoveryCodeGenerator(),
             new SqliteAuditLogRepository(db.Options),
             correlation,
-            TimeProvider.System);
+            timeProvider ?? TimeProvider.System);
 
     private static SqliteParentCredentialRepository CreateRepository(TempDatabase db) =>
         new(db.Options);

@@ -27,6 +27,8 @@
   <ItemGroup>
     <ProjectReference Include="..\EduFocus.Ports\EduFocus.Ports.csproj" />
     <ProjectReference Include="..\EduFocus.Infrastructure\EduFocus.Infrastructure.csproj" />
+    <ProjectReference Include="..\EduFocus.UseCases\EduFocus.UseCases.csproj" />
+    <ProjectReference Include="..\EduFocus.SqliteDataAccess\EduFocus.SqliteDataAccess.csproj" />
   </ItemGroup>
 
 </Project>

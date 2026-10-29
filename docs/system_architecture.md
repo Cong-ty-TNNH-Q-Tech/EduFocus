@@ -100,6 +100,7 @@ Chỉ chứa interface và DTO.
 **Inbound**
 ```text
 IParentAuthUseCase
+IParentModeUseCase
 IProtectionUseCase
 IStudySessionUseCase
 IActivityUseCase
@@ -142,6 +143,7 @@ IProcessWatchdogPort
 | UseCase | Chức năng |
 |---|---|
 | `ParentAuthUseCase` | Setup PIN, login, lockout, đổi PIN, recovery |
+| `ParentModeService` | Parent session: login mở phiên, đổi PIN/reset kết thúc phiên |
 | `ProtectionUseCase` | Bật/tắt bảo vệ, áp dụng/gỡ rule, phục hồi trạng thái |
 | `StudySessionUseCase` | Bắt đầu/kết thúc session, tổng hợp thời gian |
 | `ActivityUseCase` | Ghi sample, phân loại app/URL, phát hiện lớp online |
@@ -150,6 +152,9 @@ IProcessWatchdogPort
 | `ScheduleUseCase` | Đánh giá khung giờ, auto ON/OFF |
 | `ReportUseCase` | Query dashboard, timeline, export |
 | `DataRetentionUseCase` | Xóa dữ liệu quá hạn, xóa theo yêu cầu |
+
+`ParentSessionState` (singleton, chỉ trong bộ nhớ) triển khai `IParentAuthorizer` để các use case
+nhạy cảm kiểm tra phiên trước khi thực thi.
 
 **Decorator:** giữ pattern logging decorator cho các use case nhạy cảm (Protection, ParentAuth).
 
@@ -168,7 +173,6 @@ Triển khai outbound ports, tương tác Windows.
 | `CameraAvailabilityProbe` | Kiểm tra camera bận/không có quyền |
 | `Pbkdf2PasswordHasher` | PBKDF2-SHA256 600.000 iterations, salt 16 byte, hash 32 byte, constant-time compare |
 | `RecoveryCodeGenerator` | Sinh recovery code 12 ký tự từ alphabet không nhập nhằng bằng CSPRNG |
-| `ParentAuthorizer` | Kiểm tra Parent Mode cho use case nhạy cảm; chặn exit khi chưa PIN |
 | `WatchdogService` | Scheduled task (MVP, poll 60 giây) / Windows Service (post-MVP) |
 | `FileLogger` | Log xoay vòng theo ngày, redact dữ liệu nhạy cảm |
 | `MonotonicClockAdapter` | Giữ từ dự án cũ |
@@ -182,8 +186,9 @@ Triển khai outbound ports, tương tác Windows.
 - `SqliteBackupStore`: tạo/verify/rotate backup và `Restore` an toàn (snapshot trước khi thay thế).
 - `DataDirectorySecurity`: ACL Administrators/SYSTEM, kế thừa cho file DB và backup.
 - `SqliteParentCredentialRepository`: đọc/ghi singleton `ParentCredentials` (hash + lockout state), không lưu plaintext.
+- `SqliteAuditLogRepository`: ghi audit event kèm `CorrelationId`, tách khỏi file log kỹ thuật.
 - `SqlitePragmaInterceptor`: `PRAGMA foreign_keys = ON` mỗi kết nối; WAL và `auto_vacuum` do initializer thiết lập.
-- Repository implementations sẽ được thêm ở các issue sau.
+- Các repository còn lại sẽ được thêm ở các issue sau.
 
 ### 3.6. UI (`EduFocus.WPF`)
 
@@ -208,6 +213,11 @@ Views/
 - ViewModel chỉ gọi Inbound Ports.
 - Parent Mode được quản lý bởi `ParentSessionState` singleton.
 - Không hiển thị chi tiết nhạy cảm ở Student Mode.
+
+Triển khai (issue #14): `ParentModeWindow` + `ParentModeViewModel` cung cấp đăng nhập PIN,
+trạng thái phiên, đổi PIN, reset bằng recovery code và hiển thị mã khôi phục mới đúng một lần.
+`DatabaseBootstrapper` khởi tạo DB lazily khi mở Parent Mode; lỗi dữ liệu hiển thị trong cửa sổ
+và có thể thử lại. Onboarding tạo PIN lần đầu chưa thuộc issue này (issue #15).
 
 ---
 
@@ -515,6 +525,12 @@ Mỗi lần sai PIN/recovery code ghi audit `AuthenticationFailed`; lần thứ 
 - Mọi use case nhạy cảm kiểm tra `IParentAuthorizer` trước khi thực thi.
 - Thoát app luôn yêu cầu PIN, kể cả Protection OFF; Windows shutdown/logoff không chặn.
 
+Triển khai (issue #14): `ParentModeService` bọc `IParentAuthUseCase` + `ParentSessionState`;
+login thành công mở phiên, đổi PIN thành công khóa phiên, reset bằng recovery code luôn khóa phiên.
+`ParentModeWindow` hiển thị số phút lockout còn lại và tự quay về màn hình đăng nhập khi phiên
+hết hạn; đóng cửa sổ khóa phiên ngay. Session chỉ nằm trong bộ nhớ nên khởi động lại app phải
+đăng nhập lại.
+
 ### 9.3. Protection state machine
 
 ```text
@@ -691,8 +707,9 @@ EduFocus/
 > `InitialEduFocusSchema`, initializer + backup); issue #10 thêm ACL thư mục dữ liệu và
 > quy trình verify/restore backup; issue #11 cập nhật CI; issue #12 thêm structured logging,
 > correlation id và audit repository; issue #13 thêm `ParentAuthUseCase`, PBKDF2 hasher,
-> recovery-code generator và credential repository. `WPF` vẫn là shell tối thiểu chờ
-> Parent Mode UI (issue #14).
+> recovery-code generator và credential repository; issue #14 thêm `ParentSessionState`,
+> `ParentModeService` và cửa sổ Parent Mode trong WPF (login, lockout, đổi/reset PIN).
+> Onboarding tạo PIN lần đầu thuộc issue #15.
 > Inventory 1.x ở [legacy-cleanup.md](./legacy-cleanup.md), invariant domain ở
 > [domain-invariants.md](./domain-invariants.md).
 

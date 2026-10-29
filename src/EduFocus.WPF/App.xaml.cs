@@ -1,6 +1,11 @@
 using System.Windows;
 using EduFocus.Infrastructure;
+using EduFocus.Ports.Inbound;
+using EduFocus.Ports.Outbound.Persistence;
 using EduFocus.Ports.Outbound.Services;
+using EduFocus.SqliteDataAccess.Persistence;
+using EduFocus.SqliteDataAccess.Repositories;
+using EduFocus.UseCases.Auth;
 using EduFocus.WPF.Services;
 using EduFocus.WPF.ViewModels;
 using Microsoft.Extensions.DependencyInjection;
@@ -50,9 +55,24 @@ public partial class App : Application
     private static void ConfigureServices(IServiceCollection services)
     {
         services.AddInfrastructureServices();
+
+        services.AddSingleton(new EduFocusDatabaseOptions());
+        services.AddSingleton<SqliteDatabaseInitializer>();
+        services.AddSingleton<IParentCredentialRepository, SqliteParentCredentialRepository>();
+        services.AddSingleton<IAuditLogRepository, SqliteAuditLogRepository>();
+        services.AddSingleton<IParentAuthUseCase, ParentAuthUseCase>();
+        services.AddSingleton<ParentSessionState>();
+        services.AddSingleton<IParentAuthorizer>(provider => provider.GetRequiredService<ParentSessionState>());
+        services.AddSingleton<IParentModeUseCase, ParentModeService>();
+        services.AddSingleton<DatabaseBootstrapper>();
+
         services.AddSingleton<UpdaterService>();
         services.AddSingleton<UpdateViewModel>();
         services.AddSingleton<MainWindow>();
+        services.AddTransient<ParentModeViewModel>();
+        services.AddTransient<ParentModeWindow>();
+        services.AddSingleton<Func<ParentModeWindow>>(provider =>
+            () => provider.GetRequiredService<ParentModeWindow>());
     }
 
     protected override void OnExit(ExitEventArgs e)

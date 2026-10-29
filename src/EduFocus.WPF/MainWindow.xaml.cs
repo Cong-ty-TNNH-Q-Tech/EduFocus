@@ -5,9 +5,21 @@ namespace EduFocus.WPF;
 
 public partial class MainWindow : Window
 {
-    public MainWindow(UpdateViewModel updateViewModel)
+    private readonly Func<ParentModeWindow> _parentModeWindowFactory;
+
+    public MainWindow(
+        UpdateViewModel updateViewModel,
+        Func<ParentModeWindow> parentModeWindowFactory)
     {
         InitializeComponent();
         DataContext = updateViewModel;
+        _parentModeWindowFactory = parentModeWindowFactory;
+    }
+
+    private void ParentModeButton_Click(object sender, RoutedEventArgs e)
+    {
+        var window = _parentModeWindowFactory();
+        window.Owner = this;
+        window.ShowDialog();
     }
 }

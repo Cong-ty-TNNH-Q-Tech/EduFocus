@@ -76,6 +76,7 @@ tray icon và logic chặn thoát khi có phiên.
 - Issue #11: CI .NET 10 với cache/artifact và hướng dẫn branch protection — đã hoàn tất.
 - Issue #12: structured logging, correlation id và audit log tách khỏi log kỹ thuật — đã hoàn tất.
 - Issue #13: PBKDF2 hasher, recovery code, `ParentAuthUseCase` và credential repository — đã hoàn tất.
-- Issue #14: Parent Mode/PIN UI và lockout — tiếp theo.
+- Issue #14: Parent Mode UI, phiên 5 phút, lockout và reset PIN — đã hoàn tất.
+- Issue #15: onboarding thiết lập PIN lần đầu — tiếp theo.
 - Các phase sau: ProtectionEngine/BlockPageServer, session/activity,
   attention monitoring, dashboard/reports, installer hoàn chỉnh.

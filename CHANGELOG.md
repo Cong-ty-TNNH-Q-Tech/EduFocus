@@ -94,6 +94,13 @@ và dự án tuân theo [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 - **Persistence:** `SqliteParentCredentialRepository` đọc/ghi singleton `ParentCredentials`; schema hiện có đủ cột nên không cần migration mới.
 - **Tests:** project `EduFocus.UseCases.Tests` (19 test) + hasher/generator, recovery-code format và round-trip SQLite với PBKDF2 thật; tổng 289 test pass, build Release 0 warning.
 
+### Added (Phase 1 — Parent Mode, issue #14)
+- **Parent session:** `ParentSessionState` giữ phiên trong bộ nhớ, tự khóa sau 5 phút idle; `ParentModeService` mở phiên khi login thành công, khóa phiên sau khi đổi PIN và luôn khóa trước khi reset bằng recovery code. `IParentAuthorizer` là cổng cho các use case nhạy cảm ở các issue sau.
+- **UI Parent Mode:** cửa sổ `ParentModeWindow` với đăng nhập PIN, hiển thị số phút lockout còn lại, đổi PIN, quên PIN bằng recovery code, hiển thị mã khôi phục mới đúng một lần; ô mật khẩu được xóa sau mỗi lần gửi và khi đóng cửa sổ.
+- **Chống bypass phiên:** đóng cửa sổ hoặc idle quá 5 phút khóa phiên ngay; session không được khôi phục sau khi khởi động lại app; thao tác đổi PIN yêu cầu phiên hợp lệ.
+- **Khởi tạo DB lazy:** `DatabaseBootstrapper` khởi tạo SQLite khi mở Parent Mode; lỗi dữ liệu hiển thị trong cửa sổ và có thể thử lại, không làm sập shell. Onboarding tạo PIN lần đầu thuộc issue #15.
+- **Tests:** session hết hạn/khóa phiên, login/đổi PIN/reset kết thúc phiên, lockout đọc từ DB sau khi "restart" và hết hạn sau 15 phút; tổng 306 test pass, build Release 0 warning.
+
 ### Removed (khỏi phạm vi EduFocus)
 - Quản lý task, profile học tập, quote động lực và Gemini AI.
 - Cơ chế "friction" bắt gõ câu xác nhận bỏ cuộc.

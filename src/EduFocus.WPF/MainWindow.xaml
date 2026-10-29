@@ -14,11 +14,22 @@
             <RowDefinition Height="Auto" />
         </Grid.RowDefinitions>
 
-        <StackPanel Grid.Row="0">
-            <TextBlock Text="EduFocus" FontSize="34" FontWeight="SemiBold" Foreground="#1F2430" />
-            <TextBlock Text="Giám sát học tập có trách nhiệm — nền tảng 2.0 đang được tái thiết kế."
-                       FontSize="14" Foreground="#5B6270" Margin="0,6,0,0" />
-        </StackPanel>
+        <Grid Grid.Row="0">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="Auto" />
+            </Grid.ColumnDefinitions>
+
+            <StackPanel Grid.Column="0">
+                <TextBlock Text="EduFocus" FontSize="34" FontWeight="SemiBold" Foreground="#1F2430" />
+                <TextBlock Text="Giám sát học tập có trách nhiệm — nền tảng 2.0 đang được tái thiết kế."
+                           FontSize="14" Foreground="#5B6270" Margin="0,6,0,0" />
+            </StackPanel>
+
+            <Button Grid.Column="1" Content="Parent Mode" Padding="16,8" VerticalAlignment="Center"
+                    Click="ParentModeButton_Click"
+                    ToolTip="Đăng nhập PIN phụ huynh để quản lý các cài đặt được bảo vệ" />
+        </Grid>
 
         <Border Grid.Row="1" Margin="0,28,0,0" Padding="24" CornerRadius="12"
                 Background="White" BorderBrush="#E1E4EC" BorderThickness="1">
@@ -26,7 +37,7 @@
                 <StackPanel>
                     <TextBlock Text="Trạng thái bản dựng" FontSize="18" FontWeight="SemiBold" Foreground="#1F2430" />
                     <TextBlock Margin="0,10,0,0" FontSize="13" Foreground="#5B6270" TextWrapping="Wrap"
-                               Text="Mã nguồn 1.x đã được loại bỏ. Lớp giao diện, PIN phụ huynh và engine bảo vệ sẽ được bổ sung ở các phase tiếp theo." />
+                               Text="Mã nguồn 1.x đã được loại bỏ. Parent Mode bảo vệ các thao tác nhạy cảm bằng PIN phụ huynh; engine bảo vệ sẽ được bổ sung ở các phase tiếp theo." />
 
                     <TextBlock Margin="0,20,0,0" FontSize="13" Foreground="#5B6270">
                         <Run Text="Phiên bản hiện tại: " />
