@@ -198,7 +198,7 @@ dotnet test EduFocus.slnx --configuration Release
 - Không thể phát hiện mọi chatbot mới hoặc chatbot chạy trong ứng dụng khác.
 - Process watcher dựa trên tên/đường dẫn process; app đổi tên hoặc chạy portable có thể không bị phát hiện.
 - Ứng dụng không chống được người dùng có quyền SYSTEM/admin; Windows shutdown/logoff vẫn là đường bypass.
-- Watchdog dạng scheduled task kiểm tra mỗi 60 giây, nên có thể mất tới khoảng 60 giây để khởi động lại; uninstall PIN chỉ là best-effort.
+- Watchdog thường trú phát hiện kill/hang và khởi động lại app trong khoảng ≤ 30 giây; nếu chính watchdog bị kill, scheduled task khôi phục nó trong tối đa khoảng 60 giây. Uninstall PIN chỉ là best-effort.
 
 EduFocus hướng tới **hỗ trợ thói quen học tập**, không phải giám sát bí mật hay chống gian lận thi cử.
 

@@ -288,7 +288,8 @@ Triển khai outbound ports, tương tác Windows.
 | `WindowsCameraDeviceCatalog` | Liệt kê camera qua WMI `Win32_PnPEntity` (best effort) |
 | `Pbkdf2PasswordHasher` | PBKDF2-SHA256 600.000 iterations, salt 16 byte, hash 32 byte, constant-time compare |
 | `RecoveryCodeGenerator` | Sinh recovery code 12 ký tự từ alphabet không nhập nhằng bằng CSPRNG |
-| `WatchdogService` | Scheduled task (MVP, poll 60 giây) / Windows Service (post-MVP) |
+| `WatchdogService` / `WatchdogHost` | Tick 5 giây: heartbeat, phát hiện kill/hang, backoff 5–30 giây, budget 5 lần/10 phút, audit `WatchdogRestart`/`WatchdogGaveUp`; chạy thường trú qua `EduFocus.exe --watchdog` (Windows Service là post-MVP) |
+| `WindowsWatchdogAutoStart` | Đăng ký/xóa task `EduFocusLogon` (ONLOGON) và `EduFocusWatchdog` (mỗi phút, HIGHEST) bằng `schtasks`; bỏ qua khi app không elevated (ví dụ bản Debug) |
 | `FileLogger` | Log xoay vòng theo ngày, redact dữ liệu nhạy cảm |
 | `MonotonicClockAdapter` | Giữ từ dự án cũ |
 
@@ -496,24 +497,32 @@ Windows có thể kết thúc tiến trình trước khi hoàn tất và shutdow
 
 ## 5. Mô hình tiến trình
 
-### 5.1. MVP — một app elevated
+### 5.1. MVP — một app elevated + watchdog thường trú
 
 ```text
-EduFocus.App (WPF, elevated)
-├── UI
-├── ProtectionEngine
-├── ActivityTracker
+EduFocus.exe (WPF, elevated)                  EduFocus.exe --watchdog (elevated)
+├── UI                                        ├── WatchdogService (tick 5 giây)
+├── ProtectionEngine                          ├── heartbeat + restart budget
+├── ActivityTracker                           └── start lại app khi cần
 ├── AttentionMonitor
 ├── SQLite access
-└── Tray icon / auto-start
+└── heartbeat mỗi 5 giây ───────────────────► %ProgramData%\EduFocus\runtime\app-heartbeat.json
+
+Task Scheduler
+├── EduFocusLogon    (ONLOGON, HIGHEST)  ──► "EduFocus.exe" --watchdog --login
+└── EduFocusWatchdog (mỗi phút, HIGHEST) ──► "EduFocus.exe" --watchdog
 ```
 
-**Ưu điểm:** đơn giản, nhanh.
-**Nhược điểm:** học sinh có admin có thể kill; watchdog chỉ ở mức scheduled task.
+**Ưu điểm:** một binary duy nhất; phát hiện kill/hang và restart trong mục tiêu ≤ 30 giây.
+**Nhược điểm:** hai tiến trình elevated; người dùng có admin vẫn kill được cả hai.
 
-Watchdog MVP kiểm tra mỗi 60 giây và chỉ restart khi `ProtectionEnabled = true` và lần thoát trước không phải clean exit. Exit hợp lệ bằng PIN đặt `ProtectionEnabled = false`, ghi `LastCleanShutdownAtUtc` và không tự bật lại. Windows shutdown giữ nguyên `ProtectionEnabled` và không ghi clean exit để lần đăng nhập sau phục hồi bảo vệ.
+App ghi heartbeat mỗi 5 giây (PID + process start time + timestamp); watchdog tick mỗi 5 giây. Watchdog chỉ restart khi `ProtectionEnabled = true` và lần thoát trước không phải clean exit. Exit hợp lệ bằng PIN đặt `ProtectionEnabled = false`, ghi `LastCleanShutdownAtUtc` và không tự bật lại. Windows shutdown giữ nguyên `ProtectionEnabled`; app ghi shutdown flag + stop request trong `OnSessionEnding` nên watchdog không restart trong lúc logoff, và lần đăng nhập sau `ReconcileAsync` phục hồi bảo vệ.
 
-Spike #3 xác nhận mô hình task-only: mô phỏng chu kỳ 60 giây restart target trong một chu kỳ, trong khi watchdog process riêng bị kill thì không có lớp ngoài phục hồi. Phase 7 cần lưu restart budget bền vững và ghi audit `WatchdogRestart`/`WatchdogGaveUp`; chi tiết ở `docs/spikes/watchdog-evaluation.md`.
+Chống trùng instance: app giữ mutex `EduFocus_SingleInstance_Mutex`; watchdog giữ mutex global (local khi chạy Debug). Hai task dùng chung một exe và bị khóa bởi mutex nên chỉ một watchdog sống. Nếu process còn sống nhưng heartbeat cũ hơn 30 giây, watchdog chỉ kill sau grace 30 giây và bỏ qua lần kiểm tra ngay sau khi máy resume từ sleep (phát hiện bằng monotonic clock). Restart budget bền vững 5 lần/10 phút, backoff 5 → 10 → 20 → 30 giây, reset sau 10 phút ổn định; vượt budget ghi `WatchdogGaveUp` một lần và dừng thử đến hết cửa sổ.
+
+`WatchdogCoordinator` đồng bộ task theo settings: onboarding chưa xong → không task; Protection ON → task logon + health và đảm bảo watchdog chạy; Protection OFF + `StartWithWindows` → chỉ task logon (watchdog khởi động app một lần rồi thoát); còn lại → xóa task. Thay đổi `StartWithWindows` trong Parent Mode được đồng bộ ngay sau khi lưu.
+
+Spike #3 đề xuất task-only 60 giây. Issue #39 chấp nhận **sai lệch có chủ đích** so với khuyến nghị đó vì acceptance yêu cầu restart ≤ 30 giây: watchdog thường trú đạt độ trễ, còn hai scheduled task (logon + mỗi phút) là lớp ngoài giám sát chính watchdog. Nếu watchdog bị kill, task health khởi động lại nó trong tối đa khoảng 60 giây; chi tiết và đánh đổi ở `docs/spikes/watchdog-evaluation.md` §7.
 
 ### 5.2. Production — Service + Session Agent
 
@@ -985,14 +994,14 @@ Trạng thái lưu trong `AppSettings.ProtectionEnabled`; session active lưu tr
 | Ẩn xuống tray khi đóng | ✅ | ✅ |
 | Thoát cần PIN | ✅ (kể cả OFF) | ✅ |
 | Auto-start | Scheduled Task | Service |
-| Watchdog | Scheduled Task restart khi Protection ON, poll 60 giây; không restart sau exit sạch | Windows Service |
+| Watchdog | `EduFocus.exe --watchdog` thường trú (heartbeat 5 giây, stale 30 giây) + 2 scheduled task logon/mỗi phút giám sát chính watchdog; budget 5 lần/10 phút; không restart sau exit sạch | Windows Service |
 | Chặn kill process | Hạn chế | Process ACL + SYSTEM |
 | Chống sửa hosts | Self-heal | Service + ACL |
 | Chống uninstall | Best-effort PIN prompt | Service + policy |
 | Phát hiện đổi giờ | Ghi audit | Ghi audit + policy |
 | Chống admin | ❌ (giới hạn đã biết) | Một phần |
 
-**Tuyên bố đúng:** EduFocus chống tắt **ở mức hợp lý**, không chống được admin/SYSTEM, không chặn Windows shutdown, và scheduled-task watchdog có độ trễ tới khoảng 60 giây. Không quảng cáo "không thể tắt".
+**Tuyên bố đúng:** EduFocus chống tắt **ở mức hợp lý**, không chống được admin/SYSTEM, không chặn Windows shutdown; app thường được khởi động lại trong ≤ 30 giây sau khi bị kill, còn nếu chính watchdog bị kill thì scheduled task khôi phục nó trong tối đa khoảng 60 giây. Không quảng cáo "không thể tắt".
 
 ---
 

@@ -25,6 +25,7 @@ public enum AuditEventType
     SessionInterrupted,
     SessionRecovered,
     WatchdogRestart,
+    WatchdogGaveUp,
     SystemShutdown,
     CleanExit,
     ScheduleChanged,

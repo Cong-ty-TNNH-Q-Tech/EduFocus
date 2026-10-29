@@ -849,16 +849,17 @@ số row hiện có của từng bảng và số ngày retention đang áp dụn
    - Đóng app; watchdog không khởi động lại sau exit sạch.
 
 **Luồng chính — Khởi động cùng Windows**
-1. Khi Protection ON hoặc ScheduleEnabled, app đăng ký auto-start.
-2. Khi user đăng nhập Windows, app khởi động ẩn xuống tray.
+1. Khi Protection ON, hoặc khi Protection OFF nhưng phụ huynh bật `StartWithWindows`, app đăng ký auto-start qua task `EduFocusLogon`.
+2. Khi user đăng nhập Windows, task logon khởi động watchdog; watchdog khởi động app (ẩn xuống tray) nếu app chưa chạy.
 3. Nếu Protection ON trước khi tắt máy, app tự bật lại protection.
 
 **Luồng thay thế — App bị kill**
-1. Watchdog (scheduled task/service) phát hiện process chết.
+1. Watchdog thường trú (`EduFocus.exe --watchdog`) đọc heartbeat mỗi 5 giây.
 2. Chỉ khởi động lại khi `ProtectionEnabled = true` và lần thoát trước không phải clean exit.
-3. Khởi động lại app trong vòng khoảng 60 giây (Task Scheduler repetition tối thiểu 1 phút; có thể trễ khi máy tải cao hoặc sleep).
+3. Nếu process chết, khởi động lại với backoff 5–30 giây (mục tiêu ≤ 30 giây). Nếu process còn sống nhưng heartbeat cũ hơn 30 giây (treo), kill process rồi khởi động lại sau 1 giây.
 4. Áp dụng lại protection nếu trạng thái trước đó là ON.
-5. Ghi audit "unexpected termination".
+5. Ghi audit `WatchdogRestart` (lý do, số lần thử, PID cũ/mới) và log chẩn đoán; không chứa dữ liệu người dùng. Vượt budget 5 lần/10 phút thì ghi `WatchdogGaveUp` một lần và ngừng thử đến hết cửa sổ.
+6. Không tạo app/watchdog trùng: app giữ mutex single-instance, watchdog giữ mutex global; hai scheduled task (logon + mỗi phút) chỉ khôi phục watchdog nếu nó bị kill.
 
 **Ngoại lệ**
 - Windows shutdown/logoff: app không gỡ chặn và không đổi trạng thái bảo vệ; chỉ cố gắng đóng session với `Interrupted`/`Note = SystemShutdown` và ghi audit trong thời gian ngắn (tối đa 2 giây) trước khi tiến trình bị dừng. Không đặt `LastCleanShutdownAtUtc` và không xóa `ProtectionEnabled`, để lần đăng nhập sau phục hồi bảo vệ; nếu không kịp đóng session thì reconcile lúc khởi động self-heal. Đây là đường bypass được chấp nhận và phải ghi rõ trong tài liệu.
@@ -882,6 +883,16 @@ số row hiện có của từng bảng và số ngày retention đang áp dụn
 > `SystemShutdown`, audit `SessionInterrupted`/`SystemShutdown`, giữ nguyên `ProtectionEnabled` và
 > engine; lần đăng nhập sau `ReconcileAsync` phục hồi bảo vệ với session `Recovery`. Watchdog tự
 > khởi động lại sau kill vẫn thuộc Phase 7.
+
+> **Hiện trạng Phase 7 (issue #39):** watchdog thường trú `EduFocus.exe --watchdog` tick 5 giây, đọc
+> heartbeat 5 giây, phát hiện stale sau 30 giây, restart với backoff 5–30 giây và budget bền vững 5
+> lần/10 phút; audit `WatchdogRestart`/`WatchdogGaveUp` chỉ chứa lý do, số lần thử và PID. Hai task
+> `EduFocusLogon` (ONLOGON) và `EduFocusWatchdog` (mỗi phút, HIGHEST) giám sát chính watchdog; app
+> giữ mutex single-instance và watchdog giữ mutex global nên không có instance trùng. `WatchdogCoordinator`
+> đăng ký task khi Protection ON (hoặc Protection OFF + `StartWithWindows`), dừng watchdog khi
+> Protection OFF, và MSI uninstall chạy `--uninstall-watchdog` trước khi xóa file. Windows shutdown
+> vẫn là bypass được chấp nhận: app ghi shutdown flag + stop request để watchdog không restart trong
+> lúc logoff, và lần đăng nhập sau phục hồi bảo vệ.
 
 ---
 

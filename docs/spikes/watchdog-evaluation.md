@@ -2,7 +2,7 @@
 
 - **Issue:** [#3 - Spike: Đánh giá watchdog và khả năng chống tắt](https://github.com/Cong-ty-TNNH-Q-Tech/EduFocus/issues/3)
 - **Ngày đo:** 2026-10-29
-- **Trạng thái:** Spike hoàn tất; đề xuất chờ review trước khi triển khai Phase 7
+- **Trạng thái:** Spike hoàn tất; Phase 7 (issue #39) đã triển khai mô hình hybrid — xem §7.
 - **Phạm vi:** so sánh cơ chế watchdog, prototype restart có kiểm soát, chống trùng instance, backoff, dừng khi uninstall, phát hiện treo, đo các đường bypass; đánh giá định tính Windows Service.
 
 ## 1. Kết luận
@@ -161,3 +161,12 @@ Run chính: `docs/spikes/results/watchdog-20261029-195936.{md,json}`. Các run 1
 - Báo cáo thô: `docs/spikes/results/watchdog-20261029-195936.md` / `.json`.
 - Audit JSONL của từng phase nằm trong work root `%TEMP%\edufocus-watchdog-spike\20261029-195936` (đã xóa sau run PASS; dùng `--keep-work-dir` để giữ lại).
 - Tool: `tools/WatchdogSpike/`.
+
+## 7. Cập nhật Phase 7 (issue #39)
+
+Acceptance của #39 yêu cầu app tự khởi động lại trong **≤ 30 giây** sau khi bị kill, trong khi Task Scheduler repetition tối thiểu 1 phút. Phase 7 vì vậy chấp nhận **sai lệch có chủ đích** so với khuyến nghị task-only ở §4.1 và dùng mô hình hybrid:
+
+- **Watchdog thường trú:** `EduFocus.exe --watchdog` (cùng binary), tick 5 giây, đọc heartbeat 5 giây, coi là treo khi heartbeat cũ hơn 30 giây, kill process treo rồi restart sau 1 giây. Backoff 5 → 10 → 20 → 30 giây, budget bền vững 5 lần/10 phút, reset sau 10 phút ổn định, vượt budget ghi `WatchdogGaveUp` một lần.
+- **Lớp ngoài:** hai scheduled task chạy HIGHEST — `EduFocusLogon` (ONLOGON) và `EduFocusWatchdog` (mỗi phút) — khôi phục watchdog nếu chính nó bị kill (tối đa khoảng 60 giây). Xóa task khi Protection OFF và `StartWithWindows` tắt, hoặc khi uninstall.
+- **Giữ nguyên các kết luận của spike:** single-instance mutex cho app và mutex global cho watchdog, kiểm tra PID + start time để tránh PID reuse, không restart sau exit sạch/uninstall, audit `WatchdogRestart`/`WatchdogGaveUp` chỉ chứa lý do, số lần thử và PID.
+- **Khác biệt chưa kiểm chứng trên môi trường thật:** đăng ký task bằng `schtasks` (môi trường phát triển không cho phép tạo scheduled task), độ trễ logon, hành vi khi cả app và watchdog bị kill, sleep/resume và chính sách domain. Các điểm này cần test trên VM sạch trước release, như acceptance của #39 yêu cầu.

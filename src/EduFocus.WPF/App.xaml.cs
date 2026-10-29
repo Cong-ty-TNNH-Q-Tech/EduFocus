@@ -5,6 +5,8 @@ using EduFocus.Domain.Protection;
 using EduFocus.Infrastructure;
 using EduFocus.Infrastructure.Attention;
 using EduFocus.Infrastructure.Attention.Camera;
+using EduFocus.Infrastructure.Watchdog;
+using EduFocus.Ports.DTOs;
 using EduFocus.Ports.Inbound;
 using EduFocus.Ports.Outbound.Persistence;
 using EduFocus.Ports.Outbound.Services;
@@ -22,6 +24,7 @@ using EduFocus.UseCases.Reports;
 using EduFocus.UseCases.Retention;
 using EduFocus.UseCases.Schedule;
 using EduFocus.UseCases.Sessions;
+using EduFocus.UseCases.Watchdog;
 using EduFocus.WPF.Services;
 using EduFocus.WPF.ViewModels;
 using Microsoft.Extensions.DependencyInjection;
@@ -36,19 +39,26 @@ public partial class App : Application
 
     protected override async void OnStartup(StartupEventArgs e)
     {
-        const string appName = "EduFocus_SingleInstance_Mutex";
-        _mutex = new System.Threading.Mutex(true, appName, out bool createdNew);
+        base.OnStartup(e);
+
+        this.DispatcherUnhandledException += App_DispatcherUnhandledException;
+        System.Threading.Tasks.TaskScheduler.UnobservedTaskException += TaskScheduler_UnobservedTaskException;
+
+        var command = WatchdogCommandLine.Parse(e.Args);
+        if (command.Mode != WatchdogCommandMode.App)
+        {
+            ShutdownMode = ShutdownMode.OnExplicitShutdown;
+            await RunWatchdogCommandAsync(command);
+            return;
+        }
+
+        _mutex = new System.Threading.Mutex(true, WatchdogNames.AppInstanceMutex, out bool createdNew);
         if (!createdNew)
         {
             MessageBox.Show("Ứng dụng EduFocus đang được chạy.", "Thông báo", MessageBoxButton.OK, MessageBoxImage.Information);
             Application.Current.Shutdown();
             return;
         }
-
-        this.DispatcherUnhandledException += App_DispatcherUnhandledException;
-        System.Threading.Tasks.TaskScheduler.UnobservedTaskException += TaskScheduler_UnobservedTaskException;
-
-        base.OnStartup(e);
 
         var serviceCollection = new ServiceCollection();
         ConfigureServices(serviceCollection);
@@ -67,6 +77,10 @@ public partial class App : Application
             Shutdown();
             return;
         }
+
+        // Publish the liveness beacon before the watchdog can be spawned so its
+        // first tick already sees a fresh heartbeat.
+        Services.GetRequiredService<WatchdogHeartbeatPublisher>().Start();
 
         // Install or upgrade the built-in rules before protection starts so the
         // first reconcile already sees the default blocklist.
@@ -105,6 +119,18 @@ public partial class App : Application
         // while the app was closed is reflected in the tray and main window.
         var scheduleScheduler = Services.GetRequiredService<ScheduleSchedulerService>();
         await scheduleScheduler.EvaluateNowAsync();
+
+        // Startup reconcile also installs/repairs the watchdog tasks and the
+        // supervisor process; later protection transitions go through the
+        // protection decorator.
+        try
+        {
+            await Services.GetRequiredService<IWatchdogCoordinator>().SynchronizeAsync();
+        }
+        catch (Exception ex)
+        {
+            logger.Error(LogCategories.Watchdog, "Watchdog startup synchronization failed.", ex);
+        }
 
         var mainWindow = Services.GetRequiredService<MainWindow>();
         MainWindow = mainWindow;
@@ -170,7 +196,13 @@ public partial class App : Application
         services.AddSingleton<IParentAuthorizer>(provider => provider.GetRequiredService<ParentSessionState>());
         services.AddSingleton<IParentModeUseCase, ParentModeService>();
         services.AddSingleton<IOnboardingUseCase, OnboardingService>();
-        services.AddSingleton<IProtectionUseCase, ProtectionService>();
+        services.AddSingleton(new WatchdogOptions());
+        services.AddSingleton<IWatchdogCoordinator, WatchdogCoordinator>();
+        services.AddSingleton<ProtectionService>();
+        services.AddSingleton<IProtectionUseCase>(provider =>
+            new WatchdogAwareProtectionService(
+                provider.GetRequiredService<ProtectionService>(),
+                provider.GetRequiredService<IWatchdogCoordinator>()));
         services.AddSingleton<IDashboardUseCase, DashboardService>();
         services.AddSingleton<IReportUseCase, ReportService>();
         services.AddSingleton<IReportExportUseCase, ReportExportService>();
@@ -210,9 +242,172 @@ public partial class App : Application
             () => provider.GetRequiredService<ExitWindow>());
     }
 
+    /// <summary>
+    /// Runs <c>--watchdog</c>, <c>--watchdog-stop</c> and
+    /// <c>--uninstall-watchdog</c> before the app mutex, onboarding or any
+    /// window exists. The watchdog provider is intentionally minimal: it only
+    /// needs settings, audit, the runtime folder and the policy.
+    /// </summary>
+    private async Task RunWatchdogCommandAsync(WatchdogCommandLine command)
+    {
+        var exitCode = 0;
+        ServiceProvider? provider = null;
+        IDisposable? correlationScope = null;
+
+        try
+        {
+            provider = command.Mode == WatchdogCommandMode.Watchdog
+                ? BuildWatchdogServiceProvider()
+                : BuildMaintenanceServiceProvider();
+
+            correlationScope = provider
+                .GetRequiredService<ICorrelationContext>()
+                .BeginScope(Guid.NewGuid());
+
+            var logger = provider.GetRequiredService<IAppLogger>();
+            logger.Info(LogCategories.Watchdog, $"Watchdog command '{command.Mode}' starting.");
+
+            exitCode = command.Mode switch
+            {
+                WatchdogCommandMode.Watchdog => await RunWatchdogLoopAsync(provider, command.LoginStart),
+                WatchdogCommandMode.Stop => await StopWatchdogAsync(provider, command.WaitTimeout),
+                WatchdogCommandMode.Uninstall => await UninstallWatchdogAsync(provider, command.WaitTimeout),
+                _ => 0
+            };
+
+            logger.Info(LogCategories.Watchdog, $"Watchdog command '{command.Mode}' finished (exit={exitCode}).");
+        }
+        catch (Exception ex)
+        {
+            exitCode = 1;
+
+            try
+            {
+                provider?.GetService<IAppLogger>()?.Error(
+                    LogCategories.Watchdog,
+                    $"Watchdog command '{command.Mode}' failed.",
+                    ex);
+            }
+            catch
+            {
+                // Logging a failed command is best effort.
+            }
+        }
+        finally
+        {
+            correlationScope?.Dispose();
+
+            if (provider is not null)
+            {
+                try
+                {
+                    await provider.DisposeAsync();
+                }
+                catch
+                {
+                    // A failed provider must not block process exit.
+                }
+            }
+
+            Shutdown(exitCode);
+        }
+    }
+
+    private static async Task<int> RunWatchdogLoopAsync(ServiceProvider provider, bool loginStart)
+    {
+        var logger = provider.GetRequiredService<IAppLogger>();
+
+        try
+        {
+            // The watchdog can start before the app after an upgrade; applying
+            // the schema here lets it read settings instead of failing on an
+            // old database.
+            await provider.GetRequiredService<SqliteDatabaseInitializer>().InitializeAsync();
+        }
+        catch (Exception ex)
+        {
+            logger.Error(
+                LogCategories.Watchdog,
+                "The watchdog could not prepare the database; it exits and the health task retries.",
+                ex);
+            return 1;
+        }
+
+        logger.Info(LogCategories.Watchdog, "====== EduFocus watchdog started ======");
+        await provider.GetRequiredService<WatchdogHost>().RunAsync(loginStart);
+        logger.Info(LogCategories.Watchdog, "====== EduFocus watchdog exited ======");
+        return 0;
+    }
+
+    private static async Task<int> StopWatchdogAsync(ServiceProvider provider, TimeSpan waitTimeout)
+    {
+        var logger = provider.GetRequiredService<IAppLogger>();
+        var stopped = await provider.GetRequiredService<IWatchdogRuntimePort>().RequestStopAsync(waitTimeout);
+
+        if (stopped)
+            logger.Info(LogCategories.Watchdog, "Watchdog stopped.");
+        else
+            logger.Warning(LogCategories.Watchdog, "Watchdog did not stop within the wait time.");
+
+        return stopped ? 0 : 1;
+    }
+
+    private static async Task<int> UninstallWatchdogAsync(ServiceProvider provider, TimeSpan waitTimeout)
+    {
+        var logger = provider.GetRequiredService<IAppLogger>();
+
+        await provider
+            .GetRequiredService<IWatchdogAutoStartPort>()
+            .SynchronizeAsync(WatchdogRegistrationMode.None);
+
+        var stopped = await provider.GetRequiredService<IWatchdogRuntimePort>().RequestStopAsync(waitTimeout);
+
+        provider.GetRequiredService<WatchdogRuntimeFiles>().DeleteAll();
+
+        logger.Info(
+            LogCategories.Watchdog,
+            stopped
+                ? "Watchdog uninstalled: scheduled tasks removed, process stopped and runtime files cleared."
+                : "Watchdog uninstalled partially: scheduled tasks removed and runtime files cleared, but the process did not stop in time.");
+
+        return stopped ? 0 : 1;
+    }
+
+    private static ServiceProvider BuildWatchdogServiceProvider()
+    {
+        var services = new ServiceCollection();
+        services.AddInfrastructureServices();
+        services.AddSingleton(new EduFocusDatabaseOptions());
+        services.AddSingleton<SqliteDatabaseInitializer>();
+        services.AddSingleton<IAppSettingsRepository, SqliteAppSettingsRepository>();
+        services.AddSingleton<IAuditLogRepository, SqliteAuditLogRepository>();
+        services.AddSingleton(new WatchdogOptions());
+        services.AddSingleton<IWatchdogUseCase, WatchdogService>();
+        services.AddSingleton<WatchdogHost>();
+        return services.BuildServiceProvider();
+    }
+
+    private static ServiceProvider BuildMaintenanceServiceProvider()
+    {
+        var services = new ServiceCollection();
+        services.AddInfrastructureServices();
+        return services.BuildServiceProvider();
+    }
+
     protected override void OnSessionEnding(SessionEndingCancelEventArgs e)
     {
         var logger = Services?.GetService<IAppLogger>();
+
+        try
+        {
+            // Tell the supervisor first: it must not restart the app while
+            // Windows is shutting down or signing out.
+            Services?.GetService<IWatchdogRuntimePort>()?.NotifySessionEnding();
+        }
+        catch (Exception ex)
+        {
+            logger?.Error(LogCategories.Watchdog, "Notifying the watchdog about the Windows shutdown failed.", ex);
+        }
 
         try
         {

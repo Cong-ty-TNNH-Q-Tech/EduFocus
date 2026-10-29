@@ -24,6 +24,7 @@ public sealed partial class PrivacyViewModel : ObservableObject
     private readonly IPrivacySettingsUseCase _settings;
     private readonly IDataDeletionUseCase _deletion;
     private readonly IActivityUseCase _activity;
+    private readonly IWatchdogCoordinator _watchdog;
     private readonly IAppLogger _logger;
 
     private string? _cameraDeviceId;
@@ -61,11 +62,13 @@ public sealed partial class PrivacyViewModel : ObservableObject
         IPrivacySettingsUseCase settings,
         IDataDeletionUseCase deletion,
         IActivityUseCase activity,
+        IWatchdogCoordinator watchdog,
         IAppLogger logger)
     {
         _settings = settings ?? throw new ArgumentNullException(nameof(settings));
         _deletion = deletion ?? throw new ArgumentNullException(nameof(deletion));
         _activity = activity ?? throw new ArgumentNullException(nameof(activity));
+        _watchdog = watchdog ?? throw new ArgumentNullException(nameof(watchdog));
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
     }
 
@@ -140,6 +143,14 @@ public sealed partial class PrivacyViewModel : ObservableObject
             }
 
             ApplySettings(result.Settings);
+
+            if (result.Changed)
+            {
+                // Start-with-Windows is implemented by the at-logon watchdog
+                // task, so a saved change must reach Task Scheduler now.
+                await _watchdog.SynchronizeAsync();
+            }
+
             SetSettingsMessage(
                 result.Changed
                     ? "Đã lưu. Giới hạn giám sát và sample áp dụng ngay; retention áp dụng ở lần dọn kế tiếp; lựa chọn theme/ngôn ngữ được lưu cho bản có hỗ trợ."

@@ -198,7 +198,7 @@ dotnet test EduFocus.slnx --configuration Release
 - New or embedded chatbots cannot all be detected.
 - The process watcher relies on process name/path; renamed or portable apps may evade detection.
 - The app cannot resist a user with SYSTEM/admin privileges; Windows shutdown/logoff remains a bypass.
-- A scheduled-task watchdog checks every 60 seconds, so a restart may take up to about 60 seconds; uninstall PIN is best-effort.
+- A resident watchdog detects kills/hangs and restarts the app within about 30 seconds; if the watchdog itself is killed, a scheduled task restores it within about 60 seconds. Uninstall PIN is best-effort.
 
 EduFocus aims to **support study habits**, not to enable covert surveillance or exam cheating.
 

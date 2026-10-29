@@ -34,6 +34,22 @@
       <ComponentRef Id="AppShortcutStartMenu"/>
     </Feature>
 
+    <!--
+      Uninstall must stop the resident watchdog and remove its scheduled tasks
+      before the executable is deleted. The action is best effort: a failure
+      never blocks the uninstall.
+    -->
+    <CustomAction Id="UninstallWatchdog"
+                  FileRef="MainExeFile"
+                  ExeCommand="--uninstall-watchdog --wait-ms 5000"
+                  Execute="deferred"
+                  Impersonate="no"
+                  Return="ignore"/>
+
+    <InstallExecuteSequence>
+      <Custom Action="UninstallWatchdog" Before="RemoveFiles" Condition='REMOVE~="ALL"'/>
+    </InstallExecuteSequence>
+
   </Package>
 
   <!-- Directory structure -->

@@ -5,6 +5,7 @@ using EduFocus.Infrastructure.Export;
 using EduFocus.Infrastructure.Logging;
 using EduFocus.Infrastructure.Protection;
 using EduFocus.Infrastructure.Services;
+using EduFocus.Infrastructure.Watchdog;
 using EduFocus.Ports.Outbound.Services;
 using Microsoft.Extensions.DependencyInjection;
 
@@ -38,6 +39,17 @@ public static class InfrastructureServiceCollectionExtensions
         services.AddSingleton<IForegroundActivityPort, WindowsForegroundActivityPort>();
         services.AddSingleton(new CsvExportOptions());
         services.AddSingleton<ICsvExportStore, LocalCsvExportStore>();
+        services.AddSingleton(new WatchdogRuntimeOptions());
+        services.AddSingleton(new WatchdogHeartbeatOptions());
+        services.AddSingleton<WatchdogRuntimeFiles>();
+        services.AddSingleton<IWatchdogHeartbeatStore, JsonWatchdogHeartbeatStore>();
+        services.AddSingleton<IWatchdogStateStore, JsonWatchdogStateStore>();
+        services.AddSingleton<IWatchdogProcessPort, WindowsWatchdogProcessController>();
+        services.AddSingleton<IWatchdogRuntimePort, WindowsWatchdogRuntime>();
+        services.AddSingleton<IWatchdogCommandRunner, ProcessWatchdogCommandRunner>();
+        services.AddSingleton<IProcessElevationProbe, WindowsProcessElevationProbe>();
+        services.AddSingleton<IWatchdogAutoStartPort, WindowsWatchdogAutoStart>();
+        services.AddSingleton<WatchdogHeartbeatPublisher>();
 
         return services;
     }
