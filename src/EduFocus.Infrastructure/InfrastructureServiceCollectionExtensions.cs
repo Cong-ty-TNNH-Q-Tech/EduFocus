@@ -23,7 +23,6 @@ public static class InfrastructureServiceCollectionExtensions
         services.AddSingleton<IMonotonicClockPort, MonotonicClockAdapter>();
         services.AddSingleton<IPasswordHasher, Pbkdf2PasswordHasher>();
         services.AddSingleton<IRecoveryCodeGenerator, RecoveryCodeGenerator>();
-        services.AddSingleton<IProtectionEnginePort, DeferredProtectionEngine>();
         services.AddSingleton(new HostsFileOptions());
         services.AddSingleton<IDnsFlusher, IpconfigDnsFlusher>();
         services.AddSingleton<IHostsFileBlocker, HostsFileBlocker>();
@@ -32,6 +31,8 @@ public static class InfrastructureServiceCollectionExtensions
         services.AddSingleton(new ProcessWatcherOptions());
         services.AddSingleton<IProcessController, WindowsProcessController>();
         services.AddSingleton<IProcessWatcher, ProcessWatcher>();
+        services.AddSingleton(new ProtectionEngineOptions());
+        services.AddSingleton<IProtectionEnginePort, ProtectionEngine>();
 
         return services;
     }

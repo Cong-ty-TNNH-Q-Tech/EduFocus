@@ -78,13 +78,13 @@ tray icon và logic chặn thoát khi có phiên.
 - Issue #13: PBKDF2 hasher, recovery code, `ParentAuthUseCase` và credential repository — đã hoàn tất.
 - Issue #14: Parent Mode UI, phiên 5 phút, lockout và reset PIN — đã hoàn tất.
 - Issue #15: onboarding thiết lập PIN, privacy consent và tùy chọn an toàn — đã hoàn tất.
-- Issue #16: bật/tắt bảo vệ, session/audit, tray và reconcile sau restart — đã hoàn tất; engine chặn thật thuộc issue #24.
+- Issue #16: bật/tắt bảo vệ, session/audit, tray và reconcile sau restart — đã hoàn tất; engine chặn thật đã nối ở issue #24.
 - Issue #17: lịch bảo vệ, scheduler 30 giây, override và UI Parent Mode — đã hoàn tất.
 - Issue #18: thoát bằng PIN, ẩn xuống tray khi đóng cửa sổ và xử lý Windows shutdown — đã hoàn tất.
 - Issue #19: `BlockRuleSet` snapshot, matching `Exact` và repository BlockRules — đã hoàn tất.
 - Issue #20: `BuiltInRuleCatalog`, seed idempotent và thẻ quản lý blocklist trong Parent Mode — đã hoàn tất.
-- Issue #21: adapter hosts file `HostsFileBlocker` (marker, backup/journal, restore/self-heal, lỗi có kiểu) — đã hoàn tất; engine nối hosts + block page thuộc issue #24.
-- Issue #22: block page loopback `BlockPageServer` (GET/HEAD, HTML tĩnh, CSP, warning khi cổng bận, `BlockPageHit`) — đã hoàn tất; ghi `BlockedAttempt` và nối engine thuộc issue #24.
-- Issue #23: process watcher polling `ProcessWatcher` (khớp tên exact, đóng mềm rồi kill tree, debounce 30 giây, `ProcessBlockedObservation`) — đã hoàn tất; ghi `BlockedAttempt` và nối engine thuộc issue #24.
-- Các phase sau: ProtectionEngine, session/activity,
-  attention monitoring, dashboard/reports, installer hoàn chỉnh.
+- Issue #21: adapter hosts file `HostsFileBlocker` (marker, backup/journal, restore/self-heal, lỗi có kiểu) — đã hoàn tất; `ProtectionEngine` (issue #24) gọi apply/restore/self-heal.
+- Issue #22: block page loopback `BlockPageServer` (GET/HEAD, HTML tĩnh, CSP, warning khi cổng bận, `BlockPageHit`) — đã hoàn tất; `ProtectionEngine` (issue #24) nhận hit, debounce và ghi `BlockedAttempt`.
+- Issue #23: process watcher polling `ProcessWatcher` (khớp tên exact, đóng mềm rồi kill tree, debounce 30 giây, `ProcessBlockedObservation`) — đã hoàn tất; `ProtectionEngine` (issue #24) nhận observation, debounce và ghi `BlockedAttempt`.
+- Issue #24: `ProtectionEngine` ghép block page + hosts + watcher (rollback/reconcile/cảnh báo), writer channel ghi `BlockedAttempt` + `BlockedAttemptCount`, debounce trung tâm 30 giây; `DeferredProtectionEngine` đã xóa — đã hoàn tất.
+- Các phase sau: session/activity, attention monitoring, dashboard/reports, installer hoàn chỉnh.

@@ -165,8 +165,9 @@ nhạy cảm kiểm tra phiên trước khi thực thi.
 **Hiện trạng issue #16:** `ProtectionService` chỉ phụ thuộc `IProtectionEnginePort`, nên không biết hosts,
 process hay block page. Thứ tự bền vững là engine → session → `ProtectionEnabled` khi bật và
 engine → kết thúc session → `ProtectionEnabled = false` khi tắt; lỗi ghi DB kích hoạt rollback tương ứng
-và lỗi gỡ engine giữ nguyên trạng thái ON. `DeferredProtectionEngine` là adapter tạm thời trả cảnh báo
-cho tới khi engine thật được triển khai ở Phase 3 (issue #24); vì vậy "bật bảo vệ" hiện chưa chặn web/app.
+và lỗi gỡ engine giữ nguyên trạng thái ON. Từ issue #24, `ProtectionEngine` là adapter thật ghép block
+page, hosts và process watcher; "bật bảo vệ" chặn domain/app thật và UI hiển thị cảnh báo của engine
+(ví dụ cổng 80 bận) thay vì cảnh báo "engine chưa có".
 
 **Hiện trạng issue #17:** `ProtectionSource` lưu bền vững nguồn bật bảo vệ (`None`/`Manual`/`Schedule`).
 `ProtectionService.EnableForScheduleAsync`/`DisableForScheduleAsync` dùng actor `System` và chỉ tắt được
@@ -306,9 +307,9 @@ Parent bấm ON
 
 > **Hiện trạng Phase 2 (issue #16):** `EnableAsync` đã thực hiện đúng thứ tự engine → session → lưu
 > `ProtectionEnabled`, rollback engine/phiên khi ghi DB lỗi và bỏ qua việc tạo phiên thứ hai. Rule
-> validation, ActivityTracker và attention thuộc các issue #21/#25/#28 trở đi; engine thật thuộc #24.
-> Hiện tại `DeferredProtectionEngine` chỉ ghi log và trả cảnh báo, nên UI phải hiển thị cảnh báo thay vì
-> tuyên bố đã chặn.
+> validation, ActivityTracker và attention thuộc các issue #19/#25/#28 trở đi. Engine thật
+> `ProtectionEngine` đã được nối ở issue #24 — apply/remove/reconcile điều phối block page, hosts và
+> watcher; cảnh báo của adapter được trả về UI thay vì tuyên bố đã chặn mọi thứ.
 
 ### 4.2. Học sinh truy cập chatbot
 
@@ -466,9 +467,9 @@ Thứ tự:
 > **Triển khai (issue #19):** `BlockRuleEvaluator` là hàm thuần cho domain/app; `BlockRuleSet` là
 > snapshot bất biến dựng từ `IBlockRuleRepository.ListAsync()`. Snapshot bỏ rule `IsEnabled = false`
 > và `NotEnforced` khi tạo, kiểm tra `ExpiresAtUtc` theo `nowUtc` mỗi lần gọi, trả `Allow` cho domain
-> trong `ProtectedDomains` và so khớp `Exact` bằng `Ordinal` — không substring, không suffix. Engine
-> giữ một snapshot và dựng lại sau mỗi thay đổi rule (issue #24), nên vòng lặp matching không truy vấn
-> DB.
+> trong `ProtectedDomains` và so khớp `Exact` bằng `Ordinal` — không substring, không suffix.
+> `ProtectionEngine` (issue #24) nạp snapshot mỗi lần bật/reconcile nên vòng lặp matching không truy
+> vấn DB; thay đổi rule khi đang ON chưa tự áp dụng lại (cần tắt/bật hoặc khởi động lại).
 >
 > **Seed mặc định (issue #20):** `BuiltInRuleCatalog` phiên bản 1 cung cấp 21 rule (14 chatbot/AI,
 > 7 allowlist học tập). `BlockRuleSeedService` chạy sau onboarding và trước reconcile: seed theo
@@ -503,8 +504,8 @@ Thứ tự:
 > `%ProgramData%\EduFocus\hosts-backup` kèm `journal.json`; restore trả lại đúng byte gốc nếu ngoài
 > marker chưa bị sửa, ngược lại chỉ gỡ marker để giữ chỉnh sửa của người dùng. `SelfHealAsync` xử lý
 > journal sau crash và marker mồ côi. `IpconfigDnsFlusher` flush DNS best-effort (timeout 5 giây);
-> log chỉ ghi số domain, không ghi nội dung hosts. Engine nối hosts + block page + process watcher
-> thuộc issue #23–#24.
+> log chỉ ghi số domain, không ghi nội dung hosts. Việc nối hosts + block page + process watcher do
+> `ProtectionEngine` (issue #24) đảm nhiệm.
 >
 > **Triển khai block page (issue #22):** `IBlockPageServer`/`BlockPageServer` dùng `TcpListener`
 > loopback thay vì `HttpListener` (không cần URL ACL), mặc định cổng 80 và nhận cổng 0 cho test.
@@ -514,8 +515,8 @@ Thứ tự:
 > `Cache-Control: no-store`, `X-Content-Type-Options: nosniff`, `X-Frame-Options: DENY` và
 > `Referrer-Policy: no-referrer`. Cổng bận/thiếu quyền trả `BlockPageStartResult.Warning` thay vì
 > ném lỗi, để engine giữ Protection ON và UI cảnh báo. Mỗi request bị chặn phát `BlockPageHit`
-> (domain + UTC) để engine debounce và ghi `BlockedAttempt` với `ObservedVia = BlockPage` (issue
-> #24); adapter không tự ghi DB hoặc log domain.
+> (domain + UTC); `ProtectionEngine` (issue #24) debounce 30 giây rồi ghi `BlockedAttempt` với
+> `ObservedVia = BlockPage`. Adapter không tự ghi DB hoặc log domain.
 
 ### 6.3. App blocking (MVP)
 
@@ -532,9 +533,19 @@ Thứ tự:
 > blocklist. Watcher bỏ qua PID ≤ 4, chính EduFocus và danh sách process hệ thống quan trọng
 > (`explorer`, `lsass`, `svchost`…). `WM_CLOSE` qua `CloseMainWindow()` + chờ tối đa 2 giây; hết hạn
 > thì `Kill(entireProcessTree: true)`. Kết quả `ClosedGracefully`/`Killed`/`Failed` được phát qua
-> `ProcessBlockedObservation` để engine #24 debounce và ghi `BlockedAttempt`; watcher tự debounce 30
-> giây theo tên process bằng monotonic clock. Lỗi đóng/kill hoặc handler không làm dừng vòng polling;
-> log không ghi window title, path hay nội dung tài liệu.
+> `ProcessBlockedObservation`; watcher tự debounce 30 giây theo tên process bằng monotonic clock và
+> `ProtectionEngine` (issue #24) debounce trung tâm trước khi ghi `BlockedAttempt`. Lỗi đóng/kill hoặc
+> handler không làm dừng vòng polling; log không ghi window title, path hay nội dung tài liệu.
+>
+> **Triển khai engine (issue #24):** `ProtectionEngine` là adapter duy nhất của
+> `IProtectionEnginePort`. Bật theo thứ tự block page → hosts → watcher (listener sẵn sàng trước khi
+> hosts trỏ domain về loopback); cổng 80 bận chỉ là cảnh báo, lỗi adapter khác rollback phần đã áp và
+> ném `ProtectionEngineException`. Tắt gỡ rule watcher/page → dừng watcher/page → restore hosts; lỗi
+> dừng trả cảnh báo nhưng lỗi restore hosts ném lỗi để Protection giữ ON. Reconcile self-heal hosts rồi
+> apply/remove; remove idempotent kể cả khi Protection OFF. Block page/watcher chỉ phát observation;
+> engine debounce 30 giây theo domain/tên app bằng monotonic clock và ghi `BlockedAttempt` qua một
+> writer channel duy nhất, gắn `SessionId` đang hoạt động và tăng `BlockedAttemptCount`; lỗi ghi DB chỉ
+> log và không làm dừng adapter. Không lưu window title/path.
 
 ### 6.4. Hạn chế đã biết
 
@@ -544,6 +555,8 @@ Thứ tự:
 - UI Protection phải hiển thị cảnh báo thường trực: chặn web chỉ áp dụng HTTP/domain exact; HTTPS, DoH/VPN/proxy có thể bypass và blocked attempts HTTPS không được ghi nhận đầy đủ.
 - Browser extension (post-MVP) giải quyết URL/path và logging chính xác hơn.
 - Process watcher dựa trên tên/đường dẫn process; app đổi tên, chạy portable hoặc khởi động/thoát quá nhanh có thể không bị phát hiện.
+- Engine debounce 30 giây cho cùng domain/tên app nên nhiều lần thử liên tiếp chỉ ghi một `BlockedAttempt`; writer ghi bất đồng bộ nên attempt cuối có thể mất nếu app thoát đột ngột.
+- Thay đổi rule khi Protection ON chưa tự áp dụng lại engine; cần tắt/bật hoặc khởi động lại.
 - Học sinh có admin có thể sửa hosts/tắt app; không chống được.
 - Không dùng kernel driver/WinDivert trong MVP để tránh antivirus và rủi ro ổn định.
 
@@ -806,17 +819,16 @@ AddViews()
 
 - Singleton: `ParentSessionState`, `ProtectionEngine`, `WebcamAttentionMonitor`, `WatchdogService`, logger.
 - Scoped/transient: repositories, use cases (trừ stateful).
-- `IProtectionEnginePort` được bọc bởi `LoggingProtectionEngineDecorator`.
+- `IProtectionEnginePort` dự kiến được bọc bởi `LoggingProtectionEngineDecorator` (chưa triển khai).
 
 > **Hiện trạng sau issue #16:** composition root gọi `AddInfrastructureServices()` (logger,
-> monotonic clock, `DeferredProtectionEngine`), đăng ký SQLite repositories
+> monotonic clock), đăng ký SQLite repositories
 > (`IParentCredentialRepository`, `IAppSettingsRepository`, `IStudySessionRepository`,
 > `IAuditLogRepository`), `ParentAuthUseCase`, `ParentSessionState`, `ParentModeService`,
 > `OnboardingService`, `ProtectionService`, `DatabaseBootstrapper`, `ProtectionStatusViewModel`,
 > `MainWindowViewModel`, `TrayIconService` và các cửa sổ/ViewModel. Onboarding được mở trước dashboard
 > ở mỗi lần khởi động; sau onboarding, `App` reconcile protection trước khi hiện cửa sổ chính.
-> `IProtectionEnginePort` hiện do `DeferredProtectionEngine` triển khai; decorator logging và engine thật
-> được thêm ở Phase 3.
+> `IProtectionEnginePort` do `ProtectionEngine` triển khai từ issue #24; decorator logging chưa có.
 
 > **Bổ sung sau issue #17:** composition root đăng ký thêm `IScheduleWindowRepository`,
 > `IScheduleUseCase`/`ScheduleService`, `ScheduleViewModel` (singleton) và `ScheduleSchedulerService`.
@@ -828,6 +840,12 @@ AddViews()
 > `MainWindow` nhận `TrayIconService` + `AppExitState` để chặn đóng cửa sổ; `App.OnSessionEnding` gọi
 > lifecycle với timeout 2 giây. Việc thoát sạch đi qua `Application.Shutdown()` sau khi được duyệt, nên
 > `ShutdownMode=OnMainWindowClose` không thể vô tình đóng app khi người dùng bấm X.
+
+> **Bổ sung sau issue #24:** `AddInfrastructureServices()` đăng ký singleton `ProtectionEngine` cho
+> `IProtectionEnginePort` kèm options debounce 30 giây; `DeferredProtectionEngine` đã bị xóa. Composition
+> root đăng ký thêm `IBlockedAttemptRepository`/`SqliteBlockedAttemptRepository`. `ProtectionEngine`
+> resolve `IHostsFileBlocker`, `IBlockPageServer`, `IProcessWatcher`, repository rule/session/attempt,
+> monotonic clock, `TimeProvider` và logger qua DI.
 
 ---
 

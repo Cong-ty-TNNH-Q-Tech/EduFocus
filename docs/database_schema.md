@@ -358,6 +358,13 @@ Singleton.
 - Debounce 30 giây cho cùng domain/process để tránh spam.
 - Khi xóa session, `SessionId` về NULL nhưng log vẫn giữ đến retention.
 
+> **Triển khai (issue #24):** `IBlockedAttemptRepository`/`SqliteBlockedAttemptRepository` chỉ có
+> `AddAsync`; `ProtectionEngine` là nơi duy nhất ghi bảng này — một writer channel đọc observation từ
+> block page/watcher, debounce 30 giây theo domain/tên app bằng monotonic clock, gắn `SessionId` đang
+> hoạt động rồi tăng `BlockedAttemptCount` của session. Domain ghi `TargetType = Domain` +
+> `ObservedVia = BlockPage`; app ghi `TargetType = App` + `ObservedVia = ProcessWatcher` và
+> `ProcessName`; không ghi `WindowTitle`/path. Lỗi ghi chỉ log, không làm dừng adapter.
+
 ---
 
 ## 12. Bảng `AuditLogs`

@@ -120,6 +120,7 @@ public partial class App : Application
         services.AddSingleton<IStudySessionRepository, SqliteStudySessionRepository>();
         services.AddSingleton<IScheduleWindowRepository, SqliteScheduleWindowRepository>();
         services.AddSingleton<IBlockRuleRepository, SqliteBlockRuleRepository>();
+        services.AddSingleton<IBlockedAttemptRepository, SqliteBlockedAttemptRepository>();
         services.AddSingleton(BuiltInRuleCatalog.Default);
         services.AddSingleton<IBlockRuleSeedUseCase, BlockRuleSeedService>();
         services.AddSingleton<IBlockRuleUseCase, BlockRuleService>();

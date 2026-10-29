@@ -256,8 +256,9 @@
 > tạo/kết thúc `StudySession`, ghi audit `ProtectionOn`/`ProtectionOff`, bật thủ công xóa
 > `ScheduleOverrideUntilUtc`, và lặp lại thao tác không tạo phiên/audit trùng. Khi app khởi động, phiên
 > `Active` mồ côi bị đóng tại heartbeat và phiên `Recovery` được tạo nếu bảo vệ ON (UC14). Engine chặn
-> web/app thật, ActivityTracker và attention thuộc Phase 3–5; hiện UI hiển thị cảnh báo thay vì giả định
-> đã chặn.
+> web/app thật đã được nối ở issue #24 (`ProtectionEngine`); ActivityTracker và attention vẫn thuộc
+> Phase 3–5. Cảnh báo của engine (ví dụ cổng 80 bận) vẫn được hiển thị trên UI thay vì giả định mọi
+> thành phần đều chạy.
 
 ---
 
@@ -320,9 +321,10 @@
 > `NotEnforced` cho rule chưa hỗ trợ), `BlockRuleEvaluator` (allow thắng block) và `BlockRuleSet` —
 > snapshot bất biến bỏ rule disabled/`NotEnforced` lúc tạo, kiểm tra hết hạn mỗi lần đánh giá, coi
 > domain thiết yếu là `Allow` và so khớp `Exact` nên `chatgpt.com.evil.test` không khớp
-> `chatgpt.com`. `IBlockRuleRepository`/`SqliteBlockRuleRepository` lưu rule; engine nạp snapshot
-> khi bật bảo vệ và nạp lại sau khi rule thay đổi (issue #24), nên vòng lặp matching không truy vấn
-> DB.
+> `chatgpt.com`. `IBlockRuleRepository`/`SqliteBlockRuleRepository` lưu rule; `ProtectionEngine`
+> (issue #24) nạp snapshot mỗi lần bật/reconcile nên vòng lặp matching không truy vấn DB. Thay đổi
+> rule khi Protection ON chưa tự áp dụng lại — cần tắt/bật hoặc khởi động lại; live reload chưa có
+> trong bản dựng này.
 >
 > **Hiện trạng (issue #20):** `BuiltInRuleCatalog` phiên bản 1 cung cấp 14 domain chatbot/AI và 7
 > allowlist học tập (Meet, Teams, Classroom, Zoom, trang đăng nhập Google/Microsoft).
@@ -558,16 +560,16 @@
 > domain exact và ghi cả IPv4 `127.0.0.1` lẫn IPv6 `::1`, không tự sinh biến thể `www.`. Backup +
 > `journal.json` nằm trong `%ProgramData%\EduFocus\hosts-backup`; restore khôi phục exact khi ngoài
 > marker chưa bị sửa, ngược lại chỉ gỡ marker để giữ chỉnh sửa của người dùng. Lỗi quyền/khóa file
-> được báo bằng `HostsFileException` để use case không coi là đã tắt; log chỉ ghi số domain. Engine
-> nối hosts + block page + process watcher (issue #24) chưa có trong bản dựng này.
+> được báo bằng `HostsFileException` để use case không coi là đã tắt; log chỉ ghi số domain.
+> `ProtectionEngine` (issue #24) gọi apply/restore/self-heal adapter này khi bật, tắt và reconcile.
 >
 > **Triển khai block page (issue #22):** `BlockPageServer` dùng `TcpListener` bind `127.0.0.1:80`
 > (cổng 0 cho test) thay vì `HttpListener` nên không cần URL ACL; chỉ phục vụ GET/HEAD và chỉ trả
 > trang khi Host header khớp domain exact đang chặn. Trang tĩnh escape domain, không tài nguyên
 > ngoài, kèm CSP `default-src 'none'`, `no-store`, `nosniff`, `X-Frame-Options: DENY`,
 > `Referrer-Policy: no-referrer`. Cổng bận/thiếu quyền trả warning để engine giữ Protection ON và UI
-> cảnh báo. Mỗi request bị chặn phát `BlockPageHit` (domain + UTC) để engine debounce và ghi
-> `BlockedAttempt` với `ObservedVia = BlockPage` ở issue #24.
+> cảnh báo. Mỗi request bị chặn phát `BlockPageHit` (domain + UTC); `ProtectionEngine` (issue #24)
+> debounce 30 giây theo domain rồi ghi `BlockedAttempt` với `ObservedVia = BlockPage`.
 >
 > **Triển khai process watcher (issue #23):** `ProcessWatcher` polling mỗi 2 giây qua
 > `IProcessController` (`WindowsProcessController` dùng `Process.GetProcesses`), chỉ xét process có
@@ -575,8 +577,17 @@
 > blocklist. Process hệ thống quan trọng, PID ≤ 4, process EduFocus và process không có cửa sổ chính
 > bị bỏ qua. Trước khi kill, watcher gửi `WM_CLOSE` và chờ tối đa 2 giây; quá hạn mới kill process
 > tree và cảnh báo dữ liệu chưa lưu có thể bị mất. Attempt được debounce 30 giây theo tên process
-> bằng monotonic clock; `ProcessBlockedObservation` (tên, PID, kết quả, cảnh báo) để engine #24 ghi
-> `BlockedAttempt` với `ObservedVia = ProcessWatcher`. Log không ghi window title, path hay tài liệu.
+> bằng monotonic clock; `ProcessBlockedObservation` (tên, PID, kết quả, cảnh báo) được
+> `ProtectionEngine` (issue #24) debounce/ghi `BlockedAttempt` với `ObservedVia = ProcessWatcher`.
+> Log không ghi window title, path hay tài liệu.
+>
+> **Triển khai engine (issue #24):** `ProtectionEngine` ghép block page → hosts → watcher khi bật
+> (listener sẵn sàng trước khi hosts trỏ domain về loopback) và gỡ rule watcher/page trước khi dừng
+> adapter + restore hosts khi tắt. Cổng 80 bận chỉ là cảnh báo; lỗi adapter khác khi bật rollback phần
+> đã áp và ném `ProtectionEngineException`; hosts restore thất bại khi tắt ném lỗi để Protection giữ
+> ON. Một writer channel ghi `BlockedAttempt` kèm `SessionId` đang hoạt động và tăng
+> `BlockedAttemptCount`; debounce trung tâm 30 giây theo domain/tên app bằng monotonic clock, lỗi ghi
+> DB chỉ log. Thay đổi rule khi đang ON chưa tự áp dụng lại.
 
 ---
 

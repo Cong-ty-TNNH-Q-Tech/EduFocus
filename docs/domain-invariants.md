@@ -145,11 +145,11 @@
 | Một session Active | Không kiểm tra toàn cục | Unique partial index (issue #9) | Điều phối start/stop |
 | PBKDF2 hash/salt | Kiểm tra shape, iterations | Cột hash/salt | Hashing trong Infrastructure |
 | Built-in allowlist | `ProtectedDomains` chặn block; `BuiltInRuleCatalog` định nghĩa rule | Unique key `(RuleType, MatchType, NormalizedValue, Effect)` | `BlockRuleSeedService` seed sau onboarding: idempotent, không ghi đè rule phụ huynh, giữ trạng thái bật/tắt |
-| Debounce blocked attempt | Không | — | 30 giây |
+| Debounce blocked attempt | Không | — | `ProtectionEngine` debounce 30 giây theo domain/tên app bằng monotonic clock; ghi `BlockedAttempt` qua writer channel bất đồng bộ (best-effort) |
 | Đánh giá schedule | `Covers`, `Overlaps` | Bảng `ScheduleWindows` | Scheduler local time |
 | Xóa theo retention | Không | — | Retention use case |
 | Khôi phục Protection sau crash | Cờ `ProtectionEnabled` | Bảng `AppSettings` | Startup/recovery use case |
-| Sở hữu hosts file | Không (domain thuần) | `HostsFileBlocker` chỉ sửa khối marker, backup/journal và restore exact khi ngoài marker không đổi; lỗi ném `HostsFileException` | Engine (issue #24) gọi apply/restore; lỗi ghi giữ nguyên trạng thái bảo vệ |
+| Sở hữu hosts file | Không (domain thuần) | `HostsFileBlocker` chỉ sửa khối marker, backup/journal và restore exact khi ngoài marker không đổi; lỗi ném `HostsFileException` | `ProtectionEngine` (issue #24) gọi apply/restore/self-heal; lỗi restore khi tắt ném lỗi để giữ nguyên trạng thái bảo vệ |
 | PIN gate cho thao tác nhạy cảm | Không (domain thuần) | — | `IParentAuthorizer` |
 | Clean shutdown (BR-30) | Chỉ `RecordCleanShutdown` đặt `LastCleanShutdownAtUtc`; timestamp UTC và không lùi | Bảng `AppSettings` | `AppLifecycleService` sau khi gỡ chặn thành công; Windows shutdown chỉ interrupt session, không đặt cờ |
 
@@ -197,6 +197,7 @@ Các rule cần quyền phụ huynh (BR-05), watchdog (BR-28), block page (BR-26
 
 Chạy: `dotnet test src/EduFocus.Domain.Tests/EduFocus.Domain.Tests.csproj -c Release`.
 
-Adapter hạ tầng như `HostsFileBlockerTests`, `BlockPageServerTests` và `ProcessWatcherTests` nằm trong
-`EduFocus.Infrastructure.Tests`, chạy sandbox (thư mục tạm/cổng ephemeral/process giả, không cần
-elevation): `dotnet test src/EduFocus.Infrastructure.Tests/EduFocus.Infrastructure.Tests.csproj -c Release`.
+Adapter hạ tầng như `HostsFileBlockerTests`, `BlockPageServerTests`, `ProcessWatcherTests` và
+`ProtectionEngineTests` nằm trong `EduFocus.Infrastructure.Tests`, chạy sandbox (thư mục tạm/cổng
+ephemeral/process và adapter giả, không cần elevation):
+`dotnet test src/EduFocus.Infrastructure.Tests/EduFocus.Infrastructure.Tests.csproj -c Release`.

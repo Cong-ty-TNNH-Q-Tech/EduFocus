@@ -73,7 +73,9 @@ Các điểm sau **không được coi là lỗ hổng bảo mật** vì đã đ
 - Không phát hiện được mọi chatbot mới hoặc chatbot nhúng trong ứng dụng khác.
 - Process watcher khớp chính xác tên process (basename, không phân biệt hoa thường); app đổi tên binary hoặc chạy portable có thể không bị phát hiện. Process không có cửa sổ chính bị bỏ qua, nên app chạy nền không bị đóng.
 - URL/path, wildcard subdomain và AI sidebar chưa được enforce trong MVP.
-- Trong bản dựng hiện tại, adapter hosts file (issue #21), block page loopback (issue #22) và process watcher (issue #23) đã có nhưng engine chưa nối chúng (issue #24). Bật bảo vệ ghi trạng thái, phiên và audit nhưng chưa chặn domain/app; UI hiển thị cảnh báo "engine sẽ được bật trong Phase 3".
+- Từ issue #24, `ProtectionEngine` đã nối adapter hosts file (issue #21), block page loopback (issue #22) và process watcher (issue #23); bật bảo vệ chặn domain/app thật. Cổng 80 bận chỉ tạo cảnh báo (Protection vẫn ON); hosts restore thất bại khi tắt ném lỗi để Protection giữ ON thay vì báo OFF giả.
+- Engine debounce 30 giây cho cùng domain/tên app và ghi `BlockedAttempt` bất đồng bộ qua writer channel; số attempt có thể ít hơn thực tế và bản cuối có thể mất nếu app thoát đột ngột.
+- Thay đổi rule khi Protection ON chưa tự áp dụng lại engine; cần tắt/bật hoặc khởi động lại.
 
 Nếu bạn phát hiện cách vượt qua các giới hạn trên **trong điều kiện người dùng standard user**, hãy báo cáo — đó có thể là lỗ hổng thực sự.
 

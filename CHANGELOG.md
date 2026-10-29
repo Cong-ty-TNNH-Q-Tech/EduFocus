@@ -173,6 +173,14 @@ và dự án tuân theo [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 - **Chưa nối vào engine:** DI đăng ký adapter; `IProtectionEnginePort` vẫn là `DeferredProtectionEngine` cho tới issue #24, nơi `ProcessBlockedObservation` được debounce/ghi `BlockedAttempt` với `ObservedVia = ProcessWatcher`.
 - **Tests:** 18 test `ProcessWatcherTests` với `IProcessController`, monotonic clock và logger giả — đóng mềm, timeout → kill, close/kill lỗi, allowlist, protected/self/windowless, chuẩn hóa tên, debounce + advance clock, update rule, stop/restart, handler lỗi, scan lỗi một lần rồi phục hồi, tên/option sai; tổng **480 test pass**, build Release 0 warning.
 
+### Added (Phase 3 — ProtectionEngine, issue #24)
+- **Ghép ba adapter:** `ProtectionEngine` triển khai `IProtectionEnginePort` — bật theo thứ tự block page → hosts → process watcher để listener loopback sẵn sàng trước khi hosts trỏ domain về `127.0.0.1`; tắt thì gỡ rule watcher/page trước rồi mới dừng watcher, page và hosts, nên process không bị đóng sau khi bảo vệ đã tắt. Remove idempotent và chạy được cả khi Protection OFF; reconcile self-heal hosts trước khi áp hoặc gỡ.
+- **Rollback và cảnh báo:** cổng 80 bận chỉ tạo cảnh báo, Protection vẫn ON và hosts/watcher vẫn chạy; lỗi adapter khác khi bật sẽ gỡ phần đã áp và ném `ProtectionEngineException`. Khi tắt, lỗi dừng watcher/page trả cảnh báo nhưng rule đã được gỡ; hosts restore thất bại ném lỗi để `ProtectionService` giữ Protection ON thay vì báo OFF giả.
+- **Ghi blocked attempt:** một writer đọc `Channel` duy nhất ghi `BlockedAttempt` ngoài thread adapter, gắn `SessionId` đang hoạt động và tăng `BlockedAttemptCount`; domain ghi `ObservedVia = BlockPage`, app ghi `ProcessWatcher` (chỉ tên process, không window title/path). Debounce trung tâm 30 giây theo domain/tên app bằng monotonic clock; lỗi ghi DB chỉ được log và không làm dừng adapter.
+- **DI:** thay `DeferredProtectionEngine` bằng `ProtectionEngine` (singleton); đăng ký `IBlockedAttemptRepository` + `SqliteBlockedAttemptRepository`.
+- **Giới hạn:** thay đổi rule khi Protection ON chưa tự áp dụng lại engine — cần tắt/bật bảo vệ hoặc khởi động lại; live reload thuộc issue sau (UC05).
+- **Tests:** 22 test `ProtectionEngineTests` với adapter/clock/logger giả — thứ tự apply/remove, lọc rule allow/expired/protected, warning cổng bận, idempotent, rollback hosts/page/watcher, reconcile + self-heal, ghi attempt domain/app kèm session count, debounce, bỏ qua observation khi OFF, lỗi ghi DB và dispose; 1 test `BlockedAttemptRepositoryTests` round-trip domain/app kèm `SessionId`; tổng **503 test pass**, build Release 0 warning.
+
 ### Removed (khỏi phạm vi EduFocus)
 - Quản lý task, profile học tập, quote động lực và Gemini AI.
 - Cơ chế "friction" bắt gõ câu xác nhận bỏ cuộc.
