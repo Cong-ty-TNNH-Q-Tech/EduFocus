@@ -1,11 +1,11 @@
 namespace EduFocus.Infrastructure.Attention;
 
+/// <summary>
+/// Inference backend settings. Camera capture is owned by
+/// <c>ICameraSessionUseCase</c> since issue #30; these values only tune the
+/// detector.
+/// </summary>
 public sealed record AttentionAnalyzerOptions(
-    int CameraIndex = 0,
-    string CaptureApi = "msmf",
-    int Width = 640,
-    int Height = 480,
-    int FlushFrames = 1,
     int OnnxThreads = 1,
     float ScoreThreshold = 0.6f,
     float NmsThreshold = 0.3f);

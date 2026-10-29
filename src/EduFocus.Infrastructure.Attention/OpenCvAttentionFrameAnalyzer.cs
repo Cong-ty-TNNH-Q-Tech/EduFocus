@@ -1,4 +1,5 @@
-using EduFocus.Infrastructure.Attention.Camera;
+using System.Diagnostics;
+using EduFocus.Domain.Attention;
 using EduFocus.Infrastructure.Attention.Detection;
 using EduFocus.Ports.DTOs;
 using EduFocus.Ports.Outbound.Services;
@@ -6,73 +7,70 @@ using OpenCvSharp;
 
 namespace EduFocus.Infrastructure.Attention;
 
+/// <summary>
+/// OpenCV/ONNX frame analyzer. Consumes a managed BGR24 frame captured by the
+/// camera supervisor (issue #30), never opens a camera and never writes frame
+/// bytes or landmarks to disk or network (issue #31).
+/// </summary>
 public sealed class OpenCvAttentionFrameAnalyzer : IAttentionFrameAnalyzer
 {
-    private readonly OpenCvCameraSource _camera;
     private readonly IFaceDetector _detector;
-    private readonly AttentionAnalyzerOptions _options;
 
-    public OpenCvAttentionFrameAnalyzer(IFaceDetector detector, AttentionAnalyzerOptions options)
+    public OpenCvAttentionFrameAnalyzer(IFaceDetector detector)
     {
-        _detector = detector;
-        _options = options;
-        _camera = new OpenCvCameraSource(
-            options.CameraIndex,
-            options.CaptureApi,
-            options.Width,
-            options.Height);
+        _detector = detector ?? throw new ArgumentNullException(nameof(detector));
     }
 
     public string BackendName => _detector.Name;
+
     public string ModelInfo => _detector.Model;
+
     public long ModelLoadMs => _detector.LoadMs;
-    public bool IsOpen => _camera.IsOpen;
 
-    public AttentionOpenResult Open()
+    public AttentionFrameResult Analyze(CameraFrame frame)
     {
-        var result = _camera.Open();
-        return new AttentionOpenResult(result.Success, result.ElapsedMs, _options.CaptureApi, result.Error);
-    }
+        ArgumentNullException.ThrowIfNull(frame);
 
-    public AttentionFrameResult AnalyzeFrame()
-    {
-        using var frame = new Mat();
-        if (!_camera.IsOpen)
-            return new AttentionFrameResult(false, false, null, 0, 0, 0, "camera-not-open");
+        var luminance = 0.0;
 
-        if (!_camera.TryCapture(frame, _options.FlushFrames, out var captureMs, out var captureError))
-        {
-            _camera.Dispose();
-            return new AttentionFrameResult(false, false, null, 0, captureMs, 0, captureError ?? "frame-read-failed");
-        }
-
-        var luminance = ComputeLuminance(frame);
         try
         {
-            var start = System.Diagnostics.Stopwatch.StartNew();
-            var face = _detector.Detect(frame);
-            start.Stop();
+            using var mat = ToMat(frame);
+            luminance = ComputeLuminance(mat);
+
+            var stopwatch = Stopwatch.StartNew();
+            var face = _detector.Detect(mat);
+            stopwatch.Stop();
 
             return new AttentionFrameResult(
-                CameraAvailable: true,
-                Captured: true,
-                Face: face,
-                Luminance: luminance,
-                CaptureMs: captureMs,
-                DetectMs: start.Elapsed.TotalMilliseconds,
+                face,
+                luminance,
+                stopwatch.Elapsed.TotalMilliseconds,
                 Error: null);
         }
         catch (Exception ex)
         {
             return new AttentionFrameResult(
-                CameraAvailable: true,
-                Captured: true,
-                Face: null,
-                Luminance: luminance,
-                CaptureMs: captureMs,
+                FaceObservation.NoFace,
+                luminance,
                 DetectMs: 0,
                 Error: $"detector-error: {ex.GetType().Name}: {ex.Message}");
         }
+    }
+
+    public void Dispose() => _detector.Dispose();
+
+    private static Mat ToMat(CameraFrame frame)
+    {
+        // Mat.FromPixelData pins the array for the Mat lifetime; the frame is
+        // small (640×480 BGR24) and lives only for this analysis.
+        var pixels = frame.Pixels.ToArray();
+        return Mat.FromPixelData(
+            frame.Height,
+            frame.Width,
+            MatType.CV_8UC3,
+            pixels,
+            (long)frame.Width * 3);
     }
 
     private static double ComputeLuminance(Mat frame)
@@ -80,11 +78,5 @@ public sealed class OpenCvAttentionFrameAnalyzer : IAttentionFrameAnalyzer
         using var gray = new Mat();
         Cv2.CvtColor(frame, gray, ColorConversionCodes.BGR2GRAY);
         return Cv2.Mean(gray).Val0;
-    }
-
-    public void Dispose()
-    {
-        _camera.Dispose();
-        _detector.Dispose();
     }
 }

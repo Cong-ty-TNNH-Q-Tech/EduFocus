@@ -232,6 +232,15 @@ và dự án tuân theo [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 - **DI:** đăng ký `ICameraDeviceCatalog`/`WindowsCameraDeviceCatalog`, `CameraPortOptions`, `ICameraPort`/`OpenCvCameraPort`, `CameraOptions`, `ICameraSessionUseCase`/`CameraSessionService`, `CameraStatusViewModel`; WPF tham chiếu `EduFocus.Infrastructure.Attention`.
 - **Tests:** 25 test `CameraSessionService` (chọn thiết bị lưu/mặc định, catalog WMI rỗng, settings lỗi, permission/busy, backoff 30→60→90 giây, disconnect, ngưỡng capture, timeout open/capture, stop/idempotent, event, refresh thiết bị, validate options); tổng **647 test pass**, build Release 0 warning.
 
+### Added (Phase 5 — Attention pipeline & sampling, issue #31)
+- **Tách capture khỏi inference:** `IAttentionFrameAnalyzer`/`OpenCvAttentionFrameAnalyzer` chỉ nhận `CameraFrame` BGR24 managed từ issue #30, không mở camera, không dispose frame của caller; analyzer copy pixel sang `Mat`, tính luminance và chạy YuNet/Haar. Kết quả `AttentionFrameResult` giữ `FaceObservation`, luminance, thời gian detect và lỗi có kiểu.
+- **Sampling pipeline:** `IAttentionPipelineUseCase`/`AttentionPipelineService` chạy vòng 1 giây (validate 0–5 giây), `StartAsync` mở camera qua `ICameraSessionUseCase` và sample ngay; `StopAsync` hủy loop, chờ tick đang chạy rồi đóng camera. `SampleOnceAsync` cho test/chẩn đoán, dùng chung semaphore với loop nên không chồng capture.
+- **Mẫu không mang ảnh:** `AttentionSample` chỉ chứa timestamp, `CameraFailureKind`, observation nullable, luminance, capture/detect ms và lỗi. Frame được dispose **trước** khi phát `SampleProduced`, nên subscriber không thể giữ pixel; không ghi disk/network. Camera lỗi → `Observation = null` + failure; inference lỗi → `CameraFailure = None` + `Error`, không bị hiểu nhầm là `Absent`.
+- **Log chống spam:** lỗi camera chỉ log khi loại lỗi đổi, lỗi inference lặp được gộp; exception của subscriber được bắt và log, loop tiếp tục. Pipeline không dispose analyzer (DI/composition root sở hữu).
+- **DI:** composition root đăng ký `AttentionAnalyzerOptions`, `AttentionPipelineOptions.Default`, `IAttentionFrameAnalyzer` qua `AttentionAnalyzerFactory` (YuNet, `models/` cạnh executable) và `IAttentionPipelineUseCase`; pipeline chưa được start ở startup, việc nối phiên học thuộc #33.
+- **Spike harness:** `tools/AttentionPipelineSpike` chuyển sang `OpenCvCameraPort` + analyzer mới, giữ nguyên cách đo capture/detect; cập nhật README.
+- **Tests:** 22 test `AttentionPipelineService` (frame dispose trước event, camera/inference failure, timestamp, loop nhiều tick, loop tiếp tục sau lỗi, start idempotent/stop trước start, camera unavailable, log một lần, subscriber lỗi, serialize sample, cancel khi mở camera, validate options); tổng **669 test pass**, build Release 0 warning.
+
 ### Removed (khỏi phạm vi EduFocus)
 - Quản lý task, profile học tập, quote động lực và Gemini AI.
 - Cơ chế "friction" bắt gõ câu xác nhận bỏ cuộc.

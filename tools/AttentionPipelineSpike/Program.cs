@@ -38,7 +38,7 @@ try
         var runner = new BenchmarkRunner(options);
         var result = await runner.RunAsync(
             backendName,
-            () => AttentionAnalyzerFactory.Create(backendName, analyzerOptions, options.ModelDir));
+            () => SpikeCameraAnalyzer.Create(backendName, analyzerOptions, options));
         var output = ResultReporter.Write(result, options.OutputDir);
         PrintSummary(output);
     }
@@ -65,11 +65,6 @@ catch (Exception ex)
 }
 
 static AttentionAnalyzerOptions CreateAnalyzerOptions(CliOptions options) => new(
-    CameraIndex: options.CameraIndex,
-    CaptureApi: options.CaptureApi,
-    Width: options.Width,
-    Height: options.Height,
-    FlushFrames: options.FlushFrames,
     OnnxThreads: options.OnnxThreads,
     ScoreThreshold: options.ScoreThreshold,
     NmsThreshold: options.NmsThreshold);

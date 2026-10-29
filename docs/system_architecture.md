@@ -157,7 +157,8 @@ IProcessWatchdogPort
 | `StudySessionUseCase` | Bắt đầu/kết thúc session, tổng hợp thời gian |
 | `ActivityUseCase` | Ghi sample, phân loại app/URL, phát hiện lớp online |
 | `CameraSessionService` | Chọn/mở/đóng camera, báo lỗi quyền/bận/mất kết nối, retry backoff (issue #30) |
-| `AttentionUseCase` | Nhận trạng thái từ camera, tạo event, tính score |
+| `AttentionPipelineService` | Sampling camera 1 FPS qua camera supervisor, inference trên frame managed, dispose frame trước khi phát `AttentionSample` (issue #31) |
+| `AttentionUseCase` | Nhận `AttentionSample`, chạy state machine, tạo event, tính score (#32–#33) |
 | `BlockRuleUseCase` | CRUD rule, validate, allowlist override |
 | `ScheduleService` | CRUD khung giờ, đánh giá 30 giây, auto ON/OFF và override |
 | `ReportUseCase` | Query dashboard, timeline, export |
@@ -257,6 +258,16 @@ kê PNP camera qua WMI (best effort). `CameraStatusViewModel` hiển thị trạ
 cửa sổ chính/tray. Camera **chưa tự bật**; pipeline attention (#31–#33) sẽ gọi `StartAsync`/`CaptureAsync`
 và chịu trách nhiệm ghi `AttentionEvent`/`CameraUnavailable`.
 
+**Hiện trạng issue #31:** `IAttentionPipelineUseCase`/`AttentionPipelineService` chạy vòng sampling mặc định
+1 giây (validate 0–5 giây), `StartAsync` mở camera qua `ICameraSessionUseCase` và tick đầu tiên chạy ngay.
+Mỗi tick lấy `CameraFrame`, gọi `IAttentionFrameAnalyzer.Analyze`, dispose frame **trước** khi phát
+`AttentionSample`, nên subscriber không thể giữ ảnh. Camera lỗi/không quyền → sample có `CameraFailure` và
+`Observation = null`; lỗi inference → sample `Error` nhưng `CameraFailure = None`, không bị hiểu nhầm là
+`Absent`. Lỗi camera chỉ log khi loại lỗi đổi, lỗi inference lặp được gộp; exception của subscriber không làm
+dừng loop. `OpenCvAttentionFrameAnalyzer` không còn sở hữu camera: nó nhận `CameraFrame` BGR24, copy sang
+`Mat`, tính luminance và chạy detector. Phân loại trạng thái, ghi `AttentionEvent` và cộng coverage thuộc
+#32–#33; pipeline chưa được start ở composition root cho tới khi tích hợp phiên học.
+
 ### 3.4. Infrastructure (`EduFocus.Infrastructure`)
 
 Triển khai outbound ports, tương tác Windows.
@@ -269,7 +280,8 @@ Triển khai outbound ports, tương tác Windows.
 | `WindowsForegroundActivityPort` | Win32 foreground window + process + idle time (`GetLastInputInfo`) |
 | `UiAutomationBrowserUrlProvider` | UI Automation đọc address bar (MVP); browser extension native messaging (post-MVP) |
 | `WindowsSystemPowerEventPort` | `SystemEvents.PowerModeChanged` + `SessionSwitch` → `Suspended`/`Resumed` |
-| `WebcamAttentionMonitor` | OpenCV + ONNX; face/head/iris/EAR; không lưu frame |
+| `WebcamAttentionMonitor` | Tên cũ trong tài liệu; Phase 5 tách thành `OpenCvCameraPort` + `OpenCvAttentionFrameAnalyzer` |
+| `OpenCvAttentionFrameAnalyzer` | `IAttentionFrameAnalyzer` trên `CameraFrame` managed: YuNet/Haar, luminance, không mở camera, không lưu frame (issue #31) |
 | `OpenCvCameraPort` | `ICameraPort` trên OpenCvSharp MSMF; chọn thiết bị theo PNP id, copy frame sang buffer managed, giải phóng `Mat` ngay |
 | `WindowsCameraDeviceCatalog` | Liệt kê camera qua WMI `Win32_PnPEntity` (best effort) |
 | `Pbkdf2PasswordHasher` | PBKDF2-SHA256 600.000 iterations, salt 16 byte, hash 32 byte, constant-time compare |
@@ -412,6 +424,10 @@ Timer 1–2s
   → AttentionEvent (khi state đổi)
   → frame disposed (không ghi disk)
 ```
+
+> **Triển khai issue #31:** `AttentionPipelineService` là nửa đầu của luồng trên: timer 1 giây → camera
+> supervisor → `IAttentionFrameAnalyzer` → `AttentionSample` → frame disposed. Classifier/state machine,
+> `AttentionEvent` và aggregate 10 giây nằm ở #32–#33.
 
 ### 4.4. Schedule
 
@@ -719,6 +735,10 @@ Camera (640×480, 1–2 FPS)
 ```
 
 > Phase 0 (ADR-17): dùng OpenCV MSMF + YuNet ONNX để phát hiện mặt và suy ra yaw/pitch proxy; EAR/iris/gaze và `Drowsy` để Phase 5. Adapter nằm ở `EduFocus.Infrastructure.Attention`; Domain/Ports không phụ thuộc OpenCV/ONNX.
+>
+> Issue #31 tách capture khỏi inference: `OpenCvCameraPort` (issue #30) giữ camera và trả `CameraFrame`
+> BGR24 managed; `OpenCvAttentionFrameAnalyzer` chỉ nhận frame, chạy detector và tính luminance, không mở
+> thiết bị. `AttentionPipelineService` điều phối hai phần ở nhịp 1 FPS.
 
 ### 8.2. State machine
 
@@ -762,6 +782,10 @@ AttentionPercent =
 > mới đóng thiết bị. `CameraStatusViewModel` hiển thị trạng thái và hướng dẫn bật quyền Camera trong cửa
 > sổ chính/tray. Việc ghi `CameraUnavailable` và cộng `MonitoringEligibleSeconds` thuộc #33.
 
+> **Triển khai issue #31:** camera bận/không quyền vẫn tạo sample mỗi giây với `CameraFailure` và
+> `Observation = null`; pipeline không tự suy đoán `Absent` khi không có frame hay khi inference lỗi. Việc
+> chuyển sample lỗi thành `CameraUnavailable`/event và tính coverage thuộc #32–#33.
+
 ### 8.5. Privacy
 
 - Không ghi frame, không gửi network.
@@ -769,6 +793,9 @@ AttentionPercent =
 - Frame được `Dispose()` ngay sau xử lý.
 - Không nhận diện danh tính.
 - Có chỉ báo camera đang hoạt động (tray + UI).
+- `AttentionSample` chỉ chứa timestamp, trạng thái lỗi, luminance, thời gian capture/inference và các
+  trường số của khuôn mặt (confidence, yaw/pitch, số mắt); không chứa pixel, ảnh hay landmark thô. Frame
+  được dispose trước khi sample được phát cho subscriber (issue #31).
 
 ---
 
@@ -982,6 +1009,13 @@ AddViews()
 > `CameraStatusViewModel`; WPF tham chiếu project `EduFocus.Infrastructure.Attention`. `ServiceProvider.DisposeAsync()`
 > đóng camera qua `OpenCvCameraPort.Dispose()`. Camera chưa được start ở composition root — pipeline attention
 > (#31–#33) sẽ gọi `StartAsync`/`StopAsync` theo vòng đời phiên học.
+
+> **Bổ sung sau issue #31:** composition root đăng ký `AttentionAnalyzerOptions`,
+> `AttentionPipelineOptions.Default` (1 giây), `IAttentionFrameAnalyzer` qua `AttentionAnalyzerFactory` với
+> backend YuNet và thư mục `models/` cạnh executable, cùng singleton `IAttentionPipelineUseCase`/
+> `AttentionPipelineService`. Pipeline **chưa được resolve/start** ở startup: model ONNX được tải khi
+> analyzer được resolve, nên #33 phải nối vòng đời phiên học và xử lý thiếu model trước khi start.
+> `ServiceProvider.DisposeAsync()` dừng sampling và đóng camera nếu pipeline đã start.
 
 ---
 

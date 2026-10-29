@@ -538,6 +538,13 @@
 > thiết bị. `CameraStatusViewModel` hiển thị trạng thái và hướng dẫn quyền trong cửa sổ chính/tray. Việc
 > phân tích frame, ghi `AttentionEvent`/`CameraUnavailable` và cộng thời gian monitored thuộc #31–#33.
 
+> **Triển khai (issue #31):** `AttentionPipelineService` chạy vòng sampling 1 FPS qua `ICameraSessionUseCase`,
+> gọi `IAttentionFrameAnalyzer` trên từng `CameraFrame` và phát `AttentionSample` sau khi đã dispose frame.
+> Sample camera lỗi có `CameraFailure` + `Observation = null`; sample inference lỗi có `Error` nhưng giữ
+> `CameraFailure = None`, để #32/#33 không biến lỗi kỹ thuật thành `Absent`. `OpenCvAttentionFrameAnalyzer`
+> không còn mở camera; nó chỉ nhận frame BGR24 managed, tính luminance và chạy YuNet/Haar. Classifier,
+> state machine, `AttentionEvent` và coverage thuộc #32–#33.
+
 ---
 
 ### UC09 — Trang chặn & chặn ứng dụng

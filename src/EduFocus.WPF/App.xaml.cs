@@ -1,6 +1,8 @@
+using System.IO;
 using System.Windows;
 using EduFocus.Domain.Protection;
 using EduFocus.Infrastructure;
+using EduFocus.Infrastructure.Attention;
 using EduFocus.Infrastructure.Attention.Camera;
 using EduFocus.Ports.Inbound;
 using EduFocus.Ports.Outbound.Persistence;
@@ -140,6 +142,14 @@ public partial class App : Application
         services.AddSingleton<ICameraPort, OpenCvCameraPort>();
         services.AddSingleton(new CameraOptions());
         services.AddSingleton<ICameraSessionUseCase, CameraSessionService>();
+        services.AddSingleton(new AttentionAnalyzerOptions());
+        services.AddSingleton(AttentionPipelineOptions.Default);
+        services.AddSingleton<IAttentionFrameAnalyzer>(provider =>
+            AttentionAnalyzerFactory.Create(
+                "yunet",
+                provider.GetRequiredService<AttentionAnalyzerOptions>(),
+                Path.Combine(AppContext.BaseDirectory, "models")));
+        services.AddSingleton<IAttentionPipelineUseCase, AttentionPipelineService>();
         services.AddSingleton(BuiltInRuleCatalog.Default);
         services.AddSingleton<IBlockRuleSeedUseCase, BlockRuleSeedService>();
         services.AddSingleton<IBlockRuleUseCase, BlockRuleService>();
