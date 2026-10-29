@@ -14,7 +14,10 @@ public enum WatchdogCommandMode
     Stop,
 
     /// <summary>Remove scheduled tasks, stop the watchdog and clear runtime files.</summary>
-    Uninstall
+    Uninstall,
+
+    /// <summary>Installer step: create the data directory with the restricted ACL.</summary>
+    PrepareDataDirectory
 }
 
 /// <summary>
@@ -25,7 +28,8 @@ public enum WatchdogCommandMode
 public sealed record WatchdogCommandLine(
     WatchdogCommandMode Mode,
     bool LoginStart,
-    TimeSpan WaitTimeout)
+    TimeSpan WaitTimeout,
+    bool DeleteUserData = false)
 {
     public const int DefaultWaitMilliseconds = 5000;
     public const int MaxWaitMilliseconds = 60000;
@@ -39,7 +43,14 @@ public sealed record WatchdogCommandLine(
         var wait = ParseWait(args);
 
         if (args.Any(a => Equals(a, "--uninstall-watchdog")))
-            return new WatchdogCommandLine(WatchdogCommandMode.Uninstall, false, wait);
+            return new WatchdogCommandLine(
+                WatchdogCommandMode.Uninstall,
+                false,
+                wait,
+                args.Any(a => Equals(a, "--delete-user-data")));
+
+        if (args.Any(a => Equals(a, "--prepare-data-directory")))
+            return new WatchdogCommandLine(WatchdogCommandMode.PrepareDataDirectory, false, wait);
 
         if (args.Any(a => Equals(a, "--watchdog-stop")))
             return new WatchdogCommandLine(WatchdogCommandMode.Stop, false, wait);

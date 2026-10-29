@@ -1,10 +1,17 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!--
   WiX v4 installer definition for EduFocus.
-  Build: wix build installer/Product.wxs -ext WixToolset.UI.wixext -o EduFocus.msi -d Version=1.2.3 -d PublishDir=publish/
+
+  Build with installer/Build-Installer.ps1, which harvests the self-contained
+  publish output into installer/obj/Payload.wxs and forbids secrets in the
+  payload. Manual build:
+    wix build installer/Product.wxs installer/obj/Payload.wxs ^
+        -ext WixToolset.UI.wixext -ext WixToolset.Util.wixext ^
+        -d Version=1.2.3 -arch x64 -o EduFocus.msi
 -->
 <Wix xmlns="http://wixtoolset.org/schemas/v4/wxs"
-     xmlns:ui="http://wixtoolset.org/schemas/v4/wxs/ui">
+     xmlns:ui="http://wixtoolset.org/schemas/v4/wxs/ui"
+     xmlns:util="http://wixtoolset.org/schemas/v4/wxs/util">
 
   <Package
     Name="EduFocus"
@@ -16,86 +23,170 @@
     InstallerVersion="500"
     Scope="perMachine">
 
-    <!-- Same UpgradeCode keeps the 1.x → 2.0 upgrade path -->
+    <!-- Same UpgradeCode keeps the 1.x → 2.0 upgrade path. The old product is
+         removed first so a major upgrade never produces two installs. -->
     <MajorUpgrade
       DowngradeErrorMessage="A newer version of EduFocus is already installed."
       Schedule="afterInstallInitialize"/>
 
-    <!-- Embed cab into MSI -->
     <MediaTemplate EmbedCab="yes" CompressionLevel="high"/>
 
-    <!-- Built-in UI with license step -->
     <ui:WixUI Id="WixUI_InstallDir" InstallDirectory="INSTALLFOLDER"/>
 
-    <!-- Features -->
+    <Launch Condition="VersionNT &gt;= 1000"
+            Message="EduFocus requires Windows 10 or later."/>
+    <Launch Condition="VersionNT64"
+            Message="EduFocus requires 64-bit Windows."/>
+
+    <!-- Upgrade and uninstall close the app and the resident watchdog so no
+         file stays locked. A terminated session is recovered on next start. -->
+    <util:CloseApplication Target="EduFocus.exe"
+                           Description="EduFocus is running and will be closed so the installer can continue."
+                           CloseMessage="yes"
+                           ElevatedCloseMessage="yes"
+                           RebootPrompt="no"
+                           Timeout="30"
+                           TerminateProcess="1"/>
+
+    <!-- Keep user data unless the uninstall dialog (or a silent uninstall with
+         DELETEUSERDATA=1) asks for deletion. -->
+    <Property Id="DELETEUSERDATA" Value="0" Secure="yes"/>
+
     <Feature Id="Main" Title="EduFocus" Level="1">
       <ComponentGroupRef Id="AppFiles"/>
+      <ComponentRef Id="AppRegistry"/>
       <ComponentRef Id="AppShortcutDesktop"/>
       <ComponentRef Id="AppShortcutStartMenu"/>
     </Feature>
 
-    <!--
-      Uninstall must stop the resident watchdog and remove its scheduled tasks
-      before the executable is deleted. The action is best effort: a failure
-      never blocks the uninstall.
-    -->
-    <CustomAction Id="UninstallWatchdog"
+    <!-- Creates %ProgramData%\EduFocus with the Administrators/SYSTEM-only ACL
+         before the database exists. Failure fails the install on purpose. -->
+    <CustomAction Id="PrepareDataDirectory"
+                  FileRef="MainExeFile"
+                  ExeCommand="--prepare-data-directory"
+                  Execute="deferred"
+                  Impersonate="no"
+                  Return="check"/>
+
+    <!-- Uninstall cleanup is best effort: a hosts or data failure never
+         blocks the uninstall, but is logged by the app. -->
+    <CustomAction Id="UninstallWatchdogKeepData"
                   FileRef="MainExeFile"
                   ExeCommand="--uninstall-watchdog --wait-ms 5000"
                   Execute="deferred"
                   Impersonate="no"
                   Return="ignore"/>
 
+    <CustomAction Id="UninstallWatchdogDeleteData"
+                  FileRef="MainExeFile"
+                  ExeCommand="--uninstall-watchdog --delete-user-data --wait-ms 5000"
+                  Execute="deferred"
+                  Impersonate="no"
+                  Return="ignore"/>
+
     <InstallExecuteSequence>
-      <Custom Action="UninstallWatchdog" Before="RemoveFiles" Condition='REMOVE~="ALL"'/>
+      <Custom Action="PrepareDataDirectory"
+              After="InstallFiles"
+              Condition='NOT REMOVE~="ALL"'/>
+      <Custom Action="UninstallWatchdogKeepData"
+              Before="RemoveFiles"
+              Condition='REMOVE~="ALL" AND DELETEUSERDATA&lt;&gt;"1"'/>
+      <Custom Action="UninstallWatchdogDeleteData"
+              Before="RemoveFiles"
+              Condition='REMOVE~="ALL" AND DELETEUSERDATA="1"'/>
     </InstallExecuteSequence>
+
+    <!-- Uninstall asks explicitly whether the database and settings are kept. -->
+    <UI>
+      <Dialog Id="RemoveDataDlg" Width="370" Height="270" Title="Remove EduFocus">
+        <Control Id="BannerBitmap" Type="Bitmap" X="0" Y="0" Width="370" Height="44"
+                 TabSkip="no" Text="!(loc.MaintenanceTypeDlgBannerBitmap)"/>
+        <Control Id="BannerLine" Type="Line" X="0" Y="44" Width="373" Height="0"/>
+        <Control Id="BottomLine" Type="Line" X="0" Y="234" Width="373" Height="0"/>
+        <Control Id="Title" Type="Text" X="15" Y="6" Width="340" Height="15"
+                 Transparent="yes" NoPrefix="yes" Text="Remove EduFocus"/>
+        <Control Id="Description" Type="Text" X="25" Y="23" Width="340" Height="20"
+                 Transparent="yes" NoPrefix="yes"
+                 Text="The application, scheduled tasks and hosts file entries will be removed."/>
+        <Control Id="KeepDataText" Type="Text" X="25" Y="70" Width="320" Height="60"
+                 NoPrefix="yes"
+                 Text="Your study data, settings and backups are kept by default so reinstalling EduFocus restores everything."/>
+        <Control Id="RemoveDataCheckBox" Type="CheckBox" X="25" Y="150" Width="320" Height="18"
+                 Property="DELETEUSERDATA" CheckBoxValue="1"
+                 Text="Also delete all EduFocus data (cannot be undone)"/>
+        <Control Id="Back" Type="PushButton" X="180" Y="243" Width="56" Height="17"
+                 Text="!(loc.WixUIBack)">
+          <Publish Event="NewDialog" Value="MaintenanceTypeDlg"/>
+        </Control>
+        <Control Id="Remove" Type="PushButton" X="236" Y="243" Width="56" Height="17"
+                 Default="yes" Text="!(loc.VerifyReadyDlgRemove)" ElevationShield="yes">
+          <Publish Event="Remove" Value="All" Condition="OutOfDiskSpace &lt;&gt; 1"/>
+          <Publish Event="EndDialog" Value="Return" Condition="OutOfDiskSpace &lt;&gt; 1"/>
+          <Publish Event="SpawnDialog" Value="OutOfRbDiskDlg"
+                   Condition="OutOfDiskSpace = 1 AND OutOfNoRbDiskSpace = 0 AND (PROMPTROLLBACKCOST=&quot;P&quot; OR NOT PROMPTROLLBACKCOST)"/>
+          <Publish Event="EndDialog" Value="Return"
+                   Condition="OutOfDiskSpace = 1 AND OutOfNoRbDiskSpace = 0 AND PROMPTROLLBACKCOST=&quot;D&quot;"/>
+          <Publish Event="EnableRollback" Value="False"
+                   Condition="OutOfDiskSpace = 1 AND OutOfNoRbDiskSpace = 0 AND PROMPTROLLBACKCOST=&quot;D&quot;"/>
+          <Publish Event="SpawnDialog" Value="OutOfDiskDlg"
+                   Condition="(OutOfDiskSpace = 1 AND OutOfNoRbDiskSpace = 1) OR (OutOfDiskSpace = 1 AND PROMPTROLLBACKCOST=&quot;F&quot;)"/>
+        </Control>
+        <Control Id="Cancel" Type="PushButton" X="304" Y="243" Width="56" Height="17"
+                 Cancel="yes" Text="!(loc.WixUICancel)">
+          <Publish Event="SpawnDialog" Value="CancelDlg"/>
+        </Control>
+      </Dialog>
+
+      <!-- Runs after the built-in publisher: the last NewDialog wins. -->
+      <Publish Dialog="MaintenanceTypeDlg" Control="RemoveButton"
+               Event="NewDialog" Value="RemoveDataDlg" Order="2"/>
+    </UI>
 
   </Package>
 
-  <!-- Directory structure -->
+  <!-- Directory structure: per-machine install and shortcuts for every user. -->
   <Fragment>
-    <Directory Id="TARGETDIR" Name="SourceDir">
+    <StandardDirectory Id="ProgramFiles64Folder">
+      <Directory Id="INSTALLFOLDER" Name="EduFocus"/>
+    </StandardDirectory>
 
-      <Directory Id="ProgramFiles64Folder">
-        <Directory Id="INSTALLFOLDER" Name="EduFocus"/>
-      </Directory>
+    <Directory Id="CommonDesktopFolder"/>
 
-      <Directory Id="DesktopFolder"/>
-
-      <Directory Id="ProgramMenuFolder">
-        <Directory Id="ProgramMenuSubFolder" Name="EduFocus"/>
-      </Directory>
-
+    <Directory Id="CommonProgramsFolder">
+      <Directory Id="CommonProgramsEduFocus" Name="EduFocus"/>
     </Directory>
   </Fragment>
 
-  <!-- App files (harvested from publish output via -d PublishDir) -->
+  <!-- Install location metadata for support and uninstall cleanup. -->
   <Fragment>
-    <ComponentGroup Id="AppFiles" Directory="INSTALLFOLDER">
-
-      <!-- Main executable -->
-      <Component Id="MainExe" Guid="A1B2C3D4-E5F6-7890-ABCD-EF1234567890">
-        <File Id="MainExeFile"
-              Source="$(PublishDir)EduFocus.exe"
-              Name="EduFocus.exe"
-              KeyPath="yes"/>
-      </Component>
-
-    </ComponentGroup>
+    <Component Id="AppRegistry"
+               Directory="INSTALLFOLDER"
+               Guid="D4E5F6A7-B8C9-0123-DEF0-123456789012">
+      <RegistryKey Root="HKLM" Key="Software\ThanhTrunggDEV\EduFocus">
+        <RegistryValue Name="InstallLocation"
+                       Type="string"
+                       Value="[INSTALLFOLDER]"
+                       KeyPath="yes"/>
+        <RegistryValue Name="Version"
+                       Type="string"
+                       Value="$(Version)"/>
+      </RegistryKey>
+      <RemoveFolder Id="RemoveInstallFolder" Directory="INSTALLFOLDER" On="uninstall"/>
+    </Component>
   </Fragment>
 
   <!-- Desktop shortcut -->
   <Fragment>
     <Component Id="AppShortcutDesktop"
-               Directory="DesktopFolder"
+               Directory="CommonDesktopFolder"
                Guid="B2C3D4E5-F6A7-8901-BCDE-F12345678901">
       <Shortcut Id="ShortcutDesktop"
                 Name="EduFocus"
                 Description="Responsible study monitoring for parents."
                 Target="[INSTALLFOLDER]EduFocus.exe"
                 WorkingDirectory="INSTALLFOLDER"/>
-      <RemoveFolder Id="RemoveDesktopShortcut" Directory="DesktopFolder" On="uninstall"/>
-      <RegistryValue Root="HKCU"
+      <RemoveFolder Id="RemoveDesktopShortcut" Directory="CommonDesktopFolder" On="uninstall"/>
+      <RegistryValue Root="HKLM"
                      Key="Software\ThanhTrunggDEV\EduFocus"
                      Name="DesktopShortcut"
                      Value="1" Type="integer" KeyPath="yes"/>
@@ -105,15 +196,15 @@
   <!-- Start Menu shortcut -->
   <Fragment>
     <Component Id="AppShortcutStartMenu"
-               Directory="ProgramMenuSubFolder"
+               Directory="CommonProgramsEduFocus"
                Guid="C3D4E5F6-A7B8-9012-CDEF-123456789012">
       <Shortcut Id="ShortcutStartMenu"
                 Name="EduFocus"
                 Description="Responsible study monitoring for parents."
                 Target="[INSTALLFOLDER]EduFocus.exe"
                 WorkingDirectory="INSTALLFOLDER"/>
-      <RemoveFolder Id="RemoveStartMenu" Directory="ProgramMenuSubFolder" On="uninstall"/>
-      <RegistryValue Root="HKCU"
+      <RemoveFolder Id="RemoveStartMenu" Directory="CommonProgramsEduFocus" On="uninstall"/>
+      <RegistryValue Root="HKLM"
                      Key="Software\ThanhTrunggDEV\EduFocus"
                      Name="StartMenuShortcut"
                      Value="1" Type="integer" KeyPath="yes"/>

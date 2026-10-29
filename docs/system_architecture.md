@@ -1187,13 +1187,15 @@ EduFocus/
 │   │   └── EduFocus.WPF.csproj
 │   └── EduFocus.Domain.Tests/
 ├── installer/
-│   └── Product.wxs
+│   ├── Product.wxs
+│   └── Build-Installer.ps1
 ├── docs/
 │   ├── ba_document.md
 │   ├── use_cases.md
 │   ├── system_architecture.md
 │   ├── database_schema.md
 │   ├── domain-invariants.md
+│   ├── installer.md
 │   └── legacy-cleanup.md
 └── .github/workflows/
 ```
@@ -1212,6 +1214,12 @@ EduFocus/
 > `IProtectionEnginePort`, state machine `ProtectionService`, session repository, reconcile và tray;
 > issue #17 thêm lịch bảo vệ: `ScheduleService`, `ProtectionSource` + migration `AddProtectionSource`,
 > repository `ScheduleWindows`, scheduler 30 giây và thẻ lịch trong Parent Mode.
+> Issue #40 hoàn thiện gói cài: `installer/Build-Installer.ps1` harvest payload self-contained
+> (chặn secret/runtime data), MSI per-machine với ACL `%ProgramData%\EduFocus` qua
+> `--prepare-data-directory`, shortcut/registry dùng chung, `util:CloseApplication` khi nâng cấp,
+> hộp thoại gỡ cài đặt hỏi giữ/xóa dữ liệu và CLI `--uninstall-watchdog --delete-user-data`
+> gỡ hosts marker/listener + runtime. Chi tiết và checklist máy sạch ở
+> [installer.md](./installer.md).
 > Inventory 1.x ở [legacy-cleanup.md](./legacy-cleanup.md), invariant domain ở
 > [domain-invariants.md](./domain-invariants.md).
 

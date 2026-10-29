@@ -48,6 +48,34 @@ public sealed class WatchdogCommandLineTests
 
         command.Mode.Should().Be(WatchdogCommandMode.Uninstall);
         command.WaitTimeout.Should().Be(TimeSpan.FromMilliseconds(WatchdogCommandLine.DefaultWaitMilliseconds));
+        command.DeleteUserData.Should().BeFalse();
+    }
+
+    [Fact]
+    public void Uninstall_mode_deletes_user_data_only_when_requested()
+    {
+        var command = WatchdogCommandLine.Parse(["--uninstall-watchdog", "--delete-user-data"]);
+
+        command.Mode.Should().Be(WatchdogCommandMode.Uninstall);
+        command.DeleteUserData.Should().BeTrue();
+    }
+
+    [Fact]
+    public void Delete_user_data_without_uninstall_runs_the_normal_app()
+    {
+        var command = WatchdogCommandLine.Parse(["--delete-user-data"]);
+
+        command.Mode.Should().Be(WatchdogCommandMode.App);
+        command.DeleteUserData.Should().BeFalse();
+    }
+
+    [Fact]
+    public void Prepare_data_directory_mode_is_recognized()
+    {
+        var command = WatchdogCommandLine.Parse(["--prepare-data-directory"]);
+
+        command.Mode.Should().Be(WatchdogCommandMode.PrepareDataDirectory);
+        command.DeleteUserData.Should().BeFalse();
     }
 
     [Theory]

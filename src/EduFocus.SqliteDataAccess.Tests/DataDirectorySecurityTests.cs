@@ -51,6 +51,39 @@ public sealed class DataDirectorySecurityTests
         }
     }
 
+    [Fact]
+    [SupportedOSPlatform("windows")]
+    public void EnsureSecure_creates_a_missing_directory_with_the_restricted_acl()
+    {
+        if (!OperatingSystem.IsWindows())
+            return;
+
+        var root = Path.Combine(
+            Path.GetTempPath(),
+            "edufocus-acl-tests",
+            Guid.NewGuid().ToString("N"));
+        var directory = Path.Combine(root, "EduFocus");
+
+        try
+        {
+            var created = DataDirectorySecurity.EnsureSecure(directory);
+
+            created.Should().Be(Path.GetFullPath(directory));
+            Directory.Exists(created).Should().BeTrue();
+
+            var security = new DirectoryInfo(created).GetAccessControl();
+
+            security.AreAccessRulesProtected.Should().BeTrue();
+            AllowedSids(security).Should().BeEquivalentTo(AdministratorsSid, SystemSid);
+        }
+        finally
+        {
+            if (Directory.Exists(directory))
+                RestoreInheritance(new DirectoryInfo(directory));
+            TryDeleteDirectory(root);
+        }
+    }
+
     [SupportedOSPlatform("windows")]
     private static IEnumerable<string> AllowedSids(DirectorySecurity security) =>
         security

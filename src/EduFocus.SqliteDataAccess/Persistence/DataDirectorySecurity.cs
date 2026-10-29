@@ -22,6 +22,21 @@ public static class DataDirectorySecurity
         ApplyWindowsAcl(Path.GetFullPath(directory));
     }
 
+    /// <summary>
+    /// Creates the directory when it is missing and applies the restricted ACL.
+    /// The installer runs this before the first launch so the folder is already
+    /// protected when the app writes its first database.
+    /// </summary>
+    public static string EnsureSecure(string directory)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(directory);
+
+        var fullPath = Path.GetFullPath(directory);
+        Directory.CreateDirectory(fullPath);
+        Apply(fullPath);
+        return fullPath;
+    }
+
     [SupportedOSPlatform("windows")]
     private static void ApplyWindowsAcl(string directory)
     {

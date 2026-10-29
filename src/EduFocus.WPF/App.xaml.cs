@@ -243,10 +243,10 @@ public partial class App : Application
     }
 
     /// <summary>
-    /// Runs <c>--watchdog</c>, <c>--watchdog-stop</c> and
-    /// <c>--uninstall-watchdog</c> before the app mutex, onboarding or any
-    /// window exists. The watchdog provider is intentionally minimal: it only
-    /// needs settings, audit, the runtime folder and the policy.
+    /// Runs <c>--watchdog</c>, <c>--watchdog-stop</c>,
+    /// <c>--uninstall-watchdog</c> and <c>--prepare-data-directory</c> before
+    /// the app mutex, onboarding or any window exists. The minimal provider
+    /// only needs settings, audit, the runtime folder and the policy.
     /// </summary>
     private async Task RunWatchdogCommandAsync(WatchdogCommandLine command)
     {
@@ -271,7 +271,11 @@ public partial class App : Application
             {
                 WatchdogCommandMode.Watchdog => await RunWatchdogLoopAsync(provider, command.LoginStart),
                 WatchdogCommandMode.Stop => await StopWatchdogAsync(provider, command.WaitTimeout),
-                WatchdogCommandMode.Uninstall => await UninstallWatchdogAsync(provider, command.WaitTimeout),
+                WatchdogCommandMode.Uninstall => await UninstallWatchdogAsync(
+                    provider,
+                    command.WaitTimeout,
+                    command.DeleteUserData),
+                WatchdogCommandMode.PrepareDataDirectory => PrepareDataDirectory(provider),
                 _ => 0
             };
 
@@ -352,25 +356,161 @@ public partial class App : Application
         return stopped ? 0 : 1;
     }
 
-    private static async Task<int> UninstallWatchdogAsync(ServiceProvider provider, TimeSpan waitTimeout)
+    /// <summary>
+    /// Removes scheduled tasks, stops the watchdog, clears the runtime folder,
+    /// restores the hosts file and — only when explicitly requested — deletes
+    /// the user data directory. Every step is best effort so a failure never
+    /// blocks the uninstall, but the exit code reports partial cleanup.
+    /// </summary>
+    private static async Task<int> UninstallWatchdogAsync(
+        ServiceProvider provider,
+        TimeSpan waitTimeout,
+        bool deleteUserData)
     {
         var logger = provider.GetRequiredService<IAppLogger>();
+        var exitCode = 0;
 
         await provider
             .GetRequiredService<IWatchdogAutoStartPort>()
             .SynchronizeAsync(WatchdogRegistrationMode.None);
 
         var stopped = await provider.GetRequiredService<IWatchdogRuntimePort>().RequestStopAsync(waitTimeout);
+        if (!stopped)
+        {
+            exitCode = 1;
+            logger.Warning(
+                LogCategories.Watchdog,
+                "The watchdog process did not stop within the wait time during uninstall.");
+        }
 
-        provider.GetRequiredService<WatchdogRuntimeFiles>().DeleteAll();
+        var runtimeFiles = provider.GetRequiredService<WatchdogRuntimeFiles>();
+        runtimeFiles.DeleteAll();
+        exitCode |= TryDeleteDirectory(runtimeFiles.DirectoryPath, "runtime", logger);
+
+        try
+        {
+            var recovery = await provider.GetRequiredService<IHostsFileBlocker>().SelfHealAsync();
+            if (recovery.Performed)
+                logger.Info(LogCategories.Protection, "Uninstall removed the EduFocus section from the hosts file.");
+        }
+        catch (Exception ex)
+        {
+            exitCode = 1;
+            logger.Error(LogCategories.Protection, "Uninstall could not restore the hosts file.", ex);
+        }
+
+        exitCode |= TryDeleteDirectory(
+            provider.GetRequiredService<EduFocus.Infrastructure.Protection.HostsFileOptions>().BackupDirectory,
+            "hosts backup",
+            logger);
+
+        if (deleteUserData && !stopped)
+        {
+            logger.Error(
+                LogCategories.Database,
+                "User data was kept because the watchdog did not stop in time during uninstall.");
+            return 1;
+        }
+
+        if (deleteUserData)
+            exitCode |= DeleteUserDataDirectory(logger);
 
         logger.Info(
             LogCategories.Watchdog,
-            stopped
-                ? "Watchdog uninstalled: scheduled tasks removed, process stopped and runtime files cleared."
-                : "Watchdog uninstalled partially: scheduled tasks removed and runtime files cleared, but the process did not stop in time.");
+            deleteUserData
+                ? "Watchdog uninstalled and the EduFocus data directory was deleted as requested."
+                : "Watchdog uninstalled: scheduled tasks removed, process stopped, runtime files and hosts backup cleared. User data kept.");
 
-        return stopped ? 0 : 1;
+        return exitCode;
+    }
+
+    /// <summary>
+    /// Installer step that creates <c>%ProgramData%\EduFocus</c> with the
+    /// Administrators/SYSTEM-only ACL before the first database is written.
+    /// </summary>
+    private static int PrepareDataDirectory(ServiceProvider provider)
+    {
+        var logger = provider.GetRequiredService<IAppLogger>();
+        var directory = DataDirectorySecurity.EnsureSecure(EduFocusDatabaseOptions.DefaultDirectory);
+
+        logger.Info(
+            LogCategories.Database,
+            $"Installer prepared the data directory with the restricted ACL: '{directory}'.");
+        return 0;
+    }
+
+    private static int DeleteUserDataDirectory(IAppLogger logger)
+    {
+        var directory = Path.GetFullPath(EduFocusDatabaseOptions.DefaultDirectory);
+        var programData = Path.GetFullPath(
+            Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData));
+
+        var isExpected =
+            string.Equals(Path.GetFileName(directory), "EduFocus", StringComparison.OrdinalIgnoreCase)
+            && string.Equals(
+                Path.GetDirectoryName(directory)?.TrimEnd(Path.DirectorySeparatorChar),
+                programData.TrimEnd(Path.DirectorySeparatorChar),
+                StringComparison.OrdinalIgnoreCase);
+
+        if (!isExpected)
+        {
+            logger.Error(
+                LogCategories.Database,
+                $"Refusing to delete '{directory}' because it is not the EduFocus data directory.");
+            return 1;
+        }
+
+        try
+        {
+            if (!Directory.Exists(directory))
+                return 0;
+
+            Directory.Delete(directory, recursive: true);
+            logger.Info(
+                LogCategories.Database,
+                $"User data deleted from '{directory}' as requested during uninstall.");
+            return 0;
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            logger.Error(
+                LogCategories.Database,
+                $"Uninstall could not delete the user data directory '{directory}'.",
+                ex);
+            return 1;
+        }
+    }
+
+    private static int TryDeleteDirectory(string directory, string label, IAppLogger logger)
+    {
+        try
+        {
+            if (!Directory.Exists(directory))
+                return 0;
+
+            var dataRoot = Path.GetFullPath(EduFocusDatabaseOptions.DefaultDirectory)
+                .TrimEnd(Path.DirectorySeparatorChar) + Path.DirectorySeparatorChar;
+            var fullPath = Path.GetFullPath(directory)
+                .TrimEnd(Path.DirectorySeparatorChar) + Path.DirectorySeparatorChar;
+
+            if (!fullPath.StartsWith(dataRoot, StringComparison.OrdinalIgnoreCase))
+            {
+                logger.Warning(
+                    LogCategories.Database,
+                    $"Refusing to delete the {label} folder outside the EduFocus data directory.");
+                return 1;
+            }
+
+            Directory.Delete(fullPath.TrimEnd(Path.DirectorySeparatorChar), recursive: true);
+            return 0;
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            logger.Warning(
+                LogCategories.Database,
+                $"Uninstall could not delete the {label} folder ({ex.GetType().Name}).");
+            return 1;
+        }
     }
 
     private static ServiceProvider BuildWatchdogServiceProvider()

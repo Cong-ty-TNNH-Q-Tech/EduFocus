@@ -85,6 +85,54 @@ public sealed class InitializationTests
     }
 
     [Fact]
+    public async Task Failed_upgrade_rolls_back_and_the_backup_restores_the_previous_data()
+    {
+        await using var db = new TempDatabase();
+
+        await using (var context = db.CreateContext())
+        {
+            await context.GetService<IMigrator>()
+                .MigrateAsync("20261029140816_InitialEduFocusSchema");
+        }
+
+        using (var connection = db.OpenConnectionWithPragmas())
+        {
+            TempDatabase.ExecuteNonQuery(connection, """
+                INSERT INTO AppSettings
+                    (Id, ProtectionEnabled, CreatedAtUtc, UpdatedAtUtc)
+                VALUES
+                    ('22222222-2222-2222-2222-222222222222', 1,
+                     '2026-10-29T00:00:00.000Z', '2026-10-29T00:00:00.000Z');
+                """);
+
+            // A half-applied column makes the pending consent migration fail.
+            TempDatabase.ExecuteNonQuery(
+                connection,
+                "ALTER TABLE AppSettings ADD COLUMN PrivacyAcceptedAtUtc TEXT(28);");
+        }
+
+        var act = async () => await db.CreateInitializer().InitializeAsync();
+
+        var exception = (await act.Should().ThrowAsync<SqliteMigrationException>()).Which;
+
+        exception.BackupPath.Should().NotBeNull();
+        File.Exists(exception.BackupPath!).Should().BeTrue();
+
+        // EF rolled the failed migration back and the pre-upgrade row survived.
+        using (var connection = db.OpenConnection())
+        {
+            TempDatabase.Scalar(connection, "SELECT ProtectionEnabled FROM AppSettings;").Should().Be(1L);
+            TempDatabase.Scalar(connection, "SELECT COUNT(*) FROM __EFMigrationsHistory;").Should().Be(1L);
+        }
+
+        db.CreateInitializer().RestoreBackup(exception.BackupPath!);
+
+        using var restored = db.OpenConnection();
+        TempDatabase.Scalar(restored, "SELECT ProtectionEnabled FROM AppSettings;").Should().Be(1L);
+        TempDatabase.Scalar(restored, "SELECT COUNT(*) FROM __EFMigrationsHistory;").Should().Be(1L);
+    }
+
+    [Fact]
     public async Task Backup_retention_keeps_newest_files()
     {
         await using var db = new TempDatabase();

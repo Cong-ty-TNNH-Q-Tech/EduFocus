@@ -56,7 +56,16 @@ jobs:
             -p:Version="${{ steps.ver.outputs.semver }}" `
             --output publish/
 
-      # ── 6-8. Install WiX v4, add UI extension, build MSI ───────
+      # ── 6. Trim build metadata from the publish output ─────────
+      - name: Trim publish output
+        shell: pwsh
+        run: |
+          Get-ChildItem publish -Recurse -File -Include *.pdb, *.lib |
+            Remove-Item -Force
+          Get-ChildItem publish -Recurse -File |
+            ForEach-Object { "{0}  {1:N0}" -f $_.Name, $_.Length }
+
+      # ── 7-8. Install WiX v4, add extensions, build MSI ─────────
       - name: Build MSI
         shell: pwsh
         run: |
@@ -67,17 +76,19 @@ jobs:
           $env:PATH = [System.Environment]::GetEnvironmentVariable("PATH", "Machine") + ";" +
                       [System.Environment]::GetEnvironmentVariable("PATH", "User")
 
-          # Add UI extension — pin to 4.x to match WiX 4.0.6
+          # Pin both extensions to the tool version
           wix extension add --global WixToolset.UI.wixext/4.0.6
+          wix extension add --global WixToolset.Util.wixext/4.0.6
 
           $ver    = "${{ steps.ver.outputs.version }}"
           $semver = "${{ steps.ver.outputs.semver }}"
-          wix build installer/Product.wxs `
-            -ext WixToolset.UI.wixext `
-            -d Version="$semver" `
-            -d PublishDir="publish/" `
-            -o "EduFocus-$ver-win-x64.msi" `
-            -arch x64
+
+          # Harvests the payload, rejects secrets and runtime data, then
+          # builds with the UI and Util extensions.
+          ./installer/Build-Installer.ps1 `
+            -PublishDir publish `
+            -Version $semver `
+            -OutputPath "EduFocus-$ver-win-x64.msi"
 
 
       # ── 9. Package portable zip ────────────────────────────────
