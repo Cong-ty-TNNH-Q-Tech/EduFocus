@@ -58,10 +58,27 @@ dotnet run --project src/EduFocus.WPF/EduFocus.WPF.csproj
 Chạy test:
 
 ```bash
-dotnet test src/EduFocus.Domain.Tests/EduFocus.Domain.Tests.csproj
+dotnet test EduFocus.slnx --configuration Release
 ```
 
 > Toàn bộ solution target .NET 10 LTS và EF Core 10. Chạy `dotnet tool restore` để cài đúng `dotnet-ef` 10.0.14 trước khi làm việc với migration.
+
+### CI trên GitHub Actions
+
+[`.github/workflows/ci.yml`](./.github/workflows/ci.yml) chạy trên mọi PR và push vào `master`, job **EduFocus — Build & Test**:
+
+```bash
+dotnet tool restore
+dotnet restore EduFocus.slnx
+dotnet build EduFocus.slnx --configuration Release --no-restore
+dotnet test EduFocus.slnx --configuration Release --no-build --logger trx
+dotnet publish src/EduFocus.WPF/EduFocus.WPF.csproj --configuration Release --output artifacts/publish
+```
+
+- NuGet được cache theo `**/*.csproj` và `.config/dotnet-tools.json`; không cache DB, log hay secret.
+- Kết quả test (TRX) và bản publish framework-dependent được upload làm artifact `edufocus-test-results` / `edufocus-ci-publish`.
+- Repo **chưa bật branch protection** cho `master`. Maintainer nên bật required status check **EduFocus — Build & Test** (Settings → Branches) để PR fail CI không merge được.
+- Log CI chỉ chứa thông tin build/test; không đặt token, PIN hay connection string trong workflow.
 
 ### 4. Commit
 

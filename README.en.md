@@ -5,6 +5,7 @@
 **Responsible study monitoring — protecting your child's focus on the computer.**
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](./LICENSE)
+[![CI](https://github.com/Cong-ty-TNNH-Q-Tech/EduFocus/actions/workflows/ci.yml/badge.svg)](https://github.com/Cong-ty-TNNH-Q-Tech/EduFocus/actions/workflows/ci.yml)
 [![Status](https://img.shields.io/badge/status-in%20development-blue)]()
 [![Platform](https://img.shields.io/badge/platform-Windows%2011-0078D6)]()
 [![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](./CONTRIBUTING.md)
@@ -137,7 +138,7 @@ dotnet run --project src/EduFocus.WPF/EduFocus.WPF.csproj
 Run tests:
 
 ```bash
-dotnet test src/EduFocus.Domain.Tests/EduFocus.Domain.Tests.csproj
+dotnet test EduFocus.slnx --configuration Release
 ```
 
 > The entire solution targets .NET 10 LTS and EF Core 10; Windows 11 23H2+ is the primary platform, Windows 10 22H2 is best-effort.

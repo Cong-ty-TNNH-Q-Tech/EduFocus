@@ -73,6 +73,11 @@ và dự án tuân theo [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 - **Tài liệu:** giới hạn shared Windows account và ACL được ghi trong [SECURITY.md](SECURITY.md), README vi/en và [docs/database_schema.md](docs/database_schema.md) §16–§17.
 - **Tests:** thêm 6 test ACL/backup/restore/corrupt DB, tổng 25 test persistence.
 
+### Changed (Phase 1 — CI, issue #11)
+- **CI .NET 10:** workflow `EduFocus CI` trên Windows runner — restore, build/test Release, publish framework-dependent; cache NuGet theo csproj/tool manifest; timeout và concurrency để hủy run cũ.
+- **Artifact:** upload `edufocus-test-results` (TRX, kể cả khi fail) và `edufocus-ci-publish`; không đưa DB/log/secret vào artifact.
+- **Tài liệu:** README/README.en có badge CI và lệnh test toàn solution; CONTRIBUTING mô tả lệnh CI và nhắc maintainer bật required check **EduFocus — Build & Test** (branch protection hiện chưa bật).
+
 ### Removed (khỏi phạm vi EduFocus)
 - Quản lý task, profile học tập, quote động lực và Gemini AI.
 - Cơ chế "friction" bắt gõ câu xác nhận bỏ cuộc.

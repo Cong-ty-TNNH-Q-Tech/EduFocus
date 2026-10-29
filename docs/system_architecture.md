@@ -694,6 +694,12 @@ EduFocus/
 - SQLite repositories + migrations.
 - Rule persistence, session aggregation.
 - Retention deletion.
+- Backup verify/rotation/restore, corrupt DB, data-directory ACL.
+
+### CI
+- `.github/workflows/ci.yml` — Windows runner, .NET 10: restore, build/test Release, publish framework-dependent.
+- Cache NuGet theo csproj/tool manifest; upload TRX và bản publish làm artifact; không cache/upload DB hay secret.
+- Job **EduFocus — Build & Test** là required check khi bật branch protection cho `master`.
 
 ### Manual/system tests
 - Chặn web trên Chrome/Edge/Firefox; xác nhận HTTP block page và HTTPS báo lỗi.
