@@ -431,6 +431,8 @@ EduFocus cung cấp một lớp bảo vệ và quan sát **tối thiểu, minh b
 | CI/CD | GitHub Actions |
 | Logging | File logger xoay vòng theo ngày, không ghi dữ liệu nhạy cảm |
 
+> Spike #4 (2026-10-29) đã xác nhận build/test/publish và MSI trên .NET 10 + EF Core 10; danh sách thay đổi bắt buộc, rollback và checklist DPIA ở [`docs/spikes/net10-ef10-dpia-evaluation.md`](./spikes/net10-ef10-dpia-evaluation.md).
+
 ---
 
 ## 12. Phạm vi MVP & Lộ trình
