@@ -19,6 +19,7 @@ public partial class ParentModeWindow : Window
 
         _viewModel.PasswordBoxesShouldClear += OnPasswordBoxesShouldClear;
         _viewModel.CloseRequested += OnCloseRequested;
+        _viewModel.Privacy.DeleteSecretShouldClear += OnPasswordBoxesShouldClear;
 
         _timer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(1) };
         _timer.Tick += OnTimerTick;
@@ -42,6 +43,7 @@ public partial class ParentModeWindow : Window
         _timer.Tick -= OnTimerTick;
         _viewModel.PasswordBoxesShouldClear -= OnPasswordBoxesShouldClear;
         _viewModel.CloseRequested -= OnCloseRequested;
+        _viewModel.Privacy.DeleteSecretShouldClear -= OnPasswordBoxesShouldClear;
         _viewModel.HandleWindowClosed();
     }
 
@@ -56,6 +58,7 @@ public partial class ParentModeWindow : Window
         RecoveryCodeBox.Clear();
         ResetNewPinBox.Clear();
         ConfirmResetPinBox.Clear();
+        PrivacyDeletePinBox.Clear();
     }
 
     private void OnCloseRequested(object? sender, EventArgs e) => Close();
@@ -80,6 +83,9 @@ public partial class ParentModeWindow : Window
 
     private void ConfirmResetPinBox_OnPasswordChanged(object sender, RoutedEventArgs e) =>
         _viewModel.ConfirmResetPin = ConfirmResetPinBox.Password;
+
+    private void PrivacyDeletePinBox_OnPasswordChanged(object sender, RoutedEventArgs e) =>
+        _viewModel.Privacy.DeletePin = PrivacyDeletePinBox.Password;
 
     private void LoginPinBox_OnKeyDown(object sender, KeyEventArgs e)
     {

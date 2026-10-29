@@ -53,7 +53,7 @@ EduFocus được thiết kế để **không trở thành phần mềm do thám
 
 - **Không lưu ảnh, video hoặc âm thanh.** Frame webcam chỉ được xử lý trong bộ nhớ để suy ra trạng thái.
 - **Không lưu nội dung trang web, tin nhắn hay clipboard.**
-- **Không gửi dữ liệu học tập lên cloud.** Mọi dữ liệu nằm trong SQLite trên máy; nếu bật kiểm tra cập nhật, chỉ gửi version/OS và server vẫn có thể thấy IP.
+- **Không gửi dữ liệu học tập lên cloud.** Mọi dữ liệu nằm trong SQLite trên máy; kiểm tra cập nhật mặc định tắt, khi phụ huynh bật chỉ gửi số phiên bản tới GitHub và GitHub vẫn có thể thấy IP.
 - **Không nhận diện danh tính**, không face embedding, không phân tích cảm xúc.
 - Báo cáo luôn hiển thị **độ phủ camera** và **độ tin cậy** để phụ huynh không hiểu sai kết quả.
 - Ứng dụng phải được thông báo công khai cho học sinh; không khuyến khích giám sát bí mật.

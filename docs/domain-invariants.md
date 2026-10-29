@@ -30,6 +30,8 @@
 | Override phải kết thúc trong tương lai | `SetScheduleOverrideUntil`, `DisableProtectionWithScheduleOverride` |
 | `UpdatedAtUtc` UTC và không lùi | `Touch` nội bộ |
 | Retention/threshold dương | `UpdateRetention`, `UpdateThresholds` |
+| `UpdateCheckEnabled` mặc định tắt; chỉ đổi qua thao tác phụ huynh đã xác thực | `CreateDefault`, `UpdateUpdateCheck` (issue #38) |
+| Tắt monitoring không đổi `ProtectionEnabled`/`ProtectionSource` (BR-14) | `UpdateMonitoring` chỉ sửa cờ monitoring; ON/OFF bảo vệ do `EnableProtection`/`DisableProtection` quyết định |
 | Chỉ PIN exit mới đặt `LastCleanShutdownAtUtc` | `RecordCleanShutdown` — use case quyết định, Windows shutdown không gọi |
 
 ### 2.2. `ParentCredential` và `ParentPinPolicy`
@@ -228,7 +230,9 @@
 | Xóa theo retention | Không | `SqliteRetentionRepository` batch 500, loại session `Active`/event mở, `incremental_vacuum` | `RetentionService` đọc hạn từ `AppSettings`, xóa detail trước session, audit `RetentionApplied` kèm lỗi từng bảng |
 | Khôi phục Protection sau crash | Cờ `ProtectionEnabled` | Bảng `AppSettings` | Startup/recovery use case |
 | Sở hữu hosts file | Không (domain thuần) | `HostsFileBlocker` chỉ sửa khối marker, backup/journal và restore exact khi ngoài marker không đổi; lỗi ném `HostsFileException` | `ProtectionEngine` (issue #24) gọi apply/restore/self-heal; lỗi restore khi tắt ném lỗi để giữ nguyên trạng thái bảo vệ |
-| PIN gate cho thao tác nhạy cảm | Không (domain thuần) | — | `IParentAuthorizer` |
+| PIN gate cho thao tác nhạy cảm | Không (domain thuần) | — | `IParentAuthorizer`; `PrivacySettingsService`/`DataDeletionService` yêu cầu phiên phụ huynh, xóa toàn bộ còn yêu cầu PIN + `XÓA` (issue #38) |
+| Xóa toàn bộ dữ liệu | Không | `SqlitePrivacyDataRepository` batch 500, không chọn dữ liệu session `Active`, `VACUUM` best-effort | `DataDeletionService` xác nhận trước rồi PIN, dùng chung lockout, audit `DataDeleted` kèm `Incomplete`/bảng lỗi và không ghi audit thành công khi hủy/lockout |
+| Update check opt-in | Không | `AppSettings.UpdateCheckEnabled` default 0 | `UpdateViewModel` từ chối gọi mạng khi tắt; không auto-check lúc khởi động |
 | Clean shutdown (BR-30) | Chỉ `RecordCleanShutdown` đặt `LastCleanShutdownAtUtc`; timestamp UTC và không lùi | Bảng `AppSettings` | `AppLifecycleService` sau khi gỡ chặn thành công; Windows shutdown chỉ interrupt session, không đặt cờ |
 
 ---
@@ -295,3 +299,9 @@ test event → counter → `SessionAttentionSummary`.
 retention job (bảng quá hạn, session `Active`, event còn mở, batch session + cascade/SET NULL, vacuum),
 round-trip `ActivitySample` (kể cả `IsOnlineClass`) và
 `AddActivitySecondsAsync` (targeted, chỉ session `Active`, cộng `MonitoringEligibleSeconds`).
+Privacy: `PrivacySettingsServiceTests` phủ yêu cầu phiên phụ huynh, snapshot settings/counts/size, save đủ
+trường + audit một lần với metadata `changed`, save không đổi không audit, tắt monitoring giữ bảo vệ và biên
+threshold/retention; `DataDeletionServiceTests` phủ sai xác nhận trước PIN, sai PIN/lockout không xóa hay audit,
+batch giữ session `Active`, lỗi bảng → `Incomplete`, lỗi audit, vacuum lỗi không chặn, hủy giữa chừng không ghi
+audit thành công; `PrivacyDataRepositoryTests` phủ counts/size, batch xóa và bảo vệ session `Active`.
+`ActivityTrackingServiceTests`/`AttentionMonitorServiceTests` phủ áp dụng setting mới cho phiên đang chạy.

@@ -193,6 +193,10 @@ namespace EduFocus.SqliteDataAccess.Migrations
                         .HasColumnType("TEXT(16)")
                         .HasDefaultValue("dark");
 
+                    b.Property<bool>("UpdateCheckEnabled")
+                        .HasColumnType("INTEGER")
+                        .HasDefaultValue(false);
+
                     b.Property<string>("UpdatedAtUtc")
                         .IsRequired()
                         .HasColumnType("TEXT(28)");

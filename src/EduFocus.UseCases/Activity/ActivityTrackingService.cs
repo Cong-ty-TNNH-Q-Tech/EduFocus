@@ -50,8 +50,9 @@ public sealed class ActivityTrackingService : IActivityUseCase, IAsyncDisposable
     private Task? _loop;
     private StudySessionId? _sessionId;
     private BlockRuleSet _ruleSnapshot = BlockRuleSet.Create([]);
-    private bool _monitoringEnabled;
-    private bool _monitorOnlyDuringClasses;
+    private volatile bool _monitoringEnabled;
+    private volatile bool _monitorOnlyDuringClasses;
+    private long _sampleIntervalTicks;
     private TimeSpan _lastSampleTick;
     private DateTime _lastSampleUtc;
     private string? _candidateKey;
@@ -132,6 +133,7 @@ public sealed class ActivityTrackingService : IActivityUseCase, IAsyncDisposable
         }
 
         _options = options;
+        _sampleIntervalTicks = options.SampleInterval.Ticks;
     }
 
     public bool IsRunning => _running;
@@ -157,6 +159,7 @@ public sealed class ActivityTrackingService : IActivityUseCase, IAsyncDisposable
             _ruleSnapshot = rules;
             _monitoringEnabled = policy.MonitoringEnabled;
             _monitorOnlyDuringClasses = policy.MonitorOnlyDuringClasses;
+            Volatile.Write(ref _sampleIntervalTicks, policy.SampleInterval.Ticks);
             _lastSampleTick = _clock.GetTickCount();
             _lastSampleUtc = now;
             _candidateKey = null;
@@ -192,6 +195,35 @@ public sealed class ActivityTrackingService : IActivityUseCase, IAsyncDisposable
         finally
         {
             _lifecycleGate.Release();
+        }
+    }
+
+    public async Task RefreshSettingsAsync(CancellationToken cancellationToken = default)
+    {
+        if (!_running)
+            return;
+
+        try
+        {
+            var settings = await _settings.GetAsync(cancellationToken).ConfigureAwait(false);
+            if (settings is null)
+                return;
+
+            _monitoringEnabled = settings.MonitoringEnabled;
+            _monitorOnlyDuringClasses = settings.MonitorOnlyDuringClasses;
+            Volatile.Write(ref _sampleIntervalTicks, ResolveSampleInterval(settings).Ticks);
+
+            _logger.Info(LogCategories.Session, "Monitoring settings were refreshed for the active session.");
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            _logger.Warning(
+                LogCategories.Session,
+                $"Could not refresh monitoring settings ({ex.GetType().Name}); keeping the previous values.");
         }
     }
 
@@ -250,6 +282,7 @@ public sealed class ActivityTrackingService : IActivityUseCase, IAsyncDisposable
         _sessionEnded = false;
         _monitoringEnabled = false;
         _monitorOnlyDuringClasses = false;
+        Volatile.Write(ref _sampleIntervalTicks, _options.SampleInterval.Ticks);
         _running = false;
     }
 
@@ -332,7 +365,8 @@ public sealed class ActivityTrackingService : IActivityUseCase, IAsyncDisposable
             return false;
         }
 
-        if (elapsed < _options.SampleInterval)
+        var sampleInterval = TimeSpan.FromTicks(Volatile.Read(ref _sampleIntervalTicks));
+        if (elapsed < sampleInterval)
             return false;
 
         if (isIdle)
@@ -563,17 +597,23 @@ public sealed class ActivityTrackingService : IActivityUseCase, IAsyncDisposable
         }
     }
 
-    private async Task<(bool MonitoringEnabled, bool MonitorOnlyDuringClasses)> LoadMonitoringPolicyAsync(
-        CancellationToken cancellationToken)
+    private async Task<(bool MonitoringEnabled, bool MonitorOnlyDuringClasses, TimeSpan SampleInterval)>
+        LoadMonitoringPolicyAsync(CancellationToken cancellationToken)
     {
         try
         {
             var settings = await _settings.GetAsync(cancellationToken).ConfigureAwait(false);
 
             if (settings is null)
-                return (MonitoringEnabled: false, MonitorOnlyDuringClasses: false);
+                return (
+                    MonitoringEnabled: false,
+                    MonitorOnlyDuringClasses: false,
+                    SampleInterval: _options.SampleInterval);
 
-            return (settings.MonitoringEnabled, settings.MonitorOnlyDuringClasses);
+            return (
+                settings.MonitoringEnabled,
+                settings.MonitorOnlyDuringClasses,
+                ResolveSampleInterval(settings));
         }
         catch (OperationCanceledException)
         {
@@ -586,9 +626,15 @@ public sealed class ActivityTrackingService : IActivityUseCase, IAsyncDisposable
             _logger.Warning(
                 LogCategories.Attention,
                 $"{MonitoringPolicyWarning} ({ex.GetType().Name})");
-            return (MonitoringEnabled: false, MonitorOnlyDuringClasses: false);
+            return (
+                MonitoringEnabled: false,
+                MonitorOnlyDuringClasses: false,
+                SampleInterval: _options.SampleInterval);
         }
     }
+
+    private static TimeSpan ResolveSampleInterval(AppSettings settings) =>
+        TimeSpan.FromSeconds(Math.Clamp(settings.SampleIntervalSeconds, 1, 3600));
 
     private DateTime UtcNow() => _timeProvider.GetUtcNow().UtcDateTime;
 

@@ -790,9 +790,30 @@
 **Hiện trạng issue #29:** retention job tự động đã chạy: `RetentionService` đọc hạn trong `AppSettings`, xóa
 từng bảng theo batch 500 (sample/event/blocked attempt/audit/session), bỏ qua session `Active` và event còn
 mở, ghi audit `RetentionApplied` kèm số bản ghi và danh sách bảng lỗi. Job chạy lúc khởi động và mỗi ngày khi
-local time ≥ 03:00, sau đó `PRAGMA incremental_vacuum`. Xuất CSV đã có trong thẻ Báo cáo (issue #37). Đổi
-retention, xóa theo khoảng thời gian, xóa toàn bộ và audit viewer trong màn hình **Dữ liệu & Quyền riêng tư**
-vẫn chưa có UI/use case — thuộc phần còn lại của UC11 (#38).
+local time ≥ 03:00, sau đó `PRAGMA incremental_vacuum`. Xuất CSV đã có trong thẻ Báo cáo (issue #37).
+
+**Triển khai issue #38:** thẻ **Dữ liệu & quyền riêng tư** trong Parent Mode hiển thị dung lượng file DB,
+số row hiện có của từng bảng và số ngày retention đang áp dụng; mọi thao tác đọc/ghi đều qua
+`IPrivacySettingsUseCase`/`IDataDeletionUseCase` và yêu cầu phiên phụ huynh đã xác thực.
+- **Cấu hình:** phụ huynh sửa monitoring, `MonitorOnlyDuringClasses`, ngưỡng distracted/absent, sample interval,
+  ba mốc retention, StartWithWindows, update check và theme/language. Giá trị được validate trong domain
+  (`AppSettings.UpdateThresholds/UpdateRetention/...`), ghi một audit `SettingsChanged` chỉ chứa tên nhóm thay
+  đổi. Monitoring và sample interval áp dụng ngay cho phiên đang chạy qua `RefreshSettingsAsync`; ngưỡng
+  attention áp dụng từ phiên kế tiếp; camera ở lần bật camera sau; retention ở lần dọn kế tiếp. Theme/language
+  được lưu nhưng runtime theming/localization chưa có nên UI ghi rõ điều này. Tắt monitoring chỉ dừng
+  camera/attention, không tắt web/app blocking (xem BR-14).
+- **Update check:** mặc định tắt, chỉ chạy khi phụ huynh bật; gửi `User-Agent: EduFocus/{version}` tới GitHub
+  Releases API (phiên bản + OS nằm trong header mặc định của HTTP client) và UI nói rõ GitHub thấy IP, không
+  gửi dữ liệu học tập/tên máy/nội dung màn hình; không tự kiểm tra lúc khởi động. Không có telemetry hay upload
+  nền nào khác.
+- **Xóa toàn bộ:** yêu cầu PIN đúng và gõ đúng chữ `XÓA`; sai xác nhận bị từ chối trước khi kiểm tra PIN nên
+  không tiêu tốn lượt thử. `DataDeletionService` xóa theo batch 500 đúng thứ tự sample → event → blocked
+  attempt → phiên không `Active`, bỏ qua session đang chạy ở mọi bước, chạy `VACUUM` best-effort, ghi audit
+  `DataDeleted` (kể cả khi một bảng lỗi — khi đó trạng thái `Incomplete` kèm danh sách bảng lỗi). Hủy giữa
+  chừng hoặc sai PIN/lockout không ghi audit thành công. Xóa giữ nguyên settings, PIN, audit và dữ liệu của
+  phiên đang hoạt động; không thể hoàn tác. UI nói rõ phạm vi trước khi xóa.
+- **Chưa có:** xóa theo khoảng thời gian tùy chọn và audit viewer trong UI (audit vẫn ghi DB và xem được bằng
+  công cụ ngoài) — phần còn lại của UC11.
 
 ---
 

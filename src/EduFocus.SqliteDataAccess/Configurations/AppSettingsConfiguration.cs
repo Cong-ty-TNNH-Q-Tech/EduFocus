@@ -50,6 +50,7 @@ internal sealed class AppSettingsConfiguration : IEntityTypeConfiguration<AppSet
         builder.Property(x => x.SessionRetentionDays).HasDefaultValue(365).ValueGeneratedNever();
 
         builder.Property(x => x.StartWithWindows).HasDefaultValue(true).ValueGeneratedNever();
+        builder.Property(x => x.UpdateCheckEnabled).HasDefaultValue(false).ValueGeneratedNever();
 
         builder.Property(x => x.Theme)
             .HasConversion<AppThemeConverter>()

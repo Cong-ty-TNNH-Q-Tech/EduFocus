@@ -500,6 +500,29 @@ public sealed class ActivityTrackingServiceTests
         harness.Service.IsRunning.Should().BeFalse();
     }
 
+    [Fact]
+    public async Task RefreshSettings_applies_sample_interval_and_monitoring_switch_immediately()
+    {
+        await using var harness = new ActivityHarness();
+        await harness.StartAsync();
+        harness.Foreground = harness.Snapshot("chrome", "Docs");
+
+        harness.SettingsRow.UpdateThresholds(20, 30, 60, Now.AddMinutes(1));
+        await harness.Service.RefreshSettingsAsync();
+
+        (await harness.SampleAfterAsync(TimeSpan.FromSeconds(15))).Should().BeFalse();
+        (await harness.SampleAfterAsync(TimeSpan.FromSeconds(45))).Should().BeTrue();
+        harness.Samples.Samples.Should().ContainSingle();
+        harness.Session.MonitoringEligibleSeconds.Should().Be(60);
+
+        harness.SettingsRow.UpdateMonitoring(false, false, Now.AddMinutes(2));
+        await harness.Service.RefreshSettingsAsync();
+
+        (await harness.SampleAfterAsync(TimeSpan.FromSeconds(60))).Should().BeTrue();
+        harness.Session.NeutralSeconds.Should().Be(120);
+        harness.Session.MonitoringEligibleSeconds.Should().Be(60);
+    }
+
     private sealed class ActivityHarness : IAsyncDisposable
     {
         public ActivityHarness()

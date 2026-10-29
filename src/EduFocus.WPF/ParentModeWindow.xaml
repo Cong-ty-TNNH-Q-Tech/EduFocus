@@ -779,6 +779,210 @@
                             </StackPanel>
                         </Border>
 
+                        <Border Margin="0,16,0,0" Padding="14" CornerRadius="10" Background="#F8F9FC"
+                                BorderBrush="#DDE1EA" BorderThickness="1">
+                            <StackPanel>
+                                <Grid>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="Auto" />
+                                    </Grid.ColumnDefinitions>
+                                    <TextBlock Grid.Column="0" Text="Dữ liệu &amp; quyền riêng tư"
+                                               FontSize="14" FontWeight="SemiBold" Foreground="#1F2430" />
+                                    <TextBlock Grid.Column="1" Text="{Binding Privacy.DatabaseSizeText}"
+                                               FontSize="12" Foreground="#8A909C"
+                                               VerticalAlignment="Center" Margin="10,0,0,0" />
+                                </Grid>
+
+                                <TextBlock Text="{Binding Privacy.StorageSummary}" Margin="0,8,0,0"
+                                           FontSize="12" Foreground="#5B6270" TextWrapping="Wrap" />
+                                <TextBlock Text="{Binding Privacy.RetentionSummary}" Margin="0,4,0,0"
+                                           FontSize="12" Foreground="#5B6270" TextWrapping="Wrap" />
+                                <TextBlock Text="{Binding Privacy.CameraSummary}" Margin="0,4,0,0"
+                                           FontSize="12" Foreground="#5B6270" TextWrapping="Wrap" />
+
+                                <CheckBox Content="Bật giám sát tập trung trong phiên học"
+                                          IsChecked="{Binding Privacy.MonitoringEnabled}"
+                                          Margin="0,12,0,0" />
+                                <CheckBox Content="Chỉ giám sát trong giờ học trực tuyến"
+                                          IsChecked="{Binding Privacy.MonitorOnlyDuringClasses}"
+                                          Margin="0,6,0,0" />
+                                <TextBlock Margin="0,6,0,0" FontSize="11" Foreground="#8A909C"
+                                           TextWrapping="Wrap"
+                                           Text="Tắt giám sát chỉ dừng camera/phân tích tập trung. Chặn web và ứng dụng theo rule và lịch vẫn hoạt động cho tới khi bạn tự tắt ở thẻ Bảo vệ." />
+
+                                <Grid Margin="0,8,0,0">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="10" />
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="10" />
+                                        <ColumnDefinition Width="*" />
+                                    </Grid.ColumnDefinitions>
+                                    <StackPanel Grid.Column="0">
+                                        <TextBlock Text="Ngưỡng xao nhãng (giây)" FontSize="11"
+                                                   Foreground="#5B6270" TextWrapping="Wrap" />
+                                        <TextBox Text="{Binding Privacy.DistractionThreshold, UpdateSourceTrigger=PropertyChanged}"
+                                                 Padding="8,6" Margin="0,4,0,0" />
+                                    </StackPanel>
+                                    <StackPanel Grid.Column="2">
+                                        <TextBlock Text="Ngưỡng vắng mặt (giây)" FontSize="11"
+                                                   Foreground="#5B6270" TextWrapping="Wrap" />
+                                        <TextBox Text="{Binding Privacy.AbsenceThreshold, UpdateSourceTrigger=PropertyChanged}"
+                                                 Padding="8,6" Margin="0,4,0,0" />
+                                    </StackPanel>
+                                    <StackPanel Grid.Column="4">
+                                        <TextBlock Text="Ghi mẫu hoạt động (giây)" FontSize="11"
+                                                   Foreground="#5B6270" TextWrapping="Wrap" />
+                                        <TextBox Text="{Binding Privacy.SampleInterval, UpdateSourceTrigger=PropertyChanged}"
+                                                 Padding="8,6" Margin="0,4,0,0" />
+                                    </StackPanel>
+                                </Grid>
+
+                                <TextBlock Text="Thời gian lưu dữ liệu (ngày)" FontSize="11.5"
+                                           Foreground="#5B6270" Margin="0,12,0,0" />
+                                <Grid Margin="0,4,0,0">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="10" />
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="10" />
+                                        <ColumnDefinition Width="*" />
+                                    </Grid.ColumnDefinitions>
+                                    <StackPanel Grid.Column="0">
+                                        <TextBlock Text="Hoạt động" FontSize="11" Foreground="#8A909C" />
+                                        <TextBox Text="{Binding Privacy.ActivityRetentionDays, UpdateSourceTrigger=PropertyChanged}"
+                                                 Padding="8,6" Margin="0,4,0,0" />
+                                    </StackPanel>
+                                    <StackPanel Grid.Column="2">
+                                        <TextBlock Text="Sự kiện tập trung" FontSize="11"
+                                                   Foreground="#8A909C" />
+                                        <TextBox Text="{Binding Privacy.EventRetentionDays, UpdateSourceTrigger=PropertyChanged}"
+                                                 Padding="8,6" Margin="0,4,0,0" />
+                                    </StackPanel>
+                                    <StackPanel Grid.Column="4">
+                                        <TextBlock Text="Phiên học" FontSize="11" Foreground="#8A909C" />
+                                        <TextBox Text="{Binding Privacy.SessionRetentionDays, UpdateSourceTrigger=PropertyChanged}"
+                                                 Padding="8,6" Margin="0,4,0,0" />
+                                    </StackPanel>
+                                </Grid>
+                                <TextBlock Margin="0,6,0,0" FontSize="11" Foreground="#8A909C"
+                                           TextWrapping="Wrap"
+                                           Text="Retention áp dụng ở lần dọn dẹp kế tiếp (định kỳ mỗi ngày). Dữ liệu cũ hơn số ngày này sẽ bị xóa cục bộ và không thể khôi phục." />
+
+                                <CheckBox Content="Khởi động cùng Windows"
+                                          IsChecked="{Binding Privacy.StartWithWindows}"
+                                          Margin="0,12,0,0" />
+                                <TextBlock Margin="0,4,0,0" FontSize="11" Foreground="#8A909C"
+                                           TextWrapping="Wrap"
+                                           Text="Lựa chọn được lưu ngay; cơ chế đăng ký tự khởi động sẽ được bật cùng bộ cài đặt." />
+                                <CheckBox Content="Cho phép kiểm tra cập nhật (tùy chọn)"
+                                          IsChecked="{Binding Privacy.UpdateCheckEnabled}"
+                                          Margin="0,6,0,0" />
+                                <TextBlock Margin="0,6,0,0" FontSize="11" Foreground="#8A909C"
+                                           TextWrapping="Wrap"
+                                           Text="Khi bật, EduFocus chỉ gửi số phiên bản ứng dụng tới GitHub Releases; GitHub thấy địa chỉ IP của bạn. Không có dữ liệu học tập, tên máy hay nội dung màn hình nào được gửi, và EduFocus không tự kiểm tra khi khởi động." />
+
+                                <Grid Margin="0,12,0,0">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="10" />
+                                        <ColumnDefinition Width="*" />
+                                    </Grid.ColumnDefinitions>
+                                    <StackPanel Grid.Column="0">
+                                        <TextBlock Text="Giao diện" FontSize="11.5" Foreground="#5B6270" />
+                                        <ComboBox SelectedIndex="{Binding Privacy.ThemeIndex, Mode=TwoWay}"
+                                                  Padding="8,6" Margin="0,4,0,0">
+                                            <ComboBoxItem Content="Tối (mặc định)" />
+                                            <ComboBoxItem Content="Sáng" />
+                                            <ComboBoxItem Content="Theo hệ thống" />
+                                        </ComboBox>
+                                    </StackPanel>
+                                    <StackPanel Grid.Column="2">
+                                        <TextBlock Text="Ngôn ngữ" FontSize="11.5" Foreground="#5B6270" />
+                                        <ComboBox SelectedIndex="{Binding Privacy.LanguageIndex, Mode=TwoWay}"
+                                                  Padding="8,6" Margin="0,4,0,0">
+                                            <ComboBoxItem Content="Tiếng Việt" />
+                                            <ComboBoxItem Content="English" />
+                                        </ComboBox>
+                                    </StackPanel>
+                                </Grid>
+                                <TextBlock Margin="0,6,0,0" FontSize="11" Foreground="#8A909C"
+                                           TextWrapping="Wrap"
+                                           Text="Theme và ngôn ngữ được lưu ngay; giao diện hiện tại chưa có bộ đổi theme/bản dịch động nên thay đổi sẽ hiển thị ở bản hỗ trợ." />
+
+                                <WrapPanel Margin="0,10,0,0">
+                                    <Button Content="Lưu cài đặt" Style="{StaticResource PrimaryButton}"
+                                            Margin="0,0,8,0" Command="{Binding Privacy.SaveCommand}"
+                                            IsEnabled="{Binding Privacy.IsNotBusy}" />
+                                    <Button Content="Làm mới" Style="{StaticResource SecondaryButton}"
+                                            Margin="0,0,0,0" Command="{Binding Privacy.RefreshCommand}"
+                                            IsEnabled="{Binding Privacy.IsNotBusy}" />
+                                </WrapPanel>
+
+                                <ProgressBar IsIndeterminate="True" Height="4" Margin="0,10,0,0"
+                                             Visibility="{Binding Privacy.IsBusy, Converter={StaticResource BoolToVisibility}}" />
+
+                                <TextBlock Text="{Binding Privacy.SettingsMessage}" Margin="0,8,0,0"
+                                           FontSize="12" TextWrapping="Wrap"
+                                           Visibility="{Binding Privacy.HasSettingsMessage, Converter={StaticResource BoolToVisibility}}">
+                                    <TextBlock.Style>
+                                        <Style TargetType="TextBlock">
+                                            <Setter Property="Foreground" Value="#5B6270" />
+                                            <Style.Triggers>
+                                                <DataTrigger Binding="{Binding Privacy.SettingsIsError}"
+                                                             Value="True">
+                                                    <Setter Property="Foreground" Value="#B42318" />
+                                                </DataTrigger>
+                                            </Style.Triggers>
+                                        </Style>
+                                    </TextBlock.Style>
+                                </TextBlock>
+
+                                <Border Margin="0,14,0,0" Padding="12" CornerRadius="8"
+                                        Background="#FDF3F2" BorderBrush="#F3C7C3" BorderThickness="1">
+                                    <StackPanel>
+                                        <TextBlock Text="Xóa toàn bộ dữ liệu học tập" FontSize="13"
+                                                   FontWeight="SemiBold" Foreground="#B42318" />
+                                        <TextBlock Margin="0,6,0,0" FontSize="11.5" Foreground="#5B6270"
+                                                   TextWrapping="Wrap"
+                                                   Text="Xóa vĩnh viễn các phiên đã kết thúc, mẫu hoạt động, sự kiện tập trung và lịch sử chặn trên máy này. Không thể hoàn tác. Phiên đang hoạt động, cài đặt, PIN và audit được giữ lại." />
+                                        <TextBlock Text="Nhập PIN phụ huynh" FontSize="11.5"
+                                                   Foreground="#5B6270" Margin="0,10,0,4" />
+                                        <PasswordBox x:Name="PrivacyDeletePinBox" MaxLength="8"
+                                                     Style="{StaticResource SecretBox}"
+                                                     PasswordChanged="PrivacyDeletePinBox_OnPasswordChanged" />
+                                        <TextBlock Text="Gõ XÓA để xác nhận" FontSize="11.5"
+                                                   Foreground="#5B6270" Margin="0,8,0,4" />
+                                        <TextBox Text="{Binding Privacy.DeleteConfirmation, UpdateSourceTrigger=PropertyChanged}"
+                                                 MaxLength="8" Padding="10,8" />
+                                        <Button Content="Xóa vĩnh viễn dữ liệu học tập"
+                                                Style="{StaticResource PrimaryButton}"
+                                                Background="#B42318"
+                                                Command="{Binding Privacy.DeleteAllCommand}"
+                                                IsEnabled="{Binding Privacy.IsNotBusy}" />
+                                        <ProgressBar IsIndeterminate="True" Height="4" Margin="0,10,0,0"
+                                                     Visibility="{Binding Privacy.IsDeleting, Converter={StaticResource BoolToVisibility}}" />
+                                        <TextBlock Text="{Binding Privacy.DeleteMessage}" Margin="0,8,0,0"
+                                                   FontSize="12" TextWrapping="Wrap"
+                                                   Visibility="{Binding Privacy.HasDeleteMessage, Converter={StaticResource BoolToVisibility}}">
+                                            <TextBlock.Style>
+                                                <Style TargetType="TextBlock">
+                                                    <Setter Property="Foreground" Value="#5B6270" />
+                                                    <Style.Triggers>
+                                                        <DataTrigger Binding="{Binding Privacy.DeleteIsError}"
+                                                                     Value="True">
+                                                            <Setter Property="Foreground" Value="#B42318" />
+                                                        </DataTrigger>
+                                                    </Style.Triggers>
+                                                </Style>
+                                            </TextBlock.Style>
+                                        </TextBlock>
+                                    </StackPanel>
+                                </Border>
+                            </StackPanel>
+                        </Border>
+
                         <Button Content="Đổi PIN phụ huynh" Style="{StaticResource PrimaryButton}"
                                 Command="{Binding OpenChangePinCommand}" />
                         <Button Content="Khóa phiên" Style="{StaticResource SecondaryButton}"

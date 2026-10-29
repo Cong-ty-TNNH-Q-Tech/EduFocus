@@ -69,10 +69,11 @@ public sealed class SchemaTests
             connection,
             "SELECT MigrationId FROM __EFMigrationsHistory ORDER BY MigrationId;");
 
-        migrations.Should().HaveCount(3)
+        migrations.Should().HaveCount(4)
             .And.Contain(migration => migration.EndsWith("_InitialEduFocusSchema"))
             .And.Contain(migration => migration.EndsWith("_AddOnboardingConsent"))
-            .And.Contain(migration => migration.EndsWith("_AddProtectionSource"));
+            .And.Contain(migration => migration.EndsWith("_AddProtectionSource"))
+            .And.Contain(migration => migration.EndsWith("_AddUpdateCheckOptIn"));
     }
 
     [Fact]
@@ -133,6 +134,8 @@ public sealed class SchemaTests
         settings["Theme"].DefaultValue.Should().Be("'dark'");
         settings["Language"].DefaultValue.Should().Be("'vi'");
         settings["SampleIntervalSeconds"].DefaultValue.Should().Be("15");
+        settings["UpdateCheckEnabled"].DefaultValue.Should().Be("0");
+        settings["UpdateCheckEnabled"].NotNull.Should().BeTrue();
         settings["PrivacyAcceptedAtUtc"].Type.Should().Be("TEXT(28)");
         settings["PrivacyAcceptedAtUtc"].NotNull.Should().BeFalse();
         settings["GuardianAcknowledgedAtUtc"].Type.Should().Be("TEXT(28)");

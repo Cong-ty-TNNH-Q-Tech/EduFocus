@@ -29,6 +29,7 @@ public sealed class AppSettings
         EventRetentionDays = 90;
         SessionRetentionDays = 365;
         StartWithWindows = true;
+        UpdateCheckEnabled = false;
         Theme = AppTheme.Dark;
         Language = AppLanguage.Vi;
         OnboardingCompleted = false;
@@ -72,6 +73,12 @@ public sealed class AppSettings
     public int SessionRetentionDays { get; private set; }
 
     public bool StartWithWindows { get; private set; }
+
+    /// <summary>
+    /// Opt-in for the manual update check. Disabled by default so the app never
+    /// contacts GitHub unless the parent explicitly enables it.
+    /// </summary>
+    public bool UpdateCheckEnabled { get; private set; }
 
     public AppTheme Theme { get; private set; }
 
@@ -222,6 +229,12 @@ public sealed class AppSettings
     public void UpdateStartWithWindows(bool startWithWindows, DateTime nowUtc)
     {
         StartWithWindows = startWithWindows;
+        Touch(nowUtc);
+    }
+
+    public void UpdateUpdateCheck(bool updateCheckEnabled, DateTime nowUtc)
+    {
+        UpdateCheckEnabled = updateCheckEnabled;
         Touch(nowUtc);
     }
 

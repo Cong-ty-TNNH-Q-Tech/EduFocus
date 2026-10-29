@@ -25,6 +25,7 @@ public class AppSettingsTests
         settings.EventRetentionDays.Should().Be(90);
         settings.SessionRetentionDays.Should().Be(365);
         settings.StartWithWindows.Should().BeTrue();
+        settings.UpdateCheckEnabled.Should().BeFalse();
         settings.Theme.Should().Be(AppTheme.Dark);
         settings.Language.Should().Be(AppLanguage.Vi);
         settings.OnboardingCompleted.Should().BeFalse();
@@ -35,6 +36,21 @@ public class AppSettingsTests
         settings.LastCleanShutdownAtUtc.Should().BeNull();
         settings.CreatedAtUtc.Should().Be(Now);
         settings.UpdatedAtUtc.Should().Be(Now);
+    }
+
+    [Fact]
+    public void UpdateCheck_is_opt_in_and_can_be_toggled()
+    {
+        var settings = AppSettings.CreateDefault(Now);
+
+        settings.UpdateUpdateCheck(true, Now.AddMinutes(1));
+
+        settings.UpdateCheckEnabled.Should().BeTrue();
+        settings.UpdatedAtUtc.Should().Be(Now.AddMinutes(1));
+
+        settings.UpdateUpdateCheck(false, Now.AddMinutes(2));
+
+        settings.UpdateCheckEnabled.Should().BeFalse();
     }
 
     [Fact]

@@ -877,6 +877,27 @@ AttentionPercent =
   trường số của khuôn mặt (confidence, yaw/pitch, số mắt); không chứa pixel, ảnh hay landmark thô. Frame
   được dispose trước khi sample được phát cho subscriber (issue #31).
 
+### 8.6. Settings, update check & xóa dữ liệu (issue #38)
+
+- `IPrivacySettingsUseCase`/`PrivacySettingsService` đọc snapshot cho thẻ **Dữ liệu & quyền riêng tư**:
+  `AppSettings`, `PrivacyDataCounts` và dung lượng file DB (`page_count * page_size`). Save gọi
+  `ParentSessionState.EnsureAuthorized`, validate trong domain, cập nhật từng nhóm setting, rồi ghi một audit
+  `SettingsChanged` với metadata `{"changed":[...]}` liệt kê nhóm thực sự đổi. Save không đổi gì thì không ghi
+  audit; giá trị ngoài biên ném `ArgumentOutOfRangeException` trước khi chạm DB.
+- Monitoring/sample interval áp dụng ngay cho phiên đang chạy qua `IActivityUseCase.RefreshSettingsAsync`;
+  ngưỡng attention được đọc khi phiên kế tiếp bắt đầu; camera đọc `CameraDeviceId` ở lần mở sau. Theme/language
+  chỉ được lưu (runtime theming/localization chưa triển khai) và UI ghi rõ. Tắt monitoring không đổi
+  `ProtectionEnabled`/`ProtectionSource` nên web/app blocking vẫn chạy.
+- Update check mặc định tắt (`AppSettings.UpdateCheckEnabled = false`, migration `AddUpdateCheckOptIn`).
+  Không còn lời gọi lúc khởi động; `UpdateViewModel.CheckForUpdateCommand` đọc setting và từ chối gọi mạng khi
+  tắt. `UpdaterService` chỉ GET GitHub Releases API với `User-Agent: EduFocus/{version}`; UI nói rõ GitHub thấy
+  IP và không có dữ liệu học tập/tên máy/nội dung màn hình được gửi.
+- `IDataDeletionUseCase`/`DataDeletionService` xác thực xác nhận trước (`XÓA`) rồi mới kiểm tra PIN qua
+  `IParentAuthUseCase.VerifyPinAsync` (dùng chung lockout). `SqlitePrivacyDataRepository` xóa theo batch 500
+  đúng thứ tự sample → event → blocked attempt → session không `Active`, không chọn dữ liệu của phiên đang
+  chạy, chạy `VACUUM` best-effort, ghi audit `DataDeleted` kèm số bản ghi và trạng thái `Incomplete` nếu có
+  bảng lỗi. Hủy giữa chừng hoặc lockout ném lỗi/trả trạng thái thất bại và không ghi audit thành công.
+
 ---
 
 ## 9. Parent Authentication & State
@@ -953,7 +974,7 @@ Trạng thái lưu trong `AppSettings.ProtectionEnabled`; session active lưu tr
 - Retention job chạy lúc khởi động và mỗi ngày khi local time ≥ 03:00; xóa theo batch 500 để tránh khóa DB lâu, bỏ qua session `Active`/event còn mở và chạy `PRAGMA incremental_vacuum` sau mỗi pass.
 - Backup trước migration schema; giữ 3 bản gần nhất. Không migrate dữ liệu từ 1.x.
 - Không lưu ảnh/video/audio.
-- Không network call chứa dữ liệu học tập. Update check nếu có phải opt-in, chỉ gửi version/OS và có thể tắt; server vẫn thấy IP và điều này phải được thông báo.
+- Không network call chứa dữ liệu học tập. Update check mặc định tắt, chỉ chạy khi phụ huynh bật; request chỉ gồm `User-Agent: EduFocus/{version}` tới GitHub Releases API (GitHub thấy IP), không tự chạy lúc khởi động. Xóa toàn bộ dữ liệu theo yêu cầu dùng PIN + `XÓA` và chỉ xóa bản ghi chi tiết/session đã kết thúc, giữ settings, PIN, audit và phiên đang chạy.
 
 ---
 

@@ -21,6 +21,13 @@ public interface IActivityUseCase
     Task StopAsync(CancellationToken cancellationToken = default);
 
     /// <summary>
+    /// Re-reads monitoring coverage and the sample cadence from AppSettings so
+    /// a Parent Mode change applies to the running session. A read failure
+    /// keeps the previous values.
+    /// </summary>
+    Task RefreshSettingsAsync(CancellationToken cancellationToken = default);
+
+    /// <summary>
     /// Captures and persists one sample when the current cadence is due.
     /// Returns true when a row was written. Exposed for deterministic tests and
     /// for hosts that do not run the background loop.

@@ -87,6 +87,7 @@ Singleton — ứng dụng đảm bảo chỉ có 1 bản ghi với `Id` cố đ
 | `EventRetentionDays` | INTEGER | NOT NULL, default 90 | Giữ AttentionEvent/BlockedAttempt |
 | `SessionRetentionDays` | INTEGER | NOT NULL, default 365 | Giữ StudySession |
 | `StartWithWindows` | INTEGER | NOT NULL, default 1 | Auto-start |
+| `UpdateCheckEnabled` | INTEGER | NOT NULL, default 0 | Opt-in kiểm tra phiên bản qua GitHub Releases (migration `AddUpdateCheckOptIn`) |
 | `Theme` | TEXT(16) | NOT NULL, default `'dark'` | `dark` / `light` / `system` |
 | `Language` | TEXT(8) | NOT NULL, default `'vi'` | `vi` / `en` (dự kiến) |
 | `OnboardingCompleted` | INTEGER | NOT NULL, default 0 | Chỉ `1` khi đã có PIN và đủ hai xác nhận quyền riêng tư |
@@ -524,6 +525,14 @@ ORDER BY StartedAtUtc;
 - Ghi audit `RetentionApplied` (tên cũ trong tài liệu: "RetentionCompleted") với số bản ghi từng bảng và danh sách bảng lỗi; lỗi một bảng không dừng các bảng khác và không báo thành công giả.
 - `AuditLogs` dùng cửa sổ cố định 365 ngày (`RetentionOptions.AuditRetentionDays`) vì `AppSettings` không có knob riêng.
 - Retention chỉ xóa bản ghi chi tiết; `StudySessions` (summary) được giữ đến `SessionRetentionDays`, nên xóa `ActivitySamples`/`AttentionEvents` không làm mất báo cáo dài hạn.
+
+**Xóa toàn bộ theo yêu cầu (issue #38)**
+- `SqlitePrivacyDataRepository` đọc `PrivacyDataCounts` + dung lượng file DB (`page_count * page_size`) và xóa theo batch 500 (`DataDeletionOptions.BatchSize`).
+- Batch dùng `DELETE ... WHERE Id IN (SELECT Id FROM ... LIMIT @batch)` vì build SQLite này không bật `DELETE ... LIMIT`; lặp đến khi trả 0.
+- Thứ tự: `ActivitySamples` → `AttentionEvents` → `BlockedAttempts` → `StudySessions` (chỉ `Status <> 'Active'`); sample/event của session `Active` không bao giờ bị chọn. `BlockedAttempts.SessionId` đặt `NULL` khi session bị xóa.
+- Không xóa `AppSettings`, `ParentCredentials`, `AuditLogs` hay dữ liệu của phiên đang chạy; không thể hoàn tác.
+- Sau khi xóa chạy `VACUUM` best-effort: lỗi vacuum chỉ ghi warning, không biến thao tác thành thất bại.
+- Ghi audit `DataDeleted` với số bản ghi từng bảng; khi một bảng lỗi, các bảng khác vẫn tiếp tục, audit ghi `Incomplete` kèm danh sách bảng lỗi và UI báo lỗi (không báo thành công giả). Hủy giữa chừng không ghi audit thành công.
 
 ---
 

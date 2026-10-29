@@ -18,10 +18,11 @@ public sealed class InitializationTests
         var result = await db.CreateInitializer().InitializeAsync();
 
         result.WasCreated.Should().BeTrue();
-        result.AppliedMigrations.Should().HaveCount(3)
+        result.AppliedMigrations.Should().HaveCount(4)
             .And.Contain(migration => migration.EndsWith("_InitialEduFocusSchema"))
             .And.Contain(migration => migration.EndsWith("_AddOnboardingConsent"))
-            .And.Contain(migration => migration.EndsWith("_AddProtectionSource"));
+            .And.Contain(migration => migration.EndsWith("_AddProtectionSource"))
+            .And.Contain(migration => migration.EndsWith("_AddUpdateCheckOptIn"));
         result.BackupPath.Should().BeNull();
         File.Exists(db.DatabasePath).Should().BeTrue();
         db.Logger.Errors.Should().BeEmpty();
@@ -147,8 +148,8 @@ public sealed class InitializationTests
 
         var result = await db.CreateInitializer().InitializeAsync();
 
-        result.AppliedMigrations.Should().HaveCount(2);
-        result.AppliedMigrations.Last().Should().EndWith("_AddProtectionSource");
+        result.AppliedMigrations.Should().HaveCount(3);
+        result.AppliedMigrations.Last().Should().EndWith("_AddUpdateCheckOptIn");
         result.BackupPath.Should().NotBeNullOrEmpty();
         File.Exists(result.BackupPath!).Should().BeTrue();
 
@@ -157,6 +158,7 @@ public sealed class InitializationTests
         TempDatabase.Scalar(upgraded, "SELECT ProtectionSource FROM AppSettings;").Should().Be("Manual");
         TempDatabase.Scalar(upgraded, "SELECT PrivacyAcceptedAtUtc FROM AppSettings;").Should().Be(DBNull.Value);
         TempDatabase.Scalar(upgraded, "SELECT GuardianAcknowledgedAtUtc FROM AppSettings;").Should().Be(DBNull.Value);
+        TempDatabase.Scalar(upgraded, "SELECT UpdateCheckEnabled FROM AppSettings;").Should().Be(0L);
     }
 
     [Fact]

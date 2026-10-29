@@ -26,7 +26,7 @@ EduFocus là ứng dụng desktop **local-first** dành cho phụ huynh giám s�
 
 ### Cam kết dữ liệu
 
-- **Không gửi dữ liệu lên cloud/server.** Không telemetry mặc định. Update check (nếu có) phải opt-in, chỉ gửi version/OS; server vẫn có thể thấy IP.
+- **Không gửi dữ liệu lên cloud/server.** Không telemetry mặc định. Update check mặc định tắt (`AppSettings.UpdateCheckEnabled = 0`), chỉ chạy khi phụ huynh bật trong Parent Mode và không tự kiểm tra lúc khởi động. Request chỉ gồm `User-Agent: EduFocus/{version}` tới GitHub Releases API — không có dữ liệu học tập, tên máy, danh sách process hay nội dung màn hình — nhưng GitHub vẫn thấy IP của máy, và UI nói rõ điều này.
 - **Không lưu ảnh, video, âm thanh hoặc frame webcam.**
 - **Không lưu nội dung trang, tin nhắn, clipboard hay lịch sử duyệt web đầy đủ.**
 - **Không nhận diện danh tính/khuôn mặt.**
@@ -50,6 +50,8 @@ EduFocus là ứng dụng desktop **local-first** dành cho phụ huynh giám s�
 - Process watcher chỉ xử lý process có cửa sổ chính, khớp chính xác tên đã chuẩn hóa và không nằm trong allowlist; PID ≤ 4, chính EduFocus và process hệ thống quan trọng bị bỏ qua. Trước khi kill, watcher gửi `WM_CLOSE` và chờ tối đa 2 giây; quá hạn mới kill process tree. `ProcessBlockedObservation` chỉ gồm tên process, PID, kết quả và cảnh báo; không ghi window title, path hay nội dung tài liệu. Log không ghi danh sách process đang chạy.
 - Retention mặc định: sample 30 ngày, event/blocked attempt 90 ngày, session summary/audit 365 ngày.
 - Báo cáo CSV do phụ huynh chủ động xuất từ Parent Mode được ghi vào `%LocalAppData%\EduFocus\exports` (ngoài ACL của `%ProgramData%`), dùng UTF-8 có BOM và không ghi đè file cũ. File chỉ chứa tổng hợp session, app name + domain đã làm sạch, attention state/confidence và thời lượng; không có PIN/recovery code/token, window title, URL đầy đủ, note hay dữ liệu camera. Ô bắt đầu bằng `=`, `+`, `-`, `@` được escape trước khi mở bằng Excel (chống formula injection), và UI nhắc phụ huynh bảo vệ file vì đây là dữ liệu học tập nhạy cảm; ứng dụng không tự gửi file đi đâu.
+- Cấu hình quyền riêng tư (monitoring, `MonitorOnlyDuringClasses`, ngưỡng distracted/absent, sample interval, ba mốc retention, camera, StartWithWindows, update check, theme/language) chỉ sửa được trong Parent Mode đã xác thực qua `IParentAuthorizer`. Mỗi lần lưu ghi audit `SettingsChanged` chỉ chứa tên nhóm thay đổi (không chứa giá trị cấu hình hay secret); lưu không đổi gì thì không ghi audit. Giá trị ngoài biên bị domain từ chối. Tắt monitoring chỉ dừng camera/attention — web/app blocking vẫn theo `ProtectionEnabled` và không thể tắt nếu không qua PIN.
+- Xóa toàn bộ dữ liệu yêu cầu PIN đúng **và** gõ đúng chữ `XÓA`; sai xác nhận bị từ chối trước khi kiểm tra PIN nên không tiêu tốn lượt thử. Thao tác không thể hoàn tác: xóa sample → event → blocked attempt → session không `Active` theo batch 500, giữ nguyên settings, PIN, audit và dữ liệu phiên đang chạy, chạy `VACUUM` best-effort rồi ghi audit `DataDeleted`. Nếu một bảng lỗi, các bảng khác vẫn tiếp tục, audit ghi `Incomplete` kèm tên bảng và UI báo lỗi thay vì báo thành công giả; hủy giữa chừng hoặc bị lockout không ghi audit thành công. File CSV đã xuất nằm ngoài DB nên không bị xóa.
 
 ### Giới hạn đã biết (không phải lỗ hổng)
 

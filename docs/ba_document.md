@@ -205,8 +205,8 @@ EduFocus cung cấp một lớp bảo vệ và quan sát **tối thiểu, minh b
   - Attention event / blocked attempt: 90 ngày.
   - Session summary: 365 ngày.
   - Audit log: 365 ngày.
-- Phụ huynh có thể xóa dữ liệu báo cáo theo khoảng thời gian; thao tác xóa không xóa PIN/credential trừ khi chọn reset ứng dụng.
-- Không gửi dữ liệu học tập ra ngoài. Nếu có kiểm tra cập nhật, chỉ gửi phiên bản/OS, có thể tắt; server vẫn có thể thấy IP.
+- Phụ huynh có thể xóa toàn bộ dữ liệu báo cáo bằng PIN + gõ `XÓA`; thao tác không thể hoàn tác nhưng giữ PIN/credential, settings, audit và dữ liệu phiên đang chạy.
+- Không gửi dữ liệu học tập ra ngoài. Kiểm tra cập nhật mặc định tắt; khi bật, chỉ gửi số phiên bản tới GitHub Releases và GitHub vẫn có thể thấy IP.
 
 ### 6.2. Tính năng mở rộng (Post-MVP)
 

@@ -122,6 +122,25 @@ public class AttentionMonitorServiceTests
     }
 
     [Fact]
+    public async Task Thresholds_are_loaded_from_settings_when_the_session_starts()
+    {
+        var settings = AppSettings.CreateDefault(Start.UtcDateTime);
+        settings.UpdateThresholds(5, 5, 15, Start.UtcDateTime);
+
+        await using var h = new Harness(settings: settings);
+        await h.StartAsync();
+        await h.SampleAsync(0, Frontal);
+        await h.SampleAsync(1, Frontal);
+        await h.SampleAsync(2, Frontal);
+
+        for (var second = 3; second <= 15; second++)
+            await h.SampleAsync(second, Turned);
+
+        h.Events.Events.Should().Contain(x => x.State == AttentionState.Distracted);
+        h.Session.DistractedSeconds.Should().BeGreaterThan(0);
+    }
+
+    [Fact]
     public async Task Drowsy_closes_focus_after_the_drowsy_threshold()
     {
         await using var h = new Harness();
@@ -415,6 +434,7 @@ public class AttentionMonitorServiceTests
                 new FakeAttentionEventRepository(),
                 new FakeStudySessionRepository(),
                 new FakeAttentionPipelineUseCase(),
+                new FakeAppSettingsRepository(),
                 new RecordingLogger(),
                 new ManualTimeProvider(Start),
                 options,
@@ -445,8 +465,10 @@ public class AttentionMonitorServiceTests
     {
         public Harness(
             AttentionMonitoringOptions? options = null,
-            AttentionThresholds? thresholds = null)
+            AttentionThresholds? thresholds = null,
+            AppSettings? settings = null)
         {
+            Settings.Stored = settings;
             Session = StudySession.Start(
                 Start.UtcDateTime,
                 new DateOnly(2026, 10, 30),
@@ -458,11 +480,14 @@ public class AttentionMonitorServiceTests
                 Events,
                 Sessions,
                 Pipeline,
+                Settings,
                 Logger,
                 Clock,
                 options ?? AttentionMonitoringOptions.Default,
                 thresholds ?? new AttentionThresholds());
         }
+
+        public FakeAppSettingsRepository Settings { get; } = new();
 
         public FakeAttentionEventRepository Events { get; } = new();
 

@@ -30,6 +30,14 @@ internal sealed class FakeActivityUseCase : IActivityUseCase
         return Task.CompletedTask;
     }
 
+    public int RefreshSettingsCalls { get; private set; }
+
+    public Task RefreshSettingsAsync(CancellationToken cancellationToken = default)
+    {
+        RefreshSettingsCalls++;
+        return Task.CompletedTask;
+    }
+
     public Task<bool> SampleOnceAsync(CancellationToken cancellationToken = default) =>
         Task.FromResult(false);
 }

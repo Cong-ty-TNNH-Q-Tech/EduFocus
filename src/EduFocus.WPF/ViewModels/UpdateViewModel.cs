@@ -2,6 +2,7 @@ using System;
 using System.Threading.Tasks;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
+using EduFocus.Ports.Outbound.Persistence;
 using EduFocus.WPF.Services;
 
 namespace EduFocus.WPF.ViewModels;
@@ -9,6 +10,7 @@ namespace EduFocus.WPF.ViewModels;
 public partial class UpdateViewModel : ObservableObject
 {
     private readonly UpdaterService _updater;
+    private readonly IAppSettingsRepository _settings;
 
     [ObservableProperty] private bool _isChecking;
     [ObservableProperty] private bool _isUpdateAvailable;
@@ -22,9 +24,10 @@ public partial class UpdateViewModel : ObservableObject
 
     public string CurrentVersion => UpdaterService.CurrentVersion;
 
-    public UpdateViewModel(UpdaterService updater)
+    public UpdateViewModel(UpdaterService updater, IAppSettingsRepository settings)
     {
         _updater = updater;
+        _settings = settings;
     }
 
     [RelayCommand]
@@ -35,6 +38,13 @@ public partial class UpdateViewModel : ObservableObject
         StatusMessage   = "Đang kiểm tra cập nhật...";
         try
         {
+            var settings = await _settings.GetAsync();
+            if (settings?.UpdateCheckEnabled != true)
+            {
+                StatusMessage = "Kiểm tra cập nhật đang tắt. Bật trong Dữ liệu & Quyền riêng tư.";
+                return;
+            }
+
             _pendingRelease = await _updater.CheckForUpdateAsync();
             if (_pendingRelease != null)
             {

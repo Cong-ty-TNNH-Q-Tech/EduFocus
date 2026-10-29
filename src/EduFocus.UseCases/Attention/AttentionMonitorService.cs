@@ -27,10 +27,12 @@ public sealed class AttentionMonitorService : IAttentionMonitorUseCase, IAsyncDi
     private readonly IAttentionEventRepository _events;
     private readonly IStudySessionRepository _sessions;
     private readonly IAttentionPipelineUseCase _pipeline;
+    private readonly IAppSettingsRepository _settings;
     private readonly IAppLogger _logger;
     private readonly TimeProvider _timeProvider;
     private readonly AttentionMonitoringOptions _options;
-    private readonly AttentionThresholds _thresholds;
+    private readonly AttentionThresholds _baseThresholds;
+    private AttentionThresholds _activeThresholds;
     private readonly SemaphoreSlim _lifecycleGate = new(1, 1);
 
     private Channel<WorkItem>? _queue;
@@ -50,6 +52,7 @@ public sealed class AttentionMonitorService : IAttentionMonitorUseCase, IAsyncDi
         IAttentionEventRepository events,
         IStudySessionRepository sessions,
         IAttentionPipelineUseCase pipeline,
+        IAppSettingsRepository settings,
         IAppLogger logger,
         TimeProvider timeProvider,
         AttentionMonitoringOptions options,
@@ -58,9 +61,11 @@ public sealed class AttentionMonitorService : IAttentionMonitorUseCase, IAsyncDi
         _events = events ?? throw new ArgumentNullException(nameof(events));
         _sessions = sessions ?? throw new ArgumentNullException(nameof(sessions));
         _pipeline = pipeline ?? throw new ArgumentNullException(nameof(pipeline));
+        _settings = settings ?? throw new ArgumentNullException(nameof(settings));
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
         _timeProvider = timeProvider ?? throw new ArgumentNullException(nameof(timeProvider));
-        _thresholds = thresholds ?? throw new ArgumentNullException(nameof(thresholds));
+        _baseThresholds = thresholds ?? throw new ArgumentNullException(nameof(thresholds));
+        _activeThresholds = _baseThresholds;
 
         if (options is null)
             throw new ArgumentNullException(nameof(options));
@@ -115,8 +120,11 @@ public sealed class AttentionMonitorService : IAttentionMonitorUseCase, IAsyncDi
         {
             await StopCoreAsync().ConfigureAwait(false);
 
+            var thresholds = await LoadThresholdsAsync(cancellationToken).ConfigureAwait(false);
+
             _sessionId = sessionId;
-            _machine = new AttentionStateMachine(_thresholds);
+            _activeThresholds = thresholds;
+            _machine = new AttentionStateMachine(thresholds);
             _window = new AttentionStateWindow(
                 _options.WindowDuration,
                 _options.MinimumWindowSamples,
@@ -225,6 +233,7 @@ public sealed class AttentionMonitorService : IAttentionMonitorUseCase, IAsyncDi
         _sessionId = null;
         _machine = null;
         _window = null;
+        _activeThresholds = _baseThresholds;
         _openEvent = null;
         _persistedState = null;
         _lastSampleAt = null;
@@ -289,7 +298,7 @@ public sealed class AttentionMonitorService : IAttentionMonitorUseCase, IAsyncDi
             return false;
         }
 
-        var classification = AttentionClassifier.Classify(observation, sample.Luminance, _thresholds);
+        var classification = AttentionClassifier.Classify(observation, sample.Luminance, _activeThresholds);
         var smoothed = window.Observe(classification, sampledAt);
 
         if (smoothed is null)
@@ -486,6 +495,33 @@ public sealed class AttentionMonitorService : IAttentionMonitorUseCase, IAsyncDi
         _queue?.Writer.TryComplete();
 
         _logger.Warning(LogCategories.Attention, SessionEndedMessage);
+    }
+
+    private async Task<AttentionThresholds> LoadThresholdsAsync(CancellationToken cancellationToken)
+    {
+        try
+        {
+            var settings = await _settings.GetAsync(cancellationToken).ConfigureAwait(false);
+            if (settings is null)
+                return _baseThresholds;
+
+            return _baseThresholds with
+            {
+                DistractedAfterSeconds = settings.DistractionThresholdSeconds,
+                AbsentAfterSeconds = settings.AbsenceThresholdSeconds
+            };
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            _logger.Warning(
+                LogCategories.Attention,
+                $"Could not read attention thresholds; using defaults ({ex.GetType().Name}).");
+            return _baseThresholds;
+        }
     }
 
     private int TakeElapsedSeconds(DateTimeOffset sampledAt)

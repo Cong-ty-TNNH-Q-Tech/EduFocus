@@ -39,6 +39,7 @@ public partial class ParentModeViewModel : ObservableObject
     private readonly CameraStatusViewModel _camera;
     private readonly DashboardViewModel _dashboard;
     private readonly ReportViewModel _report;
+    private readonly PrivacyViewModel _privacy;
     private readonly DatabaseBootstrapper _database;
     private readonly IAppLogger _logger;
     private readonly TimeProvider _timeProvider;
@@ -82,6 +83,8 @@ public partial class ParentModeViewModel : ObservableObject
 
     public ReportViewModel Report => _report;
 
+    public PrivacyViewModel Privacy => _privacy;
+
     public event EventHandler? PasswordBoxesShouldClear;
     public event EventHandler? CloseRequested;
 
@@ -93,6 +96,7 @@ public partial class ParentModeViewModel : ObservableObject
         CameraStatusViewModel camera,
         DashboardViewModel dashboard,
         ReportViewModel report,
+        PrivacyViewModel privacy,
         DatabaseBootstrapper database,
         IAppLogger logger,
         TimeProvider timeProvider)
@@ -104,6 +108,7 @@ public partial class ParentModeViewModel : ObservableObject
         _camera = camera ?? throw new ArgumentNullException(nameof(camera));
         _dashboard = dashboard ?? throw new ArgumentNullException(nameof(dashboard));
         _report = report ?? throw new ArgumentNullException(nameof(report));
+        _privacy = privacy ?? throw new ArgumentNullException(nameof(privacy));
         _database = database ?? throw new ArgumentNullException(nameof(database));
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
         _timeProvider = timeProvider ?? throw new ArgumentNullException(nameof(timeProvider));
@@ -148,6 +153,7 @@ public partial class ParentModeViewModel : ObservableObject
                 await RefreshCameraAsync();
                 await _dashboard.RefreshAsync();
                 await _report.RefreshAsync();
+                await _privacy.RefreshAsync();
                 _ticksSinceDashboardRefresh = 0;
                 View = ParentModeView.Management;
                 SetStatus("Parent Mode đang mở. Phiên tự khóa sau 5 phút không hoạt động.", false);
@@ -484,6 +490,7 @@ public partial class ParentModeViewModel : ObservableObject
                 await RefreshCameraAsync();
                 await _dashboard.RefreshAsync();
                 await _report.RefreshAsync();
+                await _privacy.RefreshAsync();
                 _ticksSinceDashboardRefresh = 0;
                 View = ParentModeView.Management;
                 SetStatus("Đã mở Parent Mode. Phiên tự khóa sau 5 phút không hoạt động.", false);

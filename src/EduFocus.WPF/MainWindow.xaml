@@ -112,6 +112,10 @@
                                    VerticalAlignment="Center" FontSize="13" Foreground="#5B6270" />
                     </StackPanel>
 
+                    <TextBlock Margin="0,8,0,0" FontSize="11.5" Foreground="#8A909C"
+                               TextWrapping="Wrap"
+                               Text="Kiểm tra cập nhật chỉ chạy khi bạn bật trong Dữ liệu &amp; Quyền riêng tư. Khi chạy, EduFocus gửi phiên bản ứng dụng tới GitHub; GitHub thấy địa chỉ IP của bạn. Không có dữ liệu học tập nào được gửi." />
+
                     <StackPanel Margin="0,18,0,0"
                                 Visibility="{Binding Update.IsUpdateAvailable, Converter={StaticResource BoolToVisibility}}">
                         <TextBlock FontSize="14" FontWeight="SemiBold" Foreground="#1F2430">

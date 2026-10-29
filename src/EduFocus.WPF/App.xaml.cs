@@ -16,6 +16,7 @@ using EduFocus.UseCases.Auth;
 using EduFocus.UseCases.Blocking;
 using EduFocus.UseCases.Lifecycle;
 using EduFocus.UseCases.Onboarding;
+using EduFocus.UseCases.Privacy;
 using EduFocus.UseCases.Protection;
 using EduFocus.UseCases.Reports;
 using EduFocus.UseCases.Retention;
@@ -113,9 +114,6 @@ public partial class App : Application
         Services.GetRequiredService<TrayIconService>().Start();
         scheduleScheduler.Start();
         Services.GetRequiredService<RetentionSchedulerService>().Start();
-
-        // Background update check — non-blocking, silent on failure
-        _ = Services.GetRequiredService<MainWindowViewModel>().Update.CheckForUpdateAsync();
     }
 
     private static void ConfigureServices(IServiceCollection services)
@@ -134,6 +132,7 @@ public partial class App : Application
         services.AddSingleton<IBlockedAttemptRepository, SqliteBlockedAttemptRepository>();
         services.AddSingleton<IActivitySampleRepository, SqliteActivitySampleRepository>();
         services.AddSingleton<IRetentionRepository, SqliteRetentionRepository>();
+        services.AddSingleton<IPrivacyDataRepository, SqlitePrivacyDataRepository>();
         services.AddSingleton<ISystemPowerEventPort, WindowsSystemPowerEventPort>();
         services.AddSingleton(new StudySessionHeartbeatOptions());
         services.AddSingleton<IStudySessionHeartbeatUseCase, StudySessionHeartbeatService>();
@@ -178,6 +177,9 @@ public partial class App : Application
         services.AddSingleton<IScheduleUseCase, ScheduleService>();
         services.AddSingleton(new RetentionOptions());
         services.AddSingleton<IRetentionUseCase, RetentionService>();
+        services.AddSingleton(new DataDeletionOptions());
+        services.AddSingleton<IPrivacySettingsUseCase, PrivacySettingsService>();
+        services.AddSingleton<IDataDeletionUseCase, DataDeletionService>();
         services.AddSingleton<IAppLifecycleUseCase, AppLifecycleService>();
         services.AddSingleton<DatabaseBootstrapper>();
 
@@ -189,6 +191,7 @@ public partial class App : Application
         services.AddSingleton<ReportViewModel>();
         services.AddSingleton<ScheduleViewModel>();
         services.AddSingleton<BlocklistViewModel>();
+        services.AddSingleton<PrivacyViewModel>();
         services.AddSingleton<MainWindowViewModel>();
         services.AddSingleton<TrayIconService>();
         services.AddSingleton<ScheduleSchedulerService>();

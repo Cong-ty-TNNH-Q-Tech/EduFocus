@@ -33,6 +33,7 @@ public sealed class AppSettingsRepositoryTests
         settings.RecordPrivacyConsent(Now.AddMinutes(1));
         settings.UpdateMonitoring(false, true, Now.AddMinutes(2));
         settings.UpdateStartWithWindows(false, Now.AddMinutes(3));
+        settings.UpdateUpdateCheck(true, Now.AddMinutes(3));
         settings.CompleteOnboarding(Now.AddMinutes(4));
         await repository.UpdateAsync(settings);
 
@@ -45,6 +46,7 @@ public sealed class AppSettingsRepositoryTests
         stored.MonitoringEnabled.Should().BeFalse();
         stored.MonitorOnlyDuringClasses.Should().BeTrue();
         stored.StartWithWindows.Should().BeFalse();
+        stored.UpdateCheckEnabled.Should().BeTrue();
         stored.OnboardingCompleted.Should().BeTrue();
         stored.UpdatedAtUtc.Should().Be(Now.AddMinutes(4));
     }
