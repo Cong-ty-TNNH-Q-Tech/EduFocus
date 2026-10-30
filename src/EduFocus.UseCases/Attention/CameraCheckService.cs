@@ -74,11 +74,17 @@ public sealed class CameraCheckService : ICameraCheckUseCase
                 {
                     for (var sample = 0; sample < _options.SampleCount; sample++)
                     {
+                        if (_pipeline.IsRunning)
+                            return Unavailable(CameraHealthProblem.MonitoringActive);
+
                         if (sample > 0)
                         {
                             await Task.Delay(_options.SampleInterval, _timeProvider, cancellationToken)
                                 .ConfigureAwait(false);
                         }
+
+                        if (_pipeline.IsRunning)
+                            return Unavailable(CameraHealthProblem.MonitoringActive);
 
                         attemptedFrames++;
                         var capture = await _camera.CaptureAsync(cancellationToken).ConfigureAwait(false);
@@ -145,6 +151,9 @@ public sealed class CameraCheckService : ICameraCheckUseCase
 
     private async Task StopCameraAsync()
     {
+        if (_pipeline.IsRunning)
+            return;
+
         try
         {
             await _camera.StopAsync(CancellationToken.None).ConfigureAwait(false);

@@ -302,8 +302,18 @@ public sealed class AttentionMonitorService : IAttentionMonitorUseCase, IAsyncDi
 
         var sampledAt = sample.SampledAtUtc;
 
+        if (_lastSampleAt is { } last && sampledAt - last > _options.MaxSampleGap)
+        {
+            await CloseOpenEventAsync(last).ConfigureAwait(false);
+            _persistedState = null;
+            _pendingSeconds = 0;
+            window.Reset();
+            machine.ResetCandidate();
+        }
+
         if (sample.CameraFailure != CameraFailureKind.None)
         {
+            window.Reset();
             var camera = new AttentionClassification(
                 RawAttentionState.CameraUnavailable,
                 Confidence: 0,
@@ -449,11 +459,15 @@ public sealed class AttentionMonitorService : IAttentionMonitorUseCase, IAsyncDi
         {
             try
             {
-                var closeAt = sampledAt.UtcDateTime < _openEvent.StartedAtUtc
-                    ? _openEvent.StartedAtUtc
-                    : sampledAt.UtcDateTime;
+                if (_openEvent.IsOpen)
+                {
+                    var closeAt = sampledAt.UtcDateTime < _openEvent.StartedAtUtc
+                        ? _openEvent.StartedAtUtc
+                        : sampledAt.UtcDateTime;
 
-                _openEvent.Close(closeAt);
+                    _openEvent.Close(closeAt);
+                }
+
                 await _events.UpdateAsync(_openEvent, CancellationToken.None).ConfigureAwait(false);
                 _openEvent = null;
             }
@@ -489,19 +503,22 @@ public sealed class AttentionMonitorService : IAttentionMonitorUseCase, IAsyncDi
     private async Task CloseOpenEventAsync(DateTimeOffset endedAt)
     {
         var open = _openEvent;
-        _openEvent = null;
-
         if (open is null)
             return;
 
         try
         {
-            var closeAt = endedAt.UtcDateTime < open.StartedAtUtc
-                ? open.StartedAtUtc
-                : endedAt.UtcDateTime;
+            if (open.IsOpen)
+            {
+                var closeAt = endedAt.UtcDateTime < open.StartedAtUtc
+                    ? open.StartedAtUtc
+                    : endedAt.UtcDateTime;
 
-            open.Close(closeAt);
+                open.Close(closeAt);
+            }
+
             await _events.UpdateAsync(open, CancellationToken.None).ConfigureAwait(false);
+            _openEvent = null;
         }
         catch (Exception ex)
         {

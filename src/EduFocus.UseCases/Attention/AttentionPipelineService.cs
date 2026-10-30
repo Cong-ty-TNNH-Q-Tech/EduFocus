@@ -66,6 +66,9 @@ public sealed class AttentionPipelineService : IAttentionPipelineUseCase, IAsync
             await StopCoreAsync().ConfigureAwait(false);
 
             _cameraOwned = true;
+            _lastCameraFailure = CameraFailureKind.None;
+            _lastAnalysisError = null;
+            _running = true;
             CameraOpenResult open;
 
             try
@@ -84,10 +87,6 @@ public sealed class AttentionPipelineService : IAttentionPipelineUseCase, IAsync
                     LogCategories.Attention,
                     $"Attention sampling started without a camera: {open.Failure}.");
             }
-
-            _lastCameraFailure = CameraFailureKind.None;
-            _lastAnalysisError = null;
-            _running = true;
 
             var cts = new CancellationTokenSource();
             _loopCts = cts;
@@ -225,6 +224,9 @@ public sealed class AttentionPipelineService : IAttentionPipelineUseCase, IAsync
 
         try
         {
+            if (_cameraOwned && _camera.State == CameraSessionState.Off)
+                await _camera.StartAsync(cancellationToken).ConfigureAwait(false);
+
             capture = await _camera.CaptureAsync(cancellationToken).ConfigureAwait(false);
         }
         catch (OperationCanceledException)

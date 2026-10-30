@@ -15,6 +15,8 @@ public sealed class AttentionStateMachine
     public void UpdateThresholds(AttentionThresholds thresholds) =>
         _thresholds = thresholds ?? throw new ArgumentNullException(nameof(thresholds));
 
+    public void ResetCandidate() => _hasCandidate = false;
+
     public AttentionState? CurrentState { get; private set; }
     public DateTimeOffset? CurrentStateSince { get; private set; }
     public RawAttentionState LastRawState { get; private set; } = RawAttentionState.Unknown;
@@ -41,6 +43,13 @@ public sealed class AttentionStateMachine
 
         if (target == CurrentState)
         {
+            _hasCandidate = false;
+            return CurrentState;
+        }
+
+        if (CurrentState == AttentionState.CameraUnavailable)
+        {
+            Commit(target.Value, now);
             _hasCandidate = false;
             return CurrentState;
         }

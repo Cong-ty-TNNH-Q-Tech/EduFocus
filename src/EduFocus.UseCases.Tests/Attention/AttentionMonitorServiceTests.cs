@@ -392,6 +392,48 @@ public class AttentionMonitorServiceTests
     }
 
     [Fact]
+    public async Task A_failed_event_close_update_is_retried_without_throwing_already_closed()
+    {
+        await using var h = new Harness();
+        await h.StartAsync();
+        await h.SampleAsync(0, Frontal);
+        await h.SampleAsync(1, Frontal);
+        await h.SampleAsync(2, Frontal);
+
+        h.Events.ThrowOnUpdate = true;
+        (await h.CameraFailureAsync(3)).Should().BeFalse();
+
+        h.Events.ThrowOnUpdate = false;
+        (await h.CameraFailureAsync(4)).Should().BeTrue();
+
+        h.Events.Events.Should().HaveCount(2);
+        h.Events.Events[0].State.Should().Be(AttentionState.Focused);
+        h.Events.Events[0].IsOpen.Should().BeFalse();
+        h.Events.Events[0].EndedAtUtc.Should().Be(Start.AddSeconds(3).UtcDateTime);
+        h.Events.Events[1].State.Should().Be(AttentionState.CameraUnavailable);
+        h.Events.Events[1].IsOpen.Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task Sleep_gap_beyond_max_sample_gap_closes_open_event_at_pre_sleep_timestamp()
+    {
+        await using var h = new Harness();
+        await h.StartAsync();
+        await h.SampleAsync(0, Frontal);
+        await h.SampleAsync(1, Frontal);
+        await h.SampleAsync(2, Frontal);
+
+        await h.SampleAsync(3600, Frontal);
+        await h.SampleAsync(3601, Frontal);
+        await h.SampleAsync(3602, Frontal);
+
+        h.Events.Events.Should().HaveCount(2);
+        h.Events.Events[0].EndedAtUtc.Should().Be(Start.AddSeconds(2).UtcDateTime);
+        h.Events.Events[0].DurationSeconds.Should().Be(0);
+        h.Events.Events[1].StartedAtUtc.Should().Be(Start.AddSeconds(3602).UtcDateTime);
+    }
+
+    [Fact]
     public async Task Pipeline_samples_are_processed_while_running()
     {
         await using var h = new Harness();

@@ -242,7 +242,7 @@ public sealed class CameraSessionService : ICameraSessionUseCase
         CameraOpenResult result;
         try
         {
-            result = await RunBlockingAsync(() => _camera.Open(deviceId), cancellationToken)
+            result = await RunBlockingOpenAsync(deviceId, cancellationToken)
                 .ConfigureAwait(false);
         }
         catch (OperationCanceledException)
@@ -351,6 +351,35 @@ public sealed class CameraSessionService : ICameraSessionUseCase
             LogCategories.Attention,
             "The stored camera device is no longer connected; using the default camera.");
         return null;
+    }
+
+    private async Task<CameraOpenResult> RunBlockingOpenAsync(string? deviceId, CancellationToken cancellationToken)
+    {
+        var task = Task.Run(() => _camera.Open(deviceId), CancellationToken.None);
+
+        try
+        {
+            return await task.WaitAsync(_options.OperationTimeout, cancellationToken).ConfigureAwait(false);
+        }
+        catch (Exception ex) when (ex is TimeoutException or OperationCanceledException)
+        {
+            _ = task.ContinueWith(
+                completed =>
+                {
+                    if (completed.IsFaulted)
+                    {
+                        _ = completed.Exception;
+                        return;
+                    }
+
+                    if (completed.IsCompletedSuccessfully && completed.Result.Success && _state != CameraSessionState.Active)
+                        CloseCamera();
+                },
+                CancellationToken.None,
+                TaskContinuationOptions.ExecuteSynchronously,
+                TaskScheduler.Default);
+            throw;
+        }
     }
 
     private async Task<T> RunBlockingAsync<T>(Func<T> action, CancellationToken cancellationToken)
