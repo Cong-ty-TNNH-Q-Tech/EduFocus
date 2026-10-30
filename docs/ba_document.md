@@ -192,7 +192,7 @@ EduFocus cung cấp một lớp bảo vệ và quan sát **tối thiểu, minh b
 - Thoát app luôn cần PIN (trừ Windows shutdown/logoff).
 - Tự khởi động cùng Windows bằng Scheduled Task khi Protection ON hoặc ScheduleEnabled.
 - Tự phục hồi trạng thái chặn/session sau crash hoặc restart.
-- Watchdog thường trú kiểm tra heartbeat mỗi 5 giây và khởi động lại app nếu bị kill/hang khi Protection ON (mục tiêu ≤ 30 giây; hai scheduled task logon/mỗi phút giám sát chính watchdog; Production: Windows Service). Không restart sau exit sạch.
+- Bảo vệ nền: bản cài dùng Windows Service `EduFocusProtection` (LocalSystem, auto-start, SCM restart khi crash) nên UI đóng vẫn giữ bảo vệ; bản portable/source dùng watchdog thường trú kiểm tra heartbeat mỗi 5 giây và khởi động lại app nếu bị kill/hang khi Protection ON (mục tiêu ≤ 30 giây; hai scheduled task logon/mỗi phút giám sát chính watchdog). Không restart sau exit sạch.
 - Uninstall có cảnh báo/PIN ở mức best-effort; admin Windows vẫn có thể gỡ.
 - Ghi audit log khi có nỗ lực tắt/sửa.
 
@@ -213,7 +213,7 @@ EduFocus cung cấp một lớp bảo vệ và quan sát **tối thiểu, minh b
 | Mã | Tính năng | Ghi chú |
 |---|---|---|
 | F11 | Browser extension + native messaging | Lấy URL chính xác, chặn theo path, chặn AI sidebar |
-| F12 | Windows Service `EduFocus.Agent` | Chống tắt mạnh hơn, watchdog SYSTEM |
+| F12 | Windows Service `EduFocusProtection` | Đã triển khai ở issue #46: service LocalSystem sở hữu protection engine, heartbeat, schedule, retention và IPC có xác thực |
 | F13 | Companion app điện thoại | Camera thứ hai khi webcam bị Meet/Teams chiếm |
 | F14 | Windows Hello cho phụ huynh | Thay PIN nếu dùng tài khoản Windows riêng |
 | F15 | Nhiều hồ sơ học sinh | Mỗi con có lịch, blocklist, báo cáo riêng |
@@ -410,7 +410,7 @@ EduFocus cung cấp một lớp bảo vệ và quan sát **tối thiểu, minh b
 - Hosts không tạo log truy cập HTTPS; blocked attempts chỉ là best-effort.
 - Trang chặn chỉ hiển thị với HTTP; HTTPS thường báo lỗi kết nối/SSL.
 - URL/path, wildcard subdomain và AI sidebar chưa được enforce trong MVP.
-- Windows shutdown/logoff vẫn là đường bypass; watchdog thường trú thường khôi phục app trong ≤ 30 giây sau kill, nhưng nếu chính watchdog bị kill thì scheduled task có thể mất tới khoảng 60 giây.
+- Windows shutdown/logoff vẫn là đường bypass. Bản cài dùng service: SCM restart sau crash trong khoảng 60 giây (tối đa 3 lần/ngày); admin/SYSTEM vẫn stop/disable/gỡ được service. Bản portable/source dùng watchdog: app được khôi phục trong ≤ 30 giây sau kill, nếu chính watchdog bị kill thì scheduled task có thể mất tới khoảng 60 giây.
 - Webcam không phải eye tracker hồng ngoại; attention chỉ là ước lượng.
 - Meet/Teams có thể chiếm camera trên máy chưa hỗ trợ Multi-App Camera.
 - Không thể đảm bảo phát hiện mọi chatbot mới hoặc chatbot chạy trong app khác.

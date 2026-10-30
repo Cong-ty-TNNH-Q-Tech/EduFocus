@@ -896,6 +896,15 @@ số row hiện có của từng bảng và số ngày retention đang áp dụn
 > vẫn là bypass được chấp nhận: app ghi shutdown flag + stop request để watchdog không restart trong
 > lúc logoff, và lần đăng nhập sau phục hồi bảo vệ.
 
+> **Hiện trạng Phase 7 (issue #46):** bản cài MSI chạy Windows Service `EduFocusProtection`
+> (`EduFocus.Service.exe`, LocalSystem, auto-start) sở hữu protection engine, heartbeat, session,
+> schedule và retention. UI đóng không tắt bảo vệ; service được SCM restart tối đa 3 lần, cách 60
+> giây, reset sau 1 ngày. Lệnh bật/tắt từ UI đi qua named pipe có ACL và xác thực ảnh tiến trình;
+> lệnh cha cần Parent Mode, PIN không đi qua pipe. Khi service dừng, trạng thái bảo vệ và hosts được
+> giữ nguyên, session `Interrupted` với ghi chú `ServiceStopped`, audit `ProtectionServiceStopped`/
+> `SessionInterrupted`; lần khởi động sau reconcile lại. Bản portable/source không có marker service
+> vẫn dùng watchdog như mô tả ở trên.
+
 ---
 
 ### UC13 — Đổi PIN / Khôi phục PIN

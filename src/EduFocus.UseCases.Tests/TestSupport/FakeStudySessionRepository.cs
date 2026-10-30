@@ -13,6 +13,8 @@ internal sealed class FakeStudySessionRepository : IStudySessionRepository
 
     public List<HeartbeatCall> Heartbeats { get; } = [];
 
+    public bool ThrowOnGetActive { get; set; }
+
     public bool ThrowOnAdd { get; set; }
 
     public bool ThrowOnUpdate { get; set; }
@@ -41,8 +43,13 @@ internal sealed class FakeStudySessionRepository : IStudySessionRepository
 
     public StudySession? Active => Sessions.SingleOrDefault(session => session.IsActive);
 
-    public Task<StudySession?> GetActiveAsync(CancellationToken cancellationToken = default) =>
-        Task.FromResult(Active);
+    public Task<StudySession?> GetActiveAsync(CancellationToken cancellationToken = default)
+    {
+        if (ThrowOnGetActive)
+            throw new InvalidOperationException("The session store is unavailable.");
+
+        return Task.FromResult(Active);
+    }
 
     public Task<DailyStudySummary?> GetDailySummaryAsync(
         DateOnly localDate,

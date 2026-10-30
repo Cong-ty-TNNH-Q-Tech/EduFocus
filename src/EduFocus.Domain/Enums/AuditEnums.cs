@@ -33,5 +33,7 @@ public enum AuditEventType
     SettingsChanged,
     ClockJumpDetected,
     RetentionApplied,
-    AuthenticationFailed
+    AuthenticationFailed,
+    ProtectionServiceStarted,
+    ProtectionServiceStopped
 }

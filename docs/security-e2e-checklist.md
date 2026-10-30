@@ -81,6 +81,10 @@ Các test dưới đây là bằng chứng hồi quy cho từng kiểm soát. T�
 | Thoát bằng PIN, gỡ chặn thất bại thì không thoát | `AppLifecycleServiceTests.Exit_with_pin_cleans_state_and_records_a_clean_shutdown`, `Exit_without_removing_the_engine_keeps_the_app_running` | Đạt |
 | Watchdog restart có budget, tôn trọng clean exit, không log dữ liệu người dùng | `WatchdogServiceTests.Tick_does_not_restart_after_a_clean_exit_marker`, `Tick_gives_up_after_the_budget_and_audits_once`, `Tick_audits_only_reason_attempt_and_pids` | Đạt |
 | CLI gỡ cài đặt chỉ xóa dữ liệu khi được yêu cầu | `WatchdogCommandLineTests.Uninstall_mode_deletes_user_data_only_when_requested` | Đạt |
+| IPC chỉ phục vụ client đúng ảnh tiến trình; client lạ bị từ chối, không chạy lệnh | `ServiceControlServerTests.A_rejected_client_is_logged_and_no_command_runs`; `ServiceControlClientTests.A_pipe_server_that_is_not_the_installed_service_is_rejected`, `An_unavailable_service_is_reported_without_falling_back_locally` | Đạt |
+| IPC chống request quá lớn/malformed/thiếu frame và timeout; lỗi trả về đã làm sạch | `ServiceControlFramingTests`; `ServiceControlServerTests.An_oversized_request_is_rejected_without_dispatch`, `A_malformed_json_request_is_rejected_without_dispatch`, `A_handler_error_becomes_a_sanitized_internal_error`, `A_command_that_exceeds_the_server_timeout_is_reported` | Đạt |
+| Lệnh cha cần Parent Mode; lệnh hệ thống không cần; PIN không đi qua pipe | `ServiceControlClientTests.A_parent_command_without_parent_mode_never_reaches_the_pipe`, `Schedule_commands_do_not_require_parent_mode`; `ServiceCommandHandlerTests.Parent_commands_run_inside_an_authorized_scope`, `System_commands_run_without_parent_mode`, `A_parent_authorization_failure_maps_to_unauthorized` | Đạt |
+| Service stop giữ bảo vệ, interrupt session, audit; restart reconcile lại | `ServiceRuntimeTests.Stop_interrupts_the_active_session_but_never_disables_protection`, `A_restarted_service_reuses_the_database_and_reconciles_again`, `A_failed_start_leaves_no_running_runtime_or_pipe` | Đạt |
 | Extension chống XSS/URL injection, redirect chain và chỉ gửi URL khớp rule | `browser-extension/tests/matcher.test.mjs` (`HTML-looking paths...`, `server redirect chains...`), `static.test.mjs` (`the block page never reads or renders...`, `the service worker reports only blocked URLs...`); `BrowserExtensionBridgeTests.Verified_blocked_message_raises_attempt_with_sanitized_url`, `Blocked_message_that_does_not_match_the_snapshot_is_ignored` | Đạt |
 | MSI đăng ký native messaging và native host đọc đúng manifest | `NativeMessagingRegistrationTests`, `NativeHostOptionsTests`; kiểm tra COM trong quy trình install | Đạt |
 | Migration lỗi giữ DB và backup, restore được | `InitializationTests.Failed_upgrade_rolls_back_and_the_backup_restores_the_previous_data`, `BackupRestoreTests.Restore_rejects_missing_or_corrupt_backup_without_touching_database` | Đạt |
@@ -101,20 +105,25 @@ và một tài khoản standard user để chạy thử. Ghi mã build/MSI SHA-2
 | SEC-E2E-02 | Mở app bằng standard user | UAC xuất hiện (độ lệch elevation đã biết); sau khi nâng quyền app chạy, không lỗi quyền dữ liệu | Ảnh chụp UAC + app | ⬜ | ⬜ |
 | SEC-E2E-03 | Onboarding: từ chối consent, thử thiết lập PIN; sau đó đồng ý và hoàn tất | Không thể qua bước PIN/hoàn tất khi thiếu consent; recovery code chỉ hiển thị một lần; PIN không hiển thị lại | Ảnh chụp đã che PIN/code | ⬜ | ⬜ |
 | SEC-E2E-04 | Nhập sai PIN 5 lần; thử recovery code sai trong lúc khóa | Khóa 15 phút, đếm chung cho PIN/recovery; hết hạn đăng nhập lại được | Ảnh chụp thông báo khóa (không có mã) | ⬜ | ⬜ |
-| SEC-E2E-05 | Bật bảo vệ | Hosts có marker `EDUFOCUS BLOCK START/END`; block page lắng nghe `127.0.0.1:80`; scheduled task `EduFocus*` được tạo nếu chính sách cho phép; audit `ProtectionOn` | `Get-Content hosts`, `Get-NetTCPConnection -LocalPort 80`, `Get-ScheduledTask` | ⬜ | ⬜ |
+| SEC-E2E-05 | Bật bảo vệ | Hosts có marker `EDUFOCUS BLOCK START/END`; block page lắng nghe `127.0.0.1:80`; service `EduFocusProtection` **Running**; marker `HKLM\SOFTWARE\EduFocus\ServiceMode=1`; audit `ProtectionOn` | `Get-Content hosts`, `Get-NetTCPConnection -LocalPort 80`, `Get-Service EduFocusProtection`, `Get-ItemProperty` | ⬜ | ⬜ |
 | SEC-E2E-06 | Truy cập domain bị chặn qua HTTP và HTTPS | HTTP hiển thị trang chặn; HTTPS báo lỗi kết nối/SSL nhưng domain vẫn bị chặn; không có path/query trong `BlockedAttempts`/log | Ảnh chụp trang chặn; query DB/log đã lọc | ⬜ | ⬜ |
 | SEC-E2E-07 | Mở app bị chặn có dữ liệu chưa lưu | App nhận `WM_CLOSE` trước; quá 2 giây mới bị kill; cảnh báo mất dữ liệu được ghi trong tài liệu | Ảnh chụp + log không có window title | ⬜ | ⬜ |
 | SEC-E2E-08 | Thêm app vào allowlist khi đang bị chặn | Allowlist thắng blocklist; process hệ thống/EduFocus không bị tác động | Quan sát + DB `BlockedAttempts` | ⬜ | ⬜ |
 | SEC-E2E-20 | Cài extension, bật rule URL/path, mở URL khớp rule (kèm query/fragment) | Tab chuyển tới trang chặn không lộ URL; `BlockedAttempts` ghi URL đã bỏ query/fragment/credentials; rule allow/protected domain thắng | Ảnh chụp popup/trang chặn; query DB đã lọc | ⬜ | ⬜ |
 | SEC-E2E-21 | Tắt bảo vệ hoặc thoát EduFocus khi extension đang chạy | Không còn chặn (fail-open), popup **Chưa kết nối EduFocus**; bật lại thì chặn có hiệu lực trong vài giây, không cần khởi động lại trình duyệt | Ảnh chụp popup + timeline | ⬜ | ⬜ |
-| SEC-E2E-09 | Kill app khi Protection ON; sau đó kill watchdog | App được khôi phục ≤ 30 giây; watchdog được task khôi phục trong tối đa ~60 giây; audit `WatchdogRestart` không có dữ liệu người dùng | Timeline + audit | ⬜ | ⬜ |
+| SEC-E2E-22 | Kiểm tra service sau khi cài | `EduFocusProtection` **Running**, StartType Automatic, chạy LocalSystem; `EduFocus.Service.exe --health` healthy; marker `ServiceMode=1`; log service nằm trong `%ProgramData%\EduFocus\logs` và không có secret | `Get-CimInstance Win32_Service`, `--health`, `Select-String` log | ⬜ | ⬜ |
+| SEC-E2E-23 | Đóng UI khi Protection ON | Hosts/block page/process watcher vẫn hoạt động; không có engine cục bộ thứ hai; mở lại UI thấy trạng thái từ service | Thử chặn web/app + `Get-Process` + ảnh chụp UI | ⬜ | ⬜ |
+| SEC-E2E-24 | Kill `EduFocus.Service.exe` khi Protection ON; thử client lạ kết nối pipe | SCM restart trong khoảng 60 giây; session cũ `Interrupted` ghi chú `ServiceStopped`, audit `ProtectionServiceStopped`/`SessionInterrupted`; client lạ bị từ chối và ghi log Security, không lệnh nào chạy | Timeline + audit + log service | ⬜ | ⬜ |
+| SEC-E2E-25 | Nâng cấp MSI khi service đang chạy | Service dừng rồi khởi động lại; DB/settings giữ nguyên; chỉ một entry Apps & Features; không còn process/pipe mồ côi | Timeline + `Get-Service` + `Get-Process` | ⬜ | ⬜ |
+| SEC-E2E-26 | Chạy portable ZIP trên máy chưa cài | Không có service row/marker; app chạy standalone với watchdog, không gọi pipe và không tạo orphan service | `Get-Service EduFocusProtection`, `Get-ItemProperty` | ⬜ | ⬜ |
+| SEC-E2E-09 | Bản portable/source: kill app khi Protection ON; sau đó kill watchdog | App được khôi phục ≤ 30 giây; watchdog được task khôi phục trong tối đa ~60 giây; audit `WatchdogRestart` không có dữ liệu người dùng | Timeline + audit | ⬜ | ⬜ |
 | SEC-E2E-10 | Sửa hosts ngoài marker, sau đó tắt bảo vệ | Chỉ mất khối marker; chỉnh sửa ngoài marker còn nguyên; `hosts-backup\journal.json` và `.bak` không còn | Diff hosts trước/sau, `Get-ChildItem hosts-backup` | ⬜ | ⬜ |
 | SEC-E2E-11 | Ép crash giữa lúc apply (kill app sau khi có journal) rồi khởi động lại | `SelfHealAsync` khôi phục đúng byte gốc; không còn marker/journal/backup | So sánh hash hosts | ⬜ | ⬜ |
 | SEC-E2E-12 | Bật monitoring với cảnh giả lập/không người; dừng phiên | Không tạo file ảnh/video; camera được nhả; `AttentionEvents` chỉ có số liệu, không frame/landmark | `Get-ChildItem` tìm ảnh/video; query schema | ⬜ | ⬜ |
 | SEC-E2E-13 | Kiểm tra ACL và file sinh ra sau khi chạy | DB, `-wal`/`-shm`, backup đều chỉ Administrators/SYSTEM; standard user bị từ chối đọc/ghi | `icacls` từng file; thử đọc bằng standard user | ⬜ | ⬜ |
 | SEC-E2E-14 | Tạo lỗi PIN/recovery và URL có query để sinh log | Log không có PIN/recovery/token/URL đầy đủ; chỉ có domain đã làm sạch | `Select-String` trên log (mẫu đã che) | ⬜ | ⬜ |
 | SEC-E2E-15 | Xuất CSV báo cáo có ô bắt đầu `=`, `+`, `-`, `@` | Ô được escape; file UTF-8 BOM; không ghi đè; không có window title/URL đầy đủ | Mở CSV bằng Excel + hex BOM | ⬜ | ⬜ |
-| SEC-E2E-16 | Gỡ cài đặt, **giữ dữ liệu** | Không còn hosts marker, block page listener, scheduled task `EduFocus*`, `runtime`, `hosts-backup`; `edufocus.db` còn | `Get-Content hosts`, `Get-NetTCPConnection`, `Get-ScheduledTask`, `Get-ChildItem` | ⬜ | ⬜ |
+| SEC-E2E-16 | Gỡ cài đặt, **giữ dữ liệu** | Không còn hosts marker, block page listener, service `EduFocusProtection`, marker `ServiceMode`, watchdog/scheduled task cũ, `runtime`, `hosts-backup`; `edufocus.db` còn | `Get-Content hosts`, `Get-NetTCPConnection`, `Get-Service`, `Get-ScheduledTask`, `Get-ChildItem` | ⬜ | ⬜ |
 | SEC-E2E-17 | Gỡ cài đặt, **xóa dữ liệu** | `%ProgramData%\EduFocus` không còn; không thể khôi phục | `Test-Path` | ⬜ | ⬜ |
 | SEC-E2E-18 | Shutdown/logoff khi Protection ON, sau đó đăng nhập lại | Windows tắt bình thường; lần đăng nhập sau session `Recovery`, Protection ON như cũ | Timeline + audit | ⬜ | ⬜ |
 | SEC-E2E-19 | Rà soát artifact/bằng chứng trước khi lưu | Không có PIN, recovery code, ảnh camera, URL đầy đủ, DB/log trong artifact | Checklist thủ công trên thư mục bằng chứng | ⬜ | ⬜ |
@@ -138,7 +147,7 @@ Mức độ: **P0** chặn phát hành ngay; **P1** phải sửa trước phát 
 | F-42-05 | P2 | Mở | Chưa có thông báo quyền riêng tư đầy đủ và DPIA chính thức trước phát hành. | Theo dõi ở issue #44; không chặn #42 nhưng **chặn phát hành thương mại**. |
 
 **Kết luận:** tính đến 2026-10-30, review mã + test tự động **không phát hiện P0/P1**. Các mục thủ công
-SEC-E2E-01…19 là điều kiện bắt buộc; nếu phát hiện P0/P1 khi chạy VM, phát hành bị chặn cho đến khi
+SEC-E2E-01…26 là điều kiện bắt buộc; nếu phát hiện P0/P1 khi chạy VM, phát hành bị chặn cho đến khi
 sửa và chạy lại.
 
 ---
@@ -174,6 +183,13 @@ Get-AuthenticodeSignature .\EduFocus-<version>-x64.msi | Format-List Status, Sig
 Select-String -Path "$env:SystemRoot\System32\drivers\etc\hosts" -Pattern "EDUFOCUS BLOCK"
 Get-ScheduledTask -TaskName "EduFocus*" -ErrorAction SilentlyContinue
 Get-ChildItem "$env:ProgramData\EduFocus\hosts-backup" -ErrorAction SilentlyContinue
+
+# Service bảo vệ và marker service mode
+Get-Service EduFocusProtection | Format-List Status, StartType
+Get-CimInstance Win32_Service -Filter "Name='EduFocusProtection'" |
+  Format-List StartName, State, ProcessId
+Get-ItemProperty "HKLM:\SOFTWARE\EduFocus" -Name ServiceMode -ErrorAction SilentlyContinue
+& "$env:ProgramFiles\EduFocus\EduFocus.Service.exe" --health
 
 # Block page listener (chỉ nên thấy khi Protection ON)
 Get-NetTCPConnection -LocalAddress 127.0.0.1 -LocalPort 80 -ErrorAction SilentlyContinue

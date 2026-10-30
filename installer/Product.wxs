@@ -54,7 +54,9 @@
 
     <Feature Id="Main" Title="EduFocus" Level="1">
       <ComponentGroupRef Id="AppFiles"/>
+      <ComponentRef Id="ServiceExe"/>
       <ComponentRef Id="AppRegistry"/>
+      <ComponentRef Id="ServiceModeRegistry"/>
       <ComponentRef Id="AppShortcutDesktop"/>
       <ComponentRef Id="AppShortcutStartMenu"/>
     </Feature>
@@ -68,8 +70,9 @@
                   Impersonate="no"
                   Return="check"/>
 
-    <!-- Uninstall cleanup is best effort: a hosts or data failure never
-         blocks the uninstall, but is logged by the app. -->
+    <!-- Uninstall cleanup runs after the protection service has been stopped
+         (ServiceControl in the generated ServiceExe component), so the hosts
+         section can be restored and the database deleted without a lock. -->
     <CustomAction Id="UninstallWatchdogKeepData"
                   FileRef="MainExeFile"
                   ExeCommand="--uninstall-watchdog --wait-ms 5000"
@@ -113,10 +116,10 @@
               Before="RemoveFiles"
               Condition='REMOVE~="ALL"'/>
       <Custom Action="UninstallWatchdogKeepData"
-              Before="RemoveFiles"
+              After="StopServices"
               Condition='REMOVE~="ALL" AND DELETEUSERDATA&lt;&gt;"1"'/>
       <Custom Action="UninstallWatchdogDeleteData"
-              Before="RemoveFiles"
+              After="StopServices"
               Condition='REMOVE~="ALL" AND DELETEUSERDATA="1"'/>
     </InstallExecuteSequence>
 
@@ -239,6 +242,22 @@
                        Value="$(Version)"/>
       </RegistryKey>
       <RemoveFolder Id="RemoveInstallFolder" Directory="INSTALLFOLDER" On="uninstall"/>
+    </Component>
+  </Fragment>
+
+  <!-- Marks the install as service-managed. The UI reads this value before it
+       composes its services: when present it talks to the protection service
+       and never starts a local engine, even if the service is unreachable. -->
+  <Fragment>
+    <Component Id="ServiceModeRegistry"
+               Directory="INSTALLFOLDER"
+               Guid="A7B8C9D0-E1F2-4A5B-8C9D-0E1F2A3B4C5E">
+      <RegistryKey Root="HKLM" Key="Software\EduFocus">
+        <RegistryValue Name="ServiceMode"
+                       Type="integer"
+                       Value="1"
+                       KeyPath="yes"/>
+      </RegistryKey>
     </Component>
   </Fragment>
 

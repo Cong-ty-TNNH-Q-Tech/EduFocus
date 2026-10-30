@@ -134,6 +134,21 @@ jobs:
             -p:FileVersion="${{ steps.ver.outputs.numeric }}" `
             --output publish/
 
+      - name: Publish Windows service
+        shell: pwsh
+        run: |
+          dotnet publish src/EduFocus.Service/EduFocus.Service.csproj `
+            --configuration Release `
+            --runtime win-x64 `
+            --self-contained true `
+            -p:PublishSingleFile=true `
+            -p:IncludeNativeLibrariesForSelfExtract=true `
+            -p:EnableCompressionInSingleFile=true `
+            -p:IncludeSourceRevisionInInformationalVersion=false `
+            -p:Version="${{ steps.ver.outputs.version }}" `
+            -p:FileVersion="${{ steps.ver.outputs.numeric }}" `
+            --output publish/
+
       - name: Publish native messaging host
         shell: pwsh
         run: |
@@ -155,7 +170,11 @@ jobs:
           VERSION: ${{ steps.ver.outputs.version }}
           NUMERIC: ${{ steps.ver.outputs.numeric }}
         run: |
-          $executables = @("publish/EduFocus.exe", "publish/native-host/EduFocus.NativeHost.exe")
+          $executables = @(
+              "publish/EduFocus.exe",
+              "publish/EduFocus.Service.exe",
+              "publish/native-host/EduFocus.NativeHost.exe"
+          )
           $parts = $env:NUMERIC.Split(".")
           foreach ($path in $executables) {
               if (-not (Test-Path -LiteralPath $path -PathType Leaf)) {
@@ -195,7 +214,7 @@ jobs:
         run: |
           $required = $env:REQUIRE_CODE_SIGNING -match "^(?i:true|1|yes)$"
           $signed = ./installer/Sign-Artifacts.ps1 `
-            -Files publish/EduFocus.exe, publish/native-host/EduFocus.NativeHost.exe `
+            -Files publish/EduFocus.exe, publish/EduFocus.Service.exe, publish/native-host/EduFocus.NativeHost.exe `
             -PfxBase64 $env:CODESIGN_PFX_BASE64 `
             -PfxPassword $env:CODESIGN_PFX_PASSWORD `
             -Description "EduFocus" `

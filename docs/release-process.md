@@ -81,17 +81,18 @@ tạo release và **không** tạo tag. Tải artifact trong trang run để ki�
 3. Xác thực SemVer và tính `version`/`numeric`/`tag`/`dry_run`.
 4. Tạo release notes từ CHANGELOG; fail sớm nếu thiếu section hoặc `### Breaking changes`.
 5. `dotnet tool restore`, restore, build Release, chạy toàn bộ test (TRX được upload).
-6. Publish self-contained single-file `win-x64` cho `EduFocus.exe` và
+6. Publish self-contained single-file `win-x64` cho `EduFocus.exe`, `EduFocus.Service.exe` và
    `publish/native-host/EduFocus.NativeHost.exe`; xóa `*.pdb`/`*.lib`.
-7. Kiểm tra version trong cả hai executable.
-8. Ký `EduFocus.exe` và `EduFocus.NativeHost.exe` nếu có chứng chỉ (xem §4).
+7. Kiểm tra `ProductVersion`/`FileVersion` trong cả ba executable khớp tag.
+8. Ký `EduFocus.exe`, `EduFocus.Service.exe` và `EduFocus.NativeHost.exe` nếu có chứng chỉ (xem §4).
 9. Build MSI bằng WiX 4.0.6 + `WixToolset.UI.wixext`/`WixToolset.Util.wixext`;
    `Build-Installer.ps1` quét payload để chặn secret/runtime data. Kiểm tra
    `ProductVersion` của MSI bằng Windows Installer COM.
 10. Ký MSI nếu exe đã được ký.
-11. Tạo portable ZIP, đóng gói browser extension bằng `scripts/pack-browser-extension.ps1`
-    (`EduFocus-<version>-browser-extension.zip`) và sao chép hai hướng dẫn
-    `install-guide.md`/`browser-extension.md`.
+11. Tạo portable ZIP (gồm cả `EduFocus.Service.exe`, nhưng chạy portable không có service row/marker
+    nên app chạy standalone với watchdog), đóng gói browser extension bằng
+    `scripts/pack-browser-extension.ps1` (`EduFocus-<version>-browser-extension.zip`) và sao chép
+    hai hướng dẫn `install-guide.md`/`browser-extension.md`.
 12. Tạo `SHA256SUMS.txt` (ASCII, LF) cho MSI/portable ZIP/extension ZIP/hai install guide và đọc
     lại để xác minh hash.
 13. Quét toàn workspace: fail nếu còn `.pfx/.p12/.snk/.key/.pem/.cer/.crt`, file secret
@@ -167,6 +168,10 @@ workflow vẫn phát hành nếu `REQUIRE_CODE_SIGNING` không bật, và summar
 ```powershell
 Get-AuthenticodeSignature .\EduFocus-2.0.0-win-x64.msi |
   Format-List Status, StatusMessage, SignerCertificate
+
+# Kiểm tra cả service exe sau khi giải nén portable ZIP (nếu dùng bản portable):
+Get-AuthenticodeSignature .\publish\EduFocus.Service.exe |
+  Format-List Status, StatusMessage
 ```
 
 `Status` phải là `Valid` khi bản phát hành được ký. Có thể dùng `signtool verify /pa /v <file>`

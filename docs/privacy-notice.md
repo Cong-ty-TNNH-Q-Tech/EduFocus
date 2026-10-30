@@ -58,9 +58,10 @@ EduFocus xử lý các nhóm dữ liệu sau, tất cả đều lưu cục bộ:
 - **Audit:** hành động quan trọng (bật/tắt bảo vệ, đổi lịch, đổi PIN, xóa dữ liệu, áp dụng lưu
   trữ...), thời điểm và mã tương quan; không chứa PIN, mã khôi phục hay token.
 - **Nhật ký kỹ thuật:** tệp log cục bộ phục vụ chẩn đoán, đã che PIN/mã khôi phục/token/URL đầy
-  đủ; tối đa 10 MB mỗi tệp, giữ 14 ngày.
+  đủ; tối đa 10 MB mỗi tệp, giữ 14 ngày. UI ghi vào `%LocalAppData%\EduFocus\logs`; service bảo vệ
+  ghi vào `%ProgramData%\EduFocus\logs` với cùng quy tắc che dữ liệu.
 - **Tệp hỗ trợ hệ thống:** bản sao `hosts` trước khi chặn (để khôi phục), tệp trạng thái watchdog
-  trong `%ProgramData%\EduFocus\runtime`, và bản xuất CSV do phụ huynh chủ động tạo.
+  hoặc service trong `%ProgramData%\EduFocus\runtime`, và bản xuất CSV do phụ huynh chủ động tạo.
 
 EduFocus **không** thu thập: vị trí, danh bạ, lịch, email, nội dung clipboard, nội dung trang web,
 lịch sử duyệt web đầy đủ, âm thanh micro, dữ liệu sinh trắc học, hay thông tin nhận dạng khuôn mặt.
@@ -108,9 +109,13 @@ thương mại.
 
 - Cơ sở dữ liệu: `%ProgramData%\EduFocus\edufocus.db` (kèm WAL/SHM và tối đa 3 bản backup).
   Thư mục được cấp quyền chỉ cho Administrators và SYSTEM; tài khoản Windows chuẩn không đọc được.
-- Log kỹ thuật: `%LocalAppData%\EduFocus\logs`.
+- Log kỹ thuật: `%LocalAppData%\EduFocus\logs` (UI) và `%ProgramData%\EduFocus\logs` (service).
 - Bản xuất CSV: `%LocalAppData%\EduFocus\exports` — do phụ huynh chủ động tạo nên nằm ngoài ACL
   thư mục dữ liệu; phụ huynh chịu trách nhiệm bảo vệ và xóa tệp này.
+- Trong bản cài MSI, phần bảo vệ (hosts, block page, theo dõi tiến trình, heartbeat) chạy trong
+  Windows Service `EduFocusProtection` dưới tài khoản LocalSystem. Service chỉ đọc/ghi cùng cơ sở
+  dữ liệu và log mô tả ở trên; camera và attention vẫn chạy trong phiên người dùng, không chuyển
+  sang service và không tạo thêm loại dữ liệu.
 - PIN/recovery code chỉ lưu hash; khóa Parent Mode tự hết hạn sau 5 phút idle và không được khôi
   phục sau khi khởi động lại.
 - Toàn bộ dữ liệu nằm trên máy, không có máy chủ của EduFocus.
@@ -169,8 +174,8 @@ phụ huynh xác nhận điều này trong onboarding và không hỗ trợ giá
   cầu, trừ khi pháp luật yêu cầu thời hạn khác. Vì dữ liệu nằm trên máy gia đình, nhà phát triển
   thường không thể xóa thay; hướng dẫn sẽ tập trung vào thao tác xóa cục bộ và gỡ cài đặt.
 - **Khi gỡ cài đặt:** mặc định giữ dữ liệu để cài lại; chọn "xóa toàn bộ dữ liệu" hoặc silent
-  uninstall với `DELETEUSERDATA=1` để xóa `%ProgramData%\EduFocus`. File CSV trong
-  `%LocalAppData%` và log kỹ thuật cần được xóa thủ công.
+  uninstall với `DELETEUSERDATA=1` để xóa `%ProgramData%\EduFocus`, gồm cả log của service. File
+  CSV và log của UI trong `%LocalAppData%\EduFocus` cần được xóa thủ công.
 
 ## 11. Sự cố dữ liệu
 

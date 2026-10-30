@@ -53,9 +53,9 @@ EduFocus kế thừa nền **Clean Architecture + Ports & Adapters** của dự 
               │ ProgramData     │        │ Win32 / WMI     │
               └─────────────────┘        └─────────────────┘
 
-             (Post-MVP) EduFocus.Agent (Windows Service)
-             - watchdog, policy enforcement, ACL, auto-start
-             - giao tiếp với app qua named pipe
+             (Bản cài, issue #46) EduFocusProtection (Windows Service)
+             - protection engine, heartbeat/session, schedule, retention, ACL
+             - IPC named pipe có xác thực với app; UI đóng vẫn giữ bảo vệ
 ```
 
 ---
@@ -288,7 +288,7 @@ Triển khai outbound ports, tương tác Windows.
 | `WindowsCameraDeviceCatalog` | Liệt kê camera qua WMI `Win32_PnPEntity` (best effort) |
 | `Pbkdf2PasswordHasher` | PBKDF2-SHA256 600.000 iterations, salt 16 byte, hash 32 byte, constant-time compare |
 | `RecoveryCodeGenerator` | Sinh recovery code 12 ký tự từ alphabet không nhập nhằng bằng CSPRNG |
-| `WatchdogService` / `WatchdogHost` | Tick 5 giây: heartbeat, phát hiện kill/hang, backoff 5–30 giây, budget 5 lần/10 phút, audit `WatchdogRestart`/`WatchdogGaveUp`; chạy thường trú qua `EduFocus.exe --watchdog` (Windows Service là post-MVP) |
+| `WatchdogService` / `WatchdogHost` | Tick 5 giây: heartbeat, phát hiện kill/hang, backoff 5–30 giây, budget 5 lần/10 phút, audit `WatchdogRestart`/`WatchdogGaveUp`; chạy thường trú qua `EduFocus.exe --watchdog` (bản cài dùng service thay thế — §5.2) |
 | `WindowsWatchdogAutoStart` | Đăng ký/xóa task `EduFocusLogon` (ONLOGON) và `EduFocusWatchdog` (mỗi phút, HIGHEST) bằng `schtasks`; bỏ qua khi app không elevated (ví dụ bản Debug) |
 | `FileLogger` | Log xoay vòng theo ngày, redact dữ liệu nhạy cảm |
 | `MonotonicClockAdapter` | Giữ từ dự án cũ |
@@ -524,30 +524,58 @@ Chống trùng instance: app giữ mutex `EduFocus_SingleInstance_Mutex`; watchd
 
 Spike #3 đề xuất task-only 60 giây. Issue #39 chấp nhận **sai lệch có chủ đích** so với khuyến nghị đó vì acceptance yêu cầu restart ≤ 30 giây: watchdog thường trú đạt độ trễ, còn hai scheduled task (logon + mỗi phút) là lớp ngoài giám sát chính watchdog. Nếu watchdog bị kill, task health khởi động lại nó trong tối đa khoảng 60 giây; chi tiết và đánh đổi ở `docs/spikes/watchdog-evaluation.md` §7.
 
-### 5.2. Production — Service + Session Agent
+### 5.2. Service mode — Windows Service sở hữu protection (issue #46)
+
+Installer cài `EduFocus.Service.exe` thành service `EduFocusProtection` (LocalSystem, auto-start)
+và ghi marker `HKLM\SOFTWARE\EduFocus\ServiceMode = 1`. Khi marker tồn tại, UI chạy ở **service
+mode**: service là chủ sở hữu duy nhất của Protection state, engine, heartbeat, schedule và
+retention; UI không bao giờ mở engine cục bộ thứ hai, kể cả khi service không phản hồi.
 
 ```text
-EduFocus.Agent (Windows Service, SYSTEM)
-├── policy enforcement
-├── watchdog + auto-restart
-├── hosts/firewall rules
-├── process ACL
-└── named pipe server
-
-EduFocus.App (WPF, user session)
-├── parent UI
-├── named pipe client
-└── student status
-
-EduFocus.Monitor (user session, hidden)
-├── webcam attention
-├── foreground activity
-└── gửi event qua named pipe/DB
+EduFocusProtection (EduFocus.Service.exe, LocalSystem, Session 0)
+├── ProtectionService: state machine, reconcile, rollback
+├── ProtectionEngine: hosts file + block page :80 + process watcher
+├── StudySessionHeartbeat + vòng đời session (Active/Recovery/Interrupted)
+├── ScheduleService (mỗi 30 giây) + RetentionService (một lần lúc khởi động và mỗi ngày ≥ 03:00)
+├── SQLite %ProgramData%\EduFocus + audit
+├── Log kỹ thuật %ProgramData%\EduFocus\logs (SYSTEM không có LocalAppData)
+└── Named pipe \\.\pipe\EduFocus.ServiceControl.v1
+        ▲ ACL chỉ SYSTEM + Administrators, một request/kết nối,
+        │ 4-byte LE length + JSON, request ≤ 16 KB / response ≤ 64 KB
+EduFocus.exe (WPF, user session; vẫn elevated trong bản này)
+├── Onboarding, Parent Mode, dashboard, báo cáo, settings, xuất CSV
+├── ServiceControlClient → pipe; ServiceStatusPoller mỗi 10 giây
+├── camera/attention + activity sampling (chỉ trong user session)
+└── không có ProtectionEngine, watchdog, schedule hay retention cục bộ
 ```
 
-**Lý do tách:** Windows Service chạy Session 0 **không truy cập được webcam** và không thấy foreground window của user. Vì vậy enforcement ở service, monitoring ở user session.
+**Lý do tách:** Windows Service chạy Session 0 **không truy cập được webcam** và không thấy
+foreground window của user. Vì vậy enforcement + session + schedule ở service, camera/activity ở
+user session. UI gửi lệnh qua IPC và poll trạng thái; camera/activity chỉ chạy khi UI đang mở và
+service báo phiên đang giám sát.
 
-**Không thuộc MVP** nhưng kiến trúc Ports cho phép thêm sau mà không đổi UseCase.
+**Phân định quyền sở hữu:** `ProtectionEnabled` trong DB vẫn là nguồn sự thật, nhưng chỉ service
+được đổi giá trị này trong service mode. Lệnh phụ huynh (`enable`, `disable`, `disable-for-exit`)
+yêu cầu UI đã mở Parent Mode; `ServiceControlClient` kiểm tra `IParentAuthorizer` **trước khi gửi**
+và service mở `ServiceRequestAuthorizer` chỉ cho các lệnh đó. PIN không bao giờ đi qua pipe. Lệnh
+hệ thống (`reconcile`, `enable-for-schedule`, `disable-for-schedule`) do service tự chạy theo lịch.
+Client xác minh tiến trình server đúng là `EduFocus.Service.exe` trong thư mục cài; server xác
+minh client đúng là `EduFocus.exe` trong cùng thư mục; pipe ACL chặn mọi tài khoản khác.
+
+**Fail-closed khi service dừng:** stop service (SCM, nâng cấp hoặc lỗi) **không** gỡ hosts section
+và **không** đổi `ProtectionEnabled`. Service dừng heartbeat, đóng session đang chạy với
+`Note = ServiceStopped` tại beat cuối và ghi audit `ProtectionServiceStopped`; lần khởi động kế
+tiếp reconcile lại engine và tạo phiên `Recovery` như crash thông thường. SCM cấu hình restart 3
+lần cách nhau 60 giây, reset sau 1 ngày (`util:ServiceConfig`), nên service bị kill được khôi phục
+trong khoảng 60 giây; hosts section còn nguyên trong thời gian gián đoạn.
+
+**Service mode trong UI:** bỏ qua seed/reconcile/schedule/watchdog/retention cục bộ; xóa scheduled
+task và dừng watchdog còn sót từ bản cũ; khi poll trạng thái lỗi, UI dừng camera/activity chứ không
+tự bật engine (không có hai protection owner). UI vẫn chạy elevated trong bản này vì đọc/ghi trực
+tiếp DB có ACL Administrators/SYSTEM cho onboarding, báo cáo và settings; service mode không xóa
+UAC. Chuyển toàn bộ truy cập dữ liệu qua service để UI chạy standard user là việc tiếp theo.
+
+Nếu marker không có (chạy từ source/Debug), app dùng mô hình §5.1: app + watchdog tự quản lý bảo vệ.
 
 ---
 
@@ -979,7 +1007,7 @@ Trạng thái lưu trong `AppSettings.ProtectionEnabled`; session active lưu tr
 ## 10. Persistence & Privacy
 
 - DB: `%ProgramData%\EduFocus\edufocus.db`.
-- Logs: `%ProgramData%\EduFocus\logs`.
+- Logs: UI ghi `%LOCALAPPDATA%\EduFocus\logs`; service ghi `%ProgramData%\EduFocus\logs` (xem §12).
 - ACL: Administrators/SYSTEM full; học sinh standard user không đọc/ghi. Phụ huynh thao tác qua app elevated, không cấp quyền file trực tiếp.
 - `DataDirectorySecurity` áp ACL khi initializer chạy; quyền kế thừa cho DB, WAL và `backups`; lỗi ACL ném `DataDirectorySecurityException` và không xóa dữ liệu.
 - Backup trước migration bằng `SqliteBackupStore`: verify `PRAGMA integrity_check`, tên file duy nhất, giữ tối đa 3 bản.
@@ -995,19 +1023,23 @@ Trạng thái lưu trong `AppSettings.ProtectionEnabled`; session active lưu tr
 
 ## 11. Tamper resistance
 
-| Lớp | MVP | Production |
+| Lớp | Standalone (§5.1) | Service mode (§5.2) |
 |---|---|---|
 | Ẩn xuống tray khi đóng | ✅ | ✅ |
-| Thoát cần PIN | ✅ (kể cả OFF) | ✅ |
-| Auto-start | Scheduled Task | Service |
-| Watchdog | `EduFocus.exe --watchdog` thường trú (heartbeat 5 giây, stale 30 giây) + 2 scheduled task logon/mỗi phút giám sát chính watchdog; budget 5 lần/10 phút; không restart sau exit sạch | Windows Service |
-| Chặn kill process | Hạn chế | Process ACL + SYSTEM |
-| Chống sửa hosts | Self-heal | Service + ACL |
-| Chống uninstall | Best-effort PIN prompt | Service + policy |
-| Phát hiện đổi giờ | Ghi audit | Ghi audit + policy |
-| Chống admin | ❌ (giới hạn đã biết) | Một phần |
+| Thoát cần PIN | ✅ (kể cả OFF) | ✅ (chỉ UI; service vẫn chạy) |
+| Auto-start | Scheduled Task | Windows Service auto-start + SCM recovery |
+| Watchdog | `EduFocus.exe --watchdog` thường trú (heartbeat 5 giây, stale 30 giây) + 2 scheduled task logon/mỗi phút giám sát chính watchdog; budget 5 lần/10 phút; không restart sau exit sạch | SCM restart 3 lần, delay 60 giây, reset 1 ngày; hosts section giữ nguyên khi service dừng |
+| Chặn kill process | Hạn chế | Service chạy LocalSystem; IPC chỉ SYSTEM/Administrators và xác thực ảnh tiến trình hai chiều |
+| Chống sửa hosts | Self-heal | Service self-heal khi reconcile; hosts section giữ nguyên khi UI đóng |
+| Chống uninstall | Best-effort PIN prompt | PIN prompt cho UI; gỡ MSI vẫn cần admin và dừng service có kiểm soát |
+| Phát hiện đổi giờ | Ghi audit | Service ghi audit; lịch chạy trong service |
+| Chống admin | ❌ (giới hạn đã biết) | ❌ admin/SYSTEM vẫn tắt được service |
 
-**Tuyên bố đúng:** EduFocus chống tắt **ở mức hợp lý**, không chống được admin/SYSTEM, không chặn Windows shutdown; app thường được khởi động lại trong ≤ 30 giây sau khi bị kill, còn nếu chính watchdog bị kill thì scheduled task khôi phục nó trong tối đa khoảng 60 giây. Không quảng cáo "không thể tắt".
+**Tuyên bố đúng:** EduFocus chống tắt **ở mức hợp lý**, không chống được admin/SYSTEM, không chặn
+Windows shutdown. Trong service mode, protection tiếp tục khi UI đóng và sau reboot; service bị kill
+được SCM khôi phục trong khoảng 60 giây (tối đa 3 lần/ngày), và hosts section vẫn còn trong thời
+gian gián đoạn. Standalone mode (chạy từ source) vẫn dùng watchdog như mô tả ở §5.1. Không quảng cáo
+"không thể tắt".
 
 ---
 
@@ -1021,7 +1053,10 @@ Trạng thái lưu trong `AppSettings.ProtectionEnabled`; session active lưu tr
   → timestamp **UTC**, level, category, correlation id.
 - Level: `INFO`, `WARN`, `ERROR`. Category chuẩn: `App`, `Database`, `Security`, `Protection`, `Session`, `UI`;
   module mới thêm hằng số trong `LogCategories`.
-- Vị trí: `%LOCALAPPDATA%\EduFocus\logs\edufocus-YYYYMMDD.log` (theo user, không cần admin).
+- Vị trí:
+  - UI: `%LOCALAPPDATA%\EduFocus\logs\edufocus-YYYYMMDD.log` (theo user, không cần admin).
+  - Service: `%PROGRAMDATA%\EduFocus\logs\edufocus-YYYYMMDD.log` (SYSTEM không có LocalAppData;
+    thư mục kế thừa ACL Administrators/SYSTEM). Cùng format, redaction và rotation 10 MB/14 ngày.
 - Xoay vòng theo ngày và dung lượng: tối đa **10 MB/file** (`edufocus-YYYYMMDD-001.log`, ...),
   giữ **14 ngày**; file cũ bị dọn khi khởi động hoặc sang ngày mới.
 - Correlation: `ICorrelationContext` dùng `AsyncLocal`. App tạo id khi khởi động; mỗi thao tác
@@ -1045,9 +1080,12 @@ Trạng thái lưu trong `AppSettings.ProtectionEnabled`; session active lưu tr
 
 ### Thu thập log khi báo lỗi
 
-1. Mở `%LOCALAPPDATA%\EduFocus\logs` (thường là `C:\Users\<user>\AppData\Local\EduFocus\logs`).
+1. Mở `%LOCALAPPDATA%\EduFocus\logs` (UI, thường là `C:\Users\<user>\AppData\Local\EduFocus\logs`)
+   và `%PROGRAMDATA%\EduFocus\logs` (service, thường là `C:\ProgramData\EduFocus\logs`; cần quyền
+   admin để đọc). Log service ghi các sự kiện reconcile, lịch, pipe và vòng đời session.
 2. Gửi các file `edufocus-*.log` quanh thời điểm lỗi (nén lại).
-3. Kèm thời điểm UTC, phiên bản EduFocus, phiên bản Windows và các bước tái hiện.
+3. Kèm thời điểm UTC, phiên bản EduFocus, phiên bản Windows, trạng thái service (`EduFocus.Service.exe --health`)
+   và các bước tái hiện.
 4. Không đính kèm DB, ảnh/video webcam hoặc dữ liệu học sinh; dù log đã redact, vẫn kiểm tra trước khi chia sẻ.
 
 
@@ -1144,6 +1182,21 @@ AddViews()
 > rồi monitor drain và đóng event. Session có `MonitoringEnabled = false` không mở camera. `ActivityTrackingService`
 > nhận `IAppSettingsRepository` để cộng `MonitoringEligibleSeconds` theo policy tại thời điểm start.
 
+> **Bổ sung sau issue #46:** có hai composition root. `App.xaml.cs` chọn theo marker
+> `HKLM\SOFTWARE\EduFocus\ServiceMode` (đọc bởi `ServiceInstallationProbe`):
+> - **service mode:** `IProtectionUseCase` là `ServiceMonitoredProtectionUseCase` bọc
+>   `ServiceControlClient`; `ServiceMonitoringCoordinator` sở hữu camera/activity overlay theo
+>   status từ service; `ServiceStatusPoller` (10 giây) cập nhật tray/UI; không resolve watchdog,
+>   schedule hay retention cục bộ.
+> - **standalone:** giữ nguyên `ProtectionService` + `WatchdogAwareProtectionService` như trước.
+>
+> `ServiceComposition.Build()` là root của `EduFocus.Service`: dùng chung `AddInfrastructureServices()`
+> và SQLite repositories, nhưng thay `IProtectionEnginePort`-related monitoring ports bằng no-op
+> (`NullActivityUseCase`, `NullAttentionMonitorUseCase`, `NullAttentionPipelineUseCase` — Session 0
+> không có webcam/foreground), đăng ký `ServiceRuntime`, `ServiceControlServer` với
+> `ExpectedClientImagePath = <install>\EduFocus.exe`, và ghi log vào
+> `%ProgramData%\EduFocus\logs`.
+
 ---
 
 ## 14. Cấu trúc thư mục đích
@@ -1176,6 +1229,7 @@ EduFocus/
 │   │   ├── Attention/
 │   │   ├── Auth/
 │   │   ├── Watchdog/
+│   │   ├── ServiceControl/  (ServiceControlServer/Client, framing, process verification)
 │   │   └── EduFocus.Infrastructure.csproj
 │   ├── EduFocus.Infrastructure.Attention/
 │   │   ├── Camera/          (OpenCvCameraPort, WindowsCameraDeviceCatalog, OpenCvCameraSource)
@@ -1185,13 +1239,20 @@ EduFocus/
 │   │   ├── Repositories/
 │   │   ├── Migrations/
 │   │   └── EduFocus.SqliteDataAccess.csproj
+│   ├── EduFocus.Service/
+│   │   ├── Hosting/         (WindowsServiceHost, ServiceHealthProbe, ServicePowerNotifier)
+│   │   ├── Runtime/         (ServiceRuntime, options, status)
+│   │   ├── Control/         (ServiceCommandHandler, ServiceRequestAuthorizer)
+│   │   ├── Composition/     (ServiceComposition)
+│   │   └── NoOps/           (Null activity/attention ports cho Session 0)
 │   ├── EduFocus.WPF/
 │   │   ├── Views/
 │   │   ├── ViewModels/
-│   │   ├── Services/       (PrivacyNoticeRenderer, logging, watchdog host, ...)
+│   │   ├── Services/       (PrivacyNoticeRenderer, logging, watchdog host, ServiceStatusPoller, ...)
 │   │   ├── PrivacyNoticeWindow.xaml(.cs)
 │   │   ├── App.xaml
 │   │   └── EduFocus.WPF.csproj
+│   ├── EduFocus.Service.Tests/
 │   └── EduFocus.Domain.Tests/
 ├── installer/
 │   ├── Product.wxs
@@ -1256,6 +1317,10 @@ EduFocus/
 > Issue #44 hoàn thiện hồ sơ minh bạch trước phát hành: privacy notice tiếng Việt + trình xem trong app,
 > DPIA/bản đồ dữ liệu/quy trình sự cố, consent hai lớp (MSI + onboarding), third-party notices và
 > cập nhật README/SECURITY/installer/release checklist.
+> Issue #45 thêm URL/path rule (`Suffix`/`Contains`), native messaging host có xác thực tiến trình và
+> extension MV3. Issue #46 thêm `EduFocus.Service` (Windows Service `EduFocusProtection`), IPC
+> named-pipe có ACL + xác thực ảnh hai chiều, service mode trong WPF, marker `ServiceMode` trong MSI và
+> publish/ký `EduFocus.Service.exe` trong release workflow; chi tiết ở §5.2.
 > Inventory 1.x ở [legacy-cleanup.md](./legacy-cleanup.md), invariant domain ở
 > [domain-invariants.md](./domain-invariants.md).
 
@@ -1303,6 +1368,11 @@ EduFocus/
 - Audit log ghi kèm `CorrelationId`.
 - Parent credential round-trip với PBKDF2 thật; PIN/recovery hoạt động sau khi tạo lại repository (mô phỏng restart).
 - Backup verify/rotation/restore, corrupt DB, data-directory ACL.
+- Service control: framing (độ dài, quá lớn, cắt cụt), pipe ACL/xác thực ảnh tiến trình, timeout,
+  request hỏng, lệnh trái phép; `ServiceCommandHandler` mapping lỗi và sanitize; `ServiceRuntime`
+  start/stop/reconcile/seed/audit, session `ServiceStopped`, khởi động lại trên cùng DB.
+- Service mode UI: `ServiceMonitoredProtectionUseCase` gọi service trước/sau thao tác và
+  `ServiceMonitoringCoordinator` bật/tắt attention + activity theo status, kể cả khi service lỗi.
 
 ### CI
 - `.github/workflows/ci.yml` — Windows runner, .NET 10: restore, build/test Release, publish framework-dependent.

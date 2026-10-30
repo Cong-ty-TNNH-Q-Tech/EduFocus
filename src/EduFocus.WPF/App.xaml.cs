@@ -5,11 +5,13 @@ using EduFocus.Domain.Protection;
 using EduFocus.Infrastructure;
 using EduFocus.Infrastructure.Attention;
 using EduFocus.Infrastructure.Attention.Camera;
+using EduFocus.Infrastructure.ServiceControl;
 using EduFocus.Infrastructure.Watchdog;
 using EduFocus.Ports.DTOs;
 using EduFocus.Ports.Inbound;
 using EduFocus.Ports.Outbound.Persistence;
 using EduFocus.Ports.Outbound.Services;
+using EduFocus.Ports.ServiceControl;
 using EduFocus.SqliteDataAccess.Persistence;
 using EduFocus.SqliteDataAccess.Repositories;
 using EduFocus.UseCases.Activity;
@@ -60,8 +62,9 @@ public partial class App : Application
             return;
         }
 
+        var serviceManaged = ServiceInstallationProbe.IsServiceManaged();
         var serviceCollection = new ServiceCollection();
-        ConfigureServices(serviceCollection);
+        ConfigureServices(serviceCollection, serviceManaged);
         Services = serviceCollection.BuildServiceProvider();
 
         var correlation = Services.GetRequiredService<ICorrelationContext>();
@@ -78,6 +81,33 @@ public partial class App : Application
             return;
         }
 
+        if (serviceManaged)
+            await StartServiceManagedAsync(logger);
+        else
+            await StartStandaloneAsync(logger);
+
+        var mainWindow = Services.GetRequiredService<MainWindow>();
+        MainWindow = mainWindow;
+        ShutdownMode = ShutdownMode.OnMainWindowClose;
+        mainWindow.Show();
+
+        Services.GetRequiredService<TrayIconService>().Start();
+
+        if (!serviceManaged)
+        {
+            Services.GetRequiredService<ScheduleSchedulerService>().Start();
+            Services.GetRequiredService<RetentionSchedulerService>().Start();
+        }
+    }
+
+    /// <summary>
+    /// Standalone composition: this process owns protection, the schedule and
+    /// the watchdog. The order keeps the persisted ON state recoverable: seed
+    /// rules, reconcile the engine, evaluate the schedule, then synchronize the
+    /// supervisor before any window shows.
+    /// </summary>
+    private static async Task StartStandaloneAsync(IAppLogger logger)
+    {
         // Publish the liveness beacon before the watchdog can be spawned so its
         // first tick already sees a fresh heartbeat.
         Services.GetRequiredService<WatchdogHeartbeatPublisher>().Start();
@@ -117,8 +147,7 @@ public partial class App : Application
 
         // Apply the schedule once before any UI shows so a window that started
         // while the app was closed is reflected in the tray and main window.
-        var scheduleScheduler = Services.GetRequiredService<ScheduleSchedulerService>();
-        await scheduleScheduler.EvaluateNowAsync();
+        await Services.GetRequiredService<ScheduleSchedulerService>().EvaluateNowAsync();
 
         // Startup reconcile also installs/repairs the watchdog tasks and the
         // supervisor process; later protection transitions go through the
@@ -131,20 +160,58 @@ public partial class App : Application
         {
             logger.Error(LogCategories.Watchdog, "Watchdog startup synchronization failed.", ex);
         }
-
-        var mainWindow = Services.GetRequiredService<MainWindow>();
-        MainWindow = mainWindow;
-        ShutdownMode = ShutdownMode.OnMainWindowClose;
-        mainWindow.Show();
-
-        Services.GetRequiredService<TrayIconService>().Start();
-        scheduleScheduler.Start();
-        Services.GetRequiredService<RetentionSchedulerService>().Start();
     }
 
-    private static void ConfigureServices(IServiceCollection services)
+    /// <summary>
+    /// Service composition: the Windows service owns the engine, heartbeat,
+    /// session, schedule and retention. This process only projects the remote
+    /// status and runs the session-bound camera/activity overlay, so it removes
+    /// watchdog artifacts from older installs and never starts a local engine.
+    /// </summary>
+    private static async Task StartServiceManagedAsync(IAppLogger logger)
+    {
+        try
+        {
+            await Services
+                .GetRequiredService<IWatchdogAutoStartPort>()
+                .SynchronizeAsync(WatchdogRegistrationMode.None);
+        }
+        catch (Exception ex)
+        {
+            logger.Error(
+                LogCategories.Watchdog,
+                "Could not remove legacy watchdog scheduled tasks in service mode.",
+                ex);
+        }
+
+        try
+        {
+            if (!await Services
+                    .GetRequiredService<IWatchdogRuntimePort>()
+                    .RequestStopAsync(TimeSpan.FromSeconds(5)))
+            {
+                logger.Warning(
+                    LogCategories.Watchdog,
+                    "A legacy watchdog process did not stop within the wait time in service mode.");
+            }
+        }
+        catch (Exception ex)
+        {
+            logger.Error(
+                LogCategories.Watchdog,
+                "Could not stop the legacy watchdog process in service mode.",
+                ex);
+        }
+
+        var poller = Services.GetRequiredService<ServiceStatusPoller>();
+        await poller.RefreshOnceAsync();
+        poller.Start();
+    }
+
+    private static void ConfigureServices(IServiceCollection services, bool serviceManaged)
     {
         services.AddInfrastructureServices();
+        services.AddSingleton(new ProtectionHostModeOptions { ServiceManaged = serviceManaged });
 
         services.AddSingleton(new EduFocusDatabaseOptions());
         services.AddSingleton<SqliteDatabaseInitializer>();
@@ -198,11 +265,38 @@ public partial class App : Application
         services.AddSingleton<IOnboardingUseCase, OnboardingService>();
         services.AddSingleton(new WatchdogOptions());
         services.AddSingleton<IWatchdogCoordinator, WatchdogCoordinator>();
-        services.AddSingleton<ProtectionService>();
-        services.AddSingleton<IProtectionUseCase>(provider =>
-            new WatchdogAwareProtectionService(
-                provider.GetRequiredService<ProtectionService>(),
-                provider.GetRequiredService<IWatchdogCoordinator>()));
+
+        if (serviceManaged)
+        {
+            // The service is the only protection owner. The client verifies the
+            // pipe server image and requires a local Parent Mode session before
+            // it sends a parent command.
+            services.AddSingleton(new ServiceControlClientOptions
+            {
+                ExpectedServerImagePath = Path.Combine(
+                    AppContext.BaseDirectory,
+                    ServiceIdentity.ServiceExecutableName)
+            });
+            services.AddSingleton(provider => new ServiceControlClient(
+                provider.GetRequiredService<ServiceControlClientOptions>(),
+                provider.GetRequiredService<IParentAuthorizer>()));
+            services.AddSingleton<IServiceControlClient>(provider =>
+                provider.GetRequiredService<ServiceControlClient>());
+            services.AddSingleton<ServiceMonitoringCoordinator>();
+            services.AddSingleton<ServiceStatusPoller>();
+            services.AddSingleton<IProtectionUseCase>(provider =>
+                new ServiceMonitoredProtectionUseCase(
+                    provider.GetRequiredService<ServiceControlClient>(),
+                    provider.GetRequiredService<ServiceMonitoringCoordinator>()));
+        }
+        else
+        {
+            services.AddSingleton<ProtectionService>();
+            services.AddSingleton<IProtectionUseCase>(provider =>
+                new WatchdogAwareProtectionService(
+                    provider.GetRequiredService<ProtectionService>(),
+                    provider.GetRequiredService<IWatchdogCoordinator>()));
+        }
         services.AddSingleton<IDashboardUseCase, DashboardService>();
         services.AddSingleton<IReportUseCase, ReportService>();
         services.AddSingleton<IReportExportUseCase, ReportExportService>();

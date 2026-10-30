@@ -30,9 +30,9 @@ Tham chiếu: [release-process.md](./release-process.md),
 
 - [ ] Release workflow xanh; toàn bộ test pass (TRX đã upload).
 - [ ] Dry run trên branch thử nghiệm thành công trước khi push tag.
-- [ ] Version trong tên file, `EduFocus.exe`, `EduFocus.NativeHost.exe`, MSI khớp tag.
+- [ ] Version trong tên file, `EduFocus.exe`, `EduFocus.Service.exe`, `EduFocus.NativeHost.exe`, MSI khớp tag.
 - [ ] `SHA256SUMS.txt` khớp và đã được đọc lại tự động.
-- [ ] Chữ ký `Valid` trên exe/native host/MSI (nếu đã cấu hình chứng chỉ); nếu unsigned, đã ghi rõ lý do.
+- [ ] Chữ ký `Valid` trên exe/service exe/native host/MSI (nếu đã cấu hình chứng chỉ); nếu unsigned, đã ghi rõ lý do.
 - [ ] Artifact có đủ MSI, portable ZIP, browser extension ZIP và hai hướng dẫn cài đặt.
 - [ ] CHANGELOG có section của version và `### Breaking changes`.
 - [ ] Không có secret, PFX, DB/log/bak/tmp trong artifact.
@@ -46,7 +46,8 @@ Tham chiếu: [release-process.md](./release-process.md),
 - [ ] Log không chứa PIN, recovery code, token, query string hoặc tiêu đề cửa sổ nhạy cảm.
 - [ ] Browser extension chỉ gửi URL đã khớp rule (đã làm sạch query/fragment/credentials) qua
       named pipe cục bộ; không đọc/gửi lịch sử duyệt web, nội dung trang hay cookie.
-- [ ] Gỡ cài đặt xóa hosts marker, listener, scheduled task và thư mục runtime đúng chính sách.
+- [ ] Gỡ cài đặt xóa hosts marker, listener, scheduled task/watchdog cũ, service `EduFocusProtection` và
+      thư mục runtime đúng chính sách.
 
 ### 2.3. Hiệu năng và độ tin cậy
 
@@ -66,15 +67,26 @@ Tham chiếu: [release-process.md](./release-process.md),
       **Thông báo quyền riêng tư** hiển thị đúng tiếng Việt và chặn Next khi chưa tick.
 - [ ] Shortcut Desktop/Start Menu tồn tại; `%ProgramData%\EduFocus` có ACL
       Administrators/SYSTEM; thư mục cài có `docs\privacy-notice.md`,
-      `THIRD-PARTY-NOTICES.md`, `LICENSE`.
-- [ ] Standard user mở app nhận UAC dự kiến và app chạy sau khi nâng quyền.
-- [ ] Nâng cấp từ bản trước giữ DB/settings, session cũ được phục hồi, chỉ còn một entry
-      trong Apps & Features.
+      `THIRD-PARTY-NOTICES.md`, `LICENSE`, `EduFocus.Service.exe`.
+- [ ] Service `EduFocusProtection` ở trạng thái **Running**, auto-start, chạy LocalSystem;
+      `EduFocus.Service.exe --health` trả healthy; marker `HKLM\SOFTWARE\EduFocus\ServiceMode=1`
+      tồn tại.
+- [ ] Đóng UI khi đang bảo vệ: hosts/block page/process watcher vẫn hoạt động; mở lại UI thấy
+      trạng thái từ service, không có engine cục bộ thứ hai.
+- [ ] Kill `EduFocus.Service.exe`: SCM restart trong khoảng 60 giây; session cũ `Interrupted`
+      ghi chú `ServiceStopped`, có audit `ProtectionServiceStopped`/`SessionInterrupted`.
+- [ ] Reboot khi đang bảo vệ: service tự khởi động, protection được reconcile, session được phục hồi.
+- [ ] Standard user mở app nhận UAC dự kiến (UI vẫn cần admin vì đọc/ghi DB ACL) và app chạy sau
+      khi nâng quyền; service mode không fallback về engine cục bộ khi service dừng.
+- [ ] Nâng cấp từ bản trước giữ DB/settings, service dừng rồi khởi động lại, session cũ được phục hồi,
+      chỉ còn một entry trong Apps & Features.
 - [ ] Native messaging host được đăng ký cho Chrome/Edge sau khi cài (kiểm tra registry
       `NativeMessagingHosts\com.edufocus.native_host` ở cả hai registry view) và bị xóa khi gỡ.
 - [ ] Cài browser extension từ ZIP (Load unpacked hoặc CRX), mở popup thấy trạng thái kết nối;
       khi EduFocus tắt, duyệt web không bị ảnh hưởng (fail-open).
-- [ ] Gỡ cài đặt trả lời giữ/xóa dữ liệu đúng lựa chọn; hosts/listener/watchdog sạch.
+- [ ] Gỡ cài đặt trả lời giữ/xóa dữ liệu đúng lựa chọn; service row `EduFocusProtection`, hosts,
+      listener, watchdog/scheduled task cũ và marker `ServiceMode` sạch.
+- [ ] Portable ZIP chạy standalone (không có service row/marker) và watchdog vẫn hoạt động.
 
 ### 2.5. Migration, backup và dữ liệu
 

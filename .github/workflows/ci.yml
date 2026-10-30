@@ -68,6 +68,12 @@ jobs:
           --configuration Release
           --output "${{ github.workspace }}/artifacts/publish"
 
+      - name: Publish Windows service
+        run: >
+          dotnet publish src/EduFocus.Service/EduFocus.Service.csproj
+          --configuration Release
+          --output "${{ github.workspace }}/artifacts/publish"
+
       - name: Publish native messaging host
         run: >
           dotnet publish src/EduFocus.NativeHost/EduFocus.NativeHost.csproj

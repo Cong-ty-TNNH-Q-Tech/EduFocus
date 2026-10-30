@@ -42,7 +42,7 @@ Học sinh mở máy tính để học online nhưng rất dễ bị cuốn vào
 | 👁️ **Ước lượng tập trung** | Dùng webcam để nhận biết có mặt, nhìn màn hình, rời màn hình hoặc buồn ngủ |
 | 🖥️ **Nhận diện lớp online** | Theo dõi riêng Google Meet, Microsoft Teams, Zoom |
 | 🔒 **Local-first** | Không cloud, không tài khoản, dữ liệu chỉ nằm trên máy |
-| 🛡️ **Chống tắt cơ bản** | Ẩn xuống tray, thoát cần PIN, tự khởi động lại (khoảng 60 giây), tự phục hồi sau crash |
+| 🛡️ **Chống tắt cơ bản** | Ẩn xuống tray, thoát cần PIN; Windows Service nền giữ bảo vệ khi UI đóng, tự khởi động lại sau crash/reboot (SCM restart khoảng 60 giây) |
 | 📈 **Báo cáo phụ huynh** | Dashboard ngày/tuần, timeline, mất tập trung, blocked attempts, xuất CSV |
 
 ---
@@ -123,8 +123,9 @@ Tắt Protection bằng PIN hoặc hết khung giờ
 | **Blocking** | Windows hosts file (domain exact) + local HTTP block page + MV3 extension (URL/path) |
 | **Activity** | Win32 foreground window, WMI, UI Automation |
 | **Attention** | OpenCvSharp4 + ONNX Runtime (MediaPipe Face/Iris) |
+| **Background protection** | Windows Service `EduFocusProtection` (LocalSystem) + named-pipe IPC có ACL/xác thực ảnh tiến trình |
 | **Security** | PBKDF2-SHA256; không lưu secret khác |
-| **Installer** | WiX Toolset v4 (MSI) |
+| **Installer** | WiX Toolset v4 (MSI, cài service + native host) |
 | **CI/CD** | GitHub Actions |
 
 ---
@@ -196,8 +197,11 @@ dotnet test EduFocus.slnx --configuration Release
 
 ## 🔍 Nhật ký & gỡ lỗi
 
-- Log kỹ thuật: `%LOCALAPPDATA%\EduFocus\logs\edufocus-YYYYMMDD.log` — mỗi file tối đa 10 MB, giữ 14 ngày.
+- Log kỹ thuật của UI: `%LOCALAPPDATA%\EduFocus\logs\edufocus-YYYYMMDD.log`; của service:
+  `%PROGRAMDATA%\EduFocus\logs\edufocus-YYYYMMDD.log` — mỗi file tối đa 10 MB, giữ 14 ngày.
 - Mỗi dòng có timestamp UTC, level, category và correlation id; PIN, recovery code, token và URL đầy đủ được redact trước khi ghi.
+- Trạng thái service: `EduFocus.Service.exe --health` (cần quyền admin); chạy `--console` để xem log
+  trực tiếp khi gỡ lỗi.
 - Khi báo lỗi, gửi các file log quanh thời điểm xảy ra kèm phiên bản EduFocus, phiên bản Windows và bước tái hiện. Không gửi DB hoặc ảnh/video webcam.
 
 ---
@@ -217,7 +221,11 @@ dotnet test EduFocus.slnx --configuration Release
 - Không thể phát hiện mọi chatbot mới hoặc chatbot chạy trong ứng dụng khác.
 - Process watcher dựa trên tên/đường dẫn process; app đổi tên hoặc chạy portable có thể không bị phát hiện.
 - Ứng dụng không chống được người dùng có quyền SYSTEM/admin; Windows shutdown/logoff vẫn là đường bypass.
-- Watchdog thường trú phát hiện kill/hang và khởi động lại app trong khoảng ≤ 30 giây; nếu chính watchdog bị kill, scheduled task khôi phục nó trong tối đa khoảng 60 giây. Uninstall PIN chỉ là best-effort.
+- Bản cài dùng Windows Service: service chạy LocalSystem, tiếp tục bảo vệ khi UI đóng và được SCM
+  restart sau crash (khoảng 60 giây; tối đa 3 lần/ngày). Admin/SYSTEM vẫn stop/disable/gỡ được service.
+  UI vẫn cần quyền admin trong bản này vì đọc/ghi DB được ACL bảo vệ. Bản portable/source dùng watchdog
+  thường trú: restart app trong ≤ 30 giây, watchdog bị kill được scheduled task khôi phục trong tối đa
+  khoảng 60 giây. Uninstall PIN chỉ là best-effort.
 
 EduFocus hướng tới **hỗ trợ thói quen học tập**, không phải giám sát bí mật hay chống gian lận thi cử.
 

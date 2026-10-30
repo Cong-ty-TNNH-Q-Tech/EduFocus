@@ -42,7 +42,7 @@ Students open their computers for online classes but easily get pulled into AI c
 | 👁️ **Attention estimate** | Uses the webcam to detect presence, screen-facing gaze, absence, or drowsiness |
 | 🖥️ **Online class detection** | Separate tracking for Google Meet, Microsoft Teams, and Zoom |
 | 🔒 **Local-first** | No cloud, no account, data stays on the device |
-| 🛡️ **Basic tamper resistance** | Tray hiding, PIN-protected exit, auto-restart (~60s), crash recovery |
+| 🛡️ **Basic tamper resistance** | Tray hiding, PIN-protected exit; a background Windows Service keeps protection active while the UI is closed and auto-restarts after crash/reboot (~60s via SCM) |
 | 📈 **Parent reports** | Daily/weekly dashboard, timeline, distractions, blocked attempts, CSV export |
 
 ---
@@ -124,8 +124,9 @@ Protection turns off with PIN or when the schedule window ends
 | **Blocking** | Windows hosts file (exact domains) + local HTTP block page + MV3 extension (URL/path) |
 | **Activity** | Win32 foreground window, WMI, UI Automation |
 | **Attention** | OpenCvSharp4 + ONNX Runtime (MediaPipe Face/Iris) |
+| **Background protection** | Windows Service `EduFocusProtection` (LocalSystem) + named-pipe IPC with ACL and process-image verification |
 | **Security** | PBKDF2-SHA256; no other secrets stored |
-| **Installer** | WiX Toolset v4 (MSI) |
+| **Installer** | WiX Toolset v4 (MSI, installs the service + native host) |
 | **CI/CD** | GitHub Actions |
 
 ---
@@ -197,8 +198,11 @@ dotnet test EduFocus.slnx --configuration Release
 
 ## 🔍 Logs & troubleshooting
 
-- Technical logs: `%LOCALAPPDATA%\EduFocus\logs\edufocus-YYYYMMDD.log` — at most 10 MB per file, kept for 14 days.
+- UI technical logs: `%LOCALAPPDATA%\EduFocus\logs\edufocus-YYYYMMDD.log`; service logs:
+  `%PROGRAMDATA%\EduFocus\logs\edufocus-YYYYMMDD.log` — at most 10 MB per file, kept for 14 days.
 - Every line has a UTC timestamp, level, category and correlation id; PINs, recovery codes, tokens and full URLs are redacted before writing.
+- Service status: `EduFocus.Service.exe --health` (requires admin); run `--console` to stream the
+  service log while troubleshooting.
 - When reporting a bug, attach the log files around the failure plus the EduFocus version, Windows version and reproduction steps. Never attach the database or webcam images/video.
 
 ---
@@ -218,7 +222,7 @@ dotnet test EduFocus.slnx --configuration Release
 - New or embedded chatbots cannot all be detected.
 - The process watcher relies on process name/path; renamed or portable apps may evade detection.
 - The app cannot resist a user with SYSTEM/admin privileges; Windows shutdown/logoff remains a bypass.
-- A resident watchdog detects kills/hangs and restarts the app within about 30 seconds; if the watchdog itself is killed, a scheduled task restores it within about 60 seconds. Uninstall PIN is best-effort.
+- Installed builds run a Windows Service: it runs as LocalSystem, keeps protection active while the UI is closed and is restarted by the SCM after a crash (~60 seconds; up to 3 times per day). An admin/SYSTEM user can still stop/disable/remove the service. The UI still requires admin in this build because it reads/writes the ACL-protected database. Portable/source builds use the resident watchdog instead: the app is restarted within ≤ 30 seconds, and a killed watchdog is restored by a scheduled task within about 60 seconds. Uninstall PIN is best-effort.
 
 EduFocus aims to **support study habits**, not to enable covert surveillance or exam cheating.
 

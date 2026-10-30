@@ -18,6 +18,9 @@ public sealed record DatabaseInitializationResult(
 /// </summary>
 public sealed class SqliteDatabaseInitializer
 {
+    private const string InitializationLockFileName = "edufocus.init.lock";
+    private static readonly TimeSpan InitializationLockTimeout = TimeSpan.FromSeconds(30);
+
     private readonly EduFocusDatabaseOptions _options;
     private readonly IAppLogger _logger;
     private readonly DbContextOptions<EduFocusDbContext> _dbContextOptions;
@@ -43,6 +46,13 @@ public sealed class SqliteDatabaseInitializer
     public async Task<DatabaseInitializationResult> InitializeAsync(CancellationToken cancellationToken = default)
     {
         EnsureDataDirectory();
+
+        // The service and the UI can start at the same time after logon. A
+        // cross-process file lock keeps both from applying migrations to the
+        // same database concurrently; the lock file disappears on close and a
+        // stale file from a crash is harmless.
+        await using var initializationLock = await AcquireInitializationLockAsync(cancellationToken)
+            .ConfigureAwait(false);
 
         var existed = File.Exists(_options.DatabasePath)
             && new FileInfo(_options.DatabasePath).Length > 0;
@@ -117,6 +127,45 @@ public sealed class SqliteDatabaseInitializer
     /// file is left untouched when the backup is missing or corrupt.
     /// </summary>
     public string? RestoreBackup(string backupPath) => _backupStore.Restore(backupPath);
+
+    private async Task<FileStream> AcquireInitializationLockAsync(CancellationToken cancellationToken)
+    {
+        var directory = Path.GetDirectoryName(Path.GetFullPath(_options.DatabasePath))
+            ?? throw new InvalidOperationException("The database path has no parent directory.");
+        var lockPath = Path.Combine(directory, InitializationLockFileName);
+        var deadline = DateTime.UtcNow.Add(InitializationLockTimeout);
+        IOException? lastError = null;
+
+        while (true)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+
+            try
+            {
+                return new FileStream(
+                    lockPath,
+                    FileMode.OpenOrCreate,
+                    FileAccess.ReadWrite,
+                    FileShare.None,
+                    bufferSize: 1,
+                    FileOptions.DeleteOnClose);
+            }
+            catch (IOException ex) when (DateTime.UtcNow < deadline)
+            {
+                lastError = ex;
+                await Task.Delay(250, cancellationToken).ConfigureAwait(false);
+            }
+            catch (IOException ex)
+            {
+                _logger.Error(
+                    LogCategories.Database,
+                    "Timed out waiting for another EduFocus process to finish database initialization.");
+                throw new IOException(
+                    "Timed out waiting for another EduFocus process to finish database initialization.",
+                    lastError ?? ex);
+            }
+        }
+    }
 
     private void EnsureDataDirectory()
     {

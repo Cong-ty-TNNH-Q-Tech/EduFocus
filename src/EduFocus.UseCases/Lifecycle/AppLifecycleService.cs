@@ -5,6 +5,7 @@ using EduFocus.Ports.Inbound;
 using EduFocus.Ports.Outbound.Persistence;
 using EduFocus.Ports.Outbound.Services;
 using EduFocus.Ports.Protection;
+using EduFocus.UseCases.Protection;
 
 namespace EduFocus.UseCases.Lifecycle;
 
@@ -43,6 +44,7 @@ public sealed class AppLifecycleService : IAppLifecycleUseCase
     private readonly ICorrelationContext _correlation;
     private readonly IAppLogger _logger;
     private readonly TimeProvider _timeProvider;
+    private readonly ProtectionHostModeOptions _hostMode;
 
     public AppLifecycleService(
         IParentModeUseCase parentMode,
@@ -56,7 +58,8 @@ public sealed class AppLifecycleService : IAppLifecycleUseCase
         IAuditLogRepository auditLogs,
         ICorrelationContext correlation,
         IAppLogger logger,
-        TimeProvider timeProvider)
+        TimeProvider timeProvider,
+        ProtectionHostModeOptions? hostMode = null)
     {
         _parentMode = parentMode ?? throw new ArgumentNullException(nameof(parentMode));
         _protection = protection ?? throw new ArgumentNullException(nameof(protection));
@@ -70,6 +73,7 @@ public sealed class AppLifecycleService : IAppLifecycleUseCase
         _correlation = correlation ?? throw new ArgumentNullException(nameof(correlation));
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
         _timeProvider = timeProvider ?? throw new ArgumentNullException(nameof(timeProvider));
+        _hostMode = hostMode ?? new ProtectionHostModeOptions();
     }
 
     public async Task<AppExitResult> ExitWithPinAsync(
@@ -119,10 +123,17 @@ public sealed class AppLifecycleService : IAppLifecycleUseCase
     {
         var now = UtcNow();
 
-        // Stop the cadence first and reload the row so the shutdown interrupt
-        // closes at the flushed heartbeat instead of a stale snapshot.
+        // Camera and activity monitoring live in this user session; always
+        // release them first. The protection service owns the heartbeat and
+        // the session, so the UI must not write those rows in service mode.
         await TryStopAttentionAsync();
         await TryStopActivityAsync();
+
+        if (_hostMode.ServiceManaged)
+            return;
+
+        // Stop the cadence first and reload the row so the shutdown interrupt
+        // closes at the flushed heartbeat instead of a stale snapshot.
         await TryStopHeartbeatAsync();
 
         try

@@ -8,6 +8,8 @@
     <Project Path="src/EduFocus.NativeHost.Tests/EduFocus.NativeHost.Tests.csproj" />
     <Project Path="src/EduFocus.NativeHost/EduFocus.NativeHost.csproj" />
     <Project Path="src/EduFocus.Ports/EduFocus.Ports.csproj" />
+    <Project Path="src/EduFocus.Service/EduFocus.Service.csproj" />
+    <Project Path="src/EduFocus.Service.Tests/EduFocus.Service.Tests.csproj" />
     <Project Path="src/EduFocus.SqliteDataAccess/EduFocus.SqliteDataAccess.csproj" />
     <Project Path="src/EduFocus.SqliteDataAccess.Tests/EduFocus.SqliteDataAccess.Tests.csproj" />
     <Project Path="src/EduFocus.UseCases/EduFocus.UseCases.csproj" />

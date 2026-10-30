@@ -67,19 +67,24 @@ của phụ huynh, nhắc phụ huynh thông báo cho trẻ, không hỗ trợ g
 |---|---|---|---|---|---|---|---|---|
 | Cấu hình | bật bảo vệ/giám sát, ngưỡng, retention, camera, update check | Phụ huynh | Vận hành đúng lựa chọn | `AppSettings` | Theo vòng đời cài đặt | Parent Mode (PIN) | Không | Trung bình |
 | Xác thực | hash PIN/recovery, salt, số lần sai, lockout | Phụ huynh | Chống truy cập trái phép | `ParentCredentials` | Theo vòng đời cài đặt | Tiến trình app | Không | Cao (bảo mật) |
-| Phiên học | start/end, heartbeat, counters, confidence, blocked count, note | App | Báo cáo thời gian học | `StudySessions` | 365 ngày (cấu hình) | Parent Mode | Không | Trung bình |
+| Phiên học | start/end, heartbeat, counters, confidence, blocked count, note | App/service | Báo cáo thời gian học | `StudySessions` | 365 ngày (cấu hình) | Parent Mode | Không | Trung bình |
 | Mẫu hoạt động | app, process, window title đã làm sạch, domain/URL đã làm sạch, category, idle, online class | Hệ điều hành/UIA | Phân loại và báo cáo | `ActivitySamples` | 30 ngày (cấu hình) | Parent Mode/CSV | Không | **Cao** (title có thể chứa tên tài liệu) |
 | Sự kiện tập trung | state, start/end, confidence, app/domain, note | Camera + activity | Ước lượng tập trung | `AttentionEvents` | 90 ngày (cấu hình) | Parent Mode/CSV | Không | **Cao** (dữ liệu trẻ em) |
 | Lần truy cập bị chặn | target type/value, domain/URL đã làm sạch, process, window title, observed via | Block page/watcher/browser extension | Minh bạch nỗ lực truy cập | `BlockedAttempts` | 90 ngày (cấu hình) | Parent Mode | Không | **Cao** |
 | URL điều hướng (tạm thời) | URL đã bỏ query/fragment/credentials, tối đa 2048 ký tự | Browser extension | So khớp rule chặn cục bộ | RAM trình duyệt; chỉ URL khớp rule mới đi qua native messaging tới app | Không lưu ở extension | Không | Không | **Cao** khi khớp rule |
-| Audit | actor, event type, description, correlation id | App | Truy vết thay đổi nhạy cảm | `AuditLogs` | 365 ngày | Hỗ trợ/điều tra | Không | Trung bình |
-| Log kỹ thuật | timestamp, level, category, correlation id, message đã redact | App | Chẩn đoán lỗi | `%LocalAppData%\EduFocus\logs` | 14 ngày, 10 MB/tệp | Người dùng máy | Không | Trung bình |
-| Backup/khôi phục | bản sao DB, bản sao hosts, journal | App | Chống mất dữ liệu/khôi phục chặn | `%ProgramData%\EduFocus\backups`, `hosts-backup`, `runtime` | 3 bản backup; hosts xóa sau restore | SYSTEM/Administrators | Không | Trung bình |
+| Audit | actor, event type, description, correlation id | App/service | Truy vết thay đổi nhạy cảm | `AuditLogs` | 365 ngày | Hỗ trợ/điều tra | Không | Trung bình |
+| Log kỹ thuật | timestamp, level, category, correlation id, message đã redact | App + service | Chẩn đoán lỗi | `%LocalAppData%\EduFocus\logs` (UI), `%ProgramData%\EduFocus\logs` (service) | 14 ngày, 10 MB/tệp | Người dùng máy/Administrators | Không | Trung bình |
+| Backup/khôi phục | bản sao DB, bản sao hosts, journal | App/service | Chống mất dữ liệu/khôi phục chặn | `%ProgramData%\EduFocus\backups`, `hosts-backup`, `runtime` | 3 bản backup; hosts xóa sau restore | SYSTEM/Administrators | Không | Trung bình |
 | Bản xuất CSV | tổng hợp phiên, app/domain, sự kiện | Phụ huynh | Chia sẻ nội bộ do phụ huynh chọn | `%LocalAppData%\EduFocus\exports` | Đến khi phụ huynh xóa | Phụ huynh | Phụ huynh quyết định | **Cao** |
 | Yêu cầu cập nhật | IP, User-Agent | GitHub (khi bật) | Kiểm tra phiên bản | Không lưu cục bộ | Không áp dụng | GitHub | GitHub | Thấp |
 
 **Không có trong data map:** frame/ảnh/video/audio, landmark/embedding khuôn mặt, clipboard, nội dung
 trang, lịch sử duyệt đầy đủ, vị trí, danh bạ, email, dữ liệu sinh trắc học.
+
+**Xử lý trong service:** bản cài MSI chạy `EduFocusProtection` (LocalSystem) để giữ bảo vệ khi UI
+đóng. Service chỉ xử lý các nhóm dữ liệu đã có trong bảng trên (cấu hình, phiên học, blocked attempt,
+audit, log, backup) và không thu thêm nhóm dữ liệu mới; camera/attention vẫn chạy trong phiên người
+dùng. IPC giữa UI và service là named pipe cục bộ có ACL, không gửi dữ liệu ra mạng.
 
 ---
 
@@ -133,7 +138,7 @@ Thang điểm: Khả năng (L) và Tác động (I) 1–5; mức = L×I (1–6 t
 | R5 | Giám sát che giấu/không đồng ý trong gia đình | 2 | 5 | 10 | Onboarding yêu cầu xác nhận đã thông báo cho trẻ; privacy notice hiển thị trước khi bật monitoring và trong MSI; tài liệu nhấn mạnh không hỗ trợ che giấu | Trung bình |
 | R6 | Lộ dữ liệu qua log kỹ thuật | 2 | 4 | 8 | Redaction PIN/recovery/token/URL; không log domain/title; log cục bộ 14 ngày | Thấp |
 | R7 | Mất máy/ổ đĩa bị truy cập vật lý | 2 | 4 | 8 | ACL; dữ liệu không mã hóa toàn đĩa (BitLocker ngoài phạm vi) | Trung bình — khuyến nghị BitLocker |
-| R8 | Admin Windows tắt/gỡ/bypass giám sát | 4 | 2 | 8 | Ghi nhận là giới hạn đã biết; watchdog chỉ chống crash | Trung bình — chấp nhận |
+| R8 | Admin Windows tắt/gỡ/bypass giám sát | 4 | 2 | 8 | Ghi nhận là giới hạn đã biết; service do SCM restart khi crash, watchdog chỉ chống crash ở bản standalone | Trung bình — chấp nhận |
 | R9 | Retention/xóa thất bại, dữ liệu sống quá hạn | 2 | 3 | 6 | Batch 500, báo lỗi từng bảng, audit `RetentionApplied`, test tự động | Thấp |
 | R10 | Cấu hình sai làm camera bật ngoài phiên | 2 | 4 | 8 | Pipeline chỉ start khi bảo vệ + phiên + monitoring bật; test vòng đời | Thấp |
 | R11 | Update check tiết lộ IP cho GitHub | 2 | 1 | 2 | Mặc định tắt; UI giải thích; không gửi dữ liệu học tập | Thấp |
@@ -189,7 +194,7 @@ trong báo cáo công khai.
 | `BlockedAttempts` | `EventRetentionDays` | 90 ngày | `SessionId` chuyển NULL khi session bị xóa |
 | `StudySessions` | `SessionRetentionDays` | 365 ngày | Chi tiết xóa trước, session sau |
 | `AuditLogs` | Cố định 365 ngày | 365 ngày | Không chứa secret |
-| Log kỹ thuật | `FileLogger` rotation | 14 ngày / 10 MB | Redaction trước khi ghi |
+| Log kỹ thuật | `FileLogger` (UI + service) rotation | 14 ngày / 10 MB | Redaction trước khi ghi |
 | Backup DB | `SqliteBackupStore` | 3 bản | Tạo trước migration |
 | Hosts backup | `HostsFileBlocker` | Xóa sau restore/self-heal | Chỉ trong thư mục backup |
 | CSV | Người dùng | Không tự xóa | Nằm ngoài DB; UI nhắc bảo vệ tệp |
