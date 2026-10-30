@@ -210,8 +210,13 @@ public sealed class WatchdogService : IWatchdogUseCase
             return WatchdogTickResult.Wait(_options.PollInterval);
         }
 
-        if (state.PendingProcessId is not null)
+        if (state.PendingProcessId is { } pendingPid)
         {
+            if (_processes.IsProcessAlive(pendingPid, state.PendingProcessStartedAtUtc ?? DateTime.MinValue))
+            {
+                return WatchdogTickResult.Wait(_options.PollInterval);
+            }
+
             state = state with
             {
                 PendingProcessId = null,
@@ -242,9 +247,10 @@ public sealed class WatchdogService : IWatchdogUseCase
         if (state.RestartCount >= _options.MaxRestartsPerWindow)
         {
             var gaveUpAt = state.GaveUpRecordedAtUtc is null ? now : state.GaveUpRecordedAtUtc;
+            var cooldownEnd = windowStart + _options.RestartWindow;
             state = state with
             {
-                GaveUpUntilUtc = windowStart + _options.RestartWindow,
+                GaveUpUntilUtc = cooldownEnd > now ? cooldownEnd : now + _options.RestartWindow,
                 GaveUpRecordedAtUtc = gaveUpAt,
                 NextRestartAtUtc = null
             };
@@ -333,7 +339,12 @@ public sealed class WatchdogService : IWatchdogUseCase
         if (state.WindowStartedAtUtc is { } windowStart &&
             now - windowStart >= _options.RestartWindow)
         {
-            state = new WatchdogRestartState();
+            state = new WatchdogRestartState
+            {
+                PendingProcessId = state.PendingProcessId,
+                PendingProcessStartedAtUtc = state.PendingProcessStartedAtUtc,
+                PendingReason = state.PendingReason
+            };
         }
 
         if (state.GaveUpUntilUtc is { } gaveUpUntil && now >= gaveUpUntil)

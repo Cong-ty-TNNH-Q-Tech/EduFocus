@@ -267,10 +267,10 @@ public partial class App : Application
         services.AddSingleton<IParentModeUseCase, ParentModeService>();
         services.AddSingleton<IOnboardingUseCase, OnboardingService>();
         services.AddSingleton(new WatchdogOptions());
-        services.AddSingleton<IWatchdogCoordinator, WatchdogCoordinator>();
 
         if (serviceManaged)
         {
+            services.AddSingleton<IWatchdogCoordinator, NoOpWatchdogCoordinator>();
             // The service is the only protection owner. The client verifies the
             // pipe server image and requires a local Parent Mode session before
             // it sends a parent command.
@@ -294,6 +294,7 @@ public partial class App : Application
         }
         else
         {
+            services.AddSingleton<IWatchdogCoordinator, WatchdogCoordinator>();
             services.AddSingleton<ProtectionService>();
             services.AddSingleton<IProtectionUseCase>(provider =>
                 new WatchdogAwareProtectionService(

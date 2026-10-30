@@ -127,3 +127,14 @@ public sealed class WatchdogCoordinator : IWatchdogCoordinator
         }
     }
 }
+
+/// <summary>
+/// Used when the Windows Service owns protection (<c>serviceManaged == true</c>)
+/// so saving settings in Parent Mode never re-registers legacy user-mode watchdog
+/// scheduled tasks or spawns a duplicate <c>--watchdog</c> supervisor.
+/// </summary>
+public sealed class NoOpWatchdogCoordinator : IWatchdogCoordinator
+{
+    public Task SynchronizeAsync(CancellationToken cancellationToken = default) =>
+        Task.CompletedTask;
+}

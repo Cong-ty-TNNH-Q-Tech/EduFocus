@@ -40,7 +40,6 @@ public sealed class WatchdogHost
     public async Task RunAsync(bool loginStart)
     {
         _files.EnsureDirectory();
-        _files.TryDelete(_files.StopRequestPath);
 
         if (_files.IsShutdownInProgressForCurrentBoot())
         {
@@ -75,6 +74,7 @@ public sealed class WatchdogHost
                 return;
             }
 
+            _files.TryDelete(_files.StopRequestPath);
             using var stopEvent = TryCreateStopEvent();
             _files.WriteWatchdogPid(Environment.ProcessId);
 
@@ -82,10 +82,10 @@ public sealed class WatchdogHost
         }
         finally
         {
-            _files.DeleteWatchdogPid();
-
             if (ownsMutex)
             {
+                _files.DeleteWatchdogPid();
+
                 try
                 {
                     mutex?.ReleaseMutex();

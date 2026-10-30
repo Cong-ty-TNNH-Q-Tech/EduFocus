@@ -289,6 +289,49 @@ public sealed class WatchdogServiceTests
     }
 
     [Fact]
+    public async Task Tick_waits_when_pending_process_is_still_alive_before_heartbeat_ready()
+    {
+        var harness = new Harness();
+        harness.Settings.Stored = Settings(protectionOn: true);
+        harness.Processes.AliveProcesses.Add(4321);
+        harness.States.State = new WatchdogRestartState
+        {
+            RestartCount = 1,
+            WindowStartedAtUtc = Now.AddMinutes(-1),
+            LastRestartAtUtc = Now.AddSeconds(-6),
+            NextRestartAtUtc = Now.AddSeconds(-1),
+            PendingProcessId = 4321,
+            PendingProcessStartedAtUtc = Now.AddSeconds(-6)
+        };
+
+        var result = await harness.Service.TickAsync(loginStart: false);
+
+        result.Action.Should().Be(WatchdogTickAction.Wait);
+        harness.Processes.StartCount.Should().Be(0);
+        harness.States.State.PendingProcessId.Should().Be(4321);
+    }
+
+    [Fact]
+    public async Task Tick_preserves_pending_hang_reason_when_restart_window_expires()
+    {
+        var harness = new Harness();
+        harness.Settings.Stored = Settings(protectionOn: true);
+        harness.States.State = new WatchdogRestartState
+        {
+            RestartCount = 2,
+            WindowStartedAtUtc = Now.AddMinutes(-11),
+            LastRestartAtUtc = Now.AddMinutes(-11),
+            PendingReason = WatchdogRestartReason.Hang
+        };
+
+        var result = await harness.Service.TickAsync(loginStart: false);
+
+        result.Action.Should().Be(WatchdogTickAction.StartedApp);
+        result.Reason.Should().Be(WatchdogRestartReason.Hang);
+        harness.States.State!.RestartCount.Should().Be(1);
+    }
+
+    [Fact]
     public async Task Tick_gives_up_after_the_budget_and_audits_once()
     {
         var harness = new Harness();
