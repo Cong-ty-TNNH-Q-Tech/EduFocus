@@ -67,7 +67,7 @@ public sealed class ServiceMonitoringCoordinator
                 return;
             }
 
-            await StartCoreAsync(session);
+            await StartCoreAsync(session, status.MonitoringEnabled);
         }
         finally
         {
@@ -94,7 +94,7 @@ public sealed class ServiceMonitoringCoordinator
                 return;
             }
 
-            await StartCoreAsync(session);
+            await StartCoreAsync(session, session.MonitoringEnabled);
         }
         finally
         {
@@ -136,7 +136,7 @@ public sealed class ServiceMonitoringCoordinator
         }
     }
 
-    private async Task StartCoreAsync(StudySession session)
+    private async Task StartCoreAsync(StudySession session, bool monitoringEnabled)
     {
         if (_sessionId != session.Id)
         {
@@ -144,7 +144,7 @@ public sealed class ServiceMonitoringCoordinator
             _sessionId = session.Id;
         }
 
-        if (session.MonitoringEnabled)
+        if (monitoringEnabled)
         {
             await EnsureAttentionAsync(session);
         }

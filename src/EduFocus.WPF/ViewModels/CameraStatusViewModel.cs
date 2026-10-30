@@ -3,10 +3,13 @@ using System.Windows.Media;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using EduFocus.Domain.Attention;
+using EduFocus.Domain.Entities;
+using EduFocus.Domain.Enums;
 using EduFocus.Ports.DTOs;
 using EduFocus.Ports.Inbound;
 using EduFocus.Ports.Outbound.Persistence;
 using EduFocus.Ports.Outbound.Services;
+using EduFocus.Ports.Security;
 using EduFocus.UseCases.Attention;
 
 namespace EduFocus.WPF.ViewModels;
@@ -24,6 +27,9 @@ public sealed partial class CameraStatusViewModel : ObservableObject, IDisposabl
     private readonly IAppSettingsRepository _settings;
     private readonly IAppLogger _logger;
     private readonly TimeProvider _timeProvider;
+    private readonly IParentAuthorizer? _authorizer;
+    private readonly IAuditLogRepository? _auditLogs;
+    private readonly ICorrelationContext? _correlation;
 
     [ObservableProperty] private CameraSessionState _state = CameraSessionState.Off;
     [ObservableProperty] private string _statusText = "Camera đang tắt.";
@@ -41,7 +47,10 @@ public sealed partial class CameraStatusViewModel : ObservableObject, IDisposabl
         ICameraPlatformInfo platform,
         IAppSettingsRepository settings,
         IAppLogger logger,
-        TimeProvider timeProvider)
+        TimeProvider timeProvider,
+        IParentAuthorizer? authorizer = null,
+        IAuditLogRepository? auditLogs = null,
+        ICorrelationContext? correlation = null)
     {
         _camera = camera ?? throw new ArgumentNullException(nameof(camera));
         _checkFactory = checkFactory ?? throw new ArgumentNullException(nameof(checkFactory));
@@ -49,6 +58,9 @@ public sealed partial class CameraStatusViewModel : ObservableObject, IDisposabl
         _settings = settings ?? throw new ArgumentNullException(nameof(settings));
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
         _timeProvider = timeProvider ?? throw new ArgumentNullException(nameof(timeProvider));
+        _authorizer = authorizer;
+        _auditLogs = auditLogs;
+        _correlation = correlation;
 
         _camera.StateChanged += OnCameraStateChanged;
         Refresh();
@@ -194,6 +206,10 @@ public sealed partial class CameraStatusViewModel : ObservableObject, IDisposabl
                 $"Đã lưu camera “{device.DisplayName}”. Áp dụng từ lần giám sát tiếp theo.",
                 false);
         }
+        catch (ParentAuthorizationException)
+        {
+            SetFeedback("Phiên Parent Mode đã hết hạn. Vui lòng đăng nhập lại.", true);
+        }
         catch (Exception ex)
         {
             _logger.Error(LogCategories.Attention, "Could not save the selected camera device.", ex);
@@ -221,6 +237,10 @@ public sealed partial class CameraStatusViewModel : ObservableObject, IDisposabl
                 "EduFocus sẽ dùng camera mặc định của Windows từ lần giám sát tiếp theo.",
                 false);
         }
+        catch (ParentAuthorizationException)
+        {
+            SetFeedback("Phiên Parent Mode đã hết hạn. Vui lòng đăng nhập lại.", true);
+        }
         catch (Exception ex)
         {
             _logger.Error(LogCategories.Attention, "Could not clear the stored camera device.", ex);
@@ -234,11 +254,36 @@ public sealed partial class CameraStatusViewModel : ObservableObject, IDisposabl
 
     private async Task SaveDeviceIdAsync(string? deviceId)
     {
+        _authorizer?.EnsureAuthorized("save camera device");
+
         var settings = await _settings.GetAsync()
             ?? throw new InvalidOperationException("Application settings are not available yet.");
 
-        settings.SetCameraDevice(deviceId, _timeProvider.GetUtcNow().UtcDateTime);
+        var now = _timeProvider.GetUtcNow().UtcDateTime;
+        if (now < settings.UpdatedAtUtc)
+            now = settings.UpdatedAtUtc;
+
+        settings.SetCameraDevice(deviceId, now);
         await _settings.UpdateAsync(settings);
+
+        if (_auditLogs is not null)
+        {
+            try
+            {
+                await _auditLogs.AddAsync(
+                    AuditLog.Record(
+                        AuditActor.Parent,
+                        AuditEventType.SettingsChanged,
+                        "Parent updated camera device selection.",
+                        now,
+                        "{\"changed\":[\"camera\"]}",
+                        _correlation?.Current));
+            }
+            catch (Exception ex)
+            {
+                _logger.Warning(LogCategories.Attention, $"Could not write camera device audit ({ex.GetType().Name}).");
+            }
+        }
     }
 
     private async Task<string?> ReadStoredDeviceIdAsync()

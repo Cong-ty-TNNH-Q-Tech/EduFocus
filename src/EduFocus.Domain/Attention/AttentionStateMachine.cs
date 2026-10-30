@@ -2,15 +2,18 @@ namespace EduFocus.Domain.Attention;
 
 public sealed class AttentionStateMachine
 {
-    private readonly AttentionThresholds _thresholds;
+    private AttentionThresholds _thresholds;
     private RawAttentionState _candidateState = RawAttentionState.Unknown;
     private DateTimeOffset _candidateSince;
     private bool _hasCandidate;
 
     public AttentionStateMachine(AttentionThresholds thresholds)
     {
-        _thresholds = thresholds;
+        _thresholds = thresholds ?? throw new ArgumentNullException(nameof(thresholds));
     }
+
+    public void UpdateThresholds(AttentionThresholds thresholds) =>
+        _thresholds = thresholds ?? throw new ArgumentNullException(nameof(thresholds));
 
     public AttentionState? CurrentState { get; private set; }
     public DateTimeOffset? CurrentStateSince { get; private set; }

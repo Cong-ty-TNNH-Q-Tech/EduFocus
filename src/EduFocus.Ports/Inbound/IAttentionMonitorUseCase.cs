@@ -20,6 +20,9 @@ public interface IAttentionMonitorUseCase
 
     Task StopAsync(CancellationToken cancellationToken = default);
 
+    Task RefreshSettingsAsync(CancellationToken cancellationToken = default) =>
+        Task.CompletedTask;
+
     /// <summary>
     /// Queues one sample and waits until it has been classified and persisted.
     /// Returns false when the monitor is not running or the session ended.

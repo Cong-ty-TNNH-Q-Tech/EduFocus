@@ -168,6 +168,30 @@ public sealed class AttentionMonitorService : IAttentionMonitorUseCase, IAsyncDi
         }
     }
 
+    public async Task RefreshSettingsAsync(CancellationToken cancellationToken = default)
+    {
+        if (!_running)
+            return;
+
+        try
+        {
+            var thresholds = await LoadThresholdsAsync(cancellationToken).ConfigureAwait(false);
+            _activeThresholds = thresholds;
+            _machine?.UpdateThresholds(thresholds);
+            _logger.Info(LogCategories.Attention, "Attention thresholds were refreshed for the active session.");
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            _logger.Warning(
+                LogCategories.Attention,
+                $"Could not refresh attention thresholds ({ex.GetType().Name}); keeping previous values.");
+        }
+    }
+
     public async Task<bool> ProcessAsync(
         AttentionSample sample,
         CancellationToken cancellationToken = default)

@@ -4,6 +4,7 @@ using CommunityToolkit.Mvvm.Input;
 using EduFocus.Domain.Enums;
 using EduFocus.Ports.DTOs;
 using EduFocus.Ports.Inbound;
+using EduFocus.Ports.Outbound.Persistence;
 using EduFocus.Ports.Security;
 using EduFocus.Ports.Outbound.Services;
 
@@ -26,6 +27,9 @@ public sealed partial class PrivacyViewModel : ObservableObject
     private readonly IActivityUseCase _activity;
     private readonly IWatchdogCoordinator _watchdog;
     private readonly IAppLogger _logger;
+    private readonly IAttentionMonitorUseCase? _attentionMonitor;
+    private readonly IAttentionPipelineUseCase? _attentionPipeline;
+    private readonly IStudySessionRepository? _sessions;
 
     private string? _cameraDeviceId;
 
@@ -63,13 +67,19 @@ public sealed partial class PrivacyViewModel : ObservableObject
         IDataDeletionUseCase deletion,
         IActivityUseCase activity,
         IWatchdogCoordinator watchdog,
-        IAppLogger logger)
+        IAppLogger logger,
+        IAttentionMonitorUseCase? attentionMonitor = null,
+        IAttentionPipelineUseCase? attentionPipeline = null,
+        IStudySessionRepository? sessions = null)
     {
         _settings = settings ?? throw new ArgumentNullException(nameof(settings));
         _deletion = deletion ?? throw new ArgumentNullException(nameof(deletion));
         _activity = activity ?? throw new ArgumentNullException(nameof(activity));
         _watchdog = watchdog ?? throw new ArgumentNullException(nameof(watchdog));
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
+        _attentionMonitor = attentionMonitor;
+        _attentionPipeline = attentionPipeline;
+        _sessions = sessions;
     }
 
     public bool IsNotBusy => !IsBusy;
@@ -129,11 +139,26 @@ public sealed partial class PrivacyViewModel : ObservableObject
         IsBusy = true;
         try
         {
+            // Keep the latest CameraDeviceId in case the parent just changed it in the Camera card
+            try
+            {
+                var latestSnapshot = await _settings.GetSnapshotAsync();
+                _cameraDeviceId = latestSnapshot.Settings.CameraDeviceId;
+                update = update with { CameraDeviceId = _cameraDeviceId };
+            }
+            catch
+            {
+            }
+
             var result = await _settings.SaveAsync(update);
 
             try
             {
                 await _activity.RefreshSettingsAsync();
+                if (_attentionMonitor is not null)
+                    await _attentionMonitor.RefreshSettingsAsync();
+
+                await SyncLiveCameraMonitoringAsync(result.Settings.MonitoringEnabled);
             }
             catch (Exception ex)
             {
@@ -382,6 +407,31 @@ public sealed partial class PrivacyViewModel : ObservableObject
             >= (long)Kilobyte => $"{bytes / Kilobyte:N1} KB",
             _ => $"{bytes} B"
         };
+    }
+
+    private async Task SyncLiveCameraMonitoringAsync(bool monitoringEnabled)
+    {
+        if (_attentionMonitor is null || _attentionPipeline is null)
+            return;
+
+        if (!monitoringEnabled)
+        {
+            if (_attentionPipeline.IsRunning)
+                await _attentionPipeline.StopAsync();
+            if (_attentionMonitor.IsRunning)
+                await _attentionMonitor.StopAsync();
+            return;
+        }
+
+        if (!_attentionMonitor.IsRunning && _sessions is not null)
+        {
+            var active = await _sessions.GetActiveAsync();
+            if (active is not null)
+            {
+                await _attentionMonitor.StartAsync(active.Id);
+                await _attentionPipeline.StartAsync();
+            }
+        }
     }
 
     private void ClearDeleteSecrets()
