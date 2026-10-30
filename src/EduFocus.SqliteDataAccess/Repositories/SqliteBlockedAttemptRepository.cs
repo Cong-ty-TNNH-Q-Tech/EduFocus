@@ -8,23 +8,19 @@ namespace EduFocus.SqliteDataAccess.Repositories;
 /// <summary>Blocked attempt persistence (database schema §11).</summary>
 public sealed class SqliteBlockedAttemptRepository : IBlockedAttemptRepository
 {
-    private readonly DbContextOptions<EduFocusDbContext> _dbContextOptions;
+    private readonly SqliteDbContextFactory _contextFactory;
 
-    public SqliteBlockedAttemptRepository(EduFocusDatabaseOptions options)
+    public SqliteBlockedAttemptRepository(SqliteDbContextFactory contextFactory)
     {
-        ArgumentNullException.ThrowIfNull(options);
-
-        _dbContextOptions = new DbContextOptionsBuilder<EduFocusDbContext>()
-            .UseSqlite(options.ConnectionString)
-            .AddInterceptors(new SqlitePragmaInterceptor())
-            .Options;
+        ArgumentNullException.ThrowIfNull(contextFactory);
+        _contextFactory = contextFactory;
     }
 
     public async Task AddAsync(BlockedAttempt attempt, CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(attempt);
 
-        await using var context = new EduFocusDbContext(_dbContextOptions);
+        await using var context = _contextFactory.CreateDbContext();
         context.BlockedAttempts.Add(attempt);
         await context.SaveChangesAsync(cancellationToken);
     }

@@ -41,6 +41,12 @@ public sealed class PerformanceBudgetTests
     [Fact]
     public async Task Database_initialization_stays_within_the_startup_budget()
     {
+        // Warm up CLR, EF Core and the native SQLCipher library on a throwaway
+        // database so one-time JIT and antivirus scanning of freshly built
+        // binaries do not read as a database regression.
+        await using (var warmup = new TempDatabase())
+            await warmup.CreateInitializer().InitializeAsync();
+
         await using var db = new TempDatabase();
         var initializer = db.CreateInitializer();
 
@@ -90,9 +96,9 @@ public sealed class PerformanceBudgetTests
             "database_schema §15 estimates well under 50 MB after a full year");
 
         var report = new ReportService(
-            new SqliteStudySessionRepository(db.Options),
-            new SqliteActivitySampleRepository(db.Options),
-            new SqliteAttentionEventRepository(db.Options),
+            new SqliteStudySessionRepository(db.ContextFactory),
+            new SqliteActivitySampleRepository(db.ContextFactory),
+            new SqliteAttentionEventRepository(db.ContextFactory),
             TimeProvider.System);
 
         var period = ReportPeriod.Range(FirstDay, FirstDay.AddDays(Days - 1));
@@ -148,9 +154,9 @@ public sealed class PerformanceBudgetTests
         var beforeBytes = DatabaseBytes(db);
 
         var retention = new RetentionService(
-            new SqliteRetentionRepository(db.Options),
-            new SqliteAppSettingsRepository(db.Options),
-            new SqliteAuditLogRepository(db.Options),
+            new SqliteRetentionRepository(db.ContextFactory),
+            new SqliteAppSettingsRepository(db.ContextFactory),
+            new SqliteAuditLogRepository(db.ContextFactory),
             new CorrelationContext(),
             db.Logger,
             new AdjustedTimeProvider(Now),
@@ -190,7 +196,7 @@ public sealed class PerformanceBudgetTests
 
     private static async Task SeedSettingsAsync(TempDatabase db)
     {
-        var repository = new SqliteAppSettingsRepository(db.Options);
+        var repository = new SqliteAppSettingsRepository(db.ContextFactory);
         await repository.AddAsync(AppSettings.CreateDefault(Now));
     }
 

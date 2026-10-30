@@ -11,23 +11,19 @@ namespace EduFocus.SqliteDataAccess.Repositories;
 /// </summary>
 public sealed class SqliteAuditLogRepository : IAuditLogRepository
 {
-    private readonly DbContextOptions<EduFocusDbContext> _dbContextOptions;
+    private readonly SqliteDbContextFactory _contextFactory;
 
-    public SqliteAuditLogRepository(EduFocusDatabaseOptions options)
+    public SqliteAuditLogRepository(SqliteDbContextFactory contextFactory)
     {
-        ArgumentNullException.ThrowIfNull(options);
-
-        _dbContextOptions = new DbContextOptionsBuilder<EduFocusDbContext>()
-            .UseSqlite(options.ConnectionString)
-            .AddInterceptors(new SqlitePragmaInterceptor())
-            .Options;
+        ArgumentNullException.ThrowIfNull(contextFactory);
+        _contextFactory = contextFactory;
     }
 
     public async Task AddAsync(AuditLog auditLog, CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(auditLog);
 
-        await using var context = new EduFocusDbContext(_dbContextOptions);
+        await using var context = _contextFactory.CreateDbContext();
         context.AuditLogs.Add(auditLog);
         await context.SaveChangesAsync(cancellationToken);
     }

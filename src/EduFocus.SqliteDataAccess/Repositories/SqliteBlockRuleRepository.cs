@@ -9,21 +9,17 @@ namespace EduFocus.SqliteDataAccess.Repositories;
 /// <summary>Block and allow rules (database schema §6).</summary>
 public sealed class SqliteBlockRuleRepository : IBlockRuleRepository
 {
-    private readonly DbContextOptions<EduFocusDbContext> _dbContextOptions;
+    private readonly SqliteDbContextFactory _contextFactory;
 
-    public SqliteBlockRuleRepository(EduFocusDatabaseOptions options)
+    public SqliteBlockRuleRepository(SqliteDbContextFactory contextFactory)
     {
-        ArgumentNullException.ThrowIfNull(options);
-
-        _dbContextOptions = new DbContextOptionsBuilder<EduFocusDbContext>()
-            .UseSqlite(options.ConnectionString)
-            .AddInterceptors(new SqlitePragmaInterceptor())
-            .Options;
+        ArgumentNullException.ThrowIfNull(contextFactory);
+        _contextFactory = contextFactory;
     }
 
     public async Task<IReadOnlyList<BlockRule>> ListAsync(CancellationToken cancellationToken = default)
     {
-        await using var context = new EduFocusDbContext(_dbContextOptions);
+        await using var context = _contextFactory.CreateDbContext();
         return await context.BlockRules
             .AsNoTracking()
             .OrderBy(x => x.RuleType)
@@ -36,7 +32,7 @@ public sealed class SqliteBlockRuleRepository : IBlockRuleRepository
         BlockRuleId id,
         CancellationToken cancellationToken = default)
     {
-        await using var context = new EduFocusDbContext(_dbContextOptions);
+        await using var context = _contextFactory.CreateDbContext();
         return await context.BlockRules
             .AsNoTracking()
             .SingleOrDefaultAsync(x => x.Id == id, cancellationToken);
@@ -46,7 +42,7 @@ public sealed class SqliteBlockRuleRepository : IBlockRuleRepository
     {
         ArgumentNullException.ThrowIfNull(rule);
 
-        await using var context = new EduFocusDbContext(_dbContextOptions);
+        await using var context = _contextFactory.CreateDbContext();
         context.BlockRules.Add(rule);
         await context.SaveChangesAsync(cancellationToken);
     }
@@ -55,14 +51,14 @@ public sealed class SqliteBlockRuleRepository : IBlockRuleRepository
     {
         ArgumentNullException.ThrowIfNull(rule);
 
-        await using var context = new EduFocusDbContext(_dbContextOptions);
+        await using var context = _contextFactory.CreateDbContext();
         context.BlockRules.Update(rule);
         await context.SaveChangesAsync(cancellationToken);
     }
 
     public async Task DeleteAsync(BlockRuleId id, CancellationToken cancellationToken = default)
     {
-        await using var context = new EduFocusDbContext(_dbContextOptions);
+        await using var context = _contextFactory.CreateDbContext();
         var rule = await context.BlockRules.SingleOrDefaultAsync(x => x.Id == id, cancellationToken);
         if (rule is null)
             return;

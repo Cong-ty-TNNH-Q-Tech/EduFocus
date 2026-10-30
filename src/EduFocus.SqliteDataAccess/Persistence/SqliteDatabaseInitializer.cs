@@ -10,11 +10,12 @@ public sealed record DatabaseInitializationResult(
     string? BackupPath);
 
 /// <summary>
-/// Creates and protects the data directory, verifies the existing database,
-/// backs up before migrations (verified copy, newest three kept), applies EF
-/// Core migrations and configures SQLite pragmas. Failures keep the existing
-/// file and surface a safe exception instead of deleting data
-/// (database_schema §14, §16, §17).
+/// Creates and protects the data directory, unlocks or creates the SQLCipher
+/// key, upgrades a legacy plaintext database, backs up before migrations
+/// (verified copy, newest three kept), applies EF Core migrations and
+/// configures SQLite pragmas. Failures keep the existing file and surface a
+/// safe exception instead of deleting data (database_schema §14, §16, §17,
+/// §18).
 /// </summary>
 public sealed class SqliteDatabaseInitializer
 {
@@ -23,12 +24,14 @@ public sealed class SqliteDatabaseInitializer
 
     private readonly EduFocusDatabaseOptions _options;
     private readonly IAppLogger _logger;
-    private readonly DbContextOptions<EduFocusDbContext> _dbContextOptions;
+    private readonly IDatabaseKeyStore _keyStore;
     private readonly SqliteBackupStore _backupStore;
+    private readonly SqliteDbContextFactory _contextFactory;
 
     public SqliteDatabaseInitializer(
         EduFocusDatabaseOptions options,
         IAppLogger logger,
+        IDatabaseKeyStore? keyStore = null,
         TimeProvider? timeProvider = null)
     {
         ArgumentNullException.ThrowIfNull(options);
@@ -36,11 +39,9 @@ public sealed class SqliteDatabaseInitializer
 
         _options = options;
         _logger = logger;
-        _dbContextOptions = new DbContextOptionsBuilder<EduFocusDbContext>()
-            .UseSqlite(options.ConnectionString)
-            .AddInterceptors(new SqlitePragmaInterceptor())
-            .Options;
-        _backupStore = new SqliteBackupStore(options, logger, timeProvider);
+        _keyStore = keyStore ?? new DatabaseKeyStore(options);
+        _contextFactory = new SqliteDbContextFactory(options, _keyStore);
+        _backupStore = new SqliteBackupStore(options, logger, _keyStore, timeProvider);
     }
 
     public async Task<DatabaseInitializationResult> InitializeAsync(CancellationToken cancellationToken = default)
@@ -54,21 +55,57 @@ public sealed class SqliteDatabaseInitializer
         await using var initializationLock = await AcquireInitializationLockAsync(cancellationToken)
             .ConfigureAwait(false);
 
-        var existed = File.Exists(_options.DatabasePath)
-            && new FileInfo(_options.DatabasePath).Length > 0;
+        var state = SqliteCipher.GetFileState(_options.DatabasePath);
+        var existed = state is SqliteDatabaseFileState.Plaintext or SqliteDatabaseFileState.Encrypted;
+        string? backupPath = null;
 
-        if (existed)
+        if (state == SqliteDatabaseFileState.Plaintext)
+        {
+            _logger.Warning(
+                LogCategories.Database,
+                "The existing EduFocus database is plaintext. Encrypting it with SQLCipher; the original file is kept until the encrypted copy is verified.");
+            backupPath = UpgradePlaintextDatabaseToEncrypted();
+            state = SqliteDatabaseFileState.Encrypted;
+        }
+
+        if (state == SqliteDatabaseFileState.Encrypted)
+        {
+            var key = _keyStore.TryLoad();
+
+            if (key is null)
+            {
+                _logger.Error(
+                    LogCategories.Database,
+                    $"The encrypted database '{_options.DatabasePath}' has no key file at '{_keyStore.KeyFilePath}'. No data was changed.");
+                throw new DatabaseKeyException(
+                    "The EduFocus database is encrypted but its key file is missing. Restore the key file together with the database backup, or contact support. No data was changed.",
+                    _keyStore.KeyFilePath);
+            }
+
             EnsureDatabaseIsHealthy();
 
-        if (!existed)
+            try
+            {
+                _backupStore.EncryptLegacyBackups(key);
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+            {
+                _logger.Warning(
+                    LogCategories.Database,
+                    $"Legacy plaintext backups could not be encrypted on this start: {ex.Message}");
+            }
+        }
+        else
+        {
+            _keyStore.LoadOrCreate();
             ConfigureNewDatabaseSafely();
+        }
 
-        string? backupPath = null;
         List<string> pending;
 
         try
         {
-            await using var context = new EduFocusDbContext(_dbContextOptions);
+            await using var context = _contextFactory.CreateDbContext();
 
             pending = (await context.Database.GetPendingMigrationsAsync(cancellationToken))
                 .ToList();
@@ -76,12 +113,13 @@ public sealed class SqliteDatabaseInitializer
             if (pending.Count == 0)
             {
                 _logger.Info(LogCategories.Database, $"Database schema is up to date at '{_options.DatabasePath}'.");
-                return new DatabaseInitializationResult(false, [], null);
+                return new DatabaseInitializationResult(!existed, [], backupPath);
             }
 
             if (existed)
             {
-                backupPath = _backupStore.CreateBackup();
+                var preMigrationBackup = _backupStore.CreateBackup();
+                backupPath ??= preMigrationBackup;
                 EnsureWalMode();
             }
 
@@ -91,6 +129,10 @@ public sealed class SqliteDatabaseInitializer
             await context.Database.MigrateAsync(cancellationToken);
         }
         catch (OperationCanceledException)
+        {
+            throw;
+        }
+        catch (DatabaseKeyException)
         {
             throw;
         }
@@ -124,7 +166,8 @@ public sealed class SqliteDatabaseInitializer
     /// <summary>
     /// Restores a verified backup over the current database. Stop EduFocus
     /// first; a pre-restore snapshot is created when possible and the current
-    /// file is left untouched when the backup is missing or corrupt.
+    /// file is left untouched when the backup is missing or corrupt. A legacy
+    /// plaintext backup is encrypted during the restore.
     /// </summary>
     public string? RestoreBackup(string backupPath) => _backupStore.Restore(backupPath);
 
@@ -206,12 +249,95 @@ public sealed class SqliteDatabaseInitializer
 
         _logger.Error(
             LogCategories.Database,
-            $"Database integrity check failed for '{_options.DatabasePath}'. The file was not modified and no data was deleted.");
+            $"Database integrity check failed or the stored key could not decrypt '{_options.DatabasePath}'. The file was not modified and no data was deleted.");
         _logger.Warning(LogCategories.Database, $"Restore a verified backup from '{backupDirectory}' before using EduFocus again.");
 
         throw new SqliteDatabaseCorruptException(
-            "The EduFocus database failed the integrity check. The file was not modified; restore a backup before continuing.",
+            "The EduFocus database could not be opened with the stored encryption key or failed the integrity check. The file was not modified; restore a backup before continuing.",
             backupDirectory);
+    }
+
+    /// <summary>
+    /// Converts a plaintext database in place. The plaintext file is backed up
+    /// first, the encrypted copy is verified, and only then is it moved over
+    /// the original; a failure leaves the plaintext file untouched
+    /// (database_schema §18).
+    /// </summary>
+    private string? UpgradePlaintextDatabaseToEncrypted()
+    {
+        var key = _keyStore.LoadOrCreate();
+        string? backupPath;
+
+        try
+        {
+            backupPath = _backupStore.CreateBackup();
+        }
+        catch (SqliteBackupException)
+        {
+            _logger.Error(
+                LogCategories.Database,
+                "The pre-encryption backup of the plaintext database failed, so the database was not converted. The existing database was kept.");
+            throw;
+        }
+
+        var databasePath = Path.GetFullPath(_options.DatabasePath);
+        var directory = Path.GetDirectoryName(databasePath)
+            ?? throw new SqliteMigrationException(
+                "Encrypting the EduFocus database failed because the database path is not valid.",
+                new InvalidOperationException("The database path has no parent directory."),
+                backupPath);
+        var temporaryPath = Path.Combine(
+            directory,
+            $".{Path.GetFileName(databasePath)}.{Guid.NewGuid():N}.encrypting");
+
+        try
+        {
+            using (var source = new SqliteConnection(
+                BuildConnectionString(databasePath, SqliteOpenMode.ReadWriteCreate)))
+            {
+                source.Open();
+                ExecuteNonQuery(source, "PRAGMA wal_checkpoint(TRUNCATE);");
+                SqliteCipher.ExportEncrypted(source, temporaryPath, key);
+            }
+
+            if (!_backupStore.VerifyIntegrity(temporaryPath))
+                throw new SqliteBackupException("The encrypted copy failed the integrity check.");
+
+            SqliteConnection.ClearAllPools();
+            DeleteSideFiles(databasePath);
+            File.Move(temporaryPath, databasePath, overwrite: true);
+            DeleteSideFiles(databasePath);
+        }
+        catch (Exception ex) when (ex is SqliteException or IOException or UnauthorizedAccessException
+            or SqliteBackupException)
+        {
+            TryDelete(temporaryPath);
+            _logger.Error(
+                LogCategories.Database,
+                $"Encrypting the existing database at '{_options.DatabasePath}' failed. The original database was kept and no data was deleted.",
+                ex);
+
+            throw new SqliteMigrationException(
+                "Encrypting the existing database failed. The original database was kept; restore from the backup if necessary.",
+                ex,
+                backupPath);
+        }
+
+        try
+        {
+            EnsureWalMode();
+        }
+        catch (Exception ex) when (ex is SqliteException or IOException or UnauthorizedAccessException)
+        {
+            _logger.Warning(
+                LogCategories.Database,
+                $"The encrypted database was created but WAL mode could not be enabled: {ex.Message}");
+        }
+
+        _logger.Info(
+            LogCategories.Database,
+            $"The database at '{_options.DatabasePath}' is now encrypted with SQLCipher; the key is stored in '{_keyStore.KeyFilePath}'.");
+        return backupPath;
     }
 
     /// <summary>auto_vacuum only takes effect before the first table is created.</summary>
@@ -238,6 +364,7 @@ public sealed class SqliteDatabaseInitializer
     {
         using var connection = new SqliteConnection(_options.ConnectionString);
         connection.Open();
+        SqliteCipher.ApplyKey(connection, _keyStore.Get());
 
         var currentMode = Convert.ToInt64(
             ExecuteScalar(connection, "PRAGMA auto_vacuum;"));
@@ -246,7 +373,7 @@ public sealed class SqliteDatabaseInitializer
         {
             ExecuteNonQuery(connection, "PRAGMA auto_vacuum = INCREMENTAL;");
             ExecuteNonQuery(connection, "VACUUM;");
-            _logger.Info(LogCategories.Database, "Configured incremental auto-vacuum for the new database.");
+            _logger.Info(LogCategories.Database, "Configured incremental auto-vacuum for the new encrypted database.");
         }
 
         ExecuteNonQuery(connection, "PRAGMA journal_mode = WAL;");
@@ -256,8 +383,35 @@ public sealed class SqliteDatabaseInitializer
     {
         using var connection = new SqliteConnection(_options.ConnectionString);
         connection.Open();
+        SqliteCipher.ApplyKey(connection, _keyStore.Get());
         ExecuteNonQuery(connection, "PRAGMA journal_mode = WAL;");
     }
+
+    private static void DeleteSideFiles(string databasePath)
+    {
+        TryDelete(databasePath + "-wal");
+        TryDelete(databasePath + "-shm");
+    }
+
+    private static void TryDelete(string path)
+    {
+        try
+        {
+            if (File.Exists(path))
+                File.Delete(path);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+        }
+    }
+
+    private static string BuildConnectionString(string path, SqliteOpenMode mode) =>
+        new SqliteConnectionStringBuilder
+        {
+            DataSource = path,
+            Mode = mode,
+            Pooling = false
+        }.ToString();
 
     private static object? ExecuteScalar(SqliteConnection connection, string sql)
     {

@@ -357,6 +357,17 @@ và dự án tuân theo [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 - **Tài liệu:** architecture §5.2/§10–§14/§16 (mô hình service, IPC, vòng đời, giới hạn), `SECURITY.md` (mục dịch vụ/IPC, installer, release, known limitations), `docs/installer.md`, `docs/release-process.md`, README/README.en.
 - **Tests:** +82 test .NET (31 service control framing/ACL/xác thực ảnh/timeout/handler, 28 service host/runtime, 23 monitoring service-mode); toàn bộ **1077 test .NET pass**, build Release 0 warning.
 
+### Added (Phase 7 — Mã hóa SQLite bằng SQLCipher, issue #47)
+- **Mã hóa at-rest:** chuyển sang SQLCipher 4.5.2 (`SQLitePCLRaw.bundle_e_sqlcipher` 2.1.11, `Microsoft.EntityFrameworkCore.Sqlite.Core` 10.0.14, native `e_sqlcipher.dll`); DB, WAL và backup không đọc được nếu không có khóa; phát hiện plaintext/mã hóa qua 16 byte header.
+- **Khóa DPAPI:** `DatabaseKeyStore` sinh khóa 32 byte bằng CSPRNG, lưu `%ProgramData%\EduFocus\edufocus.key` (magic `EDUFKEY1`, DPAPI `LocalMachine`, entropy `EduFocus.DatabaseKey.v1`); khóa không phải PIN, không ghi log, gắn thiết bị; thiếu/hỏng khóa thì fail-closed, không tạo khóa mới và không ghi đè DB.
+- **PRAGMA key cho mọi kết nối:** `SqlitePragmaInterceptor` áp raw key `x'<64 hex>'` đúng một lần cho mỗi native handle (kể cả handle pool, qua `ConditionalWeakTable`) rồi `foreign_keys`; raw key tránh PBKDF2 ~525 ms mỗi kết nối.
+- **Nâng cấp plaintext:** initializer phát hiện DB plaintext (bản trước #47), tạo backup, `sqlcipher_export` sang DB mã hóa, verify rồi thay file; lỗi giữ nguyên DB và backup.
+- **Backup/restore mã hóa:** `SqliteBackupStore` dùng `ATTACH` + `sqlcipher_export` (backup API không hỗ trợ DB mã hóa), backup plaintext legacy được mã hóa lại; restore từ chối backup không giải mã được bằng key hiện tại và tạo snapshot trước khi ghi đè.
+- **UI/service & xóa dữ liệu:** key store/options dùng chung cho UI và service; `--delete-user-data` xóa cả `edufocus.key`; gỡ cài đặt giữ dữ liệu thì giữ key.
+- **Tài liệu:** schema §15–§18 (thiết kế, mất khóa, backup), SECURITY, DPIA/R15, privacy notice, installer, release/security checklist (SEC-E2E-27/28), architecture §3.5.1/ADR-18, BA §9.1, README/README.en, THIRD-PARTY (SQLCipher BSD-3-Clause).
+- **Hiệu năng:** init 175 ms (DB mới) / 78 ms (mở lại), DB 30 ngày 8,25 MB (plaintext 8,14 MB), báo cáo tháng median 274 ms, retention 545 ms, DB một năm mô phỏng 9,71 MB — trong ngân sách BA §9.3/schema §15.
+- **Tests:** +12 test (`EncryptionTests`: header/không đọc được, DPAPI/key file, fail-closed, nâng cấp plaintext, backup/restore/reject legacy, mất khóa, log); toàn bộ **1089 test .NET pass**, build Release 0 warning.
+
 ### Breaking changes
 - **Không migrate dữ liệu 1.x:** 2.0.0 dùng schema mới tại `%ProgramData%\EduFocus\edufocus.db`; DB của Don't Be Lazy (1.x) không được đọc hoặc nâng cấp tự động. Người dùng chuyển từ 1.x bắt đầu lại onboarding và dữ liệu 2.0.
 - **Mô hình bảo vệ và dữ liệu mới:** không còn phiên tập trung 1.x; quyền điều khiển thuộc Parent Mode + PIN, dữ liệu nằm trong `%ProgramData%` với ACL Administrators/SYSTEM.

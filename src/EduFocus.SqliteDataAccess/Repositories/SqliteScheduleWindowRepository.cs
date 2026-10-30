@@ -9,21 +9,17 @@ namespace EduFocus.SqliteDataAccess.Repositories;
 /// <summary>Weekly protection windows (database schema §7).</summary>
 public sealed class SqliteScheduleWindowRepository : IScheduleWindowRepository
 {
-    private readonly DbContextOptions<EduFocusDbContext> _dbContextOptions;
+    private readonly SqliteDbContextFactory _contextFactory;
 
-    public SqliteScheduleWindowRepository(EduFocusDatabaseOptions options)
+    public SqliteScheduleWindowRepository(SqliteDbContextFactory contextFactory)
     {
-        ArgumentNullException.ThrowIfNull(options);
-
-        _dbContextOptions = new DbContextOptionsBuilder<EduFocusDbContext>()
-            .UseSqlite(options.ConnectionString)
-            .AddInterceptors(new SqlitePragmaInterceptor())
-            .Options;
+        ArgumentNullException.ThrowIfNull(contextFactory);
+        _contextFactory = contextFactory;
     }
 
     public async Task<IReadOnlyList<ScheduleWindow>> ListAsync(CancellationToken cancellationToken = default)
     {
-        await using var context = new EduFocusDbContext(_dbContextOptions);
+        await using var context = _contextFactory.CreateDbContext();
         return await context.ScheduleWindows
             .AsNoTracking()
             .OrderBy(x => x.StartMinutes)
@@ -36,7 +32,7 @@ public sealed class SqliteScheduleWindowRepository : IScheduleWindowRepository
         ScheduleWindowId id,
         CancellationToken cancellationToken = default)
     {
-        await using var context = new EduFocusDbContext(_dbContextOptions);
+        await using var context = _contextFactory.CreateDbContext();
         return await context.ScheduleWindows
             .AsNoTracking()
             .SingleOrDefaultAsync(x => x.Id == id, cancellationToken);
@@ -46,7 +42,7 @@ public sealed class SqliteScheduleWindowRepository : IScheduleWindowRepository
     {
         ArgumentNullException.ThrowIfNull(window);
 
-        await using var context = new EduFocusDbContext(_dbContextOptions);
+        await using var context = _contextFactory.CreateDbContext();
         context.ScheduleWindows.Add(window);
         await context.SaveChangesAsync(cancellationToken);
     }
@@ -55,14 +51,14 @@ public sealed class SqliteScheduleWindowRepository : IScheduleWindowRepository
     {
         ArgumentNullException.ThrowIfNull(window);
 
-        await using var context = new EduFocusDbContext(_dbContextOptions);
+        await using var context = _contextFactory.CreateDbContext();
         context.ScheduleWindows.Update(window);
         await context.SaveChangesAsync(cancellationToken);
     }
 
     public async Task DeleteAsync(ScheduleWindowId id, CancellationToken cancellationToken = default)
     {
-        await using var context = new EduFocusDbContext(_dbContextOptions);
+        await using var context = _contextFactory.CreateDbContext();
         var window = await context.ScheduleWindows.SingleOrDefaultAsync(x => x.Id == id, cancellationToken);
         if (window is null)
             return;

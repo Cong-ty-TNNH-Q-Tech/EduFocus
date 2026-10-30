@@ -10,23 +10,19 @@ namespace EduFocus.SqliteDataAccess.Repositories;
 /// <summary>Foreground activity sample persistence (database schema §9).</summary>
 public sealed class SqliteActivitySampleRepository : IActivitySampleRepository
 {
-    private readonly DbContextOptions<EduFocusDbContext> _dbContextOptions;
+    private readonly SqliteDbContextFactory _contextFactory;
 
-    public SqliteActivitySampleRepository(EduFocusDatabaseOptions options)
+    public SqliteActivitySampleRepository(SqliteDbContextFactory contextFactory)
     {
-        ArgumentNullException.ThrowIfNull(options);
-
-        _dbContextOptions = new DbContextOptionsBuilder<EduFocusDbContext>()
-            .UseSqlite(options.ConnectionString)
-            .AddInterceptors(new SqlitePragmaInterceptor())
-            .Options;
+        ArgumentNullException.ThrowIfNull(contextFactory);
+        _contextFactory = contextFactory;
     }
 
     public async Task AddAsync(ActivitySample sample, CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(sample);
 
-        await using var context = new EduFocusDbContext(_dbContextOptions);
+        await using var context = _contextFactory.CreateDbContext();
         context.ActivitySamples.Add(sample);
         await context.SaveChangesAsync(cancellationToken);
     }
@@ -45,7 +41,7 @@ public sealed class SqliteActivitySampleRepository : IActivitySampleRepository
 
         var ids = sessionIds.Distinct().ToArray();
 
-        await using var context = new EduFocusDbContext(_dbContextOptions);
+        await using var context = _contextFactory.CreateDbContext();
 
         // IX_ActivitySamples_SessionId_SampledAtUtc serves the IN filter and
         // the newest-first ordering; only report-safe fields are projected.

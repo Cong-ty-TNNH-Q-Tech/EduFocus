@@ -11,21 +11,17 @@ namespace EduFocus.SqliteDataAccess.Repositories;
 /// </summary>
 public sealed class SqliteParentCredentialRepository : IParentCredentialRepository
 {
-    private readonly DbContextOptions<EduFocusDbContext> _dbContextOptions;
+    private readonly SqliteDbContextFactory _contextFactory;
 
-    public SqliteParentCredentialRepository(EduFocusDatabaseOptions options)
+    public SqliteParentCredentialRepository(SqliteDbContextFactory contextFactory)
     {
-        ArgumentNullException.ThrowIfNull(options);
-
-        _dbContextOptions = new DbContextOptionsBuilder<EduFocusDbContext>()
-            .UseSqlite(options.ConnectionString)
-            .AddInterceptors(new SqlitePragmaInterceptor())
-            .Options;
+        ArgumentNullException.ThrowIfNull(contextFactory);
+        _contextFactory = contextFactory;
     }
 
     public async Task<ParentCredential?> GetAsync(CancellationToken cancellationToken = default)
     {
-        await using var context = new EduFocusDbContext(_dbContextOptions);
+        await using var context = _contextFactory.CreateDbContext();
         return await context.ParentCredentials
             .AsNoTracking()
             .SingleOrDefaultAsync(cancellationToken);
@@ -35,7 +31,7 @@ public sealed class SqliteParentCredentialRepository : IParentCredentialReposito
     {
         ArgumentNullException.ThrowIfNull(credential);
 
-        await using var context = new EduFocusDbContext(_dbContextOptions);
+        await using var context = _contextFactory.CreateDbContext();
         context.ParentCredentials.Add(credential);
         await context.SaveChangesAsync(cancellationToken);
     }
@@ -44,7 +40,7 @@ public sealed class SqliteParentCredentialRepository : IParentCredentialReposito
     {
         ArgumentNullException.ThrowIfNull(credential);
 
-        await using var context = new EduFocusDbContext(_dbContextOptions);
+        await using var context = _contextFactory.CreateDbContext();
         context.ParentCredentials.Update(credential);
         await context.SaveChangesAsync(cancellationToken);
     }

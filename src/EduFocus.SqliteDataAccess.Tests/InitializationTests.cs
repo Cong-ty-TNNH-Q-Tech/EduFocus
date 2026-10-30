@@ -77,7 +77,7 @@ public sealed class InitializationTests
             .Which.Should().Contain("was kept");
         db.Logger.Warnings.Should().Contain(message => message.Contains("Restore"));
 
-        using var backup = OpenReadOnly(exception.BackupPath!);
+        using var backup = OpenReadOnly(exception.BackupPath!, db.KeyStore);
         TempDatabase.Scalar(
                 backup,
                 "SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name = 'AppSettings';")
@@ -89,7 +89,7 @@ public sealed class InitializationTests
     {
         await using var db = new TempDatabase();
 
-        await using (var context = db.CreateContext())
+        await using (var context = db.CreatePlaintextContext())
         {
             await context.GetService<IMigrator>()
                 .MigrateAsync("20261029140816_InitialEduFocusSchema");
@@ -133,7 +133,7 @@ public sealed class InitializationTests
     }
 
     [Fact]
-    public async Task Backup_retention_keeps_newest_files()
+    public async Task Backup_retention_keeps_newest_files_and_encrypts_legacy_backups()
     {
         await using var db = new TempDatabase();
         Directory.CreateDirectory(db.BackupDirectory);
@@ -146,7 +146,7 @@ public sealed class InitializationTests
         };
 
         foreach (var oldBackup in oldBackups)
-            await File.WriteAllTextAsync(oldBackup, "old backup placeholder");
+            CreatePlaintextBackup(oldBackup);
 
         var options = new EduFocusDatabaseOptions
         {
@@ -164,9 +164,10 @@ public sealed class InitializationTests
         var remaining = Directory.GetFiles(db.BackupDirectory, "edufocus-*.db");
 
         remaining.Should().HaveCount(2);
-        remaining.Should().Contain(oldBackups[2]);
-        remaining.Should().NotContain(oldBackups[0]);
-        remaining.Should().NotContain(oldBackups[1]);
+        remaining.Should().NotIntersectWith(oldBackups);
+        remaining.Should().OnlyContain(
+            path => SqliteCipher.GetFileState(path) == SqliteDatabaseFileState.Encrypted);
+        db.Logger.Warnings.Should().NotContain(message => message.Contains("Could not encrypt"));
     }
 
     [Fact]
@@ -174,7 +175,7 @@ public sealed class InitializationTests
     {
         await using var db = new TempDatabase();
 
-        await using (var context = db.CreateContext())
+        await using (var context = db.CreatePlaintextContext())
         {
             await context.GetService<IMigrator>()
                 .MigrateAsync("20261029140816_InitialEduFocusSchema");
@@ -237,8 +238,17 @@ public sealed class InitializationTests
         TempDatabase.ExecuteNonQuery(connection, "CREATE TABLE AppSettings (Id TEXT NOT NULL PRIMARY KEY);");
     }
 
-    private static SqliteConnection OpenReadOnly(string path)
+    private static void CreatePlaintextBackup(string path)
     {
+        using var connection = new SqliteConnection(
+            new SqliteConnectionStringBuilder { DataSource = path }.ToString());
+        connection.Open();
+        TempDatabase.ExecuteNonQuery(connection, "CREATE TABLE Marker (Value INTEGER); INSERT INTO Marker VALUES (1);");
+    }
+
+    private static SqliteConnection OpenReadOnly(string path, DatabaseKeyStore keyStore)
+    {
+        var encrypted = SqliteCipher.GetFileState(path) == SqliteDatabaseFileState.Encrypted;
         var connection = new SqliteConnection(
             new SqliteConnectionStringBuilder
             {
@@ -246,6 +256,10 @@ public sealed class InitializationTests
                 Mode = SqliteOpenMode.ReadOnly
             }.ToString());
         connection.Open();
+
+        if (encrypted)
+            keyStore.Get().ApplyTo(connection);
+
         return connection;
     }
 }

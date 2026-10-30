@@ -20,7 +20,7 @@ public sealed class AttentionEventRepositoryTests
         await db.CreateInitializer().InitializeAsync();
         var session = await SeedSessionAsync(db);
 
-        var repository = new SqliteAttentionEventRepository(db.Options);
+        var repository = new SqliteAttentionEventRepository(db.ContextFactory);
         var attentionEvent = AttentionEvent.Open(
             session.Id,
             AttentionState.Focused,
@@ -50,7 +50,7 @@ public sealed class AttentionEventRepositoryTests
         await db.CreateInitializer().InitializeAsync();
         var session = await SeedSessionAsync(db);
 
-        var repository = new SqliteAttentionEventRepository(db.Options);
+        var repository = new SqliteAttentionEventRepository(db.ContextFactory);
         var attentionEvent = AttentionEvent.Open(
             session.Id,
             AttentionState.Distracted,
@@ -76,7 +76,7 @@ public sealed class AttentionEventRepositoryTests
         await db.CreateInitializer().InitializeAsync();
         var session = await SeedSessionAsync(db);
 
-        var repository = new SqliteAttentionEventRepository(db.Options);
+        var repository = new SqliteAttentionEventRepository(db.ContextFactory);
         var later = AttentionEvent.Open(session.Id, AttentionState.Absent, Now.AddSeconds(30));
         var earlier = AttentionEvent.Open(session.Id, AttentionState.Focused, Now.AddSeconds(1));
 
@@ -98,7 +98,7 @@ public sealed class AttentionEventRepositoryTests
         var session = await SeedSessionAsync(db, active: false);
         var other = await SeedSessionAsync(db, Now.AddMinutes(5));
 
-        var repository = new SqliteAttentionEventRepository(db.Options);
+        var repository = new SqliteAttentionEventRepository(db.ContextFactory);
         var first = AttentionEvent.Open(session.Id, AttentionState.Focused, Now.AddSeconds(1));
         var second = AttentionEvent.Open(session.Id, AttentionState.CameraUnavailable, Now.AddSeconds(5));
         var foreign = AttentionEvent.Open(other.Id, AttentionState.Focused, Now.AddSeconds(1));
@@ -126,7 +126,7 @@ public sealed class AttentionEventRepositoryTests
         await db.CreateInitializer().InitializeAsync();
         var session = await SeedSessionAsync(db);
 
-        var repository = new SqliteAttentionEventRepository(db.Options);
+        var repository = new SqliteAttentionEventRepository(db.ContextFactory);
         var attentionEvent = AttentionEvent.Open(session.Id, AttentionState.Focused, Now.AddSeconds(10));
         await repository.AddAsync(attentionEvent);
 
@@ -145,7 +145,7 @@ public sealed class AttentionEventRepositoryTests
         await db.CreateInitializer().InitializeAsync();
         var session = await SeedSessionAsync(db);
 
-        var repository = new SqliteAttentionEventRepository(db.Options);
+        var repository = new SqliteAttentionEventRepository(db.ContextFactory);
 
         (await repository.CloseOpenAsync(session.Id, Now.AddSeconds(10))).Should().Be(0);
     }
@@ -156,7 +156,7 @@ public sealed class AttentionEventRepositoryTests
         await using var db = new TempDatabase();
         await db.CreateInitializer().InitializeAsync();
 
-        var repository = new SqliteAttentionEventRepository(db.Options);
+        var repository = new SqliteAttentionEventRepository(db.ContextFactory);
 
         var missingId = () => repository.GetOpenAsync(default);
         await missingId.Should().ThrowAsync<ArgumentException>();
@@ -175,7 +175,7 @@ public sealed class AttentionEventRepositoryTests
         var session = await SeedSessionAsync(db);
         var other = await SeedSessionAsync(db, Now.AddMinutes(5), active: false);
 
-        var repository = new SqliteAttentionEventRepository(db.Options);
+        var repository = new SqliteAttentionEventRepository(db.ContextFactory);
         await repository.AddAsync(AttentionEvent.Open(session.Id, AttentionState.Focused, Now.AddSeconds(1)));
         await repository.AddAsync(AttentionEvent.Open(session.Id, AttentionState.Absent, Now.AddSeconds(30)));
         await repository.AddAsync(AttentionEvent.Open(other.Id, AttentionState.Distracted, Now.AddSeconds(10)));

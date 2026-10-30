@@ -324,6 +324,7 @@ internal sealed class TempDatabase : IAsyncDisposable
             BackupDirectory = Path.Combine(RootPath, "backups"),
             ProtectDataDirectory = false
         };
+        KeyStore = new DatabaseKeyStore(Options);
     }
 
     public string RootPath { get; }
@@ -332,7 +333,9 @@ internal sealed class TempDatabase : IAsyncDisposable
 
     public EduFocusDatabaseOptions Options { get; }
 
-    public SqliteDatabaseInitializer CreateInitializer(IAppLogger logger) => new(Options, logger);
+    public DatabaseKeyStore KeyStore { get; }
+
+    public SqliteDatabaseInitializer CreateInitializer(IAppLogger logger) => new(Options, logger, KeyStore);
 
     public ValueTask DisposeAsync()
     {

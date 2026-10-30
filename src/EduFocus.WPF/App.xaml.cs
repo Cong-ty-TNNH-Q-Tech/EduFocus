@@ -214,6 +214,8 @@ public partial class App : Application
         services.AddSingleton(new ProtectionHostModeOptions { ServiceManaged = serviceManaged });
 
         services.AddSingleton(new EduFocusDatabaseOptions());
+        services.AddSingleton<IDatabaseKeyStore, DatabaseKeyStore>();
+        services.AddSingleton<SqliteDbContextFactory>();
         services.AddSingleton<SqliteDatabaseInitializer>();
         services.AddSingleton<IAppSettingsRepository, SqliteAppSettingsRepository>();
         services.AddSingleton<IParentCredentialRepository, SqliteParentCredentialRepository>();
@@ -612,6 +614,8 @@ public partial class App : Application
         var services = new ServiceCollection();
         services.AddInfrastructureServices();
         services.AddSingleton(new EduFocusDatabaseOptions());
+        services.AddSingleton<IDatabaseKeyStore, DatabaseKeyStore>();
+        services.AddSingleton<SqliteDbContextFactory>();
         services.AddSingleton<SqliteDatabaseInitializer>();
         services.AddSingleton<IAppSettingsRepository, SqliteAppSettingsRepository>();
         services.AddSingleton<IAuditLogRepository, SqliteAuditLogRepository>();

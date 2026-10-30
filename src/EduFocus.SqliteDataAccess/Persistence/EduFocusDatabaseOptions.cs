@@ -12,6 +12,7 @@ public sealed class EduFocusDatabaseOptions
     public const string DefaultFolderName = "EduFocus";
     public const string DefaultFileName = "edufocus.db";
     public const string DefaultBackupFolderName = "backups";
+    public const string DefaultKeyFileName = "edufocus.key";
 
     public static string DefaultDirectory =>
         Path.Combine(
@@ -22,6 +23,13 @@ public sealed class EduFocusDatabaseOptions
         Path.Combine(DefaultDirectory, DefaultFileName);
 
     public string DatabasePath { get; init; } = DefaultDatabasePath;
+
+    /// <summary>
+    /// DPAPI-protected database key. Defaults to <c>edufocus.key</c> next to
+    /// the database, inside the Administrators/SYSTEM-only data directory
+    /// (database_schema §16, §18).
+    /// </summary>
+    public string? KeyFilePath { get; init; }
 
     public string? BackupDirectory { get; init; }
 
@@ -38,6 +46,11 @@ public sealed class EduFocusDatabaseOptions
         string.IsNullOrWhiteSpace(BackupDirectory)
             ? Path.Combine(Path.GetDirectoryName(Path.GetFullPath(DatabasePath))!, DefaultBackupFolderName)
             : BackupDirectory;
+
+    public string ResolvedKeyFilePath =>
+        string.IsNullOrWhiteSpace(KeyFilePath)
+            ? Path.Combine(Path.GetDirectoryName(Path.GetFullPath(DatabasePath))!, DefaultKeyFileName)
+            : KeyFilePath;
 
     public string ConnectionString =>
         new SqliteConnectionStringBuilder

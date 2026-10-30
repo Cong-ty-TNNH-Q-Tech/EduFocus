@@ -297,18 +297,48 @@ Triển khai outbound ports, tương tác Windows.
 
 - `EduFocusDbContext` với 9 DbSet mới; Fluent API cấu hình index, unique constraint, converter và check constraint.
 - Migration `InitialEduFocusSchema` + `AddOnboardingConsent` (hai mốc consent nullable trên `AppSettings`) + `AddProtectionSource` (cột `ProtectionSource`, backfill `Manual`); **không migrate** dữ liệu từ `DontBeLazy` 1.x.
-- DB path: `%ProgramData%\EduFocus\edufocus.db` (mặc định trong `EduFocusDatabaseOptions`).
-- `SqliteDatabaseInitializer`: tạo/khóa thư mục dữ liệu, kiểm tra integrity DB hiện có, backup trước migration (verified, giữ 3 bản), giữ DB nếu lỗi và ghi log hướng dẫn khôi phục.
-- `SqliteBackupStore`: tạo/verify/rotate backup và `Restore` an toàn (snapshot trước khi thay thế).
-- `DataDirectorySecurity`: ACL Administrators/SYSTEM, kế thừa cho file DB và backup.
+- DB path: `%ProgramData%\EduFocus\edufocus.db` (mặc định trong `EduFocusDatabaseOptions`); DB được
+  mã hóa toàn phần bằng SQLCipher, khóa lưu tại `%ProgramData%\EduFocus\edufocus.key` (xem §3.5.1).
+- `SqliteDatabaseInitializer`: tạo/khóa thư mục dữ liệu, nạp khóa (hoặc tạo mới khi chưa có), kiểm tra
+  integrity DB hiện có, nâng cấp DB plaintext cũ sang SQLCipher (backup → export → verify → thay file),
+  backup trước migration (verified, giữ 3 bản), giữ DB nếu lỗi và ghi log hướng dẫn khôi phục; thiếu/
+  hỏng khóa thì fail-closed, không tạo khóa mới và không ghi đè DB.
+- `SqliteBackupStore`: tạo/verify/rotate backup và `Restore` an toàn (snapshot trước khi thay thế);
+  backup của DB mã hóa được mã hóa cùng khóa, backup plaintext cũ được mã hóa khi restore hoặc lúc
+  khởi động.
+- `DatabaseKeyStore`: sinh khóa 32 byte bằng CSPRNG, lưu file `edufocus.key` (magic `EDUFKEY1` +
+  DPAPI `LocalMachine`, entropy `EduFocus.DatabaseKey.v1`); không ghi khóa vào log, không đặt khóa
+  cạnh DB dưới dạng plaintext; khóa gắn thiết bị.
+- `SqliteCipher`: nhận diện DB plaintext/mã hóa qua header, áp `PRAGMA key = x'<64 hex>'` (raw key,
+  bỏ qua PBKDF2 ~525 ms), và `sqlcipher_export` qua `ATTACH` cho nâng cấp/backup vì backup API không
+  hỗ trợ DB mã hóa.
+- `DataDirectorySecurity`: ACL Administrators/SYSTEM, kế thừa cho file DB, WAL, backup và `edufocus.key`.
 - `SqliteParentCredentialRepository`: đọc/ghi singleton `ParentCredentials` (hash + lockout state), không lưu plaintext.
 - `SqliteAppSettingsRepository`: đọc/ghi singleton `AppSettings`, gồm consent onboarding và tuỳ chọn an toàn.
 - `SqliteStudySessionRepository`: đọc phiên `Active` hiện tại, thêm/cập nhật phiên; unique partial index đảm bảo tối đa một phiên active. Heartbeat và `BlockedAttemptCount` được ghi bằng `ExecuteUpdateAsync` có điều kiện (chỉ session `Active`, không lùi timestamp).
 - `SqliteScheduleWindowRepository`: CRUD `ScheduleWindows`, list theo `StartMinutes`/`EndMinutes`/`DaysMask` cho scheduler và UI.
 - `SqliteAuditLogRepository`: ghi audit event kèm `CorrelationId`, tách khỏi file log kỹ thuật.
 - `SqliteRetentionRepository`: xóa theo batch bằng raw SQL subquery `LIMIT` (SQLite không hỗ trợ `DELETE ... LIMIT`), loại session `Active`/event còn mở, và chạy `PRAGMA incremental_vacuum`.
-- `SqlitePragmaInterceptor`: `PRAGMA foreign_keys = ON` mỗi kết nối; WAL và `auto_vacuum` do initializer thiết lập.
+- `SqlitePragmaInterceptor`: áp khóa (một lần cho mỗi native handle, kể cả handle pool) rồi
+  `PRAGMA foreign_keys = ON` mỗi kết nối; WAL và `auto_vacuum` do initializer thiết lập.
 - Các repository còn lại sẽ được thêm ở các issue sau.
+
+#### 3.5.1. Mã hóa cơ sở dữ liệu (issue #47)
+
+- **Thư viện:** SQLCipher 4.5.2 qua `SQLitePCLRaw.bundle_e_sqlcipher` 2.1.11 +
+  `Microsoft.EntityFrameworkCore.Sqlite.Core` (thay `bundle_e_sqlite3`); native `e_sqlcipher.dll`
+  đi kèm bundle self-contained.
+- **Khóa:** 32 byte CSPRNG, không phải PIN/mật khẩu; lưu DPAPI `LocalMachine` trong `edufocus.key`,
+  ACL Administrators/SYSTEM. `PRAGMA key` được áp trước mọi PRAGMA/DDL/DML; raw key tránh PBKDF2.
+- **Fail-closed:** thiếu khóa → `DatabaseKeyException`; khóa hỏng/không giải mã → giữ nguyên file,
+  không ghi đè; sai khóa hoặc integrity lỗi → `SqliteDatabaseCorruptException` và hướng dẫn backup.
+- **Nâng cấp:** DB plaintext (bản trước #47) được backup rồi `sqlcipher_export` sang DB mã hóa,
+  verify, thay thế; backup plaintext được mã hóa lại.
+- **Backup/restore:** backup DB mã hóa cũng mã hóa bằng cùng khóa; restore chỉ nhận backup giải mã
+  được bằng khóa hiện tại; backup plaintext hợp lệ được export sang định dạng mã hóa.
+- **Giới hạn:** Administrator/SYSTEM vẫn giải mã được khi DB đang mở; `edufocus.key` gắn thiết bị nên
+  mất khóa hoặc chép DB sang máy khác là không thể khôi phục; CSV/log không được mã hóa. Quy trình
+  hỗ trợ mất khóa nằm ở [database_schema.md](./database_schema.md) §18.
 
 ### 3.6. UI (`EduFocus.WPF`)
 
@@ -1421,9 +1451,10 @@ EduFocus/
 | ADR-12 | Không dùng kernel driver/WinDivert | Tránh antivirus, BSOD, signing |
 | ADR-13 | BlockedAttempt là best-effort | Hosts không cung cấp log HTTPS; không được quảng cáo số liệu tuyệt đối |
 | ADR-14 | URL/path rules chỉ enforce khi có extension | Hosts không thể match path; tránh UI hứa hẹn sai |
-| ADR-15 | Không có secret phụ trợ | Chỉ lưu hash PIN/recovery; giảm bề mặt tấn công và phức tạp |
+| ADR-15 | Không có secret người dùng phụ trợ | Chỉ lưu hash PIN/recovery; ngoại lệ duy nhất là khóa mã hóa DB do hệ thống sinh và bảo vệ bằng DPAPI (ADR-18) |
 | ADR-16 | Thoát app luôn cần PIN | Nhất quán bảo vệ; Windows shutdown vẫn được phép |
 | ADR-17 | (Đề xuất) OpenCV MSMF + ONNX Runtime + YuNet cho attention Phase 0; Haar chỉ baseline; Drowsy/gaze ở Phase 5 | Face 99,2%/30 phút, CPU 0,23% máy, RAM 184 MB; Haar bỏ sót nhiều; giữ local-first |
+| ADR-18 | Mã hóa DB bằng SQLCipher, khóa 32 byte DPAPI `LocalMachine` + raw key `x'…'` | Bảo vệ dữ liệu trẻ em khi file bị sao chép; raw key tránh PBKDF2 ~525 ms mỗi kết nối; giữ fail-closed khi mất khóa, chấp nhận key gắn thiết bị (issue #47) |
 
 ---
 
@@ -1434,7 +1465,7 @@ EduFocus/
 | Camera không chia sẻ được | Mất dữ liệu attention khi Meet/Teams | Multi-App Camera; fallback; companion app |
 | Hosts bị bypass | Chặn không hiệu quả | Extension/firewall/DNS policy |
 | Hosts không log được HTTPS | Số blocked attempts thấp/sai | Ghi rõ best-effort; extension post-MVP; không dùng làm KPI |
-| SQLite bị học sinh đọc | Lộ báo cáo | ACL; mã hóa DB post-MVP nếu cần |
+| SQLite bị học sinh đọc | Lộ báo cáo | ACL + mã hóa SQLCipher; key DPAPI gắn thiết bị; admin/SYSTEM vẫn giải mã được (giới hạn đã biết) |
 | App bị kill | Mất protection | Watchdog; service; ghi rõ độ trễ |
 | Quá nhiều sample | DB phình | Aggregate + retention |
 | ONNX model nặng | CPU/RAM cao | Model nhẹ, 1–2 FPS, thread limit |

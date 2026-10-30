@@ -19,11 +19,11 @@ public sealed class ActivitySampleRepositoryTests
         await using var db = new TempDatabase();
         await db.CreateInitializer().InitializeAsync();
 
-        var sessions = new SqliteStudySessionRepository(db.Options);
+        var sessions = new SqliteStudySessionRepository(db.ContextFactory);
         var session = StudySession.Start(Now, new DateOnly(2026, 10, 30), SessionTrigger.Manual, true);
         await sessions.AddAsync(session);
 
-        var repository = new SqliteActivitySampleRepository(db.Options);
+        var repository = new SqliteActivitySampleRepository(db.ContextFactory);
         var sample = ActivitySample.Capture(
             session.Id,
             Now.AddSeconds(15),
@@ -65,14 +65,14 @@ public sealed class ActivitySampleRepositoryTests
         await using var db = new TempDatabase();
         await db.CreateInitializer().InitializeAsync();
 
-        var sessions = new SqliteStudySessionRepository(db.Options);
+        var sessions = new SqliteStudySessionRepository(db.ContextFactory);
         var session = StudySession.Start(Now, new DateOnly(2026, 10, 30), SessionTrigger.Manual, true);
         var other = StudySession.Start(Now.AddMinutes(1), new DateOnly(2026, 10, 30), SessionTrigger.Manual, true);
         await sessions.AddAsync(session);
         other.Complete(Now.AddMinutes(2));
         await sessions.AddAsync(other);
 
-        var repository = new SqliteActivitySampleRepository(db.Options);
+        var repository = new SqliteActivitySampleRepository(db.ContextFactory);
 
         await repository.AddAsync(ActivitySample.Capture(
             session.Id,
@@ -135,11 +135,11 @@ public sealed class ActivitySampleRepositoryTests
         await using var db = new TempDatabase();
         await db.CreateInitializer().InitializeAsync();
 
-        var sessions = new SqliteStudySessionRepository(db.Options);
+        var sessions = new SqliteStudySessionRepository(db.ContextFactory);
         var session = StudySession.Start(Now, new DateOnly(2026, 10, 30), SessionTrigger.Manual, true);
         await sessions.AddAsync(session);
 
-        var repository = new SqliteActivitySampleRepository(db.Options);
+        var repository = new SqliteActivitySampleRepository(db.ContextFactory);
 
         foreach (var offset in new[] { 15, 30, 45 })
         {
@@ -171,11 +171,11 @@ public sealed class ActivitySampleRepositoryTests
         await using var db = new TempDatabase();
         await db.CreateInitializer().InitializeAsync();
 
-        var sessions = new SqliteStudySessionRepository(db.Options);
+        var sessions = new SqliteStudySessionRepository(db.ContextFactory);
         var session = StudySession.Start(Now, new DateOnly(2026, 10, 30), SessionTrigger.Manual, true);
         await sessions.AddAsync(session);
 
-        var repository = new SqliteActivitySampleRepository(db.Options);
+        var repository = new SqliteActivitySampleRepository(db.ContextFactory);
         var sample = ActivitySample.Capture(
             session.Id,
             Now.AddSeconds(15),
@@ -202,11 +202,11 @@ public sealed class ActivitySampleRepositoryTests
         await using var db = new TempDatabase();
         await db.CreateInitializer().InitializeAsync();
 
-        var sessions = new SqliteStudySessionRepository(db.Options);
+        var sessions = new SqliteStudySessionRepository(db.ContextFactory);
         var session = StudySession.Start(Now, new DateOnly(2026, 10, 30), SessionTrigger.Manual, true);
         await sessions.AddAsync(session);
 
-        var repository = new SqliteActivitySampleRepository(db.Options);
+        var repository = new SqliteActivitySampleRepository(db.ContextFactory);
         var sample = ActivitySample.Capture(
             session.Id,
             Now.AddSeconds(15),

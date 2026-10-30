@@ -55,21 +55,17 @@ public sealed class SqlitePrivacyDataRepository : IPrivacyDataRepository
 
     private const string VacuumSql = "VACUUM;";
 
-    private readonly DbContextOptions<EduFocusDbContext> _dbContextOptions;
+    private readonly SqliteDbContextFactory _contextFactory;
 
-    public SqlitePrivacyDataRepository(EduFocusDatabaseOptions options)
+    public SqlitePrivacyDataRepository(SqliteDbContextFactory contextFactory)
     {
-        ArgumentNullException.ThrowIfNull(options);
-
-        _dbContextOptions = new DbContextOptionsBuilder<EduFocusDbContext>()
-            .UseSqlite(options.ConnectionString)
-            .AddInterceptors(new SqlitePragmaInterceptor())
-            .Options;
+        ArgumentNullException.ThrowIfNull(contextFactory);
+        _contextFactory = contextFactory;
     }
 
     public async Task<PrivacyDataCounts> GetCountsAsync(CancellationToken cancellationToken = default)
     {
-        await using var context = new EduFocusDbContext(_dbContextOptions);
+        await using var context = _contextFactory.CreateDbContext();
 
         var sessions = await context.StudySessions.CountAsync(cancellationToken).ConfigureAwait(false);
         var activeSessions = await context.StudySessions
@@ -84,7 +80,7 @@ public sealed class SqlitePrivacyDataRepository : IPrivacyDataRepository
 
     public async Task<long> GetDatabaseSizeBytesAsync(CancellationToken cancellationToken = default)
     {
-        await using var context = new EduFocusDbContext(_dbContextOptions);
+        await using var context = _contextFactory.CreateDbContext();
         await context.Database.OpenConnectionAsync(cancellationToken).ConfigureAwait(false);
 
         try
@@ -125,7 +121,7 @@ public sealed class SqlitePrivacyDataRepository : IPrivacyDataRepository
 
     public async Task VacuumAsync(CancellationToken cancellationToken = default)
     {
-        await using var context = new EduFocusDbContext(_dbContextOptions);
+        await using var context = _contextFactory.CreateDbContext();
         await context.Database.ExecuteSqlRawAsync(VacuumSql, cancellationToken).ConfigureAwait(false);
     }
 
@@ -137,7 +133,7 @@ public sealed class SqlitePrivacyDataRepository : IPrivacyDataRepository
         if (batchSize <= 0)
             throw new ArgumentOutOfRangeException(nameof(batchSize), batchSize, "Batch size must be positive.");
 
-        await using var context = new EduFocusDbContext(_dbContextOptions);
+        await using var context = _contextFactory.CreateDbContext();
 
         return await context.Database.ExecuteSqlRawAsync(
             sql,

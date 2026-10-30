@@ -12,7 +12,7 @@ public sealed class BackupRestoreTests
         await using var db = new TempDatabase();
         await db.CreateInitializer().InitializeAsync();
 
-        var store = new SqliteBackupStore(db.Options, db.Logger);
+        var store = db.CreateBackupStore();
         var backups = Enumerable.Range(0, 4).Select(_ => store.CreateBackup()).ToList();
 
         var remaining = Directory.GetFiles(db.BackupDirectory, "edufocus-*.db");
@@ -29,7 +29,7 @@ public sealed class BackupRestoreTests
         await using var db = new TempDatabase();
         await db.CreateInitializer().InitializeAsync();
 
-        var store = new SqliteBackupStore(db.Options, db.Logger);
+        var store = db.CreateBackupStore();
         var backupPath = store.CreateBackup();
 
         InsertSettingsRow(db);
@@ -51,7 +51,7 @@ public sealed class BackupRestoreTests
         await db.CreateInitializer().InitializeAsync();
         InsertSettingsRow(db);
 
-        var store = new SqliteBackupStore(db.Options, db.Logger);
+        var store = db.CreateBackupStore();
         var corruptedBackup = Path.Combine(db.BackupDirectory, "edufocus-20260101-000000000-00.db");
         Directory.CreateDirectory(db.BackupDirectory);
         await File.WriteAllTextAsync(corruptedBackup, "not a sqlite database");

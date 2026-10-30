@@ -11,21 +11,17 @@ namespace EduFocus.SqliteDataAccess.Repositories;
 /// </summary>
 public sealed class SqliteAppSettingsRepository : IAppSettingsRepository
 {
-    private readonly DbContextOptions<EduFocusDbContext> _dbContextOptions;
+    private readonly SqliteDbContextFactory _contextFactory;
 
-    public SqliteAppSettingsRepository(EduFocusDatabaseOptions options)
+    public SqliteAppSettingsRepository(SqliteDbContextFactory contextFactory)
     {
-        ArgumentNullException.ThrowIfNull(options);
-
-        _dbContextOptions = new DbContextOptionsBuilder<EduFocusDbContext>()
-            .UseSqlite(options.ConnectionString)
-            .AddInterceptors(new SqlitePragmaInterceptor())
-            .Options;
+        ArgumentNullException.ThrowIfNull(contextFactory);
+        _contextFactory = contextFactory;
     }
 
     public async Task<AppSettings?> GetAsync(CancellationToken cancellationToken = default)
     {
-        await using var context = new EduFocusDbContext(_dbContextOptions);
+        await using var context = _contextFactory.CreateDbContext();
         return await context.AppSettings
             .AsNoTracking()
             .SingleOrDefaultAsync(cancellationToken);
@@ -35,7 +31,7 @@ public sealed class SqliteAppSettingsRepository : IAppSettingsRepository
     {
         ArgumentNullException.ThrowIfNull(settings);
 
-        await using var context = new EduFocusDbContext(_dbContextOptions);
+        await using var context = _contextFactory.CreateDbContext();
         context.AppSettings.Add(settings);
         await context.SaveChangesAsync(cancellationToken);
     }
@@ -44,7 +40,7 @@ public sealed class SqliteAppSettingsRepository : IAppSettingsRepository
     {
         ArgumentNullException.ThrowIfNull(settings);
 
-        await using var context = new EduFocusDbContext(_dbContextOptions);
+        await using var context = _contextFactory.CreateDbContext();
         context.AppSettings.Update(settings);
         await context.SaveChangesAsync(cancellationToken);
     }

@@ -43,7 +43,11 @@ Tham chiếu: [release-process.md](./release-process.md),
       và Windows 11; có evidence (ảnh/log) và không chứa PIN, recovery code, URL nhạy cảm.
 - [ ] Không còn issue P0/P1 mở; các phát hiện P2/P3 còn lại đã có issue kèm rủi ro.
 - [ ] Không có frame/ảnh/landmark/embedding camera trong thư mục dữ liệu, log hay artifact.
-- [ ] Log không chứa PIN, recovery code, token, query string hoặc tiêu đề cửa sổ nhạy cảm.
+- [ ] Log không chứa PIN, recovery code, token, query string, tiêu đề cửa sổ nhạy cảm hoặc khóa mã hóa DB.
+- [ ] DB/WAL/SHM và backup là file mã hóa SQLCipher (16 byte đầu khác `SQLite format 3\0`); không có
+      chuỗi dữ liệu mẫu trong file; `edufocus.key` tồn tại và không chứa khóa plaintext.
+- [ ] Thiếu/sai/hỏng file khóa: app fail-closed, giữ nguyên DB, không tự tạo khóa mới; backup/khôi phục
+      trên cùng máy thành công; backup mã hóa bằng khóa khác bị từ chối.
 - [ ] Browser extension chỉ gửi URL đã khớp rule (đã làm sạch query/fragment/credentials) qua
       named pipe cục bộ; không đọc/gửi lịch sử duyệt web, nội dung trang hay cookie.
 - [ ] Gỡ cài đặt xóa hosts marker, listener, scheduled task/watchdog cũ, service `EduFocusProtection` và
@@ -67,7 +71,9 @@ Tham chiếu: [release-process.md](./release-process.md),
       **Thông báo quyền riêng tư** hiển thị đúng tiếng Việt và chặn Next khi chưa tick.
 - [ ] Shortcut Desktop/Start Menu tồn tại; `%ProgramData%\EduFocus` có ACL
       Administrators/SYSTEM; thư mục cài có `docs\privacy-notice.md`,
-      `THIRD-PARTY-NOTICES.md`, `LICENSE`, `EduFocus.Service.exe`.
+      `THIRD-PARTY-NOTICES.md`, `LICENSE`, `EduFocus.Service.exe`, native `e_sqlcipher.dll`.
+- [ ] `%ProgramData%\EduFocus` có `edufocus.db` mã hóa và `edufocus.key` chỉ Administrators/SYSTEM;
+      gỡ cài đặt **giữ dữ liệu** giữ cả hai; **xóa dữ liệu** xóa cả file khóa.
 - [ ] Service `EduFocusProtection` ở trạng thái **Running**, auto-start, chạy LocalSystem;
       `EduFocus.Service.exe --health` trả healthy; marker `HKLM\SOFTWARE\EduFocus\ServiceMode=1`
       tồn tại.
@@ -91,10 +97,16 @@ Tham chiếu: [release-process.md](./release-process.md),
 ### 2.5. Migration, backup và dữ liệu
 
 - [ ] Migration chạy thành công trên DB mới và DB nâng cấp; backup trước migration được tạo
-      và xác minh.
-- [ ] Restore backup đã được kiểm tra (restore file mới nhất, DB mở được, dữ liệu còn nguyên).
+      và xác minh; backup của DB mã hóa cũng là file mã hóa.
+- [ ] Nâng cấp từ DB plaintext (bản trước #47) được nâng cấp tại chỗ, dữ liệu và
+      `__EFMigrationsHistory` còn nguyên, file gốc chỉ bị thay sau khi bản mã hóa verify thành công.
+- [ ] Restore backup đã được kiểm tra (restore file mới nhất, DB mở được, dữ liệu còn nguyên);
+      backup plaintext legacy được mã hóa khi restore; đã thử khôi phục khi có đủ `edufocus.key`.
+- [ ] Đã xác nhận quy trình mất khóa: không có khóa thì không thể khôi phục; hướng dẫn giữ
+      `edufocus.key` cùng backup và chỉ khôi phục trên cùng máy có trong tài liệu phát hành.
 - [ ] Retention 30/90/365 ngày chạy đúng trên dữ liệu mẫu 30 ngày; DB trong dự toán 50 MB/năm.
-- [ ] Xóa dữ liệu theo yêu cầu (Privacy) hoạt động và có audit `DataDeleted`.
+- [ ] Xóa dữ liệu theo yêu cầu (Privacy) hoạt động và có audit `DataDeleted`; thao tác không xóa
+      file khóa khi vẫn còn dữ liệu cần giải mã.
 
 ### 2.6. Tài liệu
 
@@ -104,7 +116,10 @@ Tham chiếu: [release-process.md](./release-process.md),
       duyệt và khớp tính năng; timestamp consent trong onboarding và dialog MSI hoạt động.
 - [ ] [THIRD-PARTY-NOTICES.md](../THIRD-PARTY-NOTICES.md) khớp dependency thực tế
       (`dotnet list package --include-transitive`), không có GPL/AGPL/non-commercial;
-      FluentAssertions vẫn pin 7.2.0.
+      FluentAssertions vẫn pin 7.2.0; mục SQLCipher/SQLitePCLRaw.e_sqlcipher và giấy phép BSD-2-Clause
+      khớp gói đang phân phối.
+- [ ] [database_schema.md](./database_schema.md) §18, privacy notice và DPIA mô tả đúng mã hóa
+      SQLCipher, khóa DPAPI gắn máy và quy trình mất khóa; SECURITY.md không còn câu "mã hóa post-MVP".
 - [ ] Tài liệu người dùng nêu rõ giới hạn hosts/HTTPS và block page chỉ áp dụng HTTP.
 
 ---

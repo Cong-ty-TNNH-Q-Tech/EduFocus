@@ -24,7 +24,7 @@ public sealed class AuditLogRepositoryTests
             occurredAt,
             correlationId: correlationId);
 
-        var repository = new SqliteAuditLogRepository(db.Options);
+        var repository = new SqliteAuditLogRepository(db.ContextFactory);
         await repository.AddAsync(auditLog);
 
         await using var context = db.CreateContext();

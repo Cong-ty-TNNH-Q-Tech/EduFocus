@@ -8,7 +8,7 @@
 | Người chịu trách nhiệm | Nguyễn Thành Trung — Product/Release owner |
 | Tư vấn pháp lý | Luật sư/DPO bên ngoài — **cần chỉ định và ký duyệt trước phát hành thương mại** |
 | Trạng thái | Hoàn chỉnh về kỹ thuật; sẵn sàng cho rà soát pháp lý |
-| Tài liệu liên quan | [privacy-notice.md](./privacy-notice.md), [ba_document.md](./ba_document.md) §10.2, [database_schema.md](./database_schema.md) §14/§16, [security-e2e-checklist.md](./security-e2e-checklist.md), [spikes/net10-ef10-dpia-evaluation.md](./spikes/net10-ef10-dpia-evaluation.md) |
+| Tài liệu liên quan | [privacy-notice.md](./privacy-notice.md), [ba_document.md](./ba_document.md) §10.2, [database_schema.md](./database_schema.md) §14/§16/§18, [security-e2e-checklist.md](./security-e2e-checklist.md), [spikes/net10-ef10-dpia-evaluation.md](./spikes/net10-ef10-dpia-evaluation.md) |
 
 > Tài liệu này là đánh giá kỹ thuật phục vụ tuân thủ, **không phải tư vấn pháp lý** và không thay
 > thế hồ sơ nộp cơ quan có thẩm quyền. Trước khi phát hành thương mại, luật sư/DPO phải rà soát,
@@ -74,7 +74,8 @@ của phụ huynh, nhắc phụ huynh thông báo cho trẻ, không hỗ trợ g
 | URL điều hướng (tạm thời) | URL đã bỏ query/fragment/credentials, tối đa 2048 ký tự | Browser extension | So khớp rule chặn cục bộ | RAM trình duyệt; chỉ URL khớp rule mới đi qua native messaging tới app | Không lưu ở extension | Không | Không | **Cao** khi khớp rule |
 | Audit | actor, event type, description, correlation id | App/service | Truy vết thay đổi nhạy cảm | `AuditLogs` | 365 ngày | Hỗ trợ/điều tra | Không | Trung bình |
 | Log kỹ thuật | timestamp, level, category, correlation id, message đã redact | App + service | Chẩn đoán lỗi | `%LocalAppData%\EduFocus\logs` (UI), `%ProgramData%\EduFocus\logs` (service) | 14 ngày, 10 MB/tệp | Người dùng máy/Administrators | Không | Trung bình |
-| Backup/khôi phục | bản sao DB, bản sao hosts, journal | App/service | Chống mất dữ liệu/khôi phục chặn | `%ProgramData%\EduFocus\backups`, `hosts-backup`, `runtime` | 3 bản backup; hosts xóa sau restore | SYSTEM/Administrators | Không | Trung bình |
+| Backup/khôi phục | bản sao DB (mã hóa SQLCipher), bản sao hosts, journal | App/service | Chống mất dữ liệu/khôi phục chặn | `%ProgramData%\EduFocus\backups`, `hosts-backup`, `runtime` | 3 bản backup; hosts xóa sau restore | SYSTEM/Administrators | Không | Trung bình |
+| Khóa mã hóa DB | 32 byte ngẫu nhiên trong blob DPAPI `LocalMachine` (`EDUFKEY1`) | App/service | Giải mã DB/backup trên máy | `%ProgramData%\EduFocus\edufocus.key` | Theo vòng đời dữ liệu; xóa cùng thư mục khi uninstall chọn xóa dữ liệu | SYSTEM/Administrators (giải mã bởi tiến trình EduFocus) | Không | **Cao** (bảo mật) |
 | Bản xuất CSV | tổng hợp phiên, app/domain, sự kiện | Phụ huynh | Chia sẻ nội bộ do phụ huynh chọn | `%LocalAppData%\EduFocus\exports` | Đến khi phụ huynh xóa | Phụ huynh | Phụ huynh quyết định | **Cao** |
 | Yêu cầu cập nhật | IP, User-Agent | GitHub (khi bật) | Kiểm tra phiên bản | Không lưu cục bộ | Không áp dụng | GitHub | GitHub | Thấp |
 
@@ -112,7 +113,7 @@ dùng. IPC giữa UI và service là named pipe cục bộ có ACL, không gửi
 | Giới hạn mục đích | Dữ liệu chỉ dùng cho báo cáo học tập và vận hành bảo vệ; không quảng cáo, không bán |
 | Lưu trữ hạn chế | Retention 30/90/365 ngày + audit 365 + log 14 ngày; retention job hằng ngày |
 | Minh bạch | Thông báo đầy đủ trong app/installer; nhãn camera, trạng thái giám sát; báo cáo nêu coverage thấp |
-| Bảo vệ dữ liệu | ACL Administrators/SYSTEM, hash PBKDF2, redaction log, không log domain/title, không secret trong audit |
+| Bảo vệ dữ liệu | ACL Administrators/SYSTEM, **mã hóa SQLCipher cho DB/WAL/backup**, khóa DPAPI `LocalMachine` không nằm plaintext cạnh DB, hash PBKDF2, redaction log, không log domain/title, không secret trong audit |
 | Xóa được | Xóa toàn bộ trong Parent Mode (PIN + `XÓA`), uninstall `DELETEUSERDATA=1`, CSV do phụ huynh xóa |
 | Không chuyển dữ liệu | Không cloud/telemetry; update check opt-in chỉ tới GitHub khi phụ huynh bật |
 | Kiểm soát truy cập | Parent Mode khóa sau 5 phút idle, lockout 5 lần/15 phút, PIN không lưu bản rõ |
@@ -137,7 +138,7 @@ Thang điểm: Khả năng (L) và Tác động (I) 1–5; mức = L×I (1–6 t
 | R4 | Camera/attention bị hiểu sai hoặc dùng để gán nhãn trẻ | 3 | 3 | 9 | Chỉ ước lượng, hiển thị coverage/confidence, cảnh báo dữ liệu chưa đủ tin cậy; không nhận diện danh tính | Trung bình |
 | R5 | Giám sát che giấu/không đồng ý trong gia đình | 2 | 5 | 10 | Onboarding yêu cầu xác nhận đã thông báo cho trẻ; privacy notice hiển thị trước khi bật monitoring và trong MSI; tài liệu nhấn mạnh không hỗ trợ che giấu | Trung bình |
 | R6 | Lộ dữ liệu qua log kỹ thuật | 2 | 4 | 8 | Redaction PIN/recovery/token/URL; không log domain/title; log cục bộ 14 ngày | Thấp |
-| R7 | Mất máy/ổ đĩa bị truy cập vật lý | 2 | 4 | 8 | ACL; dữ liệu không mã hóa toàn đĩa (BitLocker ngoài phạm vi) | Trung bình — khuyến nghị BitLocker |
+| R7 | Mất máy/ổ đĩa bị truy cập vật lý | 2 | 4 | 8 | ACL; SQLCipher mã hóa DB/WAL/backup; khóa DPAPI `LocalMachine` gắn máy, không có trong backup; BitLocker ngoài phạm vi nhưng vẫn khuyến nghị | Thấp–trung bình — admin/SYSTEM và ổ đĩa đang mở khóa vẫn đọc được |
 | R8 | Admin Windows tắt/gỡ/bypass giám sát | 4 | 2 | 8 | Ghi nhận là giới hạn đã biết; service do SCM restart khi crash, watchdog chỉ chống crash ở bản standalone | Trung bình — chấp nhận |
 | R9 | Retention/xóa thất bại, dữ liệu sống quá hạn | 2 | 3 | 6 | Batch 500, báo lỗi từng bảng, audit `RetentionApplied`, test tự động | Thấp |
 | R10 | Cấu hình sai làm camera bật ngoài phiên | 2 | 4 | 8 | Pipeline chỉ start khi bảo vệ + phiên + monitoring bật; test vòng đời | Thấp |
@@ -145,6 +146,7 @@ Thang điểm: Khả năng (L) và Tác động (I) 1–5; mức = L×I (1–6 t
 | R12 | Thư viện bên thứ ba có license không phù hợp phát hành thương mại | 2 | 4 | 8 | Inventory tại [THIRD-PARTY-NOTICES.md](../THIRD-PARTY-NOTICES.md) + hạ FluentAssertions về 7.2.0 Apache-2.0; rà soát mỗi release | Thấp |
 | R13 | Sự cố không được phát hiện/kéo dài | 2 | 5 | 10 | Kênh báo cáo riêng tư; quy trình §8; audit cục bộ | Trung bình — cần diễn tập |
 | R14 | Browser extension thu thập/lộ URL ngoài phạm vi rule | 2 | 3 | 6 | Chỉ xử lý URL trong RAM; bỏ query/fragment/credentials; chỉ URL khớp rule đi qua named pipe cục bộ; không storage/telemetry/content script; test quyền và DOM sink mỗi CI | Thấp |
+| R15 | Mất file khóa/đổi máy làm dữ liệu không thể khôi phục | 2 | 2 | 4 | Khóa DPAPI gắn máy; fail-closed, không tự tạo khóa đè DB; hướng dẫn giữ `edufocus.key` cùng backup và khôi phục trên cùng máy trong thông báo/SECURITY/schema §18 | Thấp — ảnh hưởng tính sẵn sàng, không rò dữ liệu |
 
 Rủi ro cao nhất còn lại là R1/R2/R5 (truy cập gia đình, CSV, đồng thuận). Các biện pháp bổ sung:
 khuyến nghị BitLocker, hướng dẫn phụ huynh dùng tài khoản Windows riêng cho trẻ, nhắc không gửi CSV
@@ -159,7 +161,9 @@ qua kênh công khai, và duy trì thông báo rõ ràng trong mọi bản phát
 2. **Xác minh:** xác nhận người gửi có liên quan tới thiết bị/gia đình; không yêu cầu PIN/recovery
    code.
 3. **Thực hiện:** hướng dẫn thao tác trong app (xóa dữ liệu, tắt giám sát, xuất CSV) hoặc hỗ trợ
-   gỡ cài đặt; nhà phát triển không truy cập dữ liệu trên máy nên không thể xóa thay.
+   gỡ cài đặt; nhà phát triển không truy cập dữ liệu trên máy nên không thể xóa thay và không thể
+   giải mã DB hộ (khóa gắn máy). Nếu người dùng mất `edufocus.key`, hướng dẫn khôi phục bản sao khóa
+   trên cùng máy; nếu không còn, dữ liệu 2.0 không thể khôi phục và người dùng có thể xóa/khởi tạo lại.
 4. **Thời hạn:** xác nhận tiếp nhận trong **72 giờ làm việc**; hướng dẫn/hoàn tất trong **30 ngày**
    kể từ khi xác minh, trừ khi pháp luật yêu cầu khác.
 5. **Ghi nhận:** lưu biên nhận tối thiểu (thời điểm, loại yêu cầu, kết quả) **không kèm** dữ liệu
@@ -195,7 +199,8 @@ trong báo cáo công khai.
 | `StudySessions` | `SessionRetentionDays` | 365 ngày | Chi tiết xóa trước, session sau |
 | `AuditLogs` | Cố định 365 ngày | 365 ngày | Không chứa secret |
 | Log kỹ thuật | `FileLogger` (UI + service) rotation | 14 ngày / 10 MB | Redaction trước khi ghi |
-| Backup DB | `SqliteBackupStore` | 3 bản | Tạo trước migration |
+| Backup DB | `SqliteBackupStore` | 3 bản | Mã hóa cùng khóa SQLCipher; tạo trước migration; không chứa file khóa |
+| Khóa mã hóa DB | `DatabaseKeyStore` (DPAPI `LocalMachine`) | Theo dữ liệu | `%ProgramData%\EduFocus\edufocus.key`; không plaintext; xóa cùng dữ liệu khi uninstall `DELETEUSERDATA=1` |
 | Hosts backup | `HostsFileBlocker` | Xóa sau restore/self-heal | Chỉ trong thư mục backup |
 | CSV | Người dùng | Không tự xóa | Nằm ngoài DB; UI nhắc bảo vệ tệp |
 

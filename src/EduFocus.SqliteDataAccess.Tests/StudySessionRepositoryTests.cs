@@ -18,7 +18,7 @@ public sealed class StudySessionRepositoryTests
         await using var db = new TempDatabase();
         await db.CreateInitializer().InitializeAsync();
 
-        var repository = new SqliteStudySessionRepository(db.Options);
+        var repository = new SqliteStudySessionRepository(db.ContextFactory);
         var session = StudySession.Start(Now, new DateOnly(2026, 10, 29), SessionTrigger.Manual, true);
 
         await repository.AddAsync(session);
@@ -47,7 +47,7 @@ public sealed class StudySessionRepositoryTests
         await using var db = new TempDatabase();
         await db.CreateInitializer().InitializeAsync();
 
-        var repository = new SqliteStudySessionRepository(db.Options);
+        var repository = new SqliteStudySessionRepository(db.ContextFactory);
         var completed = StudySession.Start(
             Now.AddHours(-2),
             new DateOnly(2026, 10, 29),
@@ -77,7 +77,7 @@ public sealed class StudySessionRepositoryTests
         await using var db = new TempDatabase();
         await db.CreateInitializer().InitializeAsync();
 
-        var repository = new SqliteStudySessionRepository(db.Options);
+        var repository = new SqliteStudySessionRepository(db.ContextFactory);
         var session = StudySession.Start(Now, new DateOnly(2026, 10, 29), SessionTrigger.Manual, true);
         await repository.AddAsync(session);
 
@@ -100,7 +100,7 @@ public sealed class StudySessionRepositoryTests
         await using var db = new TempDatabase();
         await db.CreateInitializer().InitializeAsync();
 
-        var repository = new SqliteStudySessionRepository(db.Options);
+        var repository = new SqliteStudySessionRepository(db.ContextFactory);
         var session = StudySession.Start(Now, new DateOnly(2026, 10, 29), SessionTrigger.Manual, true);
         await repository.AddAsync(session);
         await repository.RecordHeartbeatAsync(session.Id, Now.AddSeconds(10), activeSeconds: 10);
@@ -123,7 +123,7 @@ public sealed class StudySessionRepositoryTests
         await using var db = new TempDatabase();
         await db.CreateInitializer().InitializeAsync();
 
-        var repository = new SqliteStudySessionRepository(db.Options);
+        var repository = new SqliteStudySessionRepository(db.ContextFactory);
         var session = StudySession.Start(Now, new DateOnly(2026, 10, 29), SessionTrigger.Manual, true);
         await repository.AddAsync(session);
 
@@ -150,7 +150,7 @@ public sealed class StudySessionRepositoryTests
         await using var db = new TempDatabase();
         await db.CreateInitializer().InitializeAsync();
 
-        var repository = new SqliteStudySessionRepository(db.Options);
+        var repository = new SqliteStudySessionRepository(db.ContextFactory);
         var session = StudySession.Start(Now, new DateOnly(2026, 10, 29), SessionTrigger.Manual, true);
         await repository.AddAsync(session);
 
@@ -182,7 +182,7 @@ public sealed class StudySessionRepositoryTests
         await using var db = new TempDatabase();
         await db.CreateInitializer().InitializeAsync();
 
-        var repository = new SqliteStudySessionRepository(db.Options);
+        var repository = new SqliteStudySessionRepository(db.ContextFactory);
         var session = StudySession.Start(Now, new DateOnly(2026, 10, 29), SessionTrigger.Manual, true);
         await repository.AddAsync(session);
 
@@ -226,7 +226,7 @@ public sealed class StudySessionRepositoryTests
         await using var db = new TempDatabase();
         await db.CreateInitializer().InitializeAsync();
 
-        var repository = new SqliteStudySessionRepository(db.Options);
+        var repository = new SqliteStudySessionRepository(db.ContextFactory);
         var session = StudySession.Start(Now, new DateOnly(2026, 10, 29), SessionTrigger.Manual, true);
         await repository.AddAsync(session);
 
@@ -256,7 +256,7 @@ public sealed class StudySessionRepositoryTests
         await using var db = new TempDatabase();
         await db.CreateInitializer().InitializeAsync();
 
-        var repository = new SqliteStudySessionRepository(db.Options);
+        var repository = new SqliteStudySessionRepository(db.ContextFactory);
         var first = StudySession.Start(Now, new DateOnly(2026, 10, 29), SessionTrigger.Manual, true);
         await repository.AddAsync(first);
 
@@ -282,7 +282,7 @@ public sealed class StudySessionRepositoryTests
         await using var db = new TempDatabase();
         await db.CreateInitializer().InitializeAsync();
 
-        var repository = new SqliteStudySessionRepository(db.Options);
+        var repository = new SqliteStudySessionRepository(db.ContextFactory);
         var session = StudySession.Start(Now, new DateOnly(2026, 10, 29), SessionTrigger.Manual, true);
         await repository.AddAsync(session);
 
@@ -330,7 +330,7 @@ public sealed class StudySessionRepositoryTests
         await using var db = new TempDatabase();
         await db.CreateInitializer().InitializeAsync();
 
-        var repository = new SqliteStudySessionRepository(db.Options);
+        var repository = new SqliteStudySessionRepository(db.ContextFactory);
         var session = StudySession.Start(Now, new DateOnly(2026, 10, 29), SessionTrigger.Manual, true);
         await repository.AddAsync(session);
 
@@ -368,7 +368,7 @@ public sealed class StudySessionRepositoryTests
         await using var db = new TempDatabase();
         await db.CreateInitializer().InitializeAsync();
 
-        var repository = new SqliteStudySessionRepository(db.Options);
+        var repository = new SqliteStudySessionRepository(db.ContextFactory);
         var session = StudySession.Start(Now, new DateOnly(2026, 10, 29), SessionTrigger.Manual, true);
         await repository.AddAsync(session);
 
@@ -414,7 +414,7 @@ public sealed class StudySessionRepositoryTests
         await using var db = new TempDatabase();
         await db.CreateInitializer().InitializeAsync();
 
-        var repository = new SqliteStudySessionRepository(db.Options);
+        var repository = new SqliteStudySessionRepository(db.ContextFactory);
         var session = StudySession.Start(Now, new DateOnly(2026, 10, 29), SessionTrigger.Manual, true);
         await repository.AddAsync(session);
 
@@ -431,7 +431,7 @@ public sealed class StudySessionRepositoryTests
         await using var db = new TempDatabase();
         await db.CreateInitializer().InitializeAsync();
 
-        var repository = new SqliteStudySessionRepository(db.Options);
+        var repository = new SqliteStudySessionRepository(db.ContextFactory);
         var day = new DateOnly(2026, 10, 29);
 
         var first = BuildSession(
@@ -498,7 +498,7 @@ public sealed class StudySessionRepositoryTests
         await using var db = new TempDatabase();
         await db.CreateInitializer().InitializeAsync();
 
-        var repository = new SqliteStudySessionRepository(db.Options);
+        var repository = new SqliteStudySessionRepository(db.ContextFactory);
         var day = new DateOnly(2026, 10, 29);
         var session = StudySession.Start(Now, day, SessionTrigger.Manual, true);
         session.AddMonitoringEligibleSeconds(1_000, Now.AddSeconds(1));
@@ -525,7 +525,7 @@ public sealed class StudySessionRepositoryTests
         await using var db = new TempDatabase();
         await db.CreateInitializer().InitializeAsync();
 
-        var repository = new SqliteStudySessionRepository(db.Options);
+        var repository = new SqliteStudySessionRepository(db.ContextFactory);
 
         var before = BuildSession(Now.AddDays(-4), new DateOnly(2026, 10, 25), 60, 60, 0, 0, 0);
         before.Complete(Now.AddDays(-4).AddHours(1));
@@ -558,7 +558,7 @@ public sealed class StudySessionRepositoryTests
         await using var db = new TempDatabase();
         await db.CreateInitializer().InitializeAsync();
 
-        var repository = new SqliteStudySessionRepository(db.Options);
+        var repository = new SqliteStudySessionRepository(db.ContextFactory);
 
         var backwards = () => repository.ListByLocalDateRangeAsync(
             new DateOnly(2026, 10, 30),

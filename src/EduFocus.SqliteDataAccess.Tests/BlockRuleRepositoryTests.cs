@@ -17,7 +17,7 @@ public sealed class BlockRuleRepositoryTests
         await using var db = new TempDatabase();
         await db.CreateInitializer().InitializeAsync();
 
-        var repository = new SqliteBlockRuleRepository(db.Options);
+        var repository = new SqliteBlockRuleRepository(db.ContextFactory);
         var block = BlockRule.Create(
             RuleType.Domain,
             RuleMatchType.Exact,
@@ -68,7 +68,7 @@ public sealed class BlockRuleRepositoryTests
         await using var db = new TempDatabase();
         await db.CreateInitializer().InitializeAsync();
 
-        var repository = new SqliteBlockRuleRepository(db.Options);
+        var repository = new SqliteBlockRuleRepository(db.ContextFactory);
         var block = BlockRule.Create(
             RuleType.Domain, RuleMatchType.Exact, "chatgpt.com",
             BlockRuleCategory.Chatbot, BlockRuleEffect.Block, Now);
@@ -91,7 +91,7 @@ public sealed class BlockRuleRepositoryTests
         await using var db = new TempDatabase();
         await db.CreateInitializer().InitializeAsync();
 
-        var repository = new SqliteBlockRuleRepository(db.Options);
+        var repository = new SqliteBlockRuleRepository(db.ContextFactory);
         var rule = BlockRule.Create(
             RuleType.Domain, RuleMatchType.Exact, "claude.ai",
             BlockRuleCategory.Chatbot, BlockRuleEffect.Block, Now);
@@ -125,7 +125,7 @@ public sealed class BlockRuleRepositoryTests
         await using var db = new TempDatabase();
         await db.CreateInitializer().InitializeAsync();
 
-        var repository = new SqliteBlockRuleRepository(db.Options);
+        var repository = new SqliteBlockRuleRepository(db.ContextFactory);
         var rule = BlockRule.Create(
             RuleType.Url, RuleMatchType.Contains, "https://chat.openai.com/chat?token=abc",
             BlockRuleCategory.Chatbot, BlockRuleEffect.Block, Now);
@@ -145,7 +145,7 @@ public sealed class BlockRuleRepositoryTests
         await using var db = new TempDatabase();
         await db.CreateInitializer().InitializeAsync();
 
-        var repository = new SqliteBlockRuleRepository(db.Options);
+        var repository = new SqliteBlockRuleRepository(db.ContextFactory);
 
         var act = () => repository.DeleteAsync(BlockRuleId.New());
 

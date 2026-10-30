@@ -73,7 +73,11 @@ EduFocus là ứng dụng desktop **local-first** dành cho phụ huynh giám s�
 - **Không lưu nội dung trang, tin nhắn, clipboard hay lịch sử duyệt web đầy đủ.**
 - **Không nhận diện danh tính/khuôn mặt.**
 - Dữ liệu nằm trong `%ProgramData%\EduFocus`, được bảo vệ bằng ACL cho Administrators/SYSTEM. Ứng dụng áp ACL khi khởi tạo DB; file DB, WAL và backup kế thừa ACL này. Khởi tạo dữ liệu cần quyền Administrator.
-- Backup trước migration được kiểm tra `PRAGMA integrity_check`; giữ tối đa 3 bản. Khi DB hỏng, ứng dụng giữ nguyên file và yêu cầu khôi phục từ backup, không tự xóa dữ liệu.
+- **Mã hóa DB tại chỗ (SQLCipher, issue #47):** DB, WAL/SHM và backup được mã hóa bằng khóa 32 byte CSPRNG (SQLCipher 4.5.2). Khóa lưu tại `%ProgramData%\EduFocus\edufocus.key` dưới dạng `EDUFKEY1` + blob DPAPI `DataProtectionScope.LocalMachine` (entropy `EduFocus.DatabaseKey.v1`), không phải plaintext; file khóa kế thừa ACL Administrators/SYSTEM. Không có khóa trong DB, log, audit, registry hay source. `sqlite3_key` được áp trước mọi statement trên mỗi native handle (kể cả kết nối pooled); dạng raw key `x'<64 hex>'` bỏ qua PBKDF2 vì khóa đã ngẫu nhiên 32 byte.
+- **Fail-closed khi khóa không dùng được:** DB mã hóa mà thiếu file khóa → `DatabaseKeyException`, không tự tạo khóa mới; file khóa hỏng/không giải mã được → báo lỗi và không ghi đè; sai khóa hoặc integrity check lỗi → `SqliteDatabaseCorruptException`, giữ nguyên DB và chỉ khôi phục từ backup. Không có fallback sang plaintext hay chế độ tắt mã hóa.
+- **Nâng cấp DB plaintext:** DB từ bản trước #47 được backup plaintext, export sang bản mã hóa, verify `PRAGMA integrity_check` rồi mới thay file; lỗi giữ nguyên DB cũ. Backup plaintext legacy được mã hóa lại khi khởi động/restore.
+- **Backup mã hóa:** SQLite backup API không hỗ trợ DB mã hóa nên backup dùng `ATTACH` + `sqlcipher_export` vào database đích đã key bằng `sqlite3_key_v2`; backup được verify và giữ tối đa 3 bản. Backup mã hóa bằng khóa khác bị từ chối; backup trước migration được kiểm tra `PRAGMA integrity_check`. Khi DB hỏng, ứng dụng giữ nguyên file và yêu cầu khôi phục từ backup, không tự xóa dữ liệu.
+- **Khóa gắn máy và quy trình mất khóa:** DPAPI `LocalMachine` chỉ giải mã trên đúng máy đã tạo khóa. Khi sao lưu thủ công, phải giữ `edufocus.key` cùng DB/backup và chỉ khôi phục trên máy đó; đổi máy hoặc mất file khóa làm dữ liệu 2.0 không thể khôi phục (không có backdoor, không lưu khóa trên cloud). App báo lỗi an toàn kèm hướng dẫn; không gửi file khóa/DB qua kênh công khai. Chi tiết: [docs/database_schema.md](docs/database_schema.md) §18.
 - Log kỹ thuật của UI nằm trong `%LocalAppData%\EduFocus\logs`; log của service nằm trong `%ProgramData%\EduFocus\logs` (ACL Administrators/SYSTEM). Cả hai tối đa 10 MB/file và giữ 14 ngày. PIN, recovery code, token và URL đầy đủ được redact trước khi ghi — kể cả khi secret không có dấu `=`/`:` (ví dụ `PIN 482915`, `recovery code is ...`); exception lồng nhau cũng được redact. Test quét raw byte DB, WAL và backup xác nhận không có PIN/recovery code dạng plaintext. Audit event quan trọng nằm trong `AuditLogs` của DB, không ghi vào file log.
 - PIN/recovery code chỉ lưu dưới dạng hash PBKDF2-SHA256 600.000 iterations, salt 16 byte, hash 32 byte; so sánh constant-time; dùng chung lockout 5 lần/15 phút. Recovery code 12 ký tự chỉ hiển thị một lần và được xoay sau khi dùng để reset PIN. Mỗi lần sai PIN/recovery code được ghi audit `AuthenticationFailed`; lần thứ 5 ghi thêm `LockoutTriggered`.
 - Parent Mode session chỉ nằm trong bộ nhớ, tự khóa sau 5 phút idle hoặc khi đóng cửa sổ Parent Mode, và không được khôi phục sau khi app khởi động lại; đổi PIN thành công buộc đăng nhập lại.
@@ -122,7 +126,8 @@ Các điểm sau **không được coi là lỗ hổng bảo mật** vì đã đ
 - Uninstall PIN chỉ là best-effort; admin Windows vẫn gỡ được.
 - Nếu maintainer chưa cấu hình chứng chỉ code signing, bản phát hành sẽ unsigned và chỉ có SHA-256; hãy kiểm tra checksum và chỉ cài từ release chính thức. Đặt `REQUIRE_CODE_SIGNING=true` để release fail thay vì phát hành unsigned.
 - Chặn app có thể đóng/kill process và làm mất dữ liệu chưa lưu; EduFocus ưu tiên `WM_CLOSE` trước khi kill.
-- PIN không bảo vệ file DB nếu phụ huynh và học sinh dùng chung tài khoản Windows; ACL thư mục dữ liệu cũng không tách được quyền trong trường hợp này.
+- PIN không bảo vệ file DB nếu phụ huynh và học sinh dùng chung tài khoản Windows; ACL thư mục dữ liệu cũng không tách được quyền trong trường hợp này. DB/WAL/backup được mã hóa SQLCipher nên standard user chỉ copy file sẽ không đọc được; nhưng tài khoản Administrator/SYSTEM trên máy đọc được file khóa DPAPI và giải mã DB. Mã hóa không thay thế BitLocker cho ổ đĩa.
+- Mất file `%ProgramData%\EduFocus\edufocus.key` hoặc chuyển DB/backup sang máy khác/Windows khác làm dữ liệu không thể giải mã; không có quy trình khôi phục khóa ngoài việc dùng bản sao file khóa trên cùng máy. CSV xuất và log kỹ thuật không được mã hóa.
 - Webcam attention chỉ là ước lượng, không phải eye tracker y khoa.
 - Ứng dụng không chống gian lận thi cử và không nên dùng cho mục đích đó.
 - Không phát hiện được mọi chatbot mới hoặc chatbot nhúng trong ứng dụng khác.
@@ -142,7 +147,8 @@ Nếu bạn phát hiện cách vượt qua các giới hạn trên **trong đi�
 
 Checklist E2E bảo mật/quyền riêng tư nằm ở [docs/security-e2e-checklist.md](docs/security-e2e-checklist.md):
 ma trận bằng chứng tự động (XSS block page, CSV injection, redaction log, ACL, hosts rollback,
-camera không lưu frame, DB/WAL/backup không có secret) và checklist thủ công trên VM sạch
+camera không lưu frame, DB/WAL/backup không có secret, DB mã hóa và fail-closed khi thiếu/sai khóa)
+và checklist thủ công trên VM sạch
 Windows 10 22H2/Windows 11. Checklist này là **cổng bắt buộc** trước khi phát hành; kết quả được ghi
 vào release checklist (#43).
 
@@ -198,6 +204,8 @@ Chúng tôi không theo đuổi pháp lý với nhà nghiên cứu bảo mật t
 - Dùng **tài khoản Windows riêng** cho học sinh (standard user).
 - Đặt PIN mạnh, không chia sẻ với trẻ.
 - Lưu recovery code ở nơi an toàn.
+- Sao lưu DB phải kèm `%ProgramData%\EduFocus\edufocus.key` và chỉ khôi phục trên cùng máy;
+  không chia sẻ khóa hoặc DB qua kênh công khai.
 - Bật **Multi-App Camera** trên Windows 11 nếu muốn theo dõi trong Meet/Teams.
 - Thông báo công khai với trẻ về việc sử dụng ứng dụng.
 - Kiểm tra báo cáo định kỳ; không dùng để kết luận thay cho trao đổi trực tiếp.

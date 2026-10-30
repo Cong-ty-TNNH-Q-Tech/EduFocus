@@ -4,7 +4,7 @@ Tài liệu này mô tả gói cài đặt MSI (WiX v4), cách nâng cấp giữ
 hỏi rõ về dữ liệu người dùng, và checklist kiểm thử trên máy Windows sạch.
 
 Tham chiếu: [system_architecture.md](./system_architecture.md) §14,
-[database_schema.md](./database_schema.md) §16–§17, [release-process.md](./release-process.md),
+[database_schema.md](./database_schema.md) §16–§18, [release-process.md](./release-process.md),
 [SECURITY.md](../SECURITY.md).
 
 ---
@@ -69,7 +69,9 @@ MSI chứa:
 - Shortcut **Desktop** và **Start Menu** dùng chung cho mọi người dùng (`CommonDesktopFolder`, `CommonProgramsFolder`).
 - Registry `HKLM\Software\ThanhTrunggDEV\EduFocus` với `InstallLocation` và `Version` (keypath của component shortcut/registry).
 - `docs\privacy-notice.md`, `THIRD-PARTY-NOTICES.md` và `LICENSE` (bản sao chỉ đọc từ repo) trong thư mục cài.
-- Không có database, log, file cấu hình hay secret. Extension trình duyệt **không** nằm trong MSI;
+- Thư viện native SQLCipher (`e_sqlcipher.dll` từ `SQLitePCLRaw.lib.e_sqlcipher`) đi kèm trong bundle
+  self-contained của `EduFocus.exe`/`EduFocus.Service.exe`; máy đích không cần cài SQLCipher riêng.
+- Không có database, log, file cấu hình, `edufocus.key` hay secret. Extension trình duyệt **không** nằm trong MSI;
   nó được phát hành dưới dạng
   `EduFocus-<version>-browser-extension.zip` (xem [browser-extension.md](./browser-extension.md)).
 
@@ -101,9 +103,9 @@ Trình tự MSI thực hiện:
    tạo `%ProgramData%\EduFocus` và áp ACL chỉ Administrators + SYSTEM (kế thừa cho file con).
    Nếu bước này lỗi, cài đặt thất bại và rollback — app sẽ không có thư mục dữ liệu hở quyền.
 5. Cài service `EduFocusProtection` từ component `ServiceExe` và **start ngay**
-   (`ServiceControl Start="install"`). Service khởi tạo/migrate DB, seed rule, reconcile bảo vệ và mở
-   control pipe; screen SCM nhận trạng thái START PENDING → RUNNING. Nếu service không start được,
-   MSI trả lỗi và rollback.
+   (`ServiceControl Start="install"`). Service khởi tạo `edufocus.key` (DPAPI) và DB SQLCipher nếu
+   chưa có, migrate DB, seed rule, reconcile bảo vệ và mở control pipe; screen SCM nhận trạng thái
+   START PENDING → RUNNING. Nếu service không start được, MSI trả lỗi và rollback.
 6. Chạy deferred custom action `--register --scope machine --manifest-dir [INSTALLFOLDER]native-host`
    **as SYSTEM**: ghi `com.edufocus.native_host.json` cạnh host và tạo registry
    `HKLM\Software\Google\Chrome\NativeMessagingHosts\com.edufocus.native_host` +
@@ -147,9 +149,16 @@ Sau khi cài, người dùng mở EduFocus từ shortcut. Lần chạy đầu:
   tiếp (`Recovery`).
 - Dữ liệu trong `%ProgramData%\EduFocus` không bị MSI chạm tới; marker `ServiceMode` giữ nguyên qua
   nâng cấp nhờ component GUID cố định.
+- **Mã hóa dữ liệu:** service mở DB bằng khóa 32 byte lưu qua DPAPI trong
+  `%ProgramData%\EduFocus\edufocus.key`. Nếu DB hiện tại còn plaintext (bản trước issue #47),
+  initializer tạo backup, export sang SQLCipher, verify rồi thay file; lỗi thì giữ DB cũ + backup.
+  Thiếu khóa hoặc khóa hỏng/không giải mã được → fail-closed, không tạo khóa mới và không ghi đè DB
+  (xem [database_schema.md](./database_schema.md) §18).
 - Lần start đầu sau nâng cấp, service chạy `SqliteDatabaseInitializer`:
-  1. kiểm tra `PRAGMA integrity_check` — hỏng thì giữ nguyên file và báo khôi phục backup;
-  2. tạo backup đã verify trong `%ProgramData%\EduFocus\backups` (giữ 3 bản mới nhất);
+  1. mở DB bằng khóa, kiểm tra `PRAGMA integrity_check` — hỏng, sai khóa hoặc không giải mã được thì
+     giữ nguyên file và báo khôi phục backup;
+  2. tạo backup đã verify trong `%ProgramData%\EduFocus\backups` (giữ 3 bản mới nhất; backup của DB
+     mã hóa cũng được mã hóa);
   3. chạy migration trong transaction; lỗi thì giữ DB cũ, ghi log và ném
      `SqliteMigrationException` kèm đường dẫn backup;
   4. bật WAL và tiếp tục khởi động.
@@ -171,10 +180,11 @@ Không migrate dữ liệu từ bản 1.x (Don't Be Lazy); DB 1.x nằm ở đư
 
 Sau bước xác nhận gỡ, hộp thoại **Remove EduFocus** hỏi rõ:
 
-- Mặc định: **giữ** database, settings và backup trong `%ProgramData%\EduFocus`
-  để cài lại là dùng tiếp.
+- Mặc định: **giữ** database, settings, backup và `edufocus.key` trong `%ProgramData%\EduFocus`
+  để cài lại là dùng tiếp. Key giữ cùng DB — thiếu key thì DB không đọc được (khóa gắn thiết bị).
 - Tùy chọn: **xóa toàn bộ dữ liệu EduFocus** (không thể hoàn tác). Nếu chọn, MSI chạy
-  `--uninstall-watchdog --delete-user-data` và xóa `%ProgramData%\EduFocus`.
+  `--uninstall-watchdog --delete-user-data` và xóa `%ProgramData%\EduFocus` (gồm DB, backup,
+  `edufocus.key` và log service).
 
 Trước `RemoveFiles`, MSI dừng service qua `ServiceControl Stop="both" Wait="yes"` và gỡ service
 (`Remove="uninstall"`), sau đó chạy `--unregister --scope machine` (deferred, SYSTEM, best effort) để
@@ -186,7 +196,7 @@ xóa registry native messaging và manifest `native-host\com.edufocus.native_hos
 3. xóa thư mục runtime `%ProgramData%\EduFocus\runtime`;
 4. `IHostsFileBlocker.SelfHealAsync()` gỡ khối `### EDUFOCUS BLOCK ... ###` khỏi hosts
    (khôi phục đúng byte gốc nếu có journal) và xóa `hosts-backup`;
-5. nếu được yêu cầu, xóa thư mục dữ liệu sau khi kiểm tra đường dẫn đúng là
+5. nếu được yêu cầu, xóa thư mục dữ liệu (kể cả `edufocus.key`) sau khi kiểm tra đường dẫn đúng là
    `%ProgramData%\EduFocus` và watchdog/service đã dừng.
 
 Block page listener và process watcher chạy trong service; SCM stop là listener đóng theo, không để
@@ -208,7 +218,8 @@ Sau khi gỡ, còn lại tối đa:
 
 - thư mục cài đặt `%ProgramFiles%\EduFocus` (MSI xóa khi rỗng);
 - shortcut/registry/service row (MSI xóa);
-- `%ProgramData%\EduFocus` **chỉ khi** người dùng chọn giữ dữ liệu (gồm log service);
+- `%ProgramData%\EduFocus` **chỉ khi** người dùng chọn giữ dữ liệu (gồm DB mã hóa, `edufocus.key`,
+  backup và log service);
 - log chẩn đoán `%LocalAppData%\EduFocus\logs` của từng tài khoản Windows (UI, không chứa secret).
 
 ---
@@ -218,15 +229,20 @@ Sau khi gỡ, còn lại tối đa:
 | Đường dẫn | Nội dung | ACL |
 |---|---|---|
 | `%ProgramFiles%\EduFocus` | `EduFocus.exe`, `EduFocus.Service.exe`, `native-host\EduFocus.NativeHost.exe`, manifest native messaging | mặc định Program Files (admin ghi, user đọc/chạy) |
-| `%ProgramData%\EduFocus` | `edufocus.db`, `backups/`, `runtime/`, `hosts-backup/`, `logs/` (service) | Administrators + SYSTEM full control, protected, kế thừa |
+| `%ProgramData%\EduFocus` | `edufocus.db` (SQLCipher), `edufocus.key`, `backups/` (mã hóa), `runtime/`, `hosts-backup/`, `logs/` (service) | Administrators + SYSTEM full control, protected, kế thừa |
 | `%LocalAppData%\EduFocus\logs` | log kỹ thuật của UI (redacted) | theo tài khoản người dùng |
 | `%LocalAppData%\EduFocus\exports` | CSV phụ huynh tự xuất | theo tài khoản người dùng |
 
 Service chạy SYSTEM nên không có `%LocalAppData%`; `FileLogger` của service dùng
 `%ProgramData%\EduFocus\logs` với cùng redaction, rotation 10 MB và retention 14 ngày.
 
-Installer và app đều áp ACL qua `DataDirectorySecurity`; file tạo sau (DB, WAL, backup)
+Installer và app đều áp ACL qua `DataDirectorySecurity`; file tạo sau (DB, WAL, backup, key)
 kế thừa ACL thư mục. Standard user không đọc/ghi được dữ liệu học tập.
+
+`edufocus.key` do service (SYSTEM) tạo lần đầu và không nằm trong MSI/backup; khóa được bảo vệ bằng
+DPAPI `LocalMachine` nên chỉ giải mã được trên đúng máy đã tạo. Thiếu key, key hỏng hoặc chép DB
+sang máy khác đều dẫn tới fail-closed: service không tạo key mới và không ghi đè DB; xem quy trình
+hỗ trợ trong [database_schema.md](./database_schema.md) §18.
 
 ---
 
@@ -249,7 +265,8 @@ Chưa thể chạy tự động trong CI (cần VM Windows). Checklist bắt bu�
    (`icacls "%ProgramData%\EduFocus"`).
 2. Kiểm tra service: `Get-Service EduFocusProtection` = Running; `EduFocus.Service.exe --health`
    trả `running`; registry `HKLM\SOFTWARE\EduFocus\ServiceMode = 1`; `sc qc EduFocusProtection`
-   thấy auto-start và recovery 60 giây.
+   thấy auto-start và recovery 60 giây; `%ProgramData%\EduFocus\edufocus.key` tồn tại với header
+   `EDUFKEY1` và phần khóa 32 byte đã mã hóa DPAPI.
 3. Mở app bằng **standard user** → xác nhận UAC xuất hiện (hành vi dự kiến) và app chạy sau khi
    nâng quyền; hoàn tất onboarding, bật bảo vệ → hosts có marker, block page hoạt động. Đóng UI
    hoàn toàn → hosts marker vẫn còn, block page vẫn trả trang, service vẫn Running; không có
@@ -262,11 +279,14 @@ Chưa thể chạy tự động trong CI (cần VM Windows). Checklist bắt bu�
 6. Cài đè bản trước đó (nâng cấp) → chỉ còn một entry trong Apps & Features; service dừng/start
    đúng, DB/settings còn nguyên, session cũ được phục hồi, migration chạy với backup trước đó.
 7. Gỡ cài đặt, **giữ dữ liệu** → service row biến mất, không còn hosts marker, không còn scheduled
-   task `EduFocus*`, không còn `runtime`/`hosts-backup`; `%ProgramData%\EduFocus\edufocus.db` còn.
-8. Gỡ cài đặt, **xóa dữ liệu** → `%ProgramData%\EduFocus` không còn.
+   task `EduFocus*`, không còn `runtime`/`hosts-backup`; `%ProgramData%\EduFocus\edufocus.db` và
+   `edufocus.key` còn.
+8. Gỡ cài đặt, **xóa dữ liệu** → `%ProgramData%\EduFocus` không còn (DB, backup, `edufocus.key`,
+   log service).
 9. Giả lập migration lỗi (ví dụ chạy bản mới trên DB có cột xung đột) → service báo lỗi an toàn,
    DB cũ và backup còn; restore backup thành công; `--console` hiển thị lỗi.
-10. Kiểm tra gói: payload có đúng một `EduFocus.Service.exe`; không có `.pfx/.pem/.snk/.key`,
+10. Kiểm tra gói: payload có đúng một `EduFocus.Service.exe`; thư viện native SQLCipher nằm trong
+    bundle self-contained (`e_sqlcipher.dll`); không có `.pfx/.pem/.snk/.key` (gồm `edufocus.key`),
     không có `.db/.log`; không có chứng chỉ/private key trong MSI.
 11. Với bản tải từ GitHub Release: đối chiếu SHA-256 với `SHA256SUMS.txt` và chạy
     `Get-AuthenticodeSignature` trên MSI (khi bản phát hành được ký) trước khi cài.
@@ -277,6 +297,14 @@ Chưa thể chạy tự động trong CI (cần VM Windows). Checklist bắt bu�
     từng bước ở [browser-extension.md](./browser-extension.md) §7.
 14. Gỡ cài đặt → registry `NativeMessagingHosts` của Chrome/Edge và
     `native-host\com.edufocus.native_host.json` bị xóa; không còn native host mồ côi.
+15. Kiểm tra mã hóa at-rest: 16 byte đầu của `edufocus.db` **không** phải `SQLite format 3`;
+    mở DB bằng công cụ SQLite thường (không có khóa) thất bại; backup trong `backups/` cũng không
+    đọc được nếu không có key; log service không chứa key. Chi tiết lệnh ở
+    [security-e2e-checklist.md](./security-e2e-checklist.md) SEC-E2E-27.
+16. Kiểm tra khóa: đổi tên `edufocus.key` rồi start lại service → service fail-closed, **không** tạo
+    key mới và DB giữ nguyên; trả key lại → service Running và dữ liệu còn nguyên. Chép
+    `edufocus.db` sang VM khác → không mở được (khóa gắn thiết bị); restore backup trên chính máy
+    có key hoạt động (SEC-E2E-28).
 
 Kết quả từng lần chạy ghi vào [release-checklist.md](./release-checklist.md) §2.4. Quy trình tag,
 ký số, checksum và dry run nằm ở [release-process.md](./release-process.md); ngưỡng hiệu năng và

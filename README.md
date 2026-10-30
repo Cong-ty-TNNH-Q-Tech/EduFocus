@@ -53,7 +53,10 @@ EduFocus được thiết kế để **không trở thành phần mềm do thám
 
 - **Không lưu ảnh, video hoặc âm thanh.** Frame webcam chỉ được xử lý trong bộ nhớ để suy ra trạng thái.
 - **Không lưu nội dung trang web, tin nhắn hay clipboard.**
-- **Không gửi dữ liệu học tập lên cloud.** Mọi dữ liệu nằm trong SQLite trên máy; kiểm tra cập nhật mặc định tắt, khi phụ huynh bật chỉ gửi số phiên bản tới GitHub và GitHub vẫn có thể thấy IP.
+- **Không gửi dữ liệu học tập lên cloud.** Mọi dữ liệu nằm trong SQLite **mã hóa SQLCipher** trên máy; kiểm tra cập nhật mặc định tắt, khi phụ huynh bật chỉ gửi số phiên bản tới GitHub và GitHub vẫn có thể thấy IP.
+- **Dữ liệu được mã hóa khi lưu:** DB, WAL và backup dùng SQLCipher; khóa 32 byte lưu bằng DPAPI
+  `LocalMachine` trong `%ProgramData%\EduFocus\edufocus.key`, gắn với máy và không nằm trong log.
+  Key không phải PIN; nếu tự sao lưu DB, cần sao lưu cả `edufocus.key` và chỉ khôi phục trên máy đó.
 - **Không nhận diện danh tính**, không face embedding, không phân tích cảm xúc.
 - Báo cáo luôn hiển thị **độ phủ camera** và **độ tin cậy** để phụ huynh không hiểu sai kết quả.
 - Ứng dụng phải được thông báo công khai cho học sinh; không khuyến khích giám sát bí mật.
@@ -69,7 +72,8 @@ EduFocus được thiết kế để **không trở thành phần mềm do thám
   phân phối trong MSI/ZIP.
 
 **Xóa dữ liệu:** Parent Mode → "Dữ liệu & quyền riêng tư" → xóa toàn bộ dữ liệu quan sát bằng
-PIN; khi gỡ cài đặt có thể chọn xóa `%ProgramData%\EduFocus`. Chi tiết và thời hạn phản hồi ở
+PIN; khi gỡ cài đặt có thể chọn xóa `%ProgramData%\EduFocus` (DB, backup và `edufocus.key`). Chi tiết
+và thời hạn phản hồi ở
 [thông báo quyền riêng tư §10](./docs/privacy-notice.md#10-yêu-cầu-xóa-dữ-liệu-và-thời-hạn-phản-hồi).
 
 > **Giới hạn:** Webcam thường không phải eye tracker hồng ngoại. "Tập trung" là ước lượng, không phải bằng chứng tuyệt đối. Khi Google Meet/Teams đang dùng camera, app có thể không quan sát được nếu máy chưa hỗ trợ Multi-App Camera.
@@ -119,7 +123,7 @@ Tắt Protection bằng PIN hoặc hết khung giờ
 |---|---|
 | **UI** | WPF .NET 10 LTS, CommunityToolkit.Mvvm (lớp UI mới ở Phase 6) |
 | **Architecture** | Clean Architecture + Ports & Adapters |
-| **Database** | SQLite + EF Core 10 |
+| **Database** | SQLite (SQLCipher) + EF Core 10 |
 | **Blocking** | Windows hosts file (domain exact) + local HTTP block page + MV3 extension (URL/path) |
 | **Activity** | Win32 foreground window, WMI, UI Automation |
 | **Attention** | OpenCvSharp4 + ONNX Runtime (MediaPipe Face/Iris) |

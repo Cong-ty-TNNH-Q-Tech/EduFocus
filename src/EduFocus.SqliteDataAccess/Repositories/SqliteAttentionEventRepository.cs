@@ -13,23 +13,19 @@ namespace EduFocus.SqliteDataAccess.Repositories;
 /// </summary>
 public sealed class SqliteAttentionEventRepository : IAttentionEventRepository
 {
-    private readonly DbContextOptions<EduFocusDbContext> _dbContextOptions;
+    private readonly SqliteDbContextFactory _contextFactory;
 
-    public SqliteAttentionEventRepository(EduFocusDatabaseOptions options)
+    public SqliteAttentionEventRepository(SqliteDbContextFactory contextFactory)
     {
-        ArgumentNullException.ThrowIfNull(options);
-
-        _dbContextOptions = new DbContextOptionsBuilder<EduFocusDbContext>()
-            .UseSqlite(options.ConnectionString)
-            .AddInterceptors(new SqlitePragmaInterceptor())
-            .Options;
+        ArgumentNullException.ThrowIfNull(contextFactory);
+        _contextFactory = contextFactory;
     }
 
     public async Task AddAsync(AttentionEvent attentionEvent, CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(attentionEvent);
 
-        await using var context = new EduFocusDbContext(_dbContextOptions);
+        await using var context = _contextFactory.CreateDbContext();
         context.AttentionEvents.Add(attentionEvent);
         await context.SaveChangesAsync(cancellationToken);
     }
@@ -38,7 +34,7 @@ public sealed class SqliteAttentionEventRepository : IAttentionEventRepository
     {
         ArgumentNullException.ThrowIfNull(attentionEvent);
 
-        await using var context = new EduFocusDbContext(_dbContextOptions);
+        await using var context = _contextFactory.CreateDbContext();
         context.AttentionEvents.Update(attentionEvent);
         await context.SaveChangesAsync(cancellationToken);
     }
@@ -49,7 +45,7 @@ public sealed class SqliteAttentionEventRepository : IAttentionEventRepository
     {
         EnsureSessionId(sessionId);
 
-        await using var context = new EduFocusDbContext(_dbContextOptions);
+        await using var context = _contextFactory.CreateDbContext();
         return await context.AttentionEvents
             .AsNoTracking()
             .Where(x => x.SessionId == sessionId && x.EndedAtUtc == null)
@@ -63,7 +59,7 @@ public sealed class SqliteAttentionEventRepository : IAttentionEventRepository
     {
         EnsureSessionId(sessionId);
 
-        await using var context = new EduFocusDbContext(_dbContextOptions);
+        await using var context = _contextFactory.CreateDbContext();
         return await context.AttentionEvents
             .AsNoTracking()
             .Where(x => x.SessionId == sessionId)
@@ -85,7 +81,7 @@ public sealed class SqliteAttentionEventRepository : IAttentionEventRepository
 
         var ids = sessionIds.Distinct().ToArray();
 
-        await using var context = new EduFocusDbContext(_dbContextOptions);
+        await using var context = _contextFactory.CreateDbContext();
         return await context.AttentionEvents
             .AsNoTracking()
             .Where(x => ids.Contains(x.SessionId))
@@ -104,7 +100,7 @@ public sealed class SqliteAttentionEventRepository : IAttentionEventRepository
         if (endedAtUtc.Kind != DateTimeKind.Utc)
             throw new ArgumentException("The end timestamp must be UTC.", nameof(endedAtUtc));
 
-        await using var context = new EduFocusDbContext(_dbContextOptions);
+        await using var context = _contextFactory.CreateDbContext();
 
         var open = await context.AttentionEvents
             .Where(x => x.SessionId == sessionId && x.EndedAtUtc == null)

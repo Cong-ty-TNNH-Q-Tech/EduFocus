@@ -42,7 +42,7 @@ public sealed class BlockedAttemptRepositoryTests
             session.Id,
             processName: "discord");
 
-        var repository = new SqliteBlockedAttemptRepository(db.Options);
+        var repository = new SqliteBlockedAttemptRepository(db.ContextFactory);
         await repository.AddAsync(domain);
         await repository.AddAsync(app);
 

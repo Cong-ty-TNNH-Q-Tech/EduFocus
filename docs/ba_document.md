@@ -336,6 +336,7 @@ EduFocus cung cấp một lớp bảo vệ và quan sát **tối thiểu, minh b
 - PIN hash PBKDF2-SHA256, salt riêng, constant-time compare.
 - Recovery code hash tương đương PIN; chỉ hiển thị một lần khi tạo/đổi, không thể hiển thị lại.
 - DB và log đặt tại `%ProgramData%\EduFocus`, ACL chỉ cho Administrators/SYSTEM. Phụ huynh thao tác qua app elevated, không đọc file trực tiếp.
+- DB mã hóa toàn phần bằng SQLCipher; khóa 32 byte lưu DPAPI `LocalMachine` trong `edufocus.key` (không phải PIN, gắn thiết bị). Thiếu/hỏng khóa thì fail-closed, không ghi đè DB; backup cũng được mã hóa. (post-MVP, issue #47)
 - Không lưu secret trong source, log hay file cấu hình plaintext.
 - Mọi thao tác nhạy cảm ghi audit log (không ghi PIN).
 - App yêu cầu quyền Administrator cho hosts/process. Firewall là post-MVP.
@@ -424,13 +425,13 @@ EduFocus cung cấp một lớp bảo vệ và quan sát **tối thiểu, minh b
 |---|---|
 | UI | WPF .NET 10 LTS, MaterialDesignInXAML, CommunityToolkit.Mvvm |
 | Architecture | Clean Architecture + Ports & Adapters |
-| Database | SQLite + EF Core 10 |
+| Database | SQLite (SQLCipher) + EF Core 10; khóa DB 32 byte lưu DPAPI, gắn thiết bị (issue #47) |
 | Chặn web | Windows hosts file + local HTTP block page (MVP, domain-level) |
 | Chặn URL/path | Browser extension (Post-MVP) |
 | Process / foreground window | Win32 API (`GetForegroundWindow`, WMI, `Process`) |
 | URL tracking | UI Automation + window title (MVP), browser extension (Post-MVP) |
 | Attention | OpenCvSharp4 + ONNX Runtime + MediaPipe Face/Iris models |
-| Bảo mật PIN | PBKDF2-SHA256; không lưu secret khác |
+| Bảo mật PIN | PBKDF2-SHA256; ngoài khóa mã hóa DB do hệ thống sinh (DPAPI, issue #47) không lưu secret khác |
 | Installer | WiX Toolset v4 (MSI) |
 | CI/CD | GitHub Actions |
 | Logging | File logger xoay vòng theo ngày, không ghi dữ liệu nhạy cảm |

@@ -29,13 +29,13 @@ public sealed class RetentionRepositoryTests
             await context.SaveChangesAsync();
         }
 
-        var samples = new SqliteActivitySampleRepository(db.Options);
+        var samples = new SqliteActivitySampleRepository(db.ContextFactory);
         await samples.AddAsync(Sample(active.Id, Now.AddDays(-40)));
         await samples.AddAsync(Sample(active.Id, Now.AddDays(-1)));
         await samples.AddAsync(Sample(finished.Id, Now.AddDays(-40)));
         await samples.AddAsync(Sample(finished.Id, Now.AddDays(-1)));
 
-        var repository = new SqliteRetentionRepository(db.Options);
+        var repository = new SqliteRetentionRepository(db.ContextFactory);
         var deleted = await repository.DeleteActivitySamplesBeforeAsync(Now.AddDays(-30), batchSize: 100);
 
         deleted.Should().Be(1);
@@ -73,7 +73,7 @@ public sealed class RetentionRepositoryTests
             await context.SaveChangesAsync();
         }
 
-        var repository = new SqliteRetentionRepository(db.Options);
+        var repository = new SqliteRetentionRepository(db.ContextFactory);
         var deleted = await repository.DeleteAttentionEventsBeforeAsync(Now.AddDays(-90), batchSize: 100);
 
         deleted.Should().Be(1);
@@ -92,7 +92,7 @@ public sealed class RetentionRepositoryTests
         await using var db = new TempDatabase();
         await db.CreateInitializer().InitializeAsync();
 
-        var attempts = new SqliteBlockedAttemptRepository(db.Options);
+        var attempts = new SqliteBlockedAttemptRepository(db.ContextFactory);
         await attempts.AddAsync(BlockedAttempt.Record(
             Now.AddDays(-100),
             BlockedAttemptTargetType.Domain,
@@ -104,7 +104,7 @@ public sealed class RetentionRepositoryTests
             "discord.com",
             BlockedAttemptObservedVia.BlockPage));
 
-        var repository = new SqliteRetentionRepository(db.Options);
+        var repository = new SqliteRetentionRepository(db.ContextFactory);
         var deleted = await repository.DeleteBlockedAttemptsBeforeAsync(Now.AddDays(-90), batchSize: 100);
 
         deleted.Should().Be(1);
@@ -120,7 +120,7 @@ public sealed class RetentionRepositoryTests
         await using var db = new TempDatabase();
         await db.CreateInitializer().InitializeAsync();
 
-        var audits = new SqliteAuditLogRepository(db.Options);
+        var audits = new SqliteAuditLogRepository(db.ContextFactory);
         await audits.AddAsync(AuditLog.Record(
             AuditActor.Parent,
             AuditEventType.PinChanged,
@@ -132,7 +132,7 @@ public sealed class RetentionRepositoryTests
             "Recent audit entry",
             Now.AddDays(-1)));
 
-        var repository = new SqliteRetentionRepository(db.Options);
+        var repository = new SqliteRetentionRepository(db.ContextFactory);
         var deleted = await repository.DeleteAuditLogsBeforeAsync(Now.AddDays(-365), batchSize: 100);
 
         deleted.Should().Be(1);
@@ -148,9 +148,9 @@ public sealed class RetentionRepositoryTests
         await using var db = new TempDatabase();
         await db.CreateInitializer().InitializeAsync();
 
-        var sessions = new SqliteStudySessionRepository(db.Options);
-        var samples = new SqliteActivitySampleRepository(db.Options);
-        var attempts = new SqliteBlockedAttemptRepository(db.Options);
+        var sessions = new SqliteStudySessionRepository(db.ContextFactory);
+        var samples = new SqliteActivitySampleRepository(db.ContextFactory);
+        var attempts = new SqliteBlockedAttemptRepository(db.ContextFactory);
         var created = new List<StudySession>();
 
         for (var index = 0; index < 3; index++)
@@ -181,7 +181,7 @@ public sealed class RetentionRepositoryTests
             BlockedAttemptObservedVia.BlockPage,
             created[0].Id));
 
-        var repository = new SqliteRetentionRepository(db.Options);
+        var repository = new SqliteRetentionRepository(db.ContextFactory);
         var cutoff = Now.AddDays(-365);
 
         (await repository.DeleteFinishedSessionsBeforeAsync(cutoff, batchSize: 2)).Should().Be(2);
@@ -213,7 +213,7 @@ public sealed class RetentionRepositoryTests
             await context.SaveChangesAsync();
         }
 
-        var repository = new SqliteRetentionRepository(db.Options);
+        var repository = new SqliteRetentionRepository(db.ContextFactory);
         var deleted = await repository.DeleteFinishedSessionsBeforeAsync(Now.AddDays(-365), batchSize: 100);
 
         deleted.Should().Be(0);
@@ -228,7 +228,7 @@ public sealed class RetentionRepositoryTests
         await using var db = new TempDatabase();
         await db.CreateInitializer().InitializeAsync();
 
-        var repository = new SqliteRetentionRepository(db.Options);
+        var repository = new SqliteRetentionRepository(db.ContextFactory);
 
         await repository.Invoking(x => x.VacuumAsync()).Should().NotThrowAsync();
     }
@@ -239,7 +239,7 @@ public sealed class RetentionRepositoryTests
         await using var db = new TempDatabase();
         await db.CreateInitializer().InitializeAsync();
 
-        var repository = new SqliteRetentionRepository(db.Options);
+        var repository = new SqliteRetentionRepository(db.ContextFactory);
 
         await repository
             .Invoking(x => x.DeleteAuditLogsBeforeAsync(new DateTime(2026, 10, 30, 0, 0, 0, DateTimeKind.Local), 10))

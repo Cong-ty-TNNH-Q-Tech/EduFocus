@@ -53,7 +53,11 @@ EduFocus is designed **not to be spyware**:
 
 - **No photos, videos, or audio are stored.** Webcam frames are processed in memory only to derive a state.
 - **No page content, messages, or clipboard are captured.**
-- **No study data is sent to the cloud.** Everything lives in a local SQLite database; if update checks are enabled, only version/OS is sent and the server can still see the IP.
+- **No study data is sent to the cloud.** Everything lives in a local **SQLCipher-encrypted** SQLite database; if update checks are enabled, only version/OS is sent and the server can still see the IP.
+- **Data is encrypted at rest:** DB, WAL and backups use SQLCipher; the 32-byte key is protected with
+  DPAPI `LocalMachine` in `%ProgramData%\EduFocus\edufocus.key`, bound to the device and never logged.
+  The key is not the PIN; if you back up the DB yourself, back up `edufocus.key` too and restore only
+  on the same machine.
 - **No identity recognition**, no face embeddings, no emotion analysis.
 - Reports always show **camera coverage** and **confidence** so parents don't misread results.
 - The app should be disclosed openly to the student; covert monitoring is discouraged.
@@ -69,7 +73,8 @@ EduFocus is designed **not to be spyware**:
   the MSI/ZIP.
 
 **Deleting data:** Parent Mode → "Dữ liệu & quyền riêng tư" → delete all observation data with the
-PIN; the uninstaller can also remove `%ProgramData%\EduFocus`. Details and response deadlines are
+PIN; the uninstaller can also remove `%ProgramData%\EduFocus` (DB, backups and `edufocus.key`).
+Details and response deadlines are
 in [privacy notice §10](./docs/privacy-notice.md#10-yêu-cầu-xóa-dữ-liệu-và-thời-hạn-phản-hồi)
 (Vietnamese).
 
@@ -120,7 +125,7 @@ Protection turns off with PIN or when the schedule window ends
 |---|---|
 | **UI** | WPF .NET 10 LTS, CommunityToolkit.Mvvm (new UI in Phase 6) |
 | **Architecture** | Clean Architecture + Ports & Adapters |
-| **Database** | SQLite + EF Core 10 |
+| **Database** | SQLite (SQLCipher) + EF Core 10 |
 | **Blocking** | Windows hosts file (exact domains) + local HTTP block page + MV3 extension (URL/path) |
 | **Activity** | Win32 foreground window, WMI, UI Automation |
 | **Attention** | OpenCvSharp4 + ONNX Runtime (MediaPipe Face/Iris) |

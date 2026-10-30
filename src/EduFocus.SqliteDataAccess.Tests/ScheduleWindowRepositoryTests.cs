@@ -16,7 +16,7 @@ public sealed class ScheduleWindowRepositoryTests
         await using var db = new TempDatabase();
         await db.CreateInitializer().InitializeAsync();
 
-        var repository = new SqliteScheduleWindowRepository(db.Options);
+        var repository = new SqliteScheduleWindowRepository(db.ContextFactory);
         var evening = ScheduleWindow.Create(ScheduleDays.Weekdays, 1140, 1260, "  Giờ học tối  ", Now);
         var morning = ScheduleWindow.Create(
             ScheduleDays.Monday | ScheduleDays.Wednesday,
@@ -48,7 +48,7 @@ public sealed class ScheduleWindowRepositoryTests
         await using var db = new TempDatabase();
         await db.CreateInitializer().InitializeAsync();
 
-        var repository = new SqliteScheduleWindowRepository(db.Options);
+        var repository = new SqliteScheduleWindowRepository(db.ContextFactory);
         var window = ScheduleWindow.Create(ScheduleDays.Weekdays, 480, 690, "Giờ học", Now);
         await repository.AddAsync(window);
 
@@ -80,7 +80,7 @@ public sealed class ScheduleWindowRepositoryTests
         await using var db = new TempDatabase();
         await db.CreateInitializer().InitializeAsync();
 
-        var repository = new SqliteScheduleWindowRepository(db.Options);
+        var repository = new SqliteScheduleWindowRepository(db.ContextFactory);
 
         var act = () => repository.DeleteAsync(EduFocus.Domain.ValueObjects.ScheduleWindowId.New());
 
@@ -93,7 +93,7 @@ public sealed class ScheduleWindowRepositoryTests
         await using var db = new TempDatabase();
         await db.CreateInitializer().InitializeAsync();
 
-        var repository = new SqliteScheduleWindowRepository(db.Options);
+        var repository = new SqliteScheduleWindowRepository(db.ContextFactory);
         var window = ScheduleWindow.Create(ScheduleDays.Sunday, 1380, 1440, null, Now);
         await repository.AddAsync(window);
 

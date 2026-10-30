@@ -20,6 +20,8 @@ internal sealed class TempDatabase : IAsyncDisposable
             BackupDirectory = BackupDirectory,
             ProtectDataDirectory = false
         };
+        KeyStore = new DatabaseKeyStore(Options);
+        ContextFactory = new SqliteDbContextFactory(Options, KeyStore);
     }
 
     public string RootPath { get; }
@@ -32,19 +34,40 @@ internal sealed class TempDatabase : IAsyncDisposable
 
     public EduFocusDatabaseOptions Options { get; }
 
-    public SqliteDatabaseInitializer CreateInitializer(TimeProvider? timeProvider = null) =>
-        new(Options, Logger, timeProvider);
+    public DatabaseKeyStore KeyStore { get; }
 
-    public EduFocusDbContext CreateContext()
+    public SqliteDbContextFactory ContextFactory { get; }
+
+    public SqliteDatabaseInitializer CreateInitializer(TimeProvider? timeProvider = null) =>
+        new(Options, Logger, KeyStore, timeProvider);
+
+    public SqliteBackupStore CreateBackupStore(TimeProvider? timeProvider = null) =>
+        new(Options, Logger, KeyStore, timeProvider);
+
+    public EduFocusDbContext CreateContext() => ContextFactory.CreateDbContext();
+
+    /// <summary>Context for creating a pre-encryption database in upgrade tests.</summary>
+    public EduFocusDbContext CreatePlaintextContext()
     {
         var builder = new DbContextOptionsBuilder<EduFocusDbContext>()
-            .UseSqlite(Options.ConnectionString)
-            .AddInterceptors(new SqlitePragmaInterceptor());
+            .UseSqlite(Options.ConnectionString);
 
         return new EduFocusDbContext(builder.Options);
     }
 
     public SqliteConnection OpenConnection()
+    {
+        var encrypted = SqliteCipher.GetFileState(DatabasePath) == SqliteDatabaseFileState.Encrypted;
+        var connection = new SqliteConnection(Options.ConnectionString);
+        connection.Open();
+
+        if (encrypted)
+            KeyStore.Get().ApplyTo(connection);
+
+        return connection;
+    }
+
+    public SqliteConnection OpenPlaintextConnection()
     {
         var connection = new SqliteConnection(Options.ConnectionString);
         connection.Open();

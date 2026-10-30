@@ -547,6 +547,9 @@ Giả định:
 
 **Ước tính:** DB < 50 MB sau 1 năm với cấu hình mặc định. Nếu giảm sampling hoặc retention, dung lượng còn nhỏ hơn.
 
+Từ issue #47, DB được mã hóa SQLCipher. Đo lại trên dữ liệu tổng hợp 30 ngày: 8,25 MB (plaintext trước đây 8,14 MB);
+DB mô phỏng một năm sau retention: 9,71 MB. Overhead của SQLCipher không làm thay đổi ngưỡng 50 MB.
+
 ---
 
 ## 16. Bảo mật dữ liệu
@@ -556,11 +559,11 @@ Giả định:
   - Học sinh standard user: không đọc/ghi.
   - `DataDirectorySecurity` áp ACL khi khởi tạo DB; quyền kế thừa cho file DB, `-wal`/`-shm` và thư mục `backups`.
   - Nếu không áp được ACL, initializer log lỗi và ném `DataDirectorySecurityException`; không xóa dữ liệu.
-- Nếu phụ huynh và học sinh dùng chung tài khoản Windows, ACL không tách được; đây là giới hạn đã biết. PIN chỉ bảo vệ UI, không bảo vệ file DB.
-- Không lưu secret trong DB ngoài hash PIN/recovery code.
-- Cân nhắc SQLCipher ở post-MVP nếu cần mã hóa toàn bộ DB.
-- Backup DB trước migration; giữ tối đa 3 bản.
-- Log không chứa dữ liệu nhạy cảm.
+- Nếu phụ huynh và học sinh dùng chung tài khoản Windows, ACL không tách được; đây là giới hạn đã biết. PIN chỉ bảo vệ UI, không bảo vệ file DB. Tuy nhiên DB/WAL/backup được mã hóa SQLCipher nên standard user không đọc được nếu chỉ copy file; tài khoản Administrator/SYSTEM trên máy vẫn giải mã được (xem §18).
+- Không lưu secret trong DB ngoài hash PIN/recovery code. Khóa mã hóa không nằm trong DB, log, audit, source hay registry.
+- DB, WAL/SHM và backup được mã hóa SQLCipher; khóa 32 byte lưu DPAPI tại `%ProgramData%\EduFocus\edufocus.key` (xem §18).
+- Backup DB trước migration; giữ tối đa 3 bản; backup của DB mã hóa cũng được mã hóa.
+- Log không chứa dữ liệu nhạy cảm và không chứa khóa mã hóa.
 
 **Kiểm tra ACL (thủ công, sau lần chạy đầu tiên bằng Administrator)**
 - `icacls "%ProgramData%\EduFocus"` chỉ hiển thị `BUILTIN\Administrators:(OI)(CI)(F)` và `NT AUTHORITY\SYSTEM:(OI)(CI)(F)`; không còn `Users`/`Authenticated Users`.
@@ -575,22 +578,93 @@ Giả định:
 - Migration `AddOnboardingConsent` (issue #15) thêm hai cột nullable `PrivacyAcceptedAtUtc` và `GuardianAcknowledgedAtUtc` vào `AppSettings`; DB cũ được backup tự động trước khi nâng cấp.
 - Migration `AddProtectionSource` (issue #17) thêm cột `ProtectionSource` vào `AppSettings` và backfill `Manual` cho các hàng đang có `ProtectionEnabled = 1`.
 - Issue #20 không thêm migration: seed version của rule mặc định là hằng số trong `BuiltInRuleCatalog` và được ghi vào audit metadata; rule seed vào bảng `BlockRules` theo unique key sẵn có.
-- Mỗi migration có backup tự động trước khi chạy — `SqliteBackupStore` backup bằng SQLite backup API, kiểm tra `PRAGMA integrity_check` và chỉ tiếp tục khi bản backup hợp lệ; giữ tối đa 3 bản gần nhất.
+- Mỗi migration có backup tự động trước khi chạy — `SqliteBackupStore` dùng SQLite backup API cho DB plaintext cũ và `sqlcipher_export` cho DB mã hóa (SQLite backup API không hỗ trợ DB mã hóa), kiểm tra `PRAGMA integrity_check` và chỉ tiếp tục khi bản backup hợp lệ; giữ tối đa 3 bản gần nhất.
 - Tên backup `edufocus-{UTC}-{nn}.db` là duy nhất, không ghi đè bản cũ; retention chỉ xóa bản cũ nhất.
 - Nếu migration thất bại:
   - Giữ DB cũ.
   - Ghi log.
   - Hiển thị lỗi cho phụ huynh; không tự xóa dữ liệu.
 - Nếu DB hiện có hỏng integrity check: không sửa file, ném `SqliteDatabaseCorruptException` kèm đường dẫn thư mục backup.
-- Khôi phục: đóng EduFocus, gọi `SqliteDatabaseInitializer.RestoreBackup(path)` (API) — backup được kiểm tra integrity, DB hiện tại được snapshot best-effort, file `-wal`/`-shm` được xóa trước khi thay thế. UI khôi phục sẽ ở phase Reports/Settings.
+- Khôi phục: đóng EduFocus, gọi `SqliteDatabaseInitializer.RestoreBackup(path)` (API) — backup được kiểm tra integrity, DB hiện tại được snapshot best-effort, file `-wal`/`-shm` được xóa trước khi thay thế. Backup mã hóa chỉ mở được bằng đúng khóa hiện tại; backup plaintext legacy được mã hóa trong lúc restore. UI khôi phục sẽ ở phase Reports/Settings.
 - Không hỗ trợ downgrade schema; nếu cần, khôi phục từ backup.
 - DB từ `DontBeLazy` 1.x không được mở bởi EduFocus.
-- Convention khi mở kết nối: `PRAGMA foreign_keys = ON` (interceptor); DB mới được set `auto_vacuum = INCREMENTAL` trước khi tạo bảng và `journal_mode = WAL`; DB cũ được bật WAL sau khi backup, trước migration.
-- Test tích hợp: `src/EduFocus.SqliteDataAccess.Tests` (schema, khởi tạo/backup/retention, roundtrip entity, heartbeat có điều kiện/chống hồi sinh, retention giữ session summary, ACL, corrupt DB và restore).
+- Convention khi mở kết nối: `PRAGMA key` (SQLCipher) luôn được áp **trước** mọi statement, sau đó `PRAGMA foreign_keys = ON` (interceptor); DB mới được set `auto_vacuum = INCREMENTAL` trước khi tạo bảng và `journal_mode = WAL`; DB cũ được bật WAL sau khi backup, trước migration.
+- Test tích hợp: `src/EduFocus.SqliteDataAccess.Tests` (schema, khởi tạo/backup/retention, roundtrip entity, heartbeat có điều kiện/chống hồi sinh, retention giữ session summary, ACL, corrupt DB và restore, mã hóa và khôi phục khóa — xem §18).
 
 ---
 
-## 18. Tài liệu liên quan
+## 18. Mã hóa cơ sở dữ liệu (SQLCipher)
+
+Issue #47 mã hóa toàn bộ DB tại chỗ bằng **SQLCipher 4.5.2** (gói `SQLitePCLRaw.bundle_e_sqlcipher`
+2.1.11, dùng `Microsoft.EntityFrameworkCore.Sqlite.Core`). Mục tiêu: file DB, WAL/SHM và backup
+không đọc được nếu bị copy ra ngoài, đồng thời không lưu khóa dưới dạng plaintext cạnh DB.
+
+**Khóa và file khóa**
+- Khóa là 32 byte sinh bằng CSPRNG, không suy ra từ PIN hay mật khẩu người dùng.
+- Lưu tại `%ProgramData%\EduFocus\edufocus.key`, định dạng `EDUFKEY1` + blob DPAPI
+  `DataProtectionScope.LocalMachine` với entropy `EduFocus.DatabaseKey.v1`; file kế thừa ACL
+  Administrators/SYSTEM. Không có byte khóa plaintext trong file, log, audit, registry hay source.
+- Ghi file khóa bằng file tạm + `File.Move(overwrite: false)` để hai tiến trình không ghi đè khóa
+  của nhau; file khóa hỏng hoặc không giải mã được **không bao giờ bị ghi đè tự động**.
+- Khóa gắn với máy: DPAPI `LocalMachine` chỉ giải mã được trên đúng máy đã tạo khóa. Sao lưu DB
+  phải đi kèm `edufocus.key` và chỉ khôi phục trên máy đó; copy DB + khóa sang máy khác vẫn không
+  mở được.
+
+**Áp khóa cho kết nối**
+- `SqlitePragmaInterceptor` gọi `sqlite3_key` trên mỗi kết nối EF trước `PRAGMA foreign_keys = ON`;
+  initializer, backup store và các kết nối trực tiếp áp khóa tương tự.
+- Khóa được truyền dưới dạng raw key `x'<64 hex>'`. Vì khóa đã 32 byte ngẫu nhiên, dạng này bỏ qua
+  PBKDF2 của SQLCipher: mở DB mất vài ms thay vì ~500 ms mỗi kết nối.
+- Mỗi native `sqlite3` handle chỉ được key **một lần** bằng `ConditionalWeakTable`. Khi connection
+  pooling trả handle về pool và dùng lại, key lại sẽ reset codec và làm mất trạng thái kết nối như
+  `auto_vacuum`; vì vậy lần mở sau chỉ áp pragma, không gọi `sqlite3_key` lần nữa.
+
+**Phát hiện trạng thái và fail-closed**
+- 16 byte đầu `SQLite format 3\0` = DB plaintext; header khác = DB mã hóa (SQLCipher dùng header
+  ngẫu nhiên). Không có/sai khóa trả SQLite error 26.
+- DB mã hóa nhưng thiếu file khóa → `DatabaseKeyException` kèm đường dẫn khóa, không tự tạo khóa mới.
+- File khóa hỏng/không giải mã được → `DatabaseKeyException`, giữ nguyên file khóa.
+- Sai khóa hoặc integrity check thất bại → `SqliteDatabaseCorruptException`, giữ nguyên DB, chỉ
+  khôi phục từ backup. Không có chế độ tắt mã hóa hay fallback sang DB plaintext.
+
+**Nâng cấp plaintext → encrypted**
+- Khi phát hiện DB plaintext (nâng cấp từ bản trước #47), initializer backup plaintext trước, dùng
+  `ATTACH` + `sqlcipher_export` tạo bản mã hóa, chạy `PRAGMA integrity_check` trên bản mới rồi mới
+  thay thế file gốc; lỗi giữ nguyên DB plaintext và backup.
+- Backup plaintext legacy trong `backups/` được mã hóa lại ở lần khởi động sau khi nâng cấp; lỗi mã
+  hóa một backup chỉ ghi warning, không chặn app và không xóa file.
+
+**Backup và restore**
+- SQLite backup API không hỗ trợ DB mã hóa; backup được tạo bằng `sqlcipher_export` vào database
+  đích đã key bằng `sqlite3_key_v2` (alias `cipher_export`), sau đó verify `integrity_check`.
+- Restore chỉ chấp nhận backup hợp lệ; backup mã hóa bằng khóa khác bị từ chối. Backup plaintext
+  legacy được mã hóa trong lúc restore nên DB đang chạy không bao giờ trở lại plaintext.
+- Restore tạo snapshot DB hiện tại (best-effort) và xóa `-wal`/`-shm` trước khi thay file.
+
+**Quy trình mất khóa và hỗ trợ người dùng**
+1. Giữ `edufocus.key` cùng bộ backup ở nơi an toàn (ví dụ ổ ngoài được mã hóa); không đổi tên file.
+2. Khi app báo thiếu/hỏng khóa: dừng app, khôi phục đúng file khóa đã sao lưu trên **cùng máy**, rồi
+   mở lại. Có thể dùng backup DB đi kèm nếu DB hiện tại hỏng.
+3. Nếu không còn file khóa (mất ổ, đổi máy, cài lại Windows): dữ liệu 2.0 **không thể khôi phục** —
+   không có backdoor, khóa không nằm trong cloud và nhà phát triển không thể giải mã. Người dùng có
+   thể gỡ cài đặt, xóa dữ liệu và bắt đầu lại onboarding.
+4. Khi báo sự cố, không gửi `edufocus.key` hoặc DB qua kênh công khai; chỉ mô tả lỗi và làm theo
+   hướng dẫn trong app/SECURITY.
+
+**Giới hạn**
+- Administrator/SYSTEM đọc được file khóa và giải mã DB; mã hóa chống đọc file bởi standard user và
+  chống lộ khi file bị copy, không chống admin cục bộ.
+- CSV xuất và log kỹ thuật không được mã hóa; BitLocker vẫn được khuyến nghị cho ổ đĩa.
+- Khóa gắn máy nên đổi phần cứng/Windows có thể làm mất khả năng đọc dữ liệu cũ.
+
+**Kiểm thử:** `EncryptionTests` (12 test) — header DB không phải plaintext, sai/thiếu/hỏng khóa,
+file khóa DPAPI không chứa khóa plaintext, nâng cấp plaintext giữ dữ liệu, backup mã hóa/restore,
+backup plaintext legacy, backup khóa khác bị từ chối, log không chứa khóa, DB/WAL/SHM không chứa
+marker plaintext. `PerformanceBudgetTests` đo lại toàn bộ ngưỡng trên DB mã hóa.
+
+---
+
+## 19. Tài liệu liên quan
 
 - [BA Document](./ba_document.md)
 - [Use Cases](./use_cases.md)

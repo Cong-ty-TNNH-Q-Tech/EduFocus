@@ -19,6 +19,7 @@ Liên quan: [SECURITY.md](../SECURITY.md), [installer.md](./installer.md) §7,
 | Toàn vẹn hosts | Restore đúng byte gốc, giữ chỉnh sửa ngoài marker, self-heal sau crash, dọn backup |
 | Quyền riêng tư camera | Không lưu frame/landmark/embedding, dispose frame trước khi phát sample, camera chỉ theo consent |
 | Dữ liệu & log | ACL `%ProgramData%\EduFocus`, không có PIN/recovery code trong DB/WAL/backup/log, redaction URL/token |
+| Mã hóa DB | SQLCipher cho DB/WAL/backup, khóa DPAPI `LocalMachine` không plaintext, fail-closed khi thiếu/sai/hỏng khóa, backup/restore cùng khóa, quy trình mất khóa |
 | Chống injection | XSS trong block page, CSV formula injection, Host header/path/query không bị phản chiếu |
 | Gỡ cài đặt | Gỡ hosts marker, block page listener, scheduled task, runtime; tùy chọn xóa dữ liệu |
 
@@ -88,6 +89,11 @@ Các test dưới đây là bằng chứng hồi quy cho từng kiểm soát. T�
 | Extension chống XSS/URL injection, redirect chain và chỉ gửi URL khớp rule | `browser-extension/tests/matcher.test.mjs` (`HTML-looking paths...`, `server redirect chains...`), `static.test.mjs` (`the block page never reads or renders...`, `the service worker reports only blocked URLs...`); `BrowserExtensionBridgeTests.Verified_blocked_message_raises_attempt_with_sanitized_url`, `Blocked_message_that_does_not_match_the_snapshot_is_ignored` | Đạt |
 | MSI đăng ký native messaging và native host đọc đúng manifest | `NativeMessagingRegistrationTests`, `NativeHostOptionsTests`; kiểm tra COM trong quy trình install | Đạt |
 | Migration lỗi giữ DB và backup, restore được | `InitializationTests.Failed_upgrade_rolls_back_and_the_backup_restores_the_previous_data`, `BackupRestoreTests.Restore_rejects_missing_or_corrupt_backup_without_touching_database` | Đạt |
+| DB được mã hóa, không đọc được nếu không có khóa | `EncryptionTests.Database_file_is_encrypted_and_unreadable_without_the_key`, `Wal_and_database_files_contain_no_plaintext` | Đạt |
+| Khóa DPAPI không chứa plaintext và log không lộ khóa | `EncryptionTests.Key_file_stores_a_dpapi_protected_key_and_no_plaintext_key_material`, `Logs_never_contain_the_encryption_key` | Đạt |
+| Fail-closed khi thiếu/sai/hỏng khóa, không ghi đè dữ liệu/khóa | `EncryptionTests.Missing_key_file_fails_closed_and_is_not_recreated`, `Damaged_key_file_is_reported_and_never_overwritten`, `Wrong_key_is_rejected_and_the_database_and_key_file_are_kept` | Đạt |
+| Nâng cấp plaintext giữ dữ liệu; lỗi giữ file gốc | `EncryptionTests.Plaintext_database_is_upgraded_in_place_with_data_preserved`, `Corrupt_plaintext_database_upgrade_keeps_the_original_file` | Đạt |
+| Backup/restore mã hóa, backup khóa khác bị từ chối, backup legacy được mã hóa | `EncryptionTests.Encrypted_backup_cannot_be_read_without_the_key_and_restores_data`, `Backup_encrypted_with_a_different_key_is_rejected`, `Legacy_plaintext_backup_is_encrypted_during_restore` | Đạt |
 
 > Các test trên chạy trên Windows runner/local. Chúng chứng minh logic và adapter trong sandbox,
 > **không thay thế** kiểm thử trên máy sạch với hosts file, port 80 và scheduled task thật.
@@ -116,6 +122,8 @@ và một tài khoản standard user để chạy thử. Ghi mã build/MSI SHA-2
 | SEC-E2E-24 | Kill `EduFocus.Service.exe` khi Protection ON; thử client lạ kết nối pipe | SCM restart trong khoảng 60 giây; session cũ `Interrupted` ghi chú `ServiceStopped`, audit `ProtectionServiceStopped`/`SessionInterrupted`; client lạ bị từ chối và ghi log Security, không lệnh nào chạy | Timeline + audit + log service | ⬜ | ⬜ |
 | SEC-E2E-25 | Nâng cấp MSI khi service đang chạy | Service dừng rồi khởi động lại; DB/settings giữ nguyên; chỉ một entry Apps & Features; không còn process/pipe mồ côi | Timeline + `Get-Service` + `Get-Process` | ⬜ | ⬜ |
 | SEC-E2E-26 | Chạy portable ZIP trên máy chưa cài | Không có service row/marker; app chạy standalone với watchdog, không gọi pipe và không tạo orphan service | `Get-Service EduFocusProtection`, `Get-ItemProperty` | ⬜ | ⬜ |
+| SEC-E2E-27 | Kiểm tra DB mã hóa và file khóa sau onboarding | 16 byte đầu `edufocus.db` khác `SQLite format 3\0`; `edufocus.key` tồn tại, chỉ Administrators/SYSTEM đọc, không có chuỗi hex/`x'...'` khóa; backup trong `backups/` cũng mã hóa; standard user không đọc được DB/WAL/backup/khóa | PowerShell đọc 16 byte header; `icacls`; thử đọc bằng standard user; `Select-String` trên file khóa | ⬜ | ⬜ |
+| SEC-E2E-28 | Mô phỏng mất/hỏng/sai khóa (trên VM snapshot) rồi khôi phục | Thiếu khóa: app báo lỗi an toàn, không tạo khóa mới; hỏng khóa: không ghi đè; khôi phục bản sao `edufocus.key` trên cùng máy + backup thì mở lại được, dữ liệu còn nguyên. Copy DB sang VM khác không mở được | Ảnh chụp lỗi; so sánh hash file khóa trước/sau; timeline restore | ⬜ | ⬜ |
 | SEC-E2E-09 | Bản portable/source: kill app khi Protection ON; sau đó kill watchdog | App được khôi phục ≤ 30 giây; watchdog được task khôi phục trong tối đa ~60 giây; audit `WatchdogRestart` không có dữ liệu người dùng | Timeline + audit | ⬜ | ⬜ |
 | SEC-E2E-10 | Sửa hosts ngoài marker, sau đó tắt bảo vệ | Chỉ mất khối marker; chỉnh sửa ngoài marker còn nguyên; `hosts-backup\journal.json` và `.bak` không còn | Diff hosts trước/sau, `Get-ChildItem hosts-backup` | ⬜ | ⬜ |
 | SEC-E2E-11 | Ép crash giữa lúc apply (kill app sau khi có journal) rồi khởi động lại | `SelfHealAsync` khôi phục đúng byte gốc; không còn marker/journal/backup | So sánh hash hosts | ⬜ | ⬜ |
@@ -157,7 +165,7 @@ sửa và chạy lại.
 Chỉ coi là đạt khi:
 
 - [ ] `dotnet test EduFocus.slnx --configuration Release` pass toàn bộ, build 0 warning.
-- [ ] Toàn bộ SEC-E2E-01…19 đạt trên **Windows 10 22H2** và **Windows 11** (hoặc có ngoại lệ được
+- [ ] Toàn bộ SEC-E2E-01…28 đạt trên **Windows 10 22H2** và **Windows 11** (hoặc có ngoại lệ được
       ghi rõ lý do môi trường).
 - [ ] Không còn P0/P1 mở; P2 có issue theo dõi và rủi ro được ghi trong release notes.
 - [ ] Bằng chứng không chứa PIN/recovery code/ảnh camera/URL đầy đủ; artifact release không có
@@ -197,6 +205,12 @@ Get-NetTCPConnection -LocalAddress 127.0.0.1 -LocalPort 80 -ErrorAction Silently
 # ACL dữ liệu và file con
 icacls "$env:ProgramData\EduFocus"
 Get-ChildItem "$env:ProgramData\EduFocus" -Recurse -File | ForEach-Object { icacls $_.FullName }
+
+# DB mã hóa: header phải khác "SQLite format 3\0" (in 16 byte hex)
+[Convert]::ToHexString([IO.File]::ReadAllBytes("$env:ProgramData\EduFocus\edufocus.db")[0..15])
+# File khóa chỉ nên có magic EDUFKEY1 + blob DPAPI; không in nội dung chi tiết
+Test-Path "$env:ProgramData\EduFocus\edufocus.key"
+(Get-Item "$env:ProgramData\EduFocus\edufocus.key").Length
 
 # Không có ảnh/video camera trong dữ liệu ứng dụng
 Get-ChildItem "$env:ProgramData\EduFocus","$env:LocalAppData\EduFocus" -Recurse -File -ErrorAction SilentlyContinue |

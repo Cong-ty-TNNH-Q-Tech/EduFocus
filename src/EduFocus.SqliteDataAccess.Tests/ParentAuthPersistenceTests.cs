@@ -115,7 +115,7 @@ public sealed class ParentAuthPersistenceTests
 
         // Keep a connection open so the WAL file exists while it is inspected.
         using var keepAlive = db.OpenConnectionWithPragmas();
-        var backupPath = new SqliteBackupStore(db.Options, db.Logger).CreateBackup();
+        var backupPath = db.CreateBackupStore().CreateBackup();
 
         var files = Directory
             .GetFiles(db.RootPath, "*", SearchOption.AllDirectories)
@@ -197,12 +197,12 @@ public sealed class ParentAuthPersistenceTests
             CreateRepository(db),
             new Pbkdf2PasswordHasher(),
             recoveryCodeGenerator ?? new RecoveryCodeGenerator(),
-            new SqliteAuditLogRepository(db.Options),
+            new SqliteAuditLogRepository(db.ContextFactory),
             correlation,
             timeProvider ?? TimeProvider.System);
 
     private static SqliteParentCredentialRepository CreateRepository(TempDatabase db) =>
-        new(db.Options);
+        new(db.ContextFactory);
 
     private static bool ContainsAscii(byte[] bytes, string value) =>
         bytes.AsSpan().IndexOf(Encoding.ASCII.GetBytes(value)) >= 0;

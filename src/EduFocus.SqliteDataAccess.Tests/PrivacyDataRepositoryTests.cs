@@ -20,7 +20,7 @@ public sealed class PrivacyDataRepositoryTests
         await db.CreateInitializer().InitializeAsync();
         var seeded = await SeedAsync(db);
 
-        var repository = new SqlitePrivacyDataRepository(db.Options);
+        var repository = new SqlitePrivacyDataRepository(db.ContextFactory);
 
         var counts = await repository.GetCountsAsync();
         var size = await repository.GetDatabaseSizeBytesAsync();
@@ -36,7 +36,7 @@ public sealed class PrivacyDataRepositoryTests
         await using var db = new TempDatabase();
         await db.CreateInitializer().InitializeAsync();
         var seeded = await SeedAsync(db);
-        var repository = new SqlitePrivacyDataRepository(db.Options);
+        var repository = new SqlitePrivacyDataRepository(db.ContextFactory);
 
         (await repository.DeleteActivitySamplesBatchAsync(batchSize: 100)).Should().Be(2);
         (await repository.DeleteAttentionEventsBatchAsync(batchSize: 100)).Should().Be(1);
@@ -61,7 +61,7 @@ public sealed class PrivacyDataRepositoryTests
         await using var db = new TempDatabase();
         await db.CreateInitializer().InitializeAsync();
         await SeedAsync(db);
-        var repository = new SqlitePrivacyDataRepository(db.Options);
+        var repository = new SqlitePrivacyDataRepository(db.ContextFactory);
 
         (await repository.DeleteFinishedSessionsBatchAsync(batchSize: 1)).Should().Be(1);
         (await repository.DeleteFinishedSessionsBatchAsync(batchSize: 1)).Should().Be(1);
@@ -79,7 +79,7 @@ public sealed class PrivacyDataRepositoryTests
     {
         await using var db = new TempDatabase();
         await db.CreateInitializer().InitializeAsync();
-        var repository = new SqlitePrivacyDataRepository(db.Options);
+        var repository = new SqlitePrivacyDataRepository(db.ContextFactory);
 
         var act = () => repository.DeleteActivitySamplesBatchAsync(batchSize);
 

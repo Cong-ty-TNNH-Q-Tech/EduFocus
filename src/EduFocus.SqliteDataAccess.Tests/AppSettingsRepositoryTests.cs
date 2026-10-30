@@ -15,7 +15,7 @@ public sealed class AppSettingsRepositoryTests
         await using var db = new TempDatabase();
         await db.CreateInitializer().InitializeAsync();
 
-        var repository = new SqliteAppSettingsRepository(db.Options);
+        var repository = new SqliteAppSettingsRepository(db.ContextFactory);
 
         (await repository.GetAsync()).Should().BeNull();
     }
@@ -26,7 +26,7 @@ public sealed class AppSettingsRepositoryTests
         await using var db = new TempDatabase();
         await db.CreateInitializer().InitializeAsync();
 
-        var repository = new SqliteAppSettingsRepository(db.Options);
+        var repository = new SqliteAppSettingsRepository(db.ContextFactory);
         var settings = AppSettings.CreateDefault(Now);
         await repository.AddAsync(settings);
 
@@ -57,7 +57,7 @@ public sealed class AppSettingsRepositoryTests
         await using var db = new TempDatabase();
         await db.CreateInitializer().InitializeAsync();
 
-        var repository = new SqliteAppSettingsRepository(db.Options);
+        var repository = new SqliteAppSettingsRepository(db.ContextFactory);
         var settings = AppSettings.CreateDefault(Now);
         await repository.AddAsync(settings);
 

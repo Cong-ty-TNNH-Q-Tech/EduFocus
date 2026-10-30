@@ -43,6 +43,8 @@ public static class ServiceComposition
             });
 
         services.AddSingleton(new EduFocusDatabaseOptions());
+        services.AddSingleton<IDatabaseKeyStore, DatabaseKeyStore>();
+        services.AddSingleton<SqliteDbContextFactory>();
         services.AddSingleton<SqliteDatabaseInitializer>();
         services.AddSingleton<IAppSettingsRepository, SqliteAppSettingsRepository>();
         services.AddSingleton<IParentCredentialRepository, SqliteParentCredentialRepository>();

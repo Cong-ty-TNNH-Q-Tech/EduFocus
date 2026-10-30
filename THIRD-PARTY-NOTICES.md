@@ -4,8 +4,8 @@ Phiên bản 1.0 · Ngày hiệu lực: 2026-10-30 · Áp dụng cho EduFocus 2.
 
 EduFocus được phân phối dưới giấy phép MIT (xem [`LICENSE`](./LICENSE)). Bản phát hành
 self-contained có kèm các thành phần bên thứ ba dưới đây. Tài liệu này liệt kê từng thành phần,
-phiên bản, giấy phép, chủ sở hữu bản quyền và nguồn, kèm toàn văn giấy phép MIT, Apache-2.0 và
-LGPL-2.1 ở phần phụ lục.
+phiên bản, giấy phép, chủ sở hữu bản quyền và nguồn, kèm toàn văn giấy phép MIT, Apache-2.0,
+BSD-3-Clause và LGPL-2.1 ở phần phụ lục.
 
 Danh mục được đối chiếu với `EduFocus.deps.json` của bản build Release 2.0.0 (ngày 2026-10-30) và
 không bao gồm gói chỉ dùng khi build/test.
@@ -32,7 +32,6 @@ thành phần đó có thêm thông báo bên thứ ba của Microsoft tại
 | Microsoft.EntityFrameworkCore | 10.0.14 | MIT | .NET Foundation and Contributors |
 | Microsoft.EntityFrameworkCore.Abstractions | 10.0.14 | MIT | .NET Foundation and Contributors |
 | Microsoft.EntityFrameworkCore.Relational | 10.0.14 | MIT | .NET Foundation and Contributors |
-| Microsoft.EntityFrameworkCore.Sqlite | 10.0.14 | MIT | .NET Foundation and Contributors |
 | Microsoft.EntityFrameworkCore.Sqlite.Core | 10.0.14 | MIT | .NET Foundation and Contributors |
 | Microsoft.Extensions.Caching.Abstractions | 10.0.14 | MIT | .NET Foundation and Contributors |
 | Microsoft.Extensions.Caching.Memory | 10.0.14 | MIT | .NET Foundation and Contributors |
@@ -47,12 +46,13 @@ thành phần đó có thêm thông báo bên thứ ba của Microsoft tại
 | Microsoft.ML.OnnxRuntime | 1.31.0 | MIT | Microsoft Corporation |
 | Microsoft.ML.OnnxRuntime.Managed | 1.31.0 | MIT | Microsoft Corporation |
 | OpenCvSharp4 | 4.13.0.20260627 | Apache-2.0 | shimat và những người đóng góp |
-| SQLitePCLRaw.bundle_e_sqlite3 | 2.1.13 | Apache-2.0 | Eric Sink và những người đóng góp |
-| SQLitePCLRaw.core | 2.1.13 | Apache-2.0 | Eric Sink và những người đóng góp |
-| SQLitePCLRaw.lib.e_sqlite3 | 2.1.13 | Apache-2.0 | Eric Sink và những người đóng góp |
-| SQLitePCLRaw.provider.e_sqlite3 | 2.1.13 | Apache-2.0 | Eric Sink và những người đóng góp |
+| SQLitePCLRaw.bundle_e_sqlcipher | 2.1.11 | Apache-2.0 | Eric Sink, SourceGear LLC và những người đóng góp |
+| SQLitePCLRaw.core | 2.1.13 | Apache-2.0 | Eric Sink, SourceGear LLC và những người đóng góp |
+| SQLitePCLRaw.lib.e_sqlcipher | 2.1.11 | Apache-2.0 | Eric Sink, SourceGear LLC và những người đóng góp |
+| SQLitePCLRaw.provider.e_sqlcipher | 2.1.11 | Apache-2.0 | Eric Sink, SourceGear LLC và những người đóng góp |
 | System.Management | 10.0.14 | MIT | .NET Foundation and Contributors |
 | System.Numerics.Tensors | 9.0.0 | MIT | .NET Foundation and Contributors |
+| System.Security.Cryptography.ProtectedData | 10.0.0 | MIT | .NET Foundation and Contributors |
 
 ONNX Runtime kèm theo các thành phần bên thứ ba khác của Microsoft; danh sách đầy đủ nằm trong
 `ThirdPartyNotices.txt` của gói `Microsoft.ML.OnnxRuntime` 1.31.0 và tại
@@ -62,7 +62,8 @@ ONNX Runtime kèm theo các thành phần bên thứ ba khác của Microsoft; d
 
 | Thành phần | Phiên bản | Giấy phép | Bản quyền |
 | --- | --- | --- | --- |
-| SQLite (`e_sqlite3.dll`, thông qua SQLitePCLRaw) | 3.x đi kèm SQLitePCLRaw 2.1.13 | Public Domain | — (xem <https://sqlite.org/copyright.html>) |
+| SQLCipher (`e_sqlcipher.dll`, thông qua SQLitePCLRaw.lib.e_sqlcipher) | 4.5.2 đi kèm SQLitePCLRaw 2.1.11 | BSD-3-Clause | ZETETIC LLC |
+| SQLite (`e_sqlcipher.dll` nhúng SQLite) | 3.x đi kèm SQLCipher 4.5.2 | Public Domain | — (xem <https://sqlite.org/copyright.html>) |
 | OpenCV (`OpenCvSharpExtern.dll`, thông qua OpenCvSharp4.runtime.win) | 4.13.0 | Apache-2.0 | OpenCV team |
 | FFmpeg (`opencv_videoio_ffmpeg4130_64.dll`, do OpenCV đóng gói cho backend videoio) | đi kèm OpenCV 4.13.0 | LGPL-2.1-or-later | FFmpeg developers |
 
@@ -111,13 +112,15 @@ này được đưa vào gói phát hành, chúng phải được chuyển vào 
 
 ## 4. Tuân thủ giấy phép
 
-- Toàn bộ thành phần được phân phối chỉ dùng giấy phép MIT, Apache-2.0, LGPL-2.1-or-later hoặc
-  Public Domain. Không có thành phần GPL, AGPL, SSPL hoặc giấy phép chỉ phi thương mại trong bản
-  phát hành.
+- Toàn bộ thành phần được phân phối chỉ dùng giấy phép MIT, Apache-2.0, BSD-3-Clause,
+  LGPL-2.1-or-later hoặc Public Domain. Không có thành phần GPL, AGPL, SSPL hoặc giấy phép chỉ phi
+  thương mại trong bản phát hành.
 - MIT: kèm thông báo bản quyền và toàn văn giấy phép (Phụ lục A).
 - Apache-2.0: kèm toàn văn giấy phép (Phụ lục B) và quyền ghi nhận cho từng thành phần. Kiểm tra
   ngày 2026-10-30 cho thấy các gói Apache-2.0 đang dùng không kèm tệp `NOTICE` riêng; nếu bản cập
   nhật sau có `NOTICE`, nội dung đó phải được bổ sung vào đây.
+- BSD-3-Clause: chỉ áp dụng cho SQLCipher (native); kèm toàn văn giấy phép và giữ nguyên thông báo
+  bản quyền (Phụ lục D).
 - LGPL-2.1-or-later: chỉ áp dụng cho FFmpeg; liên kết động, không sửa đổi, có đường dẫn mã nguồn
   và toàn văn giấy phép (Phụ lục C).
 - SQLite được hiến tặng vào public domain, không có nghĩa vụ ghi công.
@@ -134,8 +137,9 @@ Liên hệ về giấy phép: mở báo cáo riêng tư tại
 
 Áp dụng cho: Microsoft .NET Runtime, Windows Desktop Runtime, CommunityToolkit.Mvvm,
 Microsoft.Data.Sqlite, Microsoft.EntityFrameworkCore, Microsoft.Extensions.*,
-Microsoft.ML.OnnxRuntime, System.Management, System.Numerics.Tensors, Microsoft.NET.Test.Sdk,
-coverlet.collector và YuNet (khi được phân phối).
+Microsoft.ML.OnnxRuntime, System.Management, System.Numerics.Tensors,
+System.Security.Cryptography.ProtectedData, Microsoft.NET.Test.Sdk, coverlet.collector và YuNet
+(khi được phân phối).
 
 ```text
 MIT License
@@ -881,13 +885,45 @@ necessary.  Here is a sample; alter the names:
 That's all there is to it!
 ```
 
-## Phụ lục D — Nguồn tham chiếu và thông báo bổ sung
+## Phụ lục D — BSD 3-Clause License
+
+Áp dụng cho: SQLCipher (`e_sqlcipher.dll`) — BSD-3-Clause, Copyright (c) ZETETIC LLC.
+
+```text
+Copyright (c) 2025, ZETETIC LLC
+All rights reserved.
+
+Redistribution and use in source and binary forms, with or without
+modification, are permitted provided that the following conditions are met:
+    * Redistributions of source code must retain the above copyright
+      notice, this list of conditions and the following disclaimer.
+    * Redistributions in binary form must reproduce the above copyright
+      notice, this list of conditions and the following disclaimer in the
+      documentation and/or other materials provided with the distribution.
+    * Neither the name of the ZETETIC LLC nor the
+      names of its contributors may be used to endorse or promote products
+      derived from this software without specific prior written permission.
+
+THIS SOFTWARE IS PROVIDED BY ZETETIC LLC ''AS IS'' AND ANY
+EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
+WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
+DISCLAIMED. IN NO EVENT SHALL ZETETIC LLC BE LIABLE FOR ANY
+DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES
+(INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES;
+LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND
+ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
+(INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
+SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+```
+
+## Phụ lục E — Nguồn tham chiếu và thông báo bổ sung
 
 - .NET runtime: <https://github.com/dotnet/runtime/blob/main/THIRD-PARTY-NOTICES.TXT>
 - ONNX Runtime: <https://github.com/microsoft/onnxruntime/blob/main/ThirdPartyNotices.txt>
 - OpenCV: <https://github.com/opencv/opencv/blob/4.x/LICENSE> và <https://github.com/opencv/opencv/tree/4.x/3rdparty>
 - OpenCvSharp: <https://github.com/shimat/opencvsharp/blob/4.13.0.20260627/LICENSE>
 - SQLitePCLRaw: <https://github.com/ericsink/SQLitePCL.raw/blob/master/LICENSE.txt>
+- SQLCipher: <https://github.com/sqlcipher/sqlcipher/blob/master/LICENSE.md>
 - SQLite: <https://sqlite.org/copyright.html>
 - FFmpeg: <https://github.com/FFmpeg/FFmpeg> và <https://ffmpeg.org/legal.html>
 - xunit: <https://github.com/xunit/xunit/blob/main/LICENSE>

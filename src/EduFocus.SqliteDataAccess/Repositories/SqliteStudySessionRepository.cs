@@ -18,21 +18,17 @@ namespace EduFocus.SqliteDataAccess.Repositories;
 /// </summary>
 public sealed class SqliteStudySessionRepository : IStudySessionRepository
 {
-    private readonly DbContextOptions<EduFocusDbContext> _dbContextOptions;
+    private readonly SqliteDbContextFactory _contextFactory;
 
-    public SqliteStudySessionRepository(EduFocusDatabaseOptions options)
+    public SqliteStudySessionRepository(SqliteDbContextFactory contextFactory)
     {
-        ArgumentNullException.ThrowIfNull(options);
-
-        _dbContextOptions = new DbContextOptionsBuilder<EduFocusDbContext>()
-            .UseSqlite(options.ConnectionString)
-            .AddInterceptors(new SqlitePragmaInterceptor())
-            .Options;
+        ArgumentNullException.ThrowIfNull(contextFactory);
+        _contextFactory = contextFactory;
     }
 
     public async Task<StudySession?> GetActiveAsync(CancellationToken cancellationToken = default)
     {
-        await using var context = new EduFocusDbContext(_dbContextOptions);
+        await using var context = _contextFactory.CreateDbContext();
         return await context.StudySessions
             .AsNoTracking()
             .SingleOrDefaultAsync(x => x.Status == StudySessionStatus.Active, cancellationToken);
@@ -45,7 +41,7 @@ public sealed class SqliteStudySessionRepository : IStudySessionRepository
         if (localDate == default)
             throw new ArgumentException("Local date is required.", nameof(localDate));
 
-        await using var context = new EduFocusDbContext(_dbContextOptions);
+        await using var context = _contextFactory.CreateDbContext();
 
         // One aggregate row from StudySessions only; ActivitySamples and
         // AttentionEvents are never scanned for the dashboard.
@@ -104,7 +100,7 @@ public sealed class SqliteStudySessionRepository : IStudySessionRepository
         if (endLocalDate < startLocalDate)
             throw new ArgumentException("The range end must not precede its start.", nameof(endLocalDate));
 
-        await using var context = new EduFocusDbContext(_dbContextOptions);
+        await using var context = _contextFactory.CreateDbContext();
 
         // IX_StudySessions_StartLocalDate keeps this range cheap even on a
         // multi-year database; raw samples are never touched here.
@@ -119,7 +115,7 @@ public sealed class SqliteStudySessionRepository : IStudySessionRepository
     {
         ArgumentNullException.ThrowIfNull(session);
 
-        await using var context = new EduFocusDbContext(_dbContextOptions);
+        await using var context = _contextFactory.CreateDbContext();
         context.StudySessions.Add(session);
         await context.SaveChangesAsync(cancellationToken);
     }
@@ -128,7 +124,7 @@ public sealed class SqliteStudySessionRepository : IStudySessionRepository
     {
         ArgumentNullException.ThrowIfNull(session);
 
-        await using var context = new EduFocusDbContext(_dbContextOptions);
+        await using var context = _contextFactory.CreateDbContext();
         context.StudySessions.Update(session);
         await context.SaveChangesAsync(cancellationToken);
     }
@@ -144,7 +140,7 @@ public sealed class SqliteStudySessionRepository : IStudySessionRepository
         if (heartbeatAtUtc.Kind != DateTimeKind.Utc)
             throw new ArgumentException("The heartbeat must be UTC.", nameof(heartbeatAtUtc));
 
-        await using var context = new EduFocusDbContext(_dbContextOptions);
+        await using var context = _contextFactory.CreateDbContext();
 
         var affected = await context.StudySessions
             .Where(x => x.Id == sessionId
@@ -173,7 +169,7 @@ public sealed class SqliteStudySessionRepository : IStudySessionRepository
         if (nowUtc.Kind != DateTimeKind.Utc)
             throw new ArgumentException("The timestamp must be UTC.", nameof(nowUtc));
 
-        await using var context = new EduFocusDbContext(_dbContextOptions);
+        await using var context = _contextFactory.CreateDbContext();
 
         var affected = await context.StudySessions
             .Where(x => x.Id == sessionId && x.Status == StudySessionStatus.Active)
@@ -214,7 +210,7 @@ public sealed class SqliteStudySessionRepository : IStudySessionRepository
         if (nowUtc.Kind != DateTimeKind.Utc)
             throw new ArgumentException("The timestamp must be UTC.", nameof(nowUtc));
 
-        await using var context = new EduFocusDbContext(_dbContextOptions);
+        await using var context = _contextFactory.CreateDbContext();
 
         var query = context.StudySessions
             .Where(x => x.Id == sessionId && x.Status == StudySessionStatus.Active);
@@ -327,7 +323,7 @@ public sealed class SqliteStudySessionRepository : IStudySessionRepository
             ? new object[] { seconds, storedNow, sessionId.Value }
             : new object[] { seconds, confidence.Value, storedNow, sessionId.Value };
 
-        await using var context = new EduFocusDbContext(_dbContextOptions);
+        await using var context = _contextFactory.CreateDbContext();
 
         var affected = await context.Database.ExecuteSqlRawAsync(sql, parameters, cancellationToken);
 

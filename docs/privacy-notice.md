@@ -62,6 +62,9 @@ EduFocus xử lý các nhóm dữ liệu sau, tất cả đều lưu cục bộ:
   ghi vào `%ProgramData%\EduFocus\logs` với cùng quy tắc che dữ liệu.
 - **Tệp hỗ trợ hệ thống:** bản sao `hosts` trước khi chặn (để khôi phục), tệp trạng thái watchdog
   hoặc service trong `%ProgramData%\EduFocus\runtime`, và bản xuất CSV do phụ huynh chủ động tạo.
+- **Khóa mã hóa DB:** 32 byte ngẫu nhiên dùng để mã hóa cơ sở dữ liệu, được Windows DPAPI bảo vệ
+  trong `%ProgramData%\EduFocus\edufocus.key`. Khóa không phải PIN/mật khẩu, không nằm dạng văn bản
+  thường và không dùng được trên máy khác.
 
 EduFocus **không** thu thập: vị trí, danh bạ, lịch, email, nội dung clipboard, nội dung trang web,
 lịch sử duyệt web đầy đủ, âm thanh micro, dữ liệu sinh trắc học, hay thông tin nhận dạng khuôn mặt.
@@ -109,6 +112,11 @@ thương mại.
 
 - Cơ sở dữ liệu: `%ProgramData%\EduFocus\edufocus.db` (kèm WAL/SHM và tối đa 3 bản backup).
   Thư mục được cấp quyền chỉ cho Administrators và SYSTEM; tài khoản Windows chuẩn không đọc được.
+- Cơ sở dữ liệu, WAL/SHM và backup được **mã hóa bằng SQLCipher**. Khóa mã hóa lưu trong
+  `edufocus.key` dưới dạng được Windows DPAPI bảo vệ (không phải văn bản thường), cùng thư mục được
+  giới hạn cho Administrators/SYSTEM. Nếu file khóa bị mất hoặc dữ liệu được chuyển sang máy khác,
+  EduFocus không thể giải mã; phụ huynh cần giữ file khóa cùng bản sao lưu và chỉ khôi phục trên
+  cùng máy.
 - Log kỹ thuật: `%LocalAppData%\EduFocus\logs` (UI) và `%ProgramData%\EduFocus\logs` (service).
 - Bản xuất CSV: `%LocalAppData%\EduFocus\exports` — do phụ huynh chủ động tạo nên nằm ngoài ACL
   thư mục dữ liệu; phụ huynh chịu trách nhiệm bảo vệ và xóa tệp này.
@@ -140,7 +148,8 @@ thương mại.
 - Sự kiện tập trung và lần truy cập bị chặn: **90 ngày** (có thể chỉnh).
 - Tóm tắt phiên học và audit: **365 ngày** (có thể chỉnh cho phiên; audit cố định 365 ngày).
 - Log kỹ thuật: **14 ngày**; tối đa 10 MB mỗi tệp.
-- Backup DB: tối đa **3 bản**, được tạo trước migration và xoay vòng.
+- Backup DB: tối đa **3 bản**, được mã hóa cùng khóa, tạo trước migration và xoay vòng. File khóa
+  không nằm trong bản sao lưu; cần được giữ cùng bộ backup.
 - Bản sao `hosts`: chỉ giữ trong thời gian cần khôi phục và bị xóa sau khi khôi phục/self-heal.
 - Bản xuất CSV: giữ cho tới khi phụ huynh tự xóa; EduFocus không tự xóa tệp bên ngoài DB.
 - Dữ liệu của phiên đang hoạt động không bị retention xóa.
@@ -174,8 +183,9 @@ phụ huynh xác nhận điều này trong onboarding và không hỗ trợ giá
   cầu, trừ khi pháp luật yêu cầu thời hạn khác. Vì dữ liệu nằm trên máy gia đình, nhà phát triển
   thường không thể xóa thay; hướng dẫn sẽ tập trung vào thao tác xóa cục bộ và gỡ cài đặt.
 - **Khi gỡ cài đặt:** mặc định giữ dữ liệu để cài lại; chọn "xóa toàn bộ dữ liệu" hoặc silent
-  uninstall với `DELETEUSERDATA=1` để xóa `%ProgramData%\EduFocus`, gồm cả log của service. File
-  CSV và log của UI trong `%LocalAppData%\EduFocus` cần được xóa thủ công.
+  uninstall với `DELETEUSERDATA=1` để xóa `%ProgramData%\EduFocus`, gồm DB, backup, file khóa
+  `edufocus.key` và log của service. File CSV và log của UI trong `%LocalAppData%\EduFocus` cần được
+  xóa thủ công.
 
 ## 11. Sự cố dữ liệu
 
@@ -190,7 +200,7 @@ Chi tiết quy trình nằm trong [dpia.md](./dpia.md) §8.
 - Yêu cầu về dữ liệu cá nhân: mở báo cáo riêng tư qua liên kết trên, ghi rõ "Yêu cầu dữ liệu cá
   nhân" và mô tả yêu cầu. Không gửi PIN, mã khôi phục, dữ liệu học tập hoặc tệp DB trong báo cáo.
 - Tài liệu kỹ thuật: [SECURITY.md](../SECURITY.md), [dpia.md](./dpia.md),
-  [database_schema.md](./database_schema.md) §14/§16.
+  [database_schema.md](./database_schema.md) §14/§16/§18.
 
 ## 13. Thay đổi thông báo
 

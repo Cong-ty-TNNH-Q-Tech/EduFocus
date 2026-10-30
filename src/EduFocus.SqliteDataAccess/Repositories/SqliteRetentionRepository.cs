@@ -61,16 +61,12 @@ public sealed class SqliteRetentionRepository : IRetentionRepository
 
     private const string VacuumSql = "PRAGMA incremental_vacuum;";
 
-    private readonly DbContextOptions<EduFocusDbContext> _dbContextOptions;
+    private readonly SqliteDbContextFactory _contextFactory;
 
-    public SqliteRetentionRepository(EduFocusDatabaseOptions options)
+    public SqliteRetentionRepository(SqliteDbContextFactory contextFactory)
     {
-        ArgumentNullException.ThrowIfNull(options);
-
-        _dbContextOptions = new DbContextOptionsBuilder<EduFocusDbContext>()
-            .UseSqlite(options.ConnectionString)
-            .AddInterceptors(new SqlitePragmaInterceptor())
-            .Options;
+        ArgumentNullException.ThrowIfNull(contextFactory);
+        _contextFactory = contextFactory;
     }
 
     public Task<int> DeleteActivitySamplesBeforeAsync(
@@ -105,7 +101,7 @@ public sealed class SqliteRetentionRepository : IRetentionRepository
 
     public async Task VacuumAsync(CancellationToken cancellationToken = default)
     {
-        await using var context = new EduFocusDbContext(_dbContextOptions);
+        await using var context = _contextFactory.CreateDbContext();
         await context.Database.ExecuteSqlRawAsync(VacuumSql, cancellationToken);
     }
 
@@ -120,7 +116,7 @@ public sealed class SqliteRetentionRepository : IRetentionRepository
         if (batchSize <= 0)
             throw new ArgumentOutOfRangeException(nameof(batchSize), batchSize, "Batch size must be positive.");
 
-        await using var context = new EduFocusDbContext(_dbContextOptions);
+        await using var context = _contextFactory.CreateDbContext();
 
         return await context.Database.ExecuteSqlRawAsync(
             sql,
