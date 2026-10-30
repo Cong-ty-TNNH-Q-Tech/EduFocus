@@ -495,6 +495,20 @@ public partial class App : Application
             logger.Error(LogCategories.Protection, "Uninstall could not restore the hosts file.", ex);
         }
 
+        try
+        {
+            var warnings = await provider.GetRequiredService<IBrowserDnsPolicyPort>().RestoreAsync();
+            if (warnings.Count > 0)
+                exitCode = 1;
+            else
+                logger.Info(LogCategories.Protection, "Uninstall restored the browser Secure DNS policy.");
+        }
+        catch (Exception ex)
+        {
+            exitCode = 1;
+            logger.Error(LogCategories.Protection, "Uninstall could not restore the browser Secure DNS policy.", ex);
+        }
+
         exitCode |= TryDeleteDirectory(
             provider.GetRequiredService<EduFocus.Infrastructure.Protection.HostsFileOptions>().BackupDirectory,
             "hosts backup",

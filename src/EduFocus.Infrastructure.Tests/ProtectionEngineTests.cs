@@ -23,6 +23,7 @@ public sealed class ProtectionEngineTests
     private readonly FakeStudySessionRepository _sessions = new();
     private readonly FakeClock _clock = new();
     private readonly FakeBrowserExtensionBridge _bridge = new();
+    private readonly FakeBrowserDnsPolicy _dnsPolicy = new();
     private readonly FixedTimeProvider _time = new(Now.AddMinutes(5));
     private readonly RecordingLogger _logger = new();
     private readonly List<string> _order = [];
@@ -355,6 +356,74 @@ public sealed class ProtectionEngineTests
     }
 
     [Fact]
+    public async Task Apply_disables_browser_secure_dns()
+    {
+        _rules.Rules.Add(Rule(RuleType.Domain, "chatgpt.com"));
+        await using var engine = CreateEngine();
+
+        var warnings = await engine.ApplyAsync();
+
+        warnings.Should().BeEmpty();
+        _dnsPolicy.ApplyCalls.Should().Be(1);
+        _hosts.Applied.Should().Equal("chatgpt.com");
+    }
+
+    [Fact]
+    public async Task Apply_keeps_os_protection_when_secure_dns_policy_fails()
+    {
+        _rules.Rules.Add(Rule(RuleType.Domain, "chatgpt.com"));
+        _dnsPolicy.ApplyWarnings = [ProtectionEngine.BrowserDnsPolicyWarning];
+        await using var engine = CreateEngine();
+
+        var warnings = await engine.ApplyAsync();
+
+        warnings.Should().ContainSingle().Which.Should().Be(ProtectionEngine.BrowserDnsPolicyWarning);
+        _hosts.Applied.Should().Equal("chatgpt.com");
+        _page.IsRunning.Should().BeTrue();
+        _watcher.IsRunning.Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task Apply_rolls_back_secure_dns_policy_when_hosts_fails()
+    {
+        _rules.Rules.Add(Rule(RuleType.Domain, "chatgpt.com"));
+        _hosts.ApplyException = new IOException("locked");
+        await using var engine = CreateEngine();
+
+        var act = () => engine.ApplyAsync();
+
+        await act.Should().ThrowAsync<ProtectionEngineException>();
+        _dnsPolicy.ApplyCalls.Should().Be(1);
+        _dnsPolicy.RestoreCalls.Should().Be(1);
+    }
+
+    [Fact]
+    public async Task Remove_restores_browser_secure_dns()
+    {
+        await using var engine = CreateEngine();
+        await engine.ApplyAsync();
+
+        var warnings = await engine.RemoveAsync();
+
+        warnings.Should().BeEmpty();
+        _dnsPolicy.RestoreCalls.Should().Be(1);
+    }
+
+    [Fact]
+    public async Task Remove_reports_a_restore_warning_when_secure_dns_policy_restore_fails()
+    {
+        await using var engine = CreateEngine();
+        await engine.ApplyAsync();
+        _dnsPolicy.RestoreException = new UnauthorizedAccessException("denied");
+
+        var warnings = await engine.RemoveAsync();
+
+        warnings.Should().ContainSingle()
+            .Which.Should().Be(ProtectionEngine.BrowserDnsPolicyRestoreWarning);
+        _hosts.RestoreCalls.Should().Be(1);
+    }
+
+    [Fact]
     public async Task Browser_blocked_attempt_writes_url_attempt_with_extension_source()
     {
         _rules.Rules.Add(UrlRule("https://www.youtube.com/shorts/"));
@@ -504,7 +573,8 @@ public sealed class ProtectionEngineTests
         _logger,
         _time,
         new ProtectionEngineOptions { Debounce = TimeSpan.FromSeconds(30) },
-        _bridge);
+        _bridge,
+        _dnsPolicy);
 
     private static StudySession NewSession() =>
         StudySession.Start(Now, new DateOnly(2026, 10, 30), SessionTrigger.Manual, monitoringEnabled: true);
@@ -549,6 +619,39 @@ public sealed class ProtectionEngineTests
         }
 
         throw new TimeoutException("Condition was not met within 5 seconds.");
+    }
+
+    private sealed class FakeBrowserDnsPolicy : IBrowserDnsPolicyPort
+    {
+        public int ApplyCalls { get; private set; }
+
+        public int RestoreCalls { get; private set; }
+
+        public IReadOnlyList<string> ApplyWarnings { get; set; } = [];
+
+        public IReadOnlyList<string> RestoreWarnings { get; set; } = [];
+
+        public Exception? ApplyException { get; set; }
+
+        public Exception? RestoreException { get; set; }
+
+        public Task<IReadOnlyList<string>> ApplyAsync(CancellationToken cancellationToken = default)
+        {
+            ApplyCalls++;
+            if (ApplyException is not null)
+                throw ApplyException;
+
+            return Task.FromResult(ApplyWarnings);
+        }
+
+        public Task<IReadOnlyList<string>> RestoreAsync(CancellationToken cancellationToken = default)
+        {
+            RestoreCalls++;
+            if (RestoreException is not null)
+                throw RestoreException;
+
+            return Task.FromResult(RestoreWarnings);
+        }
     }
 
     private sealed class FakeBrowserExtensionBridge : IBrowserExtensionBridge

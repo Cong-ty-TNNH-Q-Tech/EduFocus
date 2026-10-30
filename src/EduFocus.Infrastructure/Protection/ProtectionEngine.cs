@@ -34,6 +34,14 @@ public sealed class ProtectionEngine : IProtectionEnginePort, IAsyncDisposable
     public const string BrowserBridgeWarning =
         "Không thể khởi động cầu nối extension trình duyệt; chặn URL/path tạm thời không hiệu lực.";
 
+    public const string BrowserDnsPolicyWarning =
+        "Không thể tắt Secure DNS của Chrome/Edge; trình duyệt có thể bỏ qua hosts. " +
+        "Hãy chạy EduFocus với quyền quản trị và khởi động lại trình duyệt.";
+
+    public const string BrowserDnsPolicyRestoreWarning =
+        "Không thể khôi phục policy Secure DNS trước đó của trình duyệt; " +
+        "policy sẽ được thử lại ở lần khởi động sau.";
+
     private readonly IBlockRuleRepository _rules;
     private readonly IHostsFileBlocker _hosts;
     private readonly IBlockPageServer _blockPage;
@@ -45,6 +53,7 @@ public sealed class ProtectionEngine : IProtectionEnginePort, IAsyncDisposable
     private readonly TimeProvider _timeProvider;
     private readonly ProtectionEngineOptions _options;
     private readonly IBrowserExtensionBridge? _browserBridge;
+    private readonly IBrowserDnsPolicyPort? _browserDnsPolicy;
     private readonly SemaphoreSlim _gate = new(1, 1);
     private readonly ConcurrentDictionary<string, TimeSpan> _lastRecorded =
         new(StringComparer.Ordinal);
@@ -65,7 +74,8 @@ public sealed class ProtectionEngine : IProtectionEnginePort, IAsyncDisposable
         IAppLogger logger,
         TimeProvider timeProvider,
         ProtectionEngineOptions options,
-        IBrowserExtensionBridge? browserBridge = null)
+        IBrowserExtensionBridge? browserBridge = null,
+        IBrowserDnsPolicyPort? browserDnsPolicy = null)
     {
         _rules = rules ?? throw new ArgumentNullException(nameof(rules));
         _hosts = hosts ?? throw new ArgumentNullException(nameof(hosts));
@@ -84,6 +94,7 @@ public sealed class ProtectionEngine : IProtectionEnginePort, IAsyncDisposable
 
         _options = options;
         _browserBridge = browserBridge;
+        _browserDnsPolicy = browserDnsPolicy;
 
         _blockPage.BlockedRequestObserved += OnBlockPageHit;
         _watcher.ProcessBlockedObserved += OnProcessBlocked;
@@ -213,6 +224,19 @@ public sealed class ProtectionEngine : IProtectionEnginePort, IAsyncDisposable
 
         var warnings = new List<string>();
 
+        try
+        {
+            // Secure DNS must be off before traffic is pointed at loopback,
+            // otherwise a Chromium browser can resolve the real address.
+            warnings.AddRange(
+                await ApplyBrowserDnsPolicyAsync(cancellationToken).ConfigureAwait(false));
+        }
+        catch (OperationCanceledException)
+        {
+            await AbortApplyAsync(queue).ConfigureAwait(false);
+            throw;
+        }
+
         BlockPageStartResult page;
         try
         {
@@ -306,6 +330,7 @@ public sealed class ProtectionEngine : IProtectionEnginePort, IAsyncDisposable
             .ConfigureAwait(false);
         await TryAsync(() => _hosts.RestoreAsync(CancellationToken.None), "restore the hosts file")
             .ConfigureAwait(false);
+        await RestoreBrowserDnsPolicyAsync(CancellationToken.None).ConfigureAwait(false);
 
         await DrainAsync(queue, _writer).ConfigureAwait(false);
         _writer = null;
@@ -393,6 +418,9 @@ public sealed class ProtectionEngine : IProtectionEnginePort, IAsyncDisposable
             _logger.Error(LogCategories.Protection, "Could not remove the hosts block section.", ex);
             hostsFailure = ex;
         }
+
+        warnings.AddRange(
+            await RestoreBrowserDnsPolicyAsync(CancellationToken.None).ConfigureAwait(false));
 
         await DrainAsync(queue, writer).ConfigureAwait(false);
         _active = false;
@@ -619,6 +647,50 @@ public sealed class ProtectionEngine : IProtectionEnginePort, IAsyncDisposable
                 return Task.CompletedTask;
             },
             description);
+
+    private async Task<IReadOnlyList<string>> ApplyBrowserDnsPolicyAsync(
+        CancellationToken cancellationToken)
+    {
+        if (_browserDnsPolicy is null)
+            return [];
+
+        try
+        {
+            return await _browserDnsPolicy.ApplyAsync(cancellationToken).ConfigureAwait(false);
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            _logger.Error(LogCategories.Protection, "Could not disable browser Secure DNS.", ex);
+            return [BrowserDnsPolicyWarning];
+        }
+    }
+
+    private async Task<IReadOnlyList<string>> RestoreBrowserDnsPolicyAsync(
+        CancellationToken cancellationToken)
+    {
+        if (_browserDnsPolicy is null)
+            return [];
+
+        try
+        {
+            return await _browserDnsPolicy.RestoreAsync(cancellationToken).ConfigureAwait(false);
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            _logger.Warning(
+                LogCategories.Protection,
+                $"Could not restore the browser Secure DNS policy ({ex.GetType().Name}).");
+            return [BrowserDnsPolicyRestoreWarning];
+        }
+    }
 
     private async Task StopBrowserBridgeAsync()
     {

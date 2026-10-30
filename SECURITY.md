@@ -109,7 +109,10 @@ EduFocus là ứng dụng desktop **local-first** dành cho phụ huynh giám s�
 Các điểm sau **không được coi là lỗ hổng bảo mật** vì đã được ghi rõ trong thiết kế:
 
 - Người dùng có quyền **Administrator/SYSTEM** có thể tắt, gỡ hoặc bypass EduFocus.
-- File `hosts` có thể bị bypass bằng DoH/DoT, VPN, proxy hoặc sửa registry.
+- File `hosts` có thể bị bypass bằng DoH/DoT, VPN, proxy hoặc sửa registry. Khi bảo vệ ON, EduFocus
+  tắt Secure DNS của Chrome/Edge bằng machine policy `DnsOverHttpsMode=off` và khôi phục policy cũ khi
+  OFF/gỡ cài đặt; browser đang chạy phải khởi động lại. Firefox DoH/DoT riêng, VPN, proxy và ứng dụng
+  tự resolve DNS vẫn có thể bypass.
 - File `hosts` có thể bị antivirus hoặc ứng dụng khác khóa: adapter thử lại 3 lần rồi báo `Locked`/`AccessDenied` và giữ nguyên trạng thái bảo vệ; phụ huynh cần đóng ứng dụng đang giữ file rồi bật lại bảo vệ.
 - Hosts không tạo log truy cập HTTPS; `BlockedAttempt` là best-effort, không phải tổng tuyệt đối.
 - Trang chặn chỉ hiển thị với HTTP; HTTPS thường báo lỗi kết nối/SSL.

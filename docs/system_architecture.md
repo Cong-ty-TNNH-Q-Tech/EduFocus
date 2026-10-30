@@ -410,6 +410,7 @@ Parent bấm ON
        → validate block rules + schedule
        → StudySessionUseCase.StartAsync()  (heartbeat bắt đầu)
        → ProtectionEngine.ApplyAsync(rules exact domain/app)
+            → tắt Secure DNS (DoH) của Chrome/Edge bằng machine policy
             → write hosts block
             → start BlockPageServer nếu port 80 khả dụng
             → start process watcher
@@ -420,7 +421,7 @@ Parent bấm ON
   → UI cập nhật ON + tray icon
 ```
 
-**Rollback:** nếu bước hosts thất bại, gỡ phần đã áp dụng và giữ OFF. Nếu block page server thất bại nhưng hosts thành công, vẫn giữ protection ON và cảnh báo.
+**Rollback:** nếu bước hosts thất bại, gỡ phần đã áp dụng (gồm policy Secure DNS) và giữ OFF. Nếu block page server hoặc policy Secure DNS thất bại nhưng hosts thành công, vẫn giữ protection ON và cảnh báo.
 
 > **Hiện trạng Phase 2 (issue #16):** `EnableAsync` đã thực hiện đúng thứ tự engine → session → lưu
 > `ProtectionEnabled`, rollback engine/phiên khi ghi DB lỗi và bỏ qua việc tạo phiên thứ hai. Rule
@@ -431,6 +432,17 @@ Parent bấm ON
 > **Heartbeat (issue #25):** `ProtectionService` giữ thứ tự engine → session → heartbeat → lưu
 > `ProtectionEnabled`; heartbeat dừng trước khi session kết thúc và được khởi động lại nếu disable lỗi.
 > Enable/disable/reconcile serialize bằng semaphore nên không tạo hai session hoặc hai heartbeat.
+>
+> **Secure DNS (bổ sung sau issue #22):** trước khi ghi hosts, engine gọi `IBrowserDnsPolicyPort` để
+> đặt `DnsOverHttpsMode=off` dưới policy máy của Chrome (`HKLM\SOFTWARE\Policies\Google\Chrome`) và
+> Edge (`HKLM\SOFTWARE\Policies\Microsoft\Edge`), cho cả Registry64/Registry32. Đây là cơ chế chỉ
+> desktop app, không cần extension: DoH là đường browser bỏ qua hosts nên tắt nó trả hosts về làm lớp
+> chặn hiệu lực. Giá trị policy cũ (hoặc việc chưa từng có value) được backup trong
+> `HKLM\SOFTWARE\EduFocus\BrowserDnsPolicy\<Chrome|Edge>-64|32` **trước khi** ghi bất kỳ policy nào;
+> adapter backup mọi view trước vì một số bản Windows chia sẻ cùng key giữa hai view. Tắt bảo vệ,
+> rollback và gỡ cài đặt khôi phục đúng giá trị/kiểu cũ hoặc xóa value nếu trước đó không có. Lỗi policy
+> chỉ là cảnh báo (protection vẫn ON) và được trả về UI; browser đang chạy cần khởi động lại mới đọc
+> policy mới.
 
 ### 4.2. Học sinh truy cập chatbot
 
@@ -712,10 +724,20 @@ Thứ tự:
 > engine debounce 30 giây theo domain/tên app bằng monotonic clock và ghi `BlockedAttempt` qua một
 > writer channel duy nhất, gắn `SessionId` đang hoạt động và tăng `BlockedAttemptCount`; lỗi ghi DB chỉ
 > log và không làm dừng adapter. Không lưu window title/path.
+>
+> **Triển khai Secure DNS (bổ sung sau issue #22):** `BrowserDnsPolicy` là adapter của
+> `IBrowserDnsPolicyPort`, chạy **trước** hosts vì browser có thể đã resolve qua DoH trước khi hosts
+> được đọc (và policy có hiệu lực ngay cả khi bật lại bảo vệ). Apply idempotent: nếu backup đã tồn tại
+> thì không ghi đè bằng giá trị `off` của chính EduFocus. Giá trị policy lạ (không phải
+> `String`/`ExpandString`) bị coi là lỗi để restore không phá policy do quản trị viên đặt; xóa value
+> chỉ diễn ra khi backup ghi nhận trước đó không có value. Abort khi hosts lỗi khôi phục policy; remove
+> và uninstall khôi phục policy kèm cảnh báo nếu một target/view thất bại.
 
 ### 6.4. Hạn chế đã biết
 
-- DoH/DoT, VPN, proxy có thể bypass hosts.
+- DoH/DoT, VPN, proxy có thể bypass hosts. Chrome/Edge được tắt Secure DNS bằng machine policy khi bảo
+  vệ ON (xem §4.1/§6.3); Firefox DoH/DoT riêng, VPN, proxy, browser khác và ứng dụng tự resolve DNS vẫn
+  có thể bypass. Browser đang chạy phải khởi động lại mới áp policy.
 - Hosts không tạo log truy cập HTTPS; không thể đếm đầy đủ blocked attempts.
 - Trang chặn chỉ hiển thị với HTTP; HTTPS thường báo lỗi kết nối/SSL.
 - UI Protection phải hiển thị cảnh báo thường trực: chặn web chỉ áp dụng HTTP/domain exact; HTTPS, DoH/VPN/proxy có thể bypass và blocked attempts HTTPS không được ghi nhận đầy đủ.
@@ -1411,6 +1433,9 @@ EduFocus/
 
 ### Manual/system tests
 - Chặn web trên Chrome/Edge/Firefox; xác nhận HTTP block page và HTTPS báo lỗi.
+- Secure DNS: bật bảo vệ rồi kiểm tra `DnsOverHttpsMode=off` trong policy Chrome/Edge và backup trong
+  `HKLM\SOFTWARE\EduFocus\BrowserDnsPolicy`; khởi động lại Chrome có Secure DNS từng bật, xác nhận
+  domain bị chặn; tắt bảo vệ/gỡ cài đặt, xác nhận policy trước đó được khôi phục đúng (hoặc bị xóa).
 - BlockedAttempt best-effort: không kỳ vọng log HTTPS.
 - Restore hosts sạch sau crash; chỉ xóa marker EduFocus.
 - Auto-start + crash recovery; session cũ `Interrupted`, session mới `Trigger = Recovery`.

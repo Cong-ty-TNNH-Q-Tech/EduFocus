@@ -196,7 +196,10 @@ xóa registry native messaging và manifest `native-host\com.edufocus.native_hos
 3. xóa thư mục runtime `%ProgramData%\EduFocus\runtime`;
 4. `IHostsFileBlocker.SelfHealAsync()` gỡ khối `### EDUFOCUS BLOCK ... ###` khỏi hosts
    (khôi phục đúng byte gốc nếu có journal) và xóa `hosts-backup`;
-5. nếu được yêu cầu, xóa thư mục dữ liệu (kể cả `edufocus.key`) sau khi kiểm tra đường dẫn đúng là
+5. `IBrowserDnsPolicyPort.RestoreAsync()` khôi phục policy Secure DNS trước đó của Chrome/Edge (hoặc
+   xóa value nếu trước đó chưa có) và xóa backup `HKLM\SOFTWARE\EduFocus\BrowserDnsPolicy`; lỗi được
+   log và trả mã lỗi nhưng không chặn gỡ cài đặt;
+6. nếu được yêu cầu, xóa thư mục dữ liệu (kể cả `edufocus.key`) sau khi kiểm tra đường dẫn đúng là
    `%ProgramData%\EduFocus` và watchdog/service đã dừng.
 
 Block page listener và process watcher chạy trong service; SCM stop là listener đóng theo, không để

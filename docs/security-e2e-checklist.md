@@ -15,7 +15,7 @@ Liên quan: [SECURITY.md](../SECURITY.md), [installer.md](./installer.md) §7,
 |---|---|
 | Onboarding & PIN | Consent bắt buộc, PIN 6–8 số, hash PBKDF2, recovery code dùng một lần, lockout chung 5 lần/15 phút |
 | Protection | Bật/tắt bằng PIN, rollback khi hosts/engine lỗi, reconcile sau crash, lịch bảo vệ |
-| Web/app blocking | Hosts marker domain exact, block page loopback, process watcher, allowlist |
+| Web/app blocking | Hosts marker domain exact, block page loopback, process watcher, allowlist, tắt Secure DNS Chrome/Edge khi bảo vệ |
 | Toàn vẹn hosts | Restore đúng byte gốc, giữ chỉnh sửa ngoài marker, self-heal sau crash, dọn backup |
 | Quyền riêng tư camera | Không lưu frame/landmark/embedding, dispose frame trước khi phát sample, camera chỉ theo consent |
 | Dữ liệu & log | ACL `%ProgramData%\EduFocus`, không có PIN/recovery code trong DB/WAL/backup/log, redaction URL/token |
@@ -23,8 +23,10 @@ Liên quan: [SECURITY.md](../SECURITY.md), [installer.md](./installer.md) §7,
 | Chống injection | XSS trong block page, CSV formula injection, Host header/path/query không bị phản chiếu |
 | Gỡ cài đặt | Gỡ hosts marker, block page listener, scheduled task, runtime; tùy chọn xóa dữ liệu |
 
-**Ngoài phạm vi MVP:** bypass bằng quyền Administrator/SYSTEM, DoH/DoT, VPN/proxy, sửa registry.
-Các điểm này là giới hạn đã biết trong [SECURITY.md](../SECURITY.md#giới-hạn-đã-biết-không-phải-lỗ-hổng).
+**Ngoài phạm vi MVP:** bypass bằng quyền Administrator/SYSTEM, DoH/DoT của Firefox hoặc ứng dụng khác,
+VPN/proxy, sửa registry. Secure DNS của Chrome/Edge được tắt bằng machine policy khi bảo vệ ON và phải
+khôi phục khi OFF/gỡ (SEC-E2E-29).
+Các điểm còn lại là giới hạn đã biết trong [SECURITY.md](../SECURITY.md#giới-hạn-đã-biết-không-phải-lỗ-hổng).
 
 ---
 
@@ -61,6 +63,7 @@ Các test dưới đây là bằng chứng hồi quy cho từng kiểm soát. T�
 | PIN/recovery chỉ lưu hash; lockout chung | `ParentAuthPersistenceTests.Setup_login_and_recovery_survive_a_process_restart`, `Lockout_survives_a_restart_and_expires_after_fifteen_minutes`; `ParentAuthUseCaseTests.Fifth_wrong_pin_locks_for_fifteen_minutes_and_audits_lockout`, `Recovery_code_failures_share_the_pin_lockout` | Đạt |
 | Không có PIN/recovery code dạng plaintext trong DB, WAL, backup | `ParentAuthPersistenceTests.Database_wal_and_backup_files_never_contain_plaintext_secrets` | Đạt |
 | Bật/tắt bảo vệ rollback đúng khi hosts/engine lỗi | `ProtectionEngineTests.Apply_rolls_back_when_hosts_fails`, `Remove_throws_when_hosts_restore_fails_but_stops_adapters`; `ProtectionServiceTests.Engine_apply_failure_keeps_protection_off`, `Engine_remove_failure_keeps_protection_on` | Đạt |
+| Tắt Secure DNS Chrome/Edge, backup/khôi phục chính xác, lỗi chỉ cảnh báo | `BrowserDnsPolicyTests.Apply_sets_off_for_every_target_and_view`, `Restore_puts_back_the_previous_values_and_removes_added_ones`, `Apply_is_idempotent_and_keeps_the_first_backup`, `Apply_leaves_a_policy_of_an_unexpected_type_untouched`; `ProtectionEngineTests.Apply_disables_browser_secure_dns`, `Apply_keeps_os_protection_when_secure_dns_policy_fails`, `Apply_rolls_back_secure_dns_policy_when_hosts_fails`, `Remove_restores_browser_secure_dns` | Đạt |
 | Hosts chỉ sửa trong marker, domain exact, ghi IPv4 + IPv6 | `HostsFileBlockerTests.Apply_writes_marker_section_with_ipv4_and_ipv6_entries`, `Apply_rejects_invalid_domains_without_touching_hosts` | Đạt |
 | Restore đúng byte gốc, giữ sửa đổi ngoài marker | `HostsFileBlockerTests.Restore_returns_the_original_bytes`, `Restore_keeps_edits_made_outside_the_block_section` | Đạt |
 | Self-heal sau crash bằng journal; journal/backup được dọn | `HostsFileBlockerTests.SelfHeal_restores_the_original_hosts_after_a_crash`, `Restore_returns_the_original_bytes` (assert không còn `.bak`) | Đạt |
@@ -124,6 +127,7 @@ và một tài khoản standard user để chạy thử. Ghi mã build/MSI SHA-2
 | SEC-E2E-26 | Chạy portable ZIP trên máy chưa cài | Không có service row/marker; app chạy standalone với watchdog, không gọi pipe và không tạo orphan service | `Get-Service EduFocusProtection`, `Get-ItemProperty` | ⬜ | ⬜ |
 | SEC-E2E-27 | Kiểm tra DB mã hóa và file khóa sau onboarding | 16 byte đầu `edufocus.db` khác `SQLite format 3\0`; `edufocus.key` tồn tại, chỉ Administrators/SYSTEM đọc, không có chuỗi hex/`x'...'` khóa; backup trong `backups/` cũng mã hóa; standard user không đọc được DB/WAL/backup/khóa | PowerShell đọc 16 byte header; `icacls`; thử đọc bằng standard user; `Select-String` trên file khóa | ⬜ | ⬜ |
 | SEC-E2E-28 | Mô phỏng mất/hỏng/sai khóa (trên VM snapshot) rồi khôi phục | Thiếu khóa: app báo lỗi an toàn, không tạo khóa mới; hỏng khóa: không ghi đè; khôi phục bản sao `edufocus.key` trên cùng máy + backup thì mở lại được, dữ liệu còn nguyên. Copy DB sang VM khác không mở được | Ảnh chụp lỗi; so sánh hash file khóa trước/sau; timeline restore | ⬜ | ⬜ |
+| SEC-E2E-29 | Bật bảo vệ khi Chrome đang bật Secure DNS; mở domain bị chặn; tắt bảo vệ; gỡ cài đặt | Khi ON: `DnsOverHttpsMode=off` dưới policy máy Chrome/Edge (cả 64/32) và backup trong `HKLM\SOFTWARE\EduFocus\BrowserDnsPolicy`; sau khi khởi động lại Chrome, domain bị chặn dù trước đó DoH hoạt động. Khi OFF/gỡ: value policy cũ được khôi phục đúng (hoặc bị xóa nếu trước đó không có) và backup key biến mất; lỗi chỉ là cảnh báo, không tắt bảo vệ | `Get-ItemProperty` policy + backup; ảnh chụp Chrome trước/sau; log không có secret | ⬜ | ⬜ |
 | SEC-E2E-09 | Bản portable/source: kill app khi Protection ON; sau đó kill watchdog | App được khôi phục ≤ 30 giây; watchdog được task khôi phục trong tối đa ~60 giây; audit `WatchdogRestart` không có dữ liệu người dùng | Timeline + audit | ⬜ | ⬜ |
 | SEC-E2E-10 | Sửa hosts ngoài marker, sau đó tắt bảo vệ | Chỉ mất khối marker; chỉnh sửa ngoài marker còn nguyên; `hosts-backup\journal.json` và `.bak` không còn | Diff hosts trước/sau, `Get-ChildItem hosts-backup` | ⬜ | ⬜ |
 | SEC-E2E-11 | Ép crash giữa lúc apply (kill app sau khi có journal) rồi khởi động lại | `SelfHealAsync` khôi phục đúng byte gốc; không còn marker/journal/backup | So sánh hash hosts | ⬜ | ⬜ |
@@ -155,7 +159,7 @@ Mức độ: **P0** chặn phát hành ngay; **P1** phải sửa trước phát 
 | F-42-05 | P2 | Mở | Chưa có thông báo quyền riêng tư đầy đủ và DPIA chính thức trước phát hành. | Theo dõi ở issue #44; không chặn #42 nhưng **chặn phát hành thương mại**. |
 
 **Kết luận:** tính đến 2026-10-30, review mã + test tự động **không phát hiện P0/P1**. Các mục thủ công
-SEC-E2E-01…26 là điều kiện bắt buộc; nếu phát hiện P0/P1 khi chạy VM, phát hành bị chặn cho đến khi
+SEC-E2E-01…29 là điều kiện bắt buộc; nếu phát hiện P0/P1 khi chạy VM, phát hành bị chặn cho đến khi
 sửa và chạy lại.
 
 ---
@@ -165,7 +169,7 @@ sửa và chạy lại.
 Chỉ coi là đạt khi:
 
 - [ ] `dotnet test EduFocus.slnx --configuration Release` pass toàn bộ, build 0 warning.
-- [ ] Toàn bộ SEC-E2E-01…28 đạt trên **Windows 10 22H2** và **Windows 11** (hoặc có ngoại lệ được
+- [ ] Toàn bộ SEC-E2E-01…29 đạt trên **Windows 10 22H2** và **Windows 11** (hoặc có ngoại lệ được
       ghi rõ lý do môi trường).
 - [ ] Không còn P0/P1 mở; P2 có issue theo dõi và rủi ro được ghi trong release notes.
 - [ ] Bằng chứng không chứa PIN/recovery code/ảnh camera/URL đầy đủ; artifact release không có

@@ -368,6 +368,13 @@ và dự án tuân theo [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 - **Hiệu năng:** init 175 ms (DB mới) / 78 ms (mở lại), DB 30 ngày 8,25 MB (plaintext 8,14 MB), báo cáo tháng median 274 ms, retention 545 ms, DB một năm mô phỏng 9,71 MB — trong ngân sách BA §9.3/schema §15.
 - **Tests:** +12 test (`EncryptionTests`: header/không đọc được, DPAPI/key file, fail-closed, nâng cấp plaintext, backup/restore/reject legacy, mất khóa, log); toàn bộ **1089 test .NET pass**, build Release 0 warning.
 
+### Added (Desktop app — tắt Secure DNS Chrome/Edge khi bảo vệ ON)
+- **Chặn DoH không cần extension:** `IBrowserDnsPolicyPort` + `BrowserDnsPolicy` đặt `DnsOverHttpsMode=off` dưới policy máy Chrome (`HKLM\SOFTWARE\Policies\Google\Chrome`) và Edge (`HKLM\SOFTWARE\Policies\Microsoft\Edge`) cho cả Registry64/Registry32; DoH là đường browser bỏ qua hosts nên policy trả hosts về làm lớp chặn hiệu lực, đúng yêu cầu chỉ dùng desktop app.
+- **Backup/khôi phục chính xác:** giá trị policy cũ (hoặc việc chưa từng có value) được ghi vào `HKLM\SOFTWARE\EduFocus\BrowserDnsPolicy\<Chrome|Edge>-64|32` **trước khi** sửa bất kỳ policy nào — cần thiết vì một số bản Windows chia sẻ cùng key giữa hai registry view. Apply idempotent (không ghi đè backup bằng `off` của EduFocus); restore khôi phục đúng kiểu/giá trị hoặc xóa value, không động vào policy kiểu lạ do quản trị viên đặt.
+- **Vòng đời bảo vệ:** engine áp policy trước hosts; rollback khi hosts lỗi; tắt bảo vệ và gỡ cài đặt khôi phục policy; lỗi policy chỉ là cảnh báo (protection vẫn ON) và được trả về UI; browser đang chạy cần khởi động lại mới đọc policy.
+- **Tài liệu:** architecture §4.1/§6.3/§6.4, security E2E thêm SEC-E2E-29 + bằng chứng tự động, installer §5 (bước khôi phục khi gỡ), SECURITY/README/README.en (giới hạn DoH còn lại cho Firefox/VPN/proxy).
+- **Tests:** +12 test (`BrowserDnsPolicyTests` 7, `ProtectionEngineTests` 5); toàn bộ **1101 test .NET pass**, build Release 0 warning.
+
 ### Breaking changes
 - **Không migrate dữ liệu 1.x:** 2.0.0 dùng schema mới tại `%ProgramData%\EduFocus\edufocus.db`; DB của Don't Be Lazy (1.x) không được đọc hoặc nâng cấp tự động. Người dùng chuyển từ 1.x bắt đầu lại onboarding và dữ liệu 2.0.
 - **Mô hình bảo vệ và dữ liệu mới:** không còn phiên tập trung 1.x; quyền điều khiển thuộc Parent Mode + PIN, dữ liệu nằm trong `%ProgramData%` với ACL Administrators/SYSTEM.

@@ -215,7 +215,8 @@ dotnet test EduFocus.slnx --configuration Release
 ## ⚠️ Known Limitations
 
 - The PIN is not a security boundary if the student shares the Windows account or has Administrator rights. The data-folder ACL only separates access when parent and student use separate Windows accounts; the PIN protects the UI, not the database file.
-- The hosts file can be bypassed via DoH/DoT, VPN, or a proxy.
+- The hosts file can be bypassed via DoH/DoT, VPN, or a proxy. Chrome/Edge Secure DNS is disabled while
+  protection is ON (restored when OFF/uninstalled); the browser must be restarted. Firefox DoH/DoT, VPN and proxies can still bypass it.
 - Hosts does not log HTTPS access; blocked-attempt counts are best-effort only.
 - The block page only appears over HTTP; HTTPS usually shows a connection/SSL error.
 - App blocking may close/kill a process and lose unsaved data; EduFocus sends `WM_CLOSE` before killing.
