@@ -17,6 +17,15 @@ public sealed record BlockRuleInfo(
 
 public sealed record BlockRuleOperationResult(bool Changed, BlockRuleInfo Rule);
 
+public sealed record CreateBlockRuleRequest(
+    RuleType RuleType,
+    string Value,
+    BlockRuleCategory Category = BlockRuleCategory.Custom,
+    BlockRuleEffect Effect = BlockRuleEffect.Block,
+    RuleMatchType MatchType = RuleMatchType.Exact,
+    DateTime? ExpiresAtUtc = null,
+    string? Note = null);
+
 /// <summary>Outcome of the idempotent built-in rule seeding at startup.</summary>
 public sealed record BlockRuleSeedResult(int SeedVersion, int Added, int Updated)
 {

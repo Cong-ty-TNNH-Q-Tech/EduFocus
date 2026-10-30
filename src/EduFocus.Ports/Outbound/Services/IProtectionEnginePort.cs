@@ -16,4 +16,7 @@ public interface IProtectionEnginePort
     Task<IReadOnlyList<string>> ReconcileAsync(
         bool shouldBeActive,
         CancellationToken cancellationToken = default);
+
+    Task<IReadOnlyList<string>> ReloadRulesAsync(CancellationToken cancellationToken = default) =>
+        Task.FromResult<IReadOnlyList<string>>([]);
 }

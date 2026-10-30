@@ -22,6 +22,8 @@ public sealed class BlockRuleService : IBlockRuleUseCase
     private readonly IAppLogger _logger;
     private readonly TimeProvider _timeProvider;
     private readonly IBrowserExtensionBridge _browserBridge;
+    private readonly IProtectionUseCase? _protection;
+    private readonly IActivityUseCase? _activity;
 
     public BlockRuleService(
         IBlockRuleRepository rules,
@@ -30,7 +32,9 @@ public sealed class BlockRuleService : IBlockRuleUseCase
         ICorrelationContext correlation,
         IAppLogger logger,
         TimeProvider timeProvider,
-        IBrowserExtensionBridge browserBridge)
+        IBrowserExtensionBridge browserBridge,
+        IProtectionUseCase? protection = null,
+        IActivityUseCase? activity = null)
     {
         _rules = rules ?? throw new ArgumentNullException(nameof(rules));
         _authorizer = authorizer ?? throw new ArgumentNullException(nameof(authorizer));
@@ -39,6 +43,8 @@ public sealed class BlockRuleService : IBlockRuleUseCase
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
         _timeProvider = timeProvider ?? throw new ArgumentNullException(nameof(timeProvider));
         _browserBridge = browserBridge ?? throw new ArgumentNullException(nameof(browserBridge));
+        _protection = protection;
+        _activity = activity;
     }
 
     public async Task<IReadOnlyList<BlockRuleInfo>> ListAsync(CancellationToken cancellationToken = default)
@@ -78,8 +84,118 @@ public sealed class BlockRuleService : IBlockRuleUseCase
             cancellationToken);
 
         await RefreshBrowserRulesAsync(now, cancellationToken);
+        await RefreshActiveEnforcementAsync(cancellationToken);
 
         return new BlockRuleOperationResult(Changed: true, ToInfo(rule));
+    }
+
+    public async Task<BlockRuleOperationResult> AddCustomAsync(
+        CreateBlockRuleRequest request,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+        _authorizer.EnsureAuthorized("add a block rule");
+
+        var now = _timeProvider.GetUtcNow().UtcDateTime;
+        var candidate = BlockRule.Create(
+            request.RuleType,
+            request.MatchType,
+            request.Value,
+            request.Category,
+            request.Effect,
+            now,
+            isEnabled: true,
+            isBuiltIn: false,
+            expiresAtUtc: request.ExpiresAtUtc,
+            note: request.Note);
+
+        var existingRules = await _rules.ListAsync(cancellationToken);
+        var duplicate = existingRules.FirstOrDefault(r =>
+            r.RuleType == candidate.RuleType &&
+            r.MatchType == candidate.MatchType &&
+            r.Effect == candidate.Effect &&
+            string.Equals(r.NormalizedValue, candidate.NormalizedValue, StringComparison.Ordinal));
+
+        if (duplicate is not null)
+            throw new InvalidOperationException("Rule này đã tồn tại trong danh sách.");
+
+        await _rules.AddAsync(candidate, cancellationToken);
+
+        await WriteAuditAsync(
+            $"Parent added custom {candidate.RuleType.ToString().ToLowerInvariant()} rule {candidate.NormalizedValue}.",
+            now,
+            cancellationToken);
+
+        await RefreshBrowserRulesAsync(now, cancellationToken);
+        await RefreshActiveEnforcementAsync(cancellationToken);
+
+        return new BlockRuleOperationResult(Changed: true, ToInfo(candidate));
+    }
+
+    public async Task<bool> DeleteCustomAsync(
+        Guid id,
+        CancellationToken cancellationToken = default)
+    {
+        _authorizer.EnsureAuthorized("delete a block rule");
+
+        var rule = await _rules.GetAsync(BlockRuleId.From(id), cancellationToken);
+        if (rule is null)
+            return false;
+
+        if (rule.IsBuiltIn)
+            throw new InvalidOperationException("Built-in rules cannot be deleted; disable them instead.");
+
+        var now = _timeProvider.GetUtcNow().UtcDateTime;
+        await _rules.DeleteAsync(rule.Id, cancellationToken);
+
+        await WriteAuditAsync(
+            $"Parent deleted custom {rule.RuleType.ToString().ToLowerInvariant()} rule {rule.NormalizedValue}.",
+            now,
+            cancellationToken);
+
+        await RefreshBrowserRulesAsync(now, cancellationToken);
+        await RefreshActiveEnforcementAsync(cancellationToken);
+
+        return true;
+    }
+
+    private async Task RefreshActiveEnforcementAsync(CancellationToken cancellationToken)
+    {
+        if (_protection is not null)
+        {
+            try
+            {
+                await _protection.ReloadRulesAsync(cancellationToken);
+            }
+            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+            {
+                throw;
+            }
+            catch (Exception ex)
+            {
+                _logger.Warning(
+                    LogCategories.Protection,
+                    $"Could not reload active protection rules ({ex.GetType().Name}).");
+            }
+        }
+
+        if (_activity is { IsRunning: true })
+        {
+            try
+            {
+                await _activity.RefreshSettingsAsync(cancellationToken);
+            }
+            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+            {
+                throw;
+            }
+            catch (Exception ex)
+            {
+                _logger.Warning(
+                    LogCategories.Session,
+                    $"Could not refresh activity tracking rules ({ex.GetType().Name}).");
+            }
+        }
     }
 
     private async Task RefreshBrowserRulesAsync(DateTime nowUtc, CancellationToken cancellationToken)

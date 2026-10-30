@@ -32,4 +32,11 @@ public interface IProtectionUseCase
     /// ON state, so manually enabled protection survives the end of a window.
     /// </summary>
     Task<ProtectionOperationResult> DisableForScheduleAsync(CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Reloads active block/allow rules into the running protection engine without
+    /// interrupting the current study session.
+    /// </summary>
+    Task<ProtectionOperationResult> ReloadRulesAsync(CancellationToken cancellationToken = default) =>
+        Task.FromResult(new ProtectionOperationResult(new ProtectionStatus(false, null, true), false, []));
 }

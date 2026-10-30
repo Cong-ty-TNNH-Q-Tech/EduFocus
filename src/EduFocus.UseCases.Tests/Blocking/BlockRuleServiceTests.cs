@@ -127,4 +127,45 @@ public sealed class BlockRuleServiceTests
 
         await act.Should().ThrowAsync<InvalidOperationException>();
     }
+
+    [Fact]
+    public async Task AddCustom_creates_rule_audits_and_refreshes_browser_bridge()
+    {
+        var harness = new BlockingHarness();
+        harness.Authenticate();
+
+        var result = await harness.Service.AddCustomAsync(
+            new EduFocus.Ports.DTOs.CreateBlockRuleRequest(
+                RuleType.Domain,
+                "example-game.com",
+                BlockRuleCategory.Custom,
+                BlockRuleEffect.Block));
+
+        result.Changed.Should().BeTrue();
+        result.Rule.Value.Should().Be("example-game.com");
+        result.Rule.IsBuiltIn.Should().BeFalse();
+        result.Rule.IsEnabled.Should().BeTrue();
+        harness.BrowserBridge.UpdateCalls.Should().Be(1);
+    }
+
+    [Fact]
+    public async Task DeleteCustom_removes_custom_rule_but_rejects_built_in_rules()
+    {
+        var harness = new BlockingHarness();
+        await harness.Seed.EnsureSeededAsync();
+        harness.Authenticate();
+
+        var builtIn = harness.Rules.Rules.First(r => r.IsBuiltIn);
+        var deleteBuiltIn = () => harness.Service.DeleteCustomAsync(builtIn.Id.Value);
+        await deleteBuiltIn.Should().ThrowAsync<InvalidOperationException>();
+
+        var custom = await harness.Service.AddCustomAsync(
+            new EduFocus.Ports.DTOs.CreateBlockRuleRequest(
+                RuleType.App,
+                "mygame.exe"));
+
+        var deleted = await harness.Service.DeleteCustomAsync(custom.Rule.Id);
+        deleted.Should().BeTrue();
+        harness.Rules.Rules.Should().NotContain(r => r.Id.Value == custom.Rule.Id);
+    }
 }

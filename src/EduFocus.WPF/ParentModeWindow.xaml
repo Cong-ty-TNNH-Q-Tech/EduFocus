@@ -160,12 +160,19 @@
                         <TextBlock Text="{Binding DetailText}" Style="{StaticResource CaptionText}"
                                    Margin="0,2,0,0" />
                     </StackPanel>
-                    <Button Grid.Column="1" Content="{Binding ToggleButtonText}"
-                            Style="{StaticResource SmallSoftButton}" Margin="10,0,0,0"
-                            VerticalAlignment="Center"
-                            Command="{Binding DataContext.Blocklist.ToggleRuleCommand, RelativeSource={RelativeSource AncestorType=Window}}"
-                            CommandParameter="{Binding}"
-                            IsEnabled="{Binding DataContext.Blocklist.IsNotBusy, RelativeSource={RelativeSource AncestorType=Window}}" />
+                    <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center" Margin="10,0,0,0">
+                        <Button Content="{Binding ToggleButtonText}"
+                                Style="{StaticResource SmallSoftButton}"
+                                Command="{Binding DataContext.Blocklist.ToggleRuleCommand, RelativeSource={RelativeSource AncestorType=Window}}"
+                                CommandParameter="{Binding}"
+                                IsEnabled="{Binding DataContext.Blocklist.IsNotBusy, RelativeSource={RelativeSource AncestorType=Window}}" />
+                        <Button Content="Xóa"
+                                Style="{StaticResource SmallSoftButton}" Margin="6,0,0,0"
+                                Visibility="{Binding CanDelete, Converter={StaticResource BoolToVisibility}}"
+                                Command="{Binding DataContext.Blocklist.DeleteRuleCommand, RelativeSource={RelativeSource AncestorType=Window}}"
+                                CommandParameter="{Binding}"
+                                IsEnabled="{Binding DataContext.Blocklist.IsNotBusy, RelativeSource={RelativeSource AncestorType=Window}}" />
+                    </StackPanel>
                 </Grid>
             </Border>
         </DataTemplate>
@@ -1094,8 +1101,37 @@
                             <Border Style="{StaticResource CardBorder}">
                                 <StackPanel>
                                     <TextBlock Text="Danh sách chặn" Style="{StaticResource CardTitleText}" />
-                                        <TextBlock Text="Rule mặc định đi kèm EduFocus. Bạn có thể tắt hoặc bật lại từng rule; rule mặc định không thể xóa."
+                                        <TextBlock Text="Rule mặc định đi kèm EduFocus và rule tùy chỉnh do phụ huynh thêm. Bạn có thể tắt/bật từng rule hoặc xóa rule tùy chỉnh."
                                                    Style="{StaticResource CaptionText}" Margin="0,6,0,0" />
+
+                                        <Grid Margin="0,12,0,4">
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="150" />
+                                                <ColumnDefinition Width="8" />
+                                                <ColumnDefinition Width="130" />
+                                                <ColumnDefinition Width="8" />
+                                                <ColumnDefinition Width="*" />
+                                                <ColumnDefinition Width="8" />
+                                                <ColumnDefinition Width="Auto" />
+                                            </Grid.ColumnDefinitions>
+                                            <ComboBox Grid.Column="0" SelectedIndex="{Binding Blocklist.NewRuleTypeIndex, Mode=TwoWay}">
+                                                <ComboBoxItem Content="Tên miền (Domain)" />
+                                                <ComboBoxItem Content="Ứng dụng (App)" />
+                                                <ComboBoxItem Content="Đường dẫn (URL)" />
+                                            </ComboBox>
+                                            <ComboBox Grid.Column="2" SelectedIndex="{Binding Blocklist.NewRuleEffectIndex, Mode=TwoWay}">
+                                                <ComboBoxItem Content="Chặn (Block)" />
+                                                <ComboBoxItem Content="Cho phép (Allow)" />
+                                            </ComboBox>
+                                            <TextBox Grid.Column="4"
+                                                     Text="{Binding Blocklist.NewRuleValue, UpdateSourceTrigger=PropertyChanged}"
+                                                     MaxLength="512" />
+                                            <Button Grid.Column="6" Content="Thêm rule"
+                                                    Style="{StaticResource PrimaryButton}"
+                                                    Command="{Binding Blocklist.AddRuleCommand}"
+                                                    IsEnabled="{Binding Blocklist.IsNotBusy}" />
+                                        </Grid>
+
                                         <TextBlock Text="Chưa có rule nào. Rule mặc định sẽ được cài ở lần khởi động tới."
                                                    Style="{StaticResource CaptionText}" Margin="0,12,0,0"
                                                    Visibility="{Binding Blocklist.HasNoRules, Converter={StaticResource BoolToVisibility}}" />

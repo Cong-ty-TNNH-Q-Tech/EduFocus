@@ -114,6 +114,7 @@ public sealed class ProcessWatcher : IProcessWatcher, IAsyncDisposable
 
         Volatile.Write(ref _blocked, blocked);
         Volatile.Write(ref _allowed, allowed);
+        _lastAttempt.Clear();
     }
 
     public async Task StopAsync(CancellationToken cancellationToken = default)

@@ -170,6 +170,86 @@ public sealed class ProtectionEngine : IProtectionEnginePort, IAsyncDisposable
         }
     }
 
+    public async Task<IReadOnlyList<string>> ReloadRulesAsync(CancellationToken cancellationToken = default)
+    {
+        await _gate.WaitAsync(cancellationToken).ConfigureAwait(false);
+        try
+        {
+            if (!_active)
+                return [];
+
+            var nowUtc = _timeProvider.GetUtcNow().UtcDateTime;
+            var effective = await LoadRulesAsync(nowUtc, cancellationToken).ConfigureAwait(false);
+            var warnings = new List<string>();
+
+            try
+            {
+                _blockPage.UpdateDomains(effective.Domains);
+            }
+            catch (Exception ex)
+            {
+                _logger.Warning(
+                    LogCategories.Protection,
+                    $"Could not update block page domains during live reload ({ex.GetType().Name}).");
+            }
+
+            try
+            {
+                await _hosts.ApplyAsync(effective.Domains, cancellationToken).ConfigureAwait(false);
+            }
+            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+            {
+                throw;
+            }
+            catch (Exception ex)
+            {
+                _logger.Error(LogCategories.Protection, "Could not update hosts file during live reload.", ex);
+                throw new ProtectionEngineException("reload", "Could not update the hosts file.", ex);
+            }
+
+            try
+            {
+                _watcher.UpdateRules(effective.BlockedApps, effective.AllowedApps);
+            }
+            catch (Exception ex)
+            {
+                _logger.Warning(
+                    LogCategories.Protection,
+                    $"Could not update process watcher rules during live reload ({ex.GetType().Name}).");
+            }
+
+            if (_browserBridge is { IsRunning: true })
+            {
+                try
+                {
+                    await _browserBridge
+                        .UpdateRulesAsync(effective.ExtensionRules.ToArray(), nowUtc, cancellationToken)
+                        .ConfigureAwait(false);
+                }
+                catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+                {
+                    throw;
+                }
+                catch (Exception ex)
+                {
+                    _logger.Warning(
+                        LogCategories.Protection,
+                        $"Could not update browser extension rules during live reload ({ex.GetType().Name}).");
+                    warnings.Add(BrowserBridgeWarning);
+                }
+            }
+
+            _logger.Info(
+                LogCategories.Protection,
+                $"Protection engine rules reloaded: {effective.Domains.Count} blocked domains, {effective.BlockedApps.Count} blocked apps.");
+            return warnings;
+        }
+        finally
+        {
+            _gate.Release();
+        }
+    }
+
     public async ValueTask DisposeAsync()
     {
         _blockPage.BlockedRequestObserved -= OnBlockPageHit;

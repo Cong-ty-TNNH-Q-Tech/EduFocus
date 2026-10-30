@@ -44,6 +44,9 @@ public sealed class ServiceMonitoredProtectionUseCase : IProtectionUseCase
     public Task<ProtectionOperationResult> DisableForScheduleAsync(CancellationToken cancellationToken = default) =>
         RemoveAsync(() => _inner.DisableForScheduleAsync(cancellationToken));
 
+    public Task<ProtectionOperationResult> ReloadRulesAsync(CancellationToken cancellationToken = default) =>
+        _inner.ReloadRulesAsync(cancellationToken);
+
     private async Task<ProtectionOperationResult> ApplyAsync(
         Func<Task<ProtectionOperationResult>> operation)
     {

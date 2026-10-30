@@ -32,6 +32,7 @@ public static class ServiceControlCommand
     public const string Reconcile = "reconcile";
     public const string EnableForSchedule = "enable-for-schedule";
     public const string DisableForSchedule = "disable-for-schedule";
+    public const string ReloadRules = "reload-rules";
 }
 
 public static class ServiceControlErrorCode

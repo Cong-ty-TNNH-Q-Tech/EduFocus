@@ -95,6 +95,10 @@ public sealed class ServiceCommandHandler : IServiceControlHandler
                 case ServiceControlCommand.DisableForSchedule:
                     return Success(await _protection.DisableForScheduleAsync(cancellationToken));
 
+                case ServiceControlCommand.ReloadRules:
+                    return Success(await RunAuthorizedAsync(
+                        () => _protection.ReloadRulesAsync(cancellationToken)));
+
                 default:
                     return ServiceControlResponse.Failure(
                         ServiceControlErrorCode.UnknownCommand,

@@ -42,6 +42,9 @@ public sealed class WatchdogAwareProtectionService : IProtectionUseCase
     public Task<ProtectionOperationResult> DisableForScheduleAsync(CancellationToken cancellationToken = default) =>
         SynchronizeAfterAsync(_inner.DisableForScheduleAsync(cancellationToken));
 
+    public Task<ProtectionOperationResult> ReloadRulesAsync(CancellationToken cancellationToken = default) =>
+        _inner.ReloadRulesAsync(cancellationToken);
+
     private async Task<ProtectionOperationResult> SynchronizeAfterAsync(
         Task<ProtectionOperationResult> operation)
     {

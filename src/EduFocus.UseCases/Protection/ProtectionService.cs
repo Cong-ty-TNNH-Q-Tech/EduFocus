@@ -362,6 +362,40 @@ public sealed class ProtectionService : IProtectionUseCase
     public Task<ProtectionOperationResult> ReconcileAsync(CancellationToken cancellationToken = default) =>
         RunSerializedAsync(() => ReconcileCoreAsync(cancellationToken), cancellationToken);
 
+    public Task<ProtectionOperationResult> ReloadRulesAsync(CancellationToken cancellationToken = default) =>
+        RunSerializedAsync(() => ReloadRulesCoreAsync(cancellationToken), cancellationToken);
+
+    private async Task<ProtectionOperationResult> ReloadRulesCoreAsync(CancellationToken cancellationToken)
+    {
+        var settings = await _settings.GetAsync(cancellationToken);
+        if (settings is null)
+            return new ProtectionOperationResult(
+                new ProtectionStatus(false, null, MonitoringEnabled: true),
+                Changed: false,
+                []);
+
+        var active = await _sessions.GetActiveAsync(cancellationToken);
+        if (!settings.ProtectionEnabled)
+            return new ProtectionOperationResult(CreateStatus(settings, active), Changed: false, []);
+
+        var warnings = await _engine.ReloadRulesAsync(cancellationToken);
+        if (_activity.IsRunning)
+        {
+            try
+            {
+                await _activity.RefreshSettingsAsync(cancellationToken);
+            }
+            catch (Exception ex)
+            {
+                _logger.Warning(
+                    LogCategories.Session,
+                    $"Could not refresh activity rules ({ex.GetType().Name}).");
+            }
+        }
+
+        return new ProtectionOperationResult(CreateStatus(settings, active), Changed: true, warnings);
+    }
+
     private async Task<ProtectionOperationResult> ReconcileCoreAsync(CancellationToken cancellationToken)
     {
         var now = UtcNow();

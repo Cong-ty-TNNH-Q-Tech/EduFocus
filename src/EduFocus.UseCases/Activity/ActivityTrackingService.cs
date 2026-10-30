@@ -206,14 +206,17 @@ public sealed class ActivityTrackingService : IActivityUseCase, IAsyncDisposable
         try
         {
             var settings = await _settings.GetAsync(cancellationToken).ConfigureAwait(false);
-            if (settings is null)
-                return;
+            if (settings is not null)
+            {
+                _monitoringEnabled = settings.MonitoringEnabled;
+                _monitorOnlyDuringClasses = settings.MonitorOnlyDuringClasses;
+                Volatile.Write(ref _sampleIntervalTicks, ResolveSampleInterval(settings).Ticks);
+            }
 
-            _monitoringEnabled = settings.MonitoringEnabled;
-            _monitorOnlyDuringClasses = settings.MonitorOnlyDuringClasses;
-            Volatile.Write(ref _sampleIntervalTicks, ResolveSampleInterval(settings).Ticks);
+            var rules = await LoadRulesAsync(cancellationToken).ConfigureAwait(false);
+            _ruleSnapshot = rules;
 
-            _logger.Info(LogCategories.Session, "Monitoring settings were refreshed for the active session.");
+            _logger.Info(LogCategories.Session, "Monitoring settings and rules were refreshed for the active session.");
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {

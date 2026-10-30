@@ -80,6 +80,13 @@ public sealed class ServiceControlClient : IProtectionUseCase, IServiceControlCl
     public Task<ProtectionOperationResult> DisableForScheduleAsync(CancellationToken cancellationToken = default) =>
         SendOperationAsync(ServiceControlCommand.DisableForSchedule, cancellationToken);
 
+    public async Task<ProtectionOperationResult> ReloadRulesAsync(CancellationToken cancellationToken = default)
+    {
+        _authorizer?.EnsureAuthorized("reload block rules");
+        return await SendOperationAsync(ServiceControlCommand.ReloadRules, cancellationToken)
+            .ConfigureAwait(false);
+    }
+
     private async Task<ProtectionOperationResult> SendOperationAsync(
         string command,
         CancellationToken cancellationToken)

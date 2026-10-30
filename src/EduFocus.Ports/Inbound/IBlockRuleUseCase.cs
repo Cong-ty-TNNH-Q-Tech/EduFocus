@@ -14,4 +14,12 @@ public interface IBlockRuleUseCase
         Guid id,
         bool isEnabled,
         CancellationToken cancellationToken = default);
+
+    Task<BlockRuleOperationResult> AddCustomAsync(
+        CreateBlockRuleRequest request,
+        CancellationToken cancellationToken = default);
+
+    Task<bool> DeleteCustomAsync(
+        Guid id,
+        CancellationToken cancellationToken = default);
 }
