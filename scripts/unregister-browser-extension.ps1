@@ -28,17 +28,28 @@ if ($Scope -eq 'Machine') {
     )
 }
 
+$manifestPaths = New-Object System.Collections.Generic.HashSet[string]([System.StringComparer]::OrdinalIgnoreCase)
+[void]$manifestPaths.Add((Join-Path $manifestDirectory "$hostName.json"))
+if ($Scope -eq 'Machine' -and $env:ProgramFiles) {
+    [void]$manifestPaths.Add((Join-Path $env:ProgramFiles "EduFocus\native-host\$hostName.json"))
+}
+
 foreach ($key in $keyRoots) {
     if (Test-Path -Path "Registry::$key") {
+        $registeredManifest = (Get-Item -Path "Registry::$key").GetValue('')
+        if (-not [string]::IsNullOrWhiteSpace($registeredManifest)) {
+            [void]$manifestPaths.Add([string]$registeredManifest)
+        }
         Remove-Item -Path "Registry::$key" -Recurse -Force
         Write-Host "Removed $key"
     }
 }
 
-$manifestPath = Join-Path $manifestDirectory "$hostName.json"
-if (Test-Path -LiteralPath $manifestPath) {
-    Remove-Item -LiteralPath $manifestPath -Force
-    Write-Host "Removed $manifestPath"
+foreach ($manifestPath in $manifestPaths) {
+    if (Test-Path -LiteralPath $manifestPath) {
+        Remove-Item -LiteralPath $manifestPath -Force
+        Write-Host "Removed $manifestPath"
+    }
 }
 
 Write-Host "Native host unregistered for $Scope scope."

@@ -300,7 +300,7 @@ jobs:
         run: |
           ./scripts/pack-browser-extension.ps1 `
             -OutputDir "${{ github.workspace }}" `
-            -Version "${{ steps.ver.outputs.numeric }}"
+            -Version "${{ steps.ver.outputs.version }}"
 
       - name: Prepare install guides
         shell: pwsh

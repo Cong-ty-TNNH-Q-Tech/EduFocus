@@ -21,7 +21,7 @@ if ($Scope -eq 'Machine') {
         throw 'Machine scope requires an elevated PowerShell session.'
     }
 
-    $manifestDirectory = Join-Path $env:ProgramData 'EduFocus\NativeMessaging'
+    $manifestDirectory = Split-Path -Parent $resolvedHost
     $root = 'HKEY_LOCAL_MACHINE'
 } else {
     $manifestDirectory = Join-Path $env:LOCALAPPDATA 'EduFocus\NativeMessaging'

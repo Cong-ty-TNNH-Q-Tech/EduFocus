@@ -39,6 +39,15 @@ function Get-TargetProcess {
         return Get-Process -Id $ProcessId -ErrorAction Stop
     }
 
+    if ($Mode -eq "Protection" -and $ProcessName -eq "EduFocus") {
+        $serviceCandidates = Get-Process -Name "EduFocus.Service" -ErrorAction SilentlyContinue |
+            Sort-Object StartTime
+        if ($serviceCandidates) {
+            $script:ProcessName = "EduFocus.Service"
+            return $serviceCandidates | Select-Object -First 1
+        }
+    }
+
     $candidates = Get-Process -Name $ProcessName -ErrorAction SilentlyContinue |
         Sort-Object StartTime
     if (-not $candidates) {
@@ -165,15 +174,15 @@ while ((Get-Date) -lt $deadline) {
         continue
     }
 
+    $elapsedSeconds = [math]::Max(($now - $previousAt).TotalSeconds, 0.001)
     if ($sampleIndex -gt 0 -and $process.Id -ne $lastPid) {
         $restartCount++
-        $previousCpu = $process.TotalProcessorTime
-        $previousAt = $now
+        $cpuDelta = $process.TotalProcessorTime.TotalSeconds
+    } else {
+        $cpuDelta = ($process.TotalProcessorTime - $previousCpu).TotalSeconds
     }
 
     $lastPid = $process.Id
-    $elapsedSeconds = [math]::Max(($now - $previousAt).TotalSeconds, 0.001)
-    $cpuDelta = ($process.TotalProcessorTime - $previousCpu).TotalSeconds
     $cpuPercent = ($cpuDelta / $elapsedSeconds / $coreCount) * 100.0
     $previousCpu = $process.TotalProcessorTime
     $previousAt = $now
@@ -206,9 +215,6 @@ $cpus = [double[]]($records | ForEach-Object { $_.CpuPercent })
 $times = [double[]]($records | ForEach-Object { $_.ElapsedSeconds })
 
 $sampledCpus = $cpus
-if ($cpus.Count -gt 1) {
-    $sampledCpus = [double[]]($cpus[1..($cpus.Count - 1)])
-}
 
 $headEnd = [math]::Min(2, $workingSets.Count - 1)
 $tailStart = [math]::Max(0, $workingSets.Count - 3)
@@ -288,7 +294,7 @@ $summary = [pscustomobject]@{
     App = [pscustomobject]@{
         ProductVersion = $appVersion
         Path = $appPath
-        Pid = $process.Id
+        Pid = $lastPid
         LogicalCoresUsedForCpuPercent = $coreCount
     }
     Failures = $failures.ToArray()

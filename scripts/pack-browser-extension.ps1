@@ -56,7 +56,8 @@ if ([string]::IsNullOrWhiteSpace($manifest.key)) {
 if ([string]::IsNullOrWhiteSpace($Version)) {
     $Version = [string]$manifest.version
 }
-if ($Version -notmatch '^[0-9]+(\.[0-9]+){0,3}$') {
+$manifestVersion = ($Version -split '[-+]', 2)[0]
+if ($manifestVersion -notmatch '^[0-9]+(\.[0-9]+){0,3}$') {
     throw "Extension version '$Version' is not numeric (expected 1.0.0)."
 }
 
@@ -87,7 +88,7 @@ try {
         Copy-Item -LiteralPath (Join-Path $extensionDir $file) -Destination $stage
     }
 
-    $manifest.version = $Version
+    $manifest.version = $manifestVersion
     $stagedManifest = $manifest | ConvertTo-Json -Depth 10
     [System.IO.File]::WriteAllText(
         (Join-Path $stage 'manifest.json'),

@@ -47,6 +47,13 @@
                            RebootPrompt="no"
                            Timeout="30"
                            TerminateProcess="1"/>
+    <util:CloseApplication Target="EduFocus.NativeHost.exe"
+                           Description="EduFocus browser native host will be closed so the installer can continue."
+                           CloseMessage="no"
+                           ElevatedCloseMessage="no"
+                           RebootPrompt="no"
+                           Timeout="10"
+                           TerminateProcess="1"/>
 
     <!-- Keep user data unless the uninstall dialog (or a silent uninstall with
          DELETEUSERDATA=1) asks for deletion. -->
@@ -114,13 +121,13 @@
               Condition='NOT REMOVE~="ALL"'/>
       <Custom Action="UnregisterNativeMessagingHost"
               Before="RemoveFiles"
-              Condition='REMOVE~="ALL"'/>
+              Condition='REMOVE~="ALL" AND (NOT UPGRADINGPRODUCTCODE)'/>
       <Custom Action="UninstallWatchdogKeepData"
               After="StopServices"
-              Condition='REMOVE~="ALL" AND DELETEUSERDATA&lt;&gt;"1"'/>
+              Condition='REMOVE~="ALL" AND (NOT UPGRADINGPRODUCTCODE) AND DELETEUSERDATA&lt;&gt;"1"'/>
       <Custom Action="UninstallWatchdogDeleteData"
               After="StopServices"
-              Condition='REMOVE~="ALL" AND DELETEUSERDATA="1"'/>
+              Condition='REMOVE~="ALL" AND (NOT UPGRADINGPRODUCTCODE) AND DELETEUSERDATA="1"'/>
     </InstallExecuteSequence>
 
     <!-- First install shows the privacy notice before any files are copied.
