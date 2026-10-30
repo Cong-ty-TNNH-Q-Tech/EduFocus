@@ -186,7 +186,7 @@ public sealed class OnboardingServiceTests
         var setup = await harness.Service.ConfigurePinAsync(AuthHarness.InitialPin);
 
         var restarted = harness.CreateService();
-        var reset = await restarted.ResetPinWithRecoveryCodeAsync(setup.RecoveryCode, AuthHarness.UpdatedPin);
+        var reset = await restarted.ResetPinWithRecoveryCodeAsync(setup.RecoveryCode, AuthHarness.ReplacementPin);
 
         reset.Status.Should().Be(ParentAuthStatus.Success);
         reset.RecoveryCode.Should().Be(AuthHarness.SecondRecoveryCode);
