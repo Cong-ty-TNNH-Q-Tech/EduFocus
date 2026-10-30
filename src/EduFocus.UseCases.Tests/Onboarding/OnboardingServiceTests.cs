@@ -177,4 +177,18 @@ public sealed class OnboardingServiceTests
             .Should()
             .Be(1);
     }
+
+    [Fact]
+    public async Task Restart_after_pin_setup_can_reset_pin_with_recovery_code()
+    {
+        var harness = new OnboardingHarness();
+        await harness.Service.RecordPrivacyConsentAsync();
+        var setup = await harness.Service.ConfigurePinAsync(AuthHarness.InitialPin);
+
+        var restarted = harness.CreateService();
+        var reset = await restarted.ResetPinWithRecoveryCodeAsync(setup.RecoveryCode, AuthHarness.UpdatedPin);
+
+        reset.Status.Should().Be(ParentAuthStatus.Success);
+        reset.RecoveryCode.Should().Be(AuthHarness.SecondRecoveryCode);
+    }
 }

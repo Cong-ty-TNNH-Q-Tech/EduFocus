@@ -85,8 +85,18 @@ public sealed class ServiceStatusPoller : IDisposable
             return;
         }
 
-        _viewModel.Apply(status, []);
-        await _monitoring.SyncAsync(status, cancellationToken);
+        try
+        {
+            _viewModel.Apply(status, []);
+            await _monitoring.SyncAsync(status, cancellationToken);
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+        }
+        catch (Exception ex)
+        {
+            _logger.Error(LogCategories.Protection, "Could not apply the polled protection status.", ex);
+        }
     }
 
     private async void OnTimerTick(object? sender, EventArgs e)

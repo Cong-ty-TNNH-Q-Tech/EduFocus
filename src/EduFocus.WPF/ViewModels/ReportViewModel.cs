@@ -181,7 +181,7 @@ public sealed partial class ReportViewModel : ObservableObject
     /// </summary>
     public async Task RefreshAsync(CancellationToken cancellationToken = default)
     {
-        await _gate.WaitAsync(cancellationToken).ConfigureAwait(false);
+        await _gate.WaitAsync(cancellationToken);
 
         try
         {
@@ -196,8 +196,7 @@ public sealed partial class ReportViewModel : ObservableObject
             var range = SelectedRange ?? Ranges[0];
             var today = DateOnly.FromDateTime(_timeProvider.GetLocalNow().DateTime);
             var report = await _reports
-                .GetAsync(BuildPeriod(range.Kind, today), cancellationToken)
-                .ConfigureAwait(false);
+                .GetAsync(BuildPeriod(range.Kind, today), cancellationToken);
 
             Apply(report, range);
         }
@@ -233,7 +232,7 @@ public sealed partial class ReportViewModel : ObservableObject
 
         try
         {
-            var result = await _exports.ExportCsvAsync(report).ConfigureAwait(false);
+            var result = await _exports.ExportCsvAsync(report);
             ExportIsError = false;
             ExportMessage = BuildExportMessage(result);
         }

@@ -38,6 +38,7 @@ public partial class App : Application
 {
     public static ServiceProvider Services { get; private set; } = null!;
     private static System.Threading.Mutex? _mutex;
+    private static bool _ownsMutex;
     private static IDisposable? _correlationScope;
 
     protected override async void OnStartup(StartupEventArgs e)
@@ -55,8 +56,8 @@ public partial class App : Application
             return;
         }
 
-        _mutex = new System.Threading.Mutex(true, WatchdogNames.AppInstanceMutex, out bool createdNew);
-        if (!createdNew)
+        _mutex = new System.Threading.Mutex(true, WatchdogNames.AppInstanceMutex, out _ownsMutex);
+        if (!_ownsMutex)
         {
             MessageBox.Show("Ứng dụng EduFocus đang được chạy.", "Thông báo", MessageBoxButton.OK, MessageBoxImage.Information);
             Application.Current.Shutdown();
@@ -734,7 +735,19 @@ public partial class App : Application
             _correlationScope?.Dispose();
         }
 
-        _mutex?.ReleaseMutex();
+        if (_ownsMutex)
+        {
+            try
+            {
+                _mutex?.ReleaseMutex();
+            }
+            catch (ApplicationException)
+            {
+            }
+
+            _ownsMutex = false;
+        }
+
         _mutex?.Dispose();
         base.OnExit(e);
     }

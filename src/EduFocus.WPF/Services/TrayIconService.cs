@@ -22,6 +22,7 @@ public sealed class TrayIconService : IDisposable
     private NotifyIcon? _icon;
     private ToolStripMenuItem? _statusItem;
     private ToolStripMenuItem? _cameraItem;
+    private bool _exitDialogOpen;
 
     public TrayIconService(
         ProtectionStatusViewModel protection,
@@ -140,6 +141,10 @@ public sealed class TrayIconService : IDisposable
 
     private void ShowExitDialog()
     {
+        if (_exitDialogOpen)
+            return;
+
+        _exitDialogOpen = true;
         try
         {
             var window = _exitWindowFactory();
@@ -149,6 +154,10 @@ public sealed class TrayIconService : IDisposable
         catch (Exception ex)
         {
             _logger.Error(LogCategories.UI, "Could not open the exit dialog.", ex);
+        }
+        finally
+        {
+            _exitDialogOpen = false;
         }
     }
 

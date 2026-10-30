@@ -52,6 +52,9 @@ public partial class OnboardingViewModel : ObservableObject
         "EduFocus sẽ kiểm tra nhanh camera trước khi bật giám sát.";
     [ObservableProperty] private bool _cameraStatusIsWarning;
     [ObservableProperty] private bool _isCheckingCamera;
+    [ObservableProperty] private bool _isBusy;
+    [ObservableProperty] private bool _useRecoveryCodeOnResume;
+    [ObservableProperty] private string _resumeRecoveryCode = string.Empty;
     [ObservableProperty] private string _issuedRecoveryCode = string.Empty;
     [ObservableProperty] private bool _recoveryCodeSaved;
 
@@ -67,10 +70,11 @@ public partial class OnboardingViewModel : ObservableObject
     public bool IsPinVisible => View == OnboardingStep.Pin;
     public bool IsResumePinVisible => View == OnboardingStep.ResumePin;
     public bool IsRecoveryCodeVisible => View == OnboardingStep.RecoveryCode;
+    public bool ShowResumeRecoveryInput => _credentialConfigured && UseRecoveryCodeOnResume;
 
-    public bool CanContinuePrivacy => PrivacyAccepted && GuardianAcknowledged;
-    public bool CanFinish => RecoveryCodeSaved && IssuedRecoveryCode.Length > 0;
-    public bool CanCheckCamera => !IsCheckingCamera;
+    public bool CanContinuePrivacy => !IsBusy && PrivacyAccepted && GuardianAcknowledged;
+    public bool CanFinish => !IsBusy && RecoveryCodeSaved && IssuedRecoveryCode.Length > 0;
+    public bool CanCheckCamera => !IsBusy && !IsCheckingCamera;
 
     public string StepLabel => View switch
     {
@@ -124,6 +128,16 @@ public partial class OnboardingViewModel : ObservableObject
     partial void OnIssuedRecoveryCodeChanged(string value) => OnPropertyChanged(nameof(CanFinish));
 
     partial void OnIsCheckingCameraChanged(bool value) => OnPropertyChanged(nameof(CanCheckCamera));
+
+    partial void OnIsBusyChanged(bool value)
+    {
+        OnPropertyChanged(nameof(CanContinuePrivacy));
+        OnPropertyChanged(nameof(CanFinish));
+        OnPropertyChanged(nameof(CanCheckCamera));
+    }
+
+    partial void OnUseRecoveryCodeOnResumeChanged(bool value) =>
+        OnPropertyChanged(nameof(ShowResumeRecoveryInput));
 
     partial void OnViewChanged(OnboardingStep value)
     {
@@ -202,24 +216,21 @@ public partial class OnboardingViewModel : ObservableObject
     [RelayCommand]
     private async Task ContinuePrivacyAsync()
     {
+        if (IsBusy)
+            return;
+
         if (!CanContinuePrivacy)
         {
             SetStatus("Bạn cần xác nhận cả hai mục trước khi tiếp tục.", true);
             return;
         }
 
+        IsBusy = true;
         SetStatus("Đang lưu xác nhận quyền riêng tư...", false);
 
         try
         {
             await _onboarding.RecordPrivacyConsentAsync();
-
-            if (_credentialConfigured)
-            {
-                View = OnboardingStep.ResumePin;
-                SetStatus("Nhập PIN phụ huynh để tạo lại mã khôi phục.", false);
-                return;
-            }
 
             View = OnboardingStep.Preferences;
             SetStatus("Chọn tuỳ chọn phù hợp với gia đình.", false);
@@ -230,17 +241,33 @@ public partial class OnboardingViewModel : ObservableObject
             _logger.Error(LogCategories.UI, "Could not record onboarding privacy consent.", ex);
             SetStatus("Không thể lưu xác nhận. Kiểm tra quyền truy cập dữ liệu và thử lại.", true);
         }
+        finally
+        {
+            IsBusy = false;
+        }
     }
 
     [RelayCommand]
     private async Task ContinuePreferencesAsync()
     {
+        if (IsBusy)
+            return;
+
+        IsBusy = true;
         SetStatus("Đang lưu tuỳ chọn...", false);
 
         try
         {
             await _onboarding.SavePreferencesAsync(
                 new OnboardingPreferences(MonitoringEnabled, StartWithWindows));
+
+            if (_credentialConfigured)
+            {
+                UseRecoveryCodeOnResume = false;
+                View = OnboardingStep.ResumePin;
+                SetStatus("Nhập PIN phụ huynh để tạo lại mã khôi phục.", false);
+                return;
+            }
 
             View = OnboardingStep.Pin;
             SetStatus("Tạo PIN phụ huynh để bảo vệ các cài đặt quan trọng.", false);
@@ -250,13 +277,61 @@ public partial class OnboardingViewModel : ObservableObject
             _logger.Error(LogCategories.UI, "Could not save onboarding preferences.", ex);
             SetStatus("Không thể lưu tuỳ chọn. Kiểm tra quyền truy cập dữ liệu và thử lại.", true);
         }
+        finally
+        {
+            IsBusy = false;
+        }
+    }
+
+    [RelayCommand]
+    private void OpenResumeRecoveryReset()
+    {
+        if (IsBusy || !_credentialConfigured)
+            return;
+
+        ClearInputs();
+        UseRecoveryCodeOnResume = true;
+        OnPropertyChanged(nameof(ShowResumeRecoveryInput));
+        View = OnboardingStep.Pin;
+        SetStatus("Nhập mã khôi phục đã lưu và tạo PIN mới.", false);
+    }
+
+    [RelayCommand]
+    private void BackToResumePin()
+    {
+        if (IsBusy || !_credentialConfigured)
+            return;
+
+        ClearInputs();
+        UseRecoveryCodeOnResume = false;
+        OnPropertyChanged(nameof(ShowResumeRecoveryInput));
+        View = OnboardingStep.ResumePin;
+        SetStatus("Nhập PIN phụ huynh để tiếp tục.", false);
+    }
+
+    [RelayCommand]
+    private async Task OpenPreferencesAsync()
+    {
+        if (IsBusy)
+            return;
+
+        ClearInputs();
+        View = OnboardingStep.Preferences;
+        SetStatus("Chọn tuỳ chọn phù hợp với gia đình.", false);
+        await CheckCameraAsync();
     }
 
     [RelayCommand]
     private async Task ConfigurePinAsync()
     {
-        if (View != OnboardingStep.Pin)
+        if (IsBusy || View != OnboardingStep.Pin)
             return;
+
+        if (_credentialConfigured && UseRecoveryCodeOnResume && string.IsNullOrWhiteSpace(ResumeRecoveryCode))
+        {
+            SetStatus("Nhập mã khôi phục đã lưu để đặt lại PIN.", true);
+            return;
+        }
 
         if (!ParentPinPolicy.IsValid(Pin))
         {
@@ -271,13 +346,47 @@ public partial class OnboardingViewModel : ObservableObject
         }
 
         var pin = Pin;
+        var recoveryCode = ResumeRecoveryCode;
+        var resetWithRecovery = _credentialConfigured && UseRecoveryCodeOnResume;
         ClearInputs();
-        SetStatus("Đang tạo PIN...", false);
+        IsBusy = true;
+        SetStatus(resetWithRecovery ? "Đang đặt lại PIN..." : "Đang tạo PIN...", false);
 
         try
         {
+            if (resetWithRecovery)
+            {
+                var resetResult = await Task.Run(() => _onboarding.ResetPinWithRecoveryCodeAsync(recoveryCode, pin));
+                switch (resetResult.Status)
+                {
+                    case ParentAuthStatus.Success when resetResult.RecoveryCode is not null:
+                        _credentialConfigured = true;
+                        UseRecoveryCodeOnResume = false;
+                        IssuedRecoveryCode = resetResult.RecoveryCode;
+                        RecoveryCodeSaved = false;
+                        View = OnboardingStep.RecoveryCode;
+                        SetStatus("PIN đã được đặt lại. Hãy lưu mã khôi phục mới trước khi hoàn tất.", false);
+                        break;
+                    case ParentAuthStatus.LockedOut:
+                        SetStatus(LockoutMessage(resetResult.LockoutUntilUtc), true);
+                        break;
+                    case ParentAuthStatus.NotConfigured:
+                        _credentialConfigured = false;
+                        UseRecoveryCodeOnResume = false;
+                        OnPropertyChanged(nameof(ShowResumeRecoveryInput));
+                        SetStatus("Chưa có PIN phụ huynh trên máy này. Hãy tạo PIN mới.", true);
+                        break;
+                    default:
+                        SetStatus($"Mã khôi phục không đúng. Còn {resetResult.RemainingAttempts} lần thử.", true);
+                        break;
+                }
+
+                return;
+            }
+
             var result = await Task.Run(() => _onboarding.ConfigurePinAsync(pin));
             _credentialConfigured = true;
+            OnPropertyChanged(nameof(ShowResumeRecoveryInput));
             IssuedRecoveryCode = result.RecoveryCode;
             RecoveryCodeSaved = false;
             View = OnboardingStep.RecoveryCode;
@@ -296,12 +405,16 @@ public partial class OnboardingViewModel : ObservableObject
             _logger.Error(LogCategories.Security, "Could not configure the onboarding PIN.", ex);
             SetStatus("Không thể lưu PIN. Kiểm tra quyền truy cập dữ liệu và thử lại.", true);
         }
+        finally
+        {
+            IsBusy = false;
+        }
     }
 
     [RelayCommand]
     private async Task ResumeWithPinAsync()
     {
-        if (View != OnboardingStep.ResumePin)
+        if (IsBusy || View != OnboardingStep.ResumePin)
             return;
 
         if (string.IsNullOrEmpty(ResumePin))
@@ -312,6 +425,7 @@ public partial class OnboardingViewModel : ObservableObject
 
         var pin = ResumePin;
         ClearInputs();
+        IsBusy = true;
         SetStatus("Đang xác thực PIN...", false);
 
         try
@@ -330,6 +444,7 @@ public partial class OnboardingViewModel : ObservableObject
                     SetStatus(LockoutMessage(result.LockoutUntilUtc), true);
                     break;
                 case ParentAuthStatus.NotConfigured:
+                    _credentialConfigured = false;
                     View = OnboardingStep.Welcome;
                     SetStatus("Chưa có PIN phụ huynh trên máy này. Hãy thiết lập lại.", true);
                     break;
@@ -346,6 +461,10 @@ public partial class OnboardingViewModel : ObservableObject
         {
             _logger.Error(LogCategories.Security, "Could not reissue the onboarding recovery code.", ex);
             SetStatus("Không thể xác thực PIN lúc này. Vui lòng thử lại.", true);
+        }
+        finally
+        {
+            IsBusy = false;
         }
     }
 
@@ -372,12 +491,16 @@ public partial class OnboardingViewModel : ObservableObject
     [RelayCommand]
     private async Task FinishAsync()
     {
+        if (IsBusy)
+            return;
+
         if (!CanFinish)
         {
             SetStatus("Xác nhận bạn đã lưu mã khôi phục trước khi hoàn tất.", true);
             return;
         }
 
+        IsBusy = true;
         SetStatus("Đang hoàn tất thiết lập...", false);
 
         try
@@ -391,6 +514,10 @@ public partial class OnboardingViewModel : ObservableObject
         {
             _logger.Error(LogCategories.UI, "Could not complete onboarding.", ex);
             SetStatus("Không thể hoàn tất thiết lập. Kiểm tra quyền truy cập dữ liệu và thử lại.", true);
+        }
+        finally
+        {
+            IsBusy = false;
         }
     }
 
@@ -453,6 +580,7 @@ public partial class OnboardingViewModel : ObservableObject
         Pin = string.Empty;
         ConfirmPin = string.Empty;
         ResumePin = string.Empty;
+        ResumeRecoveryCode = string.Empty;
         PasswordBoxesShouldClear?.Invoke(this, EventArgs.Empty);
     }
 

@@ -73,6 +73,7 @@ public sealed class RetentionSchedulerService : IDisposable
 
             if (result.Completed)
             {
+                _lastRunLocalDate = today;
                 _logger.Info(LogCategories.Database, "Daily retention completed.");
             }
             else
@@ -88,7 +89,6 @@ public sealed class RetentionSchedulerService : IDisposable
         }
         finally
         {
-            _lastRunLocalDate = today;
             _running = false;
         }
     }

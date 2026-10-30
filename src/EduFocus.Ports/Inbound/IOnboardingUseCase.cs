@@ -25,5 +25,11 @@ public interface IOnboardingUseCase
         string pin,
         CancellationToken cancellationToken = default);
 
+    /// <summary>Resets the PIN using the recovery code when onboarding was interrupted after PIN setup.</summary>
+    Task<ParentPinResetResult> ResetPinWithRecoveryCodeAsync(
+        string recoveryCode,
+        string newPin,
+        CancellationToken cancellationToken = default);
+
     Task CompleteAsync(CancellationToken cancellationToken = default);
 }

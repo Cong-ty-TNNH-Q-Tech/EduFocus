@@ -50,6 +50,7 @@ public partial class ParentModeViewModel : ObservableObject
     private int _ticksSinceDashboardRefresh;
 
     [ObservableProperty] private ParentModeView _view = ParentModeView.Loading;
+    [ObservableProperty] private bool _isBusy;
     [ObservableProperty] private string _statusMessage = string.Empty;
     [ObservableProperty] private bool _statusIsError;
     [ObservableProperty] private string _issuedRecoveryCode = string.Empty;
@@ -177,7 +178,7 @@ public partial class ParentModeViewModel : ObservableObject
     [RelayCommand]
     private async Task LoginAsync()
     {
-        if (View != ParentModeView.Login)
+        if (IsBusy || View != ParentModeView.Login)
             return;
 
         if (string.IsNullOrEmpty(LoginPin))
@@ -188,6 +189,7 @@ public partial class ParentModeViewModel : ObservableObject
 
         var pin = LoginPin;
         ClearInputs();
+        IsBusy = true;
         SetStatus("Đang xác thực...", false);
 
         try
@@ -199,6 +201,10 @@ public partial class ParentModeViewModel : ObservableObject
         {
             _logger.Error(LogCategories.Security, "Parent PIN verification failed unexpectedly.", ex);
             SetStatus("Không thể xác thực lúc này. Vui lòng thử lại.", true);
+        }
+        finally
+        {
+            IsBusy = false;
         }
     }
 
@@ -225,7 +231,7 @@ public partial class ParentModeViewModel : ObservableObject
     [RelayCommand]
     private async Task ChangePinAsync()
     {
-        if (View != ParentModeView.ChangePin)
+        if (IsBusy || View != ParentModeView.ChangePin)
             return;
 
         if (string.IsNullOrEmpty(CurrentPin))
@@ -243,6 +249,7 @@ public partial class ParentModeViewModel : ObservableObject
         var current = CurrentPin;
         var newPin = NewPin;
         ClearInputs();
+        IsBusy = true;
         SetStatus("Đang đổi PIN...", false);
 
         try
@@ -283,12 +290,16 @@ public partial class ParentModeViewModel : ObservableObject
             _logger.Error(LogCategories.Security, "Parent PIN change failed unexpectedly.", ex);
             SetStatus("Không thể đổi PIN lúc này. Vui lòng thử lại.", true);
         }
+        finally
+        {
+            IsBusy = false;
+        }
     }
 
     [RelayCommand]
     private async Task ResetPinAsync()
     {
-        if (View != ParentModeView.RecoveryReset)
+        if (IsBusy || View != ParentModeView.RecoveryReset)
             return;
 
         if (string.IsNullOrWhiteSpace(RecoveryCode))
@@ -306,6 +317,7 @@ public partial class ParentModeViewModel : ObservableObject
         var recoveryCode = RecoveryCode;
         var newPin = ResetNewPin;
         ClearInputs();
+        IsBusy = true;
         SetStatus("Đang đặt lại PIN...", false);
 
         try
@@ -345,6 +357,10 @@ public partial class ParentModeViewModel : ObservableObject
         {
             _logger.Error(LogCategories.Security, "Parent PIN reset failed unexpectedly.", ex);
             SetStatus("Không thể đặt lại PIN lúc này. Vui lòng thử lại.", true);
+        }
+        finally
+        {
+            IsBusy = false;
         }
     }
 
@@ -543,6 +559,13 @@ public partial class ParentModeViewModel : ObservableObject
             _lockoutUntilUtc = null;
             if (View == ParentModeView.Login)
                 SetStatus("Bạn có thể thử lại PIN.", false);
+            return;
+        }
+
+        if (remaining < TimeSpan.FromMinutes(1))
+        {
+            var seconds = Math.Max(1, (int)Math.Ceiling(remaining.TotalSeconds));
+            SetStatus($"Đã tạm khóa đăng nhập. Vui lòng thử lại sau {seconds} giây.", true);
             return;
         }
 

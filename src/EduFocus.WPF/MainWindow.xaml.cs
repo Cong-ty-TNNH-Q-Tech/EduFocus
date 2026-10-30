@@ -90,6 +90,9 @@ public partial class MainWindow : Window
         window.Owner = this;
         window.ShowDialog();
 
+        if (_exitState.IsExitApproved || !IsLoaded)
+            return;
+
         // Protection and the today dashboard may have changed inside Parent Mode.
         _ = RefreshDashboardAsync();
     }

@@ -73,7 +73,7 @@ public sealed partial class DashboardViewModel : ObservableObject
     /// </summary>
     public async Task RefreshAsync(CancellationToken cancellationToken = default)
     {
-        if (!await _gate.WaitAsync(0, cancellationToken).ConfigureAwait(false))
+        if (!await _gate.WaitAsync(0, cancellationToken))
             return;
 
         try
@@ -81,7 +81,7 @@ public sealed partial class DashboardViewModel : ObservableObject
             if (!_loaded)
                 IsLoading = true;
 
-            var summary = await _dashboard.GetTodayAsync(cancellationToken).ConfigureAwait(false);
+            var summary = await _dashboard.GetTodayAsync(cancellationToken);
             Apply(summary);
             _loaded = true;
         }

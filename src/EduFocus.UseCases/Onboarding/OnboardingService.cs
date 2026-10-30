@@ -111,6 +111,18 @@ public sealed class OnboardingService : IOnboardingUseCase
         return await _auth.RegenerateRecoveryCodeAsync(pin, cancellationToken);
     }
 
+    public async Task<ParentPinResetResult> ResetPinWithRecoveryCodeAsync(
+        string recoveryCode,
+        string newPin,
+        CancellationToken cancellationToken = default)
+    {
+        var settings = await _settings.GetAsync(cancellationToken);
+        if (settings?.HasPrivacyConsent != true)
+            throw new InvalidOperationException(ConsentRequired);
+
+        return await _auth.ResetPinWithRecoveryCodeAsync(recoveryCode, newPin, cancellationToken);
+    }
+
     public async Task CompleteAsync(CancellationToken cancellationToken = default)
     {
         var now = UtcNow();
