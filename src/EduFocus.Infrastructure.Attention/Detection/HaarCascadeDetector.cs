@@ -12,13 +12,29 @@ internal sealed class HaarCascadeDetector : IFaceDetector
     public HaarCascadeDetector(string faceModelPath, string eyeModelPath)
     {
         var sw = Stopwatch.StartNew();
-        _faceCascade = new CascadeClassifier(faceModelPath);
-        _eyeCascade = new CascadeClassifier(eyeModelPath);
-        sw.Stop();
-        LoadMs = sw.ElapsedMilliseconds;
+        CascadeClassifier? faceCascade = null;
+        CascadeClassifier? eyeCascade = null;
 
-        if (_faceCascade.Empty() || _eyeCascade.Empty())
-            throw new InvalidOperationException("Could not load Haar cascade model files.");
+        try
+        {
+            faceCascade = new CascadeClassifier(faceModelPath);
+            eyeCascade = new CascadeClassifier(eyeModelPath);
+            sw.Stop();
+            LoadMs = sw.ElapsedMilliseconds;
+
+            if (faceCascade.Empty() || eyeCascade.Empty())
+                throw new InvalidOperationException("Could not load Haar cascade model files.");
+
+            _faceCascade = faceCascade;
+            _eyeCascade = eyeCascade;
+            faceCascade = null;
+            eyeCascade = null;
+        }
+        finally
+        {
+            faceCascade?.Dispose();
+            eyeCascade?.Dispose();
+        }
 
         var faceSize = new FileInfo(faceModelPath).Length;
         var eyeSize = new FileInfo(eyeModelPath).Length;
@@ -86,7 +102,8 @@ internal sealed class HaarCascadeDetector : IFaceDetector
             EyeCount: eyeCount,
             HeadYawRatio: yawRatio,
             HeadPitchRatio: pitchRatio,
-            LandmarksAvailable: false);
+            LandmarksAvailable: false,
+            EyesClosed: eyeCount == 0);
     }
 
     public void Dispose()

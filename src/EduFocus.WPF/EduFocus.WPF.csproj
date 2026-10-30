@@ -58,6 +58,11 @@
              Link="LICENSE"
              CopyToOutputDirectory="PreserveNewest"
              CopyToPublishDirectory="PreserveNewest" />
+    <Content Include="..\..\tools\AttentionPipelineSpike\models\*"
+             Condition="Exists('..\..\tools\AttentionPipelineSpike\models')"
+             Link="models\%(Filename)%(Extension)"
+             CopyToOutputDirectory="PreserveNewest"
+             CopyToPublishDirectory="PreserveNewest" />
   </ItemGroup>
 
 </Project>

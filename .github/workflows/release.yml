@@ -164,6 +164,11 @@ jobs:
             -p:FileVersion="${{ steps.ver.outputs.numeric }}" `
             --output publish/native-host/
 
+      - name: Fetch attention models into publish payload
+        shell: pwsh
+        run: |
+          ./tools/AttentionPipelineSpike/fetch-models.ps1 -Destination publish/models
+
       - name: Verify executable versions
         shell: pwsh
         env:

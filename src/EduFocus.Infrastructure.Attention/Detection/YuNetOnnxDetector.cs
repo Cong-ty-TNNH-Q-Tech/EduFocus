@@ -22,7 +22,7 @@ internal sealed class YuNetOnnxDetector : IFaceDetector
     public YuNetOnnxDetector(string modelPath, int threads, float scoreThreshold, float nmsThreshold)
     {
         var sw = Stopwatch.StartNew();
-        var options = new SessionOptions
+        using var options = new SessionOptions
         {
             GraphOptimizationLevel = GraphOptimizationLevel.ORT_ENABLE_ALL,
             IntraOpNumThreads = Math.Max(1, threads),

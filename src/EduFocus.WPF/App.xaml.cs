@@ -250,7 +250,7 @@ public partial class App : Application
         services.AddSingleton(new AttentionAnalyzerOptions());
         services.AddSingleton(AttentionPipelineOptions.Default);
         services.AddSingleton<IAttentionFrameAnalyzer>(provider =>
-            AttentionAnalyzerFactory.Create(
+            AttentionAnalyzerFactory.CreateLazy(
                 "yunet",
                 provider.GetRequiredService<AttentionAnalyzerOptions>(),
                 Path.Combine(AppContext.BaseDirectory, "models")));
