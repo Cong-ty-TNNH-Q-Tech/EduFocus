@@ -79,7 +79,7 @@ public sealed class ReportService : IReportUseCase
                 .OrderByDescending(session => session.StartedAtUtc)
                 .Take(MaxDisplayedSessions)
                 .ToArray(),
-            Timeline = BuildTimeline(samples, _timeProvider.LocalTimeZone),
+            Timeline = BuildTimeline(samples, _timeProvider.LocalTimeZone, period),
             TopActivities = BuildTopActivities(samples),
             AttentionEvents = events,
             SessionCount = sessions.Count,
@@ -133,6 +133,8 @@ public sealed class ReportService : IReportUseCase
                 ActiveSeconds = daySessions.Sum(session => session.ActiveSeconds),
                 StudySeconds = daySessions.Sum(session => session.StudySeconds),
                 DistractionSeconds = daySessions.Sum(session => session.DistractionSeconds),
+                NeutralSeconds = daySessions.Sum(session => session.NeutralSeconds),
+                OnlineClassSeconds = daySessions.Sum(session => session.OnlineClassSeconds),
                 BlockedAttemptCount = daySessions.Sum(session => session.BlockedAttemptCount),
                 ActiveSessionStartedAtUtc = daySessions
                     .Where(session => session.IsActive)
@@ -152,7 +154,8 @@ public sealed class ReportService : IReportUseCase
 
     private static IReadOnlyList<HourlyActivityBucket> BuildTimeline(
         IReadOnlyList<ReportActivitySample> samples,
-        TimeZoneInfo timeZone)
+        TimeZoneInfo timeZone,
+        ReportPeriod period)
     {
         var buckets = new Dictionary<(DateOnly Date, int Hour), (int Study, int Distraction, int Neutral)>();
 
@@ -164,7 +167,11 @@ public sealed class ReportService : IReportUseCase
             // Samples are stored in UTC; the conversion applies the historical
             // DST rules of the selected zone, including a repeated local hour.
             var local = TimeZoneInfo.ConvertTimeFromUtc(AsUtc(sample.SampledAtUtc), timeZone);
-            var key = (DateOnly.FromDateTime(local), local.Hour);
+            var localDate = DateOnly.FromDateTime(local);
+            if (!period.Contains(localDate))
+                continue;
+
+            var key = (localDate, local.Hour);
 
             buckets.TryGetValue(key, out var totals);
 

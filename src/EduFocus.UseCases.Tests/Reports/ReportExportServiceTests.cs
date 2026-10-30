@@ -91,6 +91,7 @@ public sealed class ReportExportServiceTests
         Cell(header, summary, "Mất tập trung (giây)").Should().Be("120");
         Cell(header, summary, "Trung tính (giây)").Should().Be("60");
         Cell(header, summary, "Tập trung (giây)").Should().Be(report.FocusedSeconds.ToString(CultureInfo.InvariantCulture));
+        Cell(header, summary, "Mất tập trung camera (giây)").Should().Be("60");
         Cell(header, summary, "Vắng mặt (giây)").Should().Be("20");
         Cell(header, summary, "Thời gian quan sát (giây)").Should().Be("480");
         Cell(header, summary, "Thời gian đủ điều kiện (giây)").Should().Be("700");
@@ -106,6 +107,8 @@ public sealed class ReportExportServiceTests
         Cell(header, day, "Ngày").Should().Be("2026-10-30");
         Cell(header, day, "Số phiên").Should().Be("2");
         Cell(header, day, "Học (giây)").Should().Be("900");
+        Cell(header, day, "Trung tính (giây)").Should().Be("60");
+        Cell(header, day, "Mất tập trung camera (giây)").Should().Be("60");
 
         var sessionRows = RowsOfType(rows, "Phiên học");
         sessionRows.Should().HaveCount(2);

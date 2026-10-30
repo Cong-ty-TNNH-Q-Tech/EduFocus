@@ -20,6 +20,10 @@ public sealed record DailyStudySummary
 
     public int DistractionSeconds { get; init; }
 
+    public int NeutralSeconds { get; init; }
+
+    public int OnlineClassSeconds { get; init; }
+
     public int BlockedAttemptCount { get; init; }
 
     public DateTime? ActiveSessionStartedAtUtc { get; init; }

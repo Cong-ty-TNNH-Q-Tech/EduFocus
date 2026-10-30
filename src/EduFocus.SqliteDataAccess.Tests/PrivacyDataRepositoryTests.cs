@@ -40,7 +40,7 @@ public sealed class PrivacyDataRepositoryTests
 
         (await repository.DeleteActivitySamplesBatchAsync(batchSize: 100)).Should().Be(2);
         (await repository.DeleteAttentionEventsBatchAsync(batchSize: 100)).Should().Be(1);
-        (await repository.DeleteBlockedAttemptsBatchAsync(batchSize: 100)).Should().Be(2);
+        (await repository.DeleteBlockedAttemptsBatchAsync(batchSize: 100)).Should().Be(1);
         (await repository.DeleteFinishedSessionsBatchAsync(batchSize: 100)).Should().Be(2);
         (await repository.DeleteFinishedSessionsBatchAsync(batchSize: 100)).Should().Be(0);
 
@@ -50,7 +50,8 @@ public sealed class PrivacyDataRepositoryTests
         (await read.ActivitySamples.CountAsync()).Should().Be(2);
         (await read.ActivitySamples.AllAsync(x => x.SessionId == seeded.ActiveSessionId)).Should().BeTrue();
         (await read.AttentionEvents.CountAsync()).Should().Be(1);
-        (await read.BlockedAttempts.CountAsync()).Should().Be(0);
+        (await read.BlockedAttempts.CountAsync()).Should().Be(1);
+        (await read.BlockedAttempts.SingleAsync()).SessionId.Should().Be(seeded.ActiveSessionId);
 
         await repository.VacuumAsync();
     }

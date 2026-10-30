@@ -40,6 +40,7 @@ internal static class ReportCsvWriter
         "Trung tính (giây)",
         "Lớp trực tuyến (giây)",
         "Tập trung (giây)",
+        "Mất tập trung camera (giây)",
         "Vắng mặt (giây)",
         "Buồn ngủ (giây)",
         "Camera không khả dụng (giây)",
@@ -74,16 +75,17 @@ internal static class ReportCsvWriter
         summary[13] = Number(report.NeutralSeconds);
         summary[14] = Number(report.OnlineClassSeconds);
         summary[15] = Number(report.FocusedSeconds);
-        summary[16] = Number(report.AbsentSeconds);
-        summary[17] = Number(report.DrowsySeconds);
-        summary[18] = Number(report.CameraUnavailableSeconds);
-        summary[19] = Number(report.Attention.MonitoredSeconds);
-        summary[20] = Number(report.MonitoringEligibleSeconds);
-        summary[21] = Percent(report.Attention.CoveragePercent);
-        summary[22] = Percent(report.Attention.AttentionPercent);
-        summary[23] = Percent(report.ConfidenceAvg is { } summaryConfidence ? summaryConfidence * 100 : null);
-        summary[24] = Number(report.BlockedAttemptCount);
-        summary[26] = BuildSummaryNote(report, exportedAt, warnings);
+        summary[16] = Number(report.DistractedSeconds);
+        summary[17] = Number(report.AbsentSeconds);
+        summary[18] = Number(report.DrowsySeconds);
+        summary[19] = Number(report.CameraUnavailableSeconds);
+        summary[20] = Number(report.Attention.MonitoredSeconds);
+        summary[21] = Number(report.MonitoringEligibleSeconds);
+        summary[22] = Percent(report.Attention.CoveragePercent);
+        summary[23] = Percent(report.Attention.AttentionPercent);
+        summary[24] = Percent(report.ConfidenceAvg is { } summaryConfidence ? summaryConfidence * 100 : null);
+        summary[25] = Number(report.BlockedAttemptCount);
+        summary[27] = BuildSummaryNote(report, exportedAt, warnings);
         AppendRow(builder, summary);
 
         foreach (var day in report.Days.Where(day => day.HasSessions))
@@ -93,15 +95,18 @@ internal static class ReportCsvWriter
             row[10] = Number(day.ActiveSeconds);
             row[11] = Number(day.StudySeconds);
             row[12] = Number(day.DistractionSeconds);
+            row[13] = Number(day.NeutralSeconds);
+            row[14] = Number(day.OnlineClassSeconds);
             row[15] = Number(day.FocusedSeconds);
-            row[16] = Number(day.AbsentSeconds);
-            row[17] = Number(day.DrowsySeconds);
-            row[18] = Number(day.CameraUnavailableSeconds);
-            row[19] = Number(day.Attention.MonitoredSeconds);
-            row[20] = Number(day.MonitoringEligibleSeconds);
-            row[21] = Percent(day.Attention.CoveragePercent);
-            row[22] = Percent(day.Attention.AttentionPercent);
-            row[24] = Number(day.BlockedAttemptCount);
+            row[16] = Number(day.DistractedSeconds);
+            row[17] = Number(day.AbsentSeconds);
+            row[18] = Number(day.DrowsySeconds);
+            row[19] = Number(day.CameraUnavailableSeconds);
+            row[20] = Number(day.Attention.MonitoredSeconds);
+            row[21] = Number(day.MonitoringEligibleSeconds);
+            row[22] = Percent(day.Attention.CoveragePercent);
+            row[23] = Percent(day.Attention.AttentionPercent);
+            row[25] = Number(day.BlockedAttemptCount);
             AppendRow(builder, row);
         }
 
@@ -119,15 +124,16 @@ internal static class ReportCsvWriter
             row[13] = Number(session.NeutralSeconds);
             row[14] = Number(session.OnlineClassSeconds);
             row[15] = Number(session.FocusedSeconds);
-            row[16] = Number(session.AbsentSeconds);
-            row[17] = Number(session.DrowsySeconds);
-            row[18] = Number(session.CameraUnavailableSeconds);
-            row[19] = Number(session.MonitoredSeconds);
-            row[20] = Number(session.MonitoringEligibleSeconds);
-            row[21] = Percent(session.CoveragePercent);
-            row[22] = Percent(session.AttentionPercent);
-            row[23] = Percent(session.ConfidenceAvg is { } sessionConfidence ? sessionConfidence * 100 : null);
-            row[24] = Number(session.BlockedAttemptCount);
+            row[16] = Number(session.DistractedSeconds);
+            row[17] = Number(session.AbsentSeconds);
+            row[18] = Number(session.DrowsySeconds);
+            row[19] = Number(session.CameraUnavailableSeconds);
+            row[20] = Number(session.MonitoredSeconds);
+            row[21] = Number(session.MonitoringEligibleSeconds);
+            row[22] = Percent(session.CoveragePercent);
+            row[23] = Percent(session.AttentionPercent);
+            row[24] = Percent(session.ConfidenceAvg is { } sessionConfidence ? sessionConfidence * 100 : null);
+            row[25] = Number(session.BlockedAttemptCount);
             AppendRow(builder, row);
         }
 
@@ -156,9 +162,9 @@ internal static class ReportCsvWriter
             row[5] = AttentionStateTitle(attentionEvent.State);
             row[8] = attentionEvent.AppName;
             row[9] = attentionEvent.Domain?.Value;
-            row[23] = Percent(attentionEvent.Confidence is { } eventConfidence ? eventConfidence * 100 : null);
-            row[25] = Number(attentionEvent.DurationSeconds);
-            row[26] = attentionEvent.IsOpen ? "Đang diễn ra" : null;
+            row[24] = Percent(attentionEvent.Confidence is { } eventConfidence ? eventConfidence * 100 : null);
+            row[26] = Number(attentionEvent.DurationSeconds);
+            row[27] = attentionEvent.IsOpen ? "Đang diễn ra" : null;
             AppendRow(builder, row);
         }
 

@@ -37,6 +37,8 @@ public sealed class SqlitePrivacyDataRepository : IPrivacyDataRepository
         DELETE FROM "BlockedAttempts"
         WHERE "Id" IN (
             SELECT "Id" FROM "BlockedAttempts"
+            WHERE "SessionId" IS NULL
+               OR "SessionId" NOT IN (SELECT "Id" FROM "StudySessions" WHERE "Status" = 'Active')
             LIMIT @batch);
         """;
 
