@@ -56,14 +56,19 @@ public sealed class WindowsWatchdogProcessControllerTests
     [Fact]
     public void A_held_app_mutex_counts_as_a_running_instance()
     {
-        using var mutex = new Mutex(initiallyOwned: true, WatchdogNames.AppInstanceMutex);
+        // A running EduFocus holds the same global mutex; only release when this test owns it.
+        using var mutex = new Mutex(
+            initiallyOwned: true,
+            WatchdogNames.AppInstanceMutex,
+            out var createdNew);
         try
         {
             _controller.IsAppInstanceRunning().Should().BeTrue();
         }
         finally
         {
-            mutex.ReleaseMutex();
+            if (createdNew)
+                mutex.ReleaseMutex();
         }
     }
 }

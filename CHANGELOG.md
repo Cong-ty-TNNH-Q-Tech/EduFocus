@@ -375,6 +375,20 @@ và dự án tuân theo [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 - **Tài liệu:** architecture §4.1/§6.3/§6.4, security E2E thêm SEC-E2E-29 + bằng chứng tự động, installer §5 (bước khôi phục khi gỡ), SECURITY/README/README.en (giới hạn DoH còn lại cho Firefox/VPN/proxy).
 - **Tests:** +12 test (`BrowserDnsPolicyTests` 7, `ProtectionEngineTests` 5); toàn bộ **1101 test .NET pass**, build Release 0 warning.
 
+### Changed (UI/UX — điều hướng sidebar bên trái)
+- **Sidebar dùng chung:** thêm `SidebarNavList`/`SidebarNavItem` và `ContentOnlyTabControl` trong `Themes/DesignSystem.xaml` (mục đang chọn có thanh nhấn, icon + nhãn, hover/focus rõ ràng, hỗ trợ bàn phím); nội dung chính chuyển trang theo `SelectedIndex`, không còn tab strip ngang.
+- **Student Mode:** `MainWindow` đổi sang sidebar trái (Tổng quan, Mẹo học tập, Cài đặt & riêng tư) kèm thẻ trạng thái camera và lối vào Parent Mode; giữ nguyên binding dashboard/protection và mọi thông báo.
+- **Parent Mode:** sidebar trái thay cho tab ngang (Tổng quan, Báo cáo, Bảo vệ, Lịch, Chặn, Cài đặt); lịch bảo vệ và danh sách chặn tách thành hai trang riêng (bên trái là trạng thái + danh sách khung giờ, bên phải là form soạn khung giờ); binding, PIN, tự khóa phiên và xác nhận nguy hiểm không đổi.
+- **Trang chặn:** giữ thiết kế thẻ tên miền/dark mode hiện có khi chuyển sang phục vụ cả HTTP và HTTPS.
+
+### Added (Trang chặn HTTPS bằng CA cục bộ)
+- **Root CA cục bộ:** `LocalCertificateAuthority` sinh root ECDSA P-256 một lần, lưu khóa riêng trong `%ProgramData%\EduFocus\certificates\block-root-ca.edufocus` (magic `EDUCA1` + DPAPI `LocalMachine`, ACL Administrators/SYSTEM, hạn 10 năm); chỉ **public root** được cài vào `LocalMachine\Root` khi bảo vệ ON và bị gỡ khi OFF/rollback/gỡ cài đặt.
+- **Chứng chỉ theo domain:** leaf ECDSA P-256 `CA:FALSE`, EKU serverAuth, SAN đúng domain bị chặn, hạn 14 ngày, cache tối đa 512; chỉ cấp cho domain đang bị chặn và chọn theo SNI; khóa riêng giữ trong user key store của tiến trình (SChannel không hỗ trợ ephemeral key) và được xóa khi dispose.
+- **Listener 443:** `BlockPageServer` phục vụ TLS 1.2/1.3, ALPN HTTP/1.1, trả cùng trang chặn với HTTP; vẫn kiểm tra Host header chính xác, giữ CSP/security headers, không log domain/path/query; listener 443 chỉ mở khi CA sẵn sàng, lỗi CA/port chỉ là cảnh báo và không tắt bảo vệ.
+- **Vòng đời engine:** thứ tự apply DNS policy → CA trust → block page (80/443) → hosts → watcher → bridge; rollback và remove đảo ngược, gỡ trust CA sau khi listener đã dừng; gỡ cài đặt (kể cả giữ dữ liệu) gỡ root khỏi trust store và xóa thư mục `certificates`.
+- **Tài liệu:** SECURITY (trust anchor, rủi ro còn lại, Firefox), architecture §4/§5/§6 + ADR-19, DPIA (data map/R16), privacy notice, installer §3–§7, security E2E thêm SEC-E2E-30…33; Firefox vẫn cảnh báo chứng chỉ (F-42-06, P3 chấp nhận).
+- **Tests:** `CertificateAuthorityTests` 11, `BlockPageServerHttpsTests` 5, `ProtectionEngineTests` +6 cho vòng đời CA/rollback/warning.
+
 ### Changed (UI/UX — thiết kế lại giao diện theo độ tuổi)
 - **Design system dùng chung:** thêm `Themes/DesignSystem.xaml` (bảng màu, typography, nút, input, checkbox, progress, tab, card) và chuyển toàn bộ cửa sổ sang style/token thay vì màu hardcode; không thêm thư viện UI bên ngoài.
 - **Student Mode:** `MainWindow` mới với hero trạng thái bảo vệ, thẻ thống kê hôm nay, gợi ý học tập và cập nhật; bỏ các khối "Phase 1"/thông tin dành cho nhà phát triển.

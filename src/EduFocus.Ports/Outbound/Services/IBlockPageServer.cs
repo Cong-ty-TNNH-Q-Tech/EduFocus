@@ -24,6 +24,9 @@ public interface IBlockPageServer
 
     int Port { get; }
 
+    /// <summary>Actual HTTPS port while the TLS listener is running, otherwise 0.</summary>
+    int HttpsPort { get; }
+
     Task<BlockPageStartResult> StartAsync(
         IReadOnlyCollection<string> blockedDomains,
         CancellationToken cancellationToken = default);

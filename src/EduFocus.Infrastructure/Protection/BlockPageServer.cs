@@ -1,17 +1,23 @@
 using System.Collections.Frozen;
 using System.Globalization;
 using System.Net;
+using System.Net.Security;
 using System.Net.Sockets;
+using System.Security.Authentication;
+using System.Security.Cryptography.X509Certificates;
 using System.Text;
 using EduFocus.Domain.ValueObjects;
+using EduFocus.Infrastructure.Protection.Certificates;
 using EduFocus.Ports.Outbound.Services;
 
 namespace EduFocus.Infrastructure.Protection;
 
 /// <summary>
-/// Minimal loopback HTTP server for the block page. It uses a raw
-/// <see cref="TcpListener"/> instead of HttpListener so it does not need a
+/// Minimal loopback HTTP/HTTPS server for the block page. It uses raw
+/// <see cref="TcpListener"/>s instead of HttpListener so it does not need a
 /// URL ACL reservation and only ever accepts connections from 127.0.0.1.
+/// The HTTPS listener presents short-lived certificates issued per blocked
+/// domain by the local certificate authority and never serves any other host.
 /// </summary>
 public sealed class BlockPageServer : IBlockPageServer, IAsyncDisposable
 {
@@ -23,22 +29,31 @@ public sealed class BlockPageServer : IBlockPageServer, IAsyncDisposable
 
     private readonly BlockPageOptions _options;
     private readonly IAppLogger _logger;
+    private readonly ILocalCertificateAuthority? _certificateAuthority;
     private readonly SemaphoreSlim _gate = new(1, 1);
     private readonly SemaphoreSlim _connectionSlots;
 
     private FrozenSet<string> _blockedDomains = FrozenSet<string>.Empty;
     private TcpListener? _listener;
+    private TcpListener? _httpsListener;
     private CancellationTokenSource? _cts;
     private Task? _acceptLoop;
+    private Task? _httpsAcceptLoop;
     private int _port;
+    private int _httpsPort;
 
-    public BlockPageServer(BlockPageOptions options, IAppLogger logger)
+    public BlockPageServer(
+        BlockPageOptions options,
+        IAppLogger logger,
+        ILocalCertificateAuthority? certificateAuthority = null)
     {
         ArgumentNullException.ThrowIfNull(options);
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
 
         if (options.Port is < 0 or > 65535)
             throw new ArgumentOutOfRangeException(nameof(options), "Port must be between 0 and 65535.");
+        if (options.HttpsPort is < 0 or > 65535)
+            throw new ArgumentOutOfRangeException(nameof(options), "HttpsPort must be between 0 and 65535.");
         if (options.MaxHeaderBytes is < 256 or > 64 * 1024)
             throw new ArgumentOutOfRangeException(nameof(options), "MaxHeaderBytes must be between 256 and 65536.");
         if (options.HeaderReadTimeout <= TimeSpan.Zero || options.HeaderReadTimeout > TimeSpan.FromSeconds(30))
@@ -49,14 +64,18 @@ public sealed class BlockPageServer : IBlockPageServer, IAsyncDisposable
             throw new ArgumentOutOfRangeException(nameof(options), "Backlog must be between 1 and 512.");
 
         _options = options;
+        _certificateAuthority = certificateAuthority;
         _connectionSlots = new SemaphoreSlim(
             options.MaxConcurrentConnections,
             options.MaxConcurrentConnections);
     }
 
-    public bool IsRunning => Volatile.Read(ref _listener) is not null;
+    public bool IsRunning =>
+        Volatile.Read(ref _listener) is not null || Volatile.Read(ref _httpsListener) is not null;
 
     public int Port => Volatile.Read(ref _port);
+
+    public int HttpsPort => Volatile.Read(ref _httpsPort);
 
     public event Action<BlockPageHit>? BlockedRequestObserved;
 
@@ -71,35 +90,28 @@ public sealed class BlockPageServer : IBlockPageServer, IAsyncDisposable
         {
             Volatile.Write(ref _blockedDomains, domains);
 
-            if (_listener is not null)
-                return new BlockPageStartResult(true, Port, null);
+            var warnings = new List<string>();
 
-            var listener = new TcpListener(IPAddress.Loopback, _options.Port);
-            try
+            if (_listener is null)
             {
-                listener.Start(_options.Backlog);
-            }
-            catch (SocketException ex)
-            {
-                try { listener.Stop(); }
-                catch (SocketException) { }
-
-                return FailStart(ex.SocketErrorCode);
+                var http = StartHttpListener(warnings);
+                if (http is not null)
+                    _listener = http;
             }
 
-            var port = ((IPEndPoint)listener.LocalEndpoint).Port;
-            var cts = new CancellationTokenSource();
+            if (_httpsListener is null && _certificateAuthority?.IsReady == true)
+                _httpsListener = StartHttpsListener(warnings);
 
-            _cts = cts;
-            _listener = listener;
-            Volatile.Write(ref _port, port);
-            _acceptLoop = Task.Run(() => AcceptLoopAsync(listener, cts.Token));
+            if (_listener is null && _httpsListener is null && _cts is not null)
+            {
+                _cts.Dispose();
+                _cts = null;
+            }
 
-            _logger.Info(
-                LogCategories.Protection,
-                string.Create(CultureInfo.InvariantCulture, $"Block page listening on 127.0.0.1:{port}."));
-
-            return new BlockPageStartResult(true, port, null);
+            return new BlockPageStartResult(
+                _listener is not null || _httpsListener is not null,
+                Port,
+                warnings.Count == 0 ? null : string.Join(" ", warnings));
         }
         finally
         {
@@ -115,41 +127,30 @@ public sealed class BlockPageServer : IBlockPageServer, IAsyncDisposable
         await _gate.WaitAsync(cancellationToken).ConfigureAwait(false);
         try
         {
-            var listener = _listener;
-            if (listener is null)
-                return;
-
+            var httpListener = _listener;
+            var httpsListener = _httpsListener;
+            var httpLoop = _acceptLoop;
+            var httpsLoop = _httpsAcceptLoop;
             var cts = _cts;
-            var loop = _acceptLoop;
 
             _listener = null;
-            _cts = null;
+            _httpsListener = null;
             _acceptLoop = null;
+            _httpsAcceptLoop = null;
+            _cts = null;
+
+            if (httpListener is null && httpsListener is null)
+                return;
 
             cts?.Cancel();
-            try { listener.Stop(); }
-            catch (SocketException) { }
-            catch (ObjectDisposedException) { }
 
-            if (loop is not null)
-            {
-                try
-                {
-                    await loop.WaitAsync(TimeSpan.FromSeconds(2)).ConfigureAwait(false);
-                }
-                catch (TimeoutException)
-                {
-                    _logger.Warning(LogCategories.Protection, "Block page accept loop did not stop in time.");
-                }
-                catch (Exception ex)
-                {
-                    _logger.Error(LogCategories.Protection, "Block page accept loop faulted.", ex);
-                }
-            }
+            await StopListenerAsync(httpListener, httpLoop, "HTTP", cancellationToken).ConfigureAwait(false);
+            await StopListenerAsync(httpsListener, httpsLoop, "HTTPS", cancellationToken).ConfigureAwait(false);
 
             cts?.Dispose();
             Volatile.Write(ref _port, 0);
-            _logger.Info(LogCategories.Protection, "Block page listener stopped.");
+            Volatile.Write(ref _httpsPort, 0);
+            _logger.Info(LogCategories.Protection, "Block page listeners stopped.");
         }
         finally
         {
@@ -159,28 +160,126 @@ public sealed class BlockPageServer : IBlockPageServer, IAsyncDisposable
 
     public async ValueTask DisposeAsync() => await StopAsync().ConfigureAwait(false);
 
-    private BlockPageStartResult FailStart(SocketError error)
+    private TcpListener? StartHttpListener(List<string> warnings)
     {
-        var warning = error switch
+        var listener = new TcpListener(IPAddress.Loopback, _options.Port);
+        try
         {
-            SocketError.AddressAlreadyInUse =>
-                $"Cổng {_options.Port} đang bị chiếm; block page không khả dụng nhưng trạng thái bảo vệ không thay đổi.",
-            SocketError.AccessDenied =>
-                $"Không đủ quyền mở cổng {_options.Port}; block page không khả dụng. Hãy chạy EduFocus với quyền Administrator.",
-            _ =>
-                $"Không mở được block page trên cổng {_options.Port}; trạng thái bảo vệ không thay đổi."
-        };
+            listener.Start(_options.Backlog);
 
-        _logger.Warning(
-            LogCategories.Protection,
-            string.Create(
-                CultureInfo.InvariantCulture,
-                $"Block page listener failed on 127.0.0.1:{_options.Port} ({error}); protection continues without the local block page."));
+            var cts = EnsureCts();
+            var port = ((IPEndPoint)listener.LocalEndpoint).Port;
+            Volatile.Write(ref _port, port);
+            _acceptLoop = Task.Run(() => AcceptLoopAsync(listener, HandleClientAsync, cts.Token));
 
-        return new BlockPageStartResult(false, 0, warning);
+            _logger.Info(
+                LogCategories.Protection,
+                string.Create(CultureInfo.InvariantCulture, $"Block page listening on 127.0.0.1:{port}."));
+
+            return listener;
+        }
+        catch (SocketException ex)
+        {
+            try { listener.Stop(); }
+            catch (SocketException) { }
+
+            warnings.Add(FailMessage(_options.Port, "block page", ex.SocketErrorCode));
+            _logger.Warning(
+                LogCategories.Protection,
+                string.Create(
+                    CultureInfo.InvariantCulture,
+                    $"Block page listener failed on 127.0.0.1:{_options.Port} ({ex.SocketErrorCode}); protection continues without the local block page."));
+
+            return null;
+        }
     }
 
-    private async Task AcceptLoopAsync(TcpListener listener, CancellationToken cancellationToken)
+    private TcpListener? StartHttpsListener(List<string> warnings)
+    {
+        var listener = new TcpListener(IPAddress.Loopback, _options.HttpsPort);
+        try
+        {
+            listener.Start(_options.Backlog);
+
+            var cts = EnsureCts();
+            var port = ((IPEndPoint)listener.LocalEndpoint).Port;
+            Volatile.Write(ref _httpsPort, port);
+            _httpsAcceptLoop = Task.Run(() => AcceptLoopAsync(listener, HandleHttpsClientAsync, cts.Token));
+
+            _logger.Info(
+                LogCategories.Protection,
+                string.Create(CultureInfo.InvariantCulture, $"HTTPS block page listening on 127.0.0.1:{port}."));
+
+            return listener;
+        }
+        catch (SocketException ex)
+        {
+            try { listener.Stop(); }
+            catch (SocketException) { }
+
+            warnings.Add(FailMessage(_options.HttpsPort, "trang chặn HTTPS", ex.SocketErrorCode));
+            _logger.Warning(
+                LogCategories.Protection,
+                string.Create(
+                    CultureInfo.InvariantCulture,
+                    $"HTTPS block page listener failed on 127.0.0.1:{_options.HttpsPort} ({ex.SocketErrorCode}); HTTP blocking continues."));
+
+            Volatile.Write(ref _httpsPort, 0);
+            return null;
+        }
+    }
+
+    private CancellationTokenSource EnsureCts() => _cts ??= new CancellationTokenSource();
+
+    private async Task StopListenerAsync(
+        TcpListener? listener,
+        Task? loop,
+        string label,
+        CancellationToken cancellationToken)
+    {
+        if (listener is null)
+            return;
+
+        try { listener.Stop(); }
+        catch (SocketException) { }
+        catch (ObjectDisposedException) { }
+
+        if (loop is null)
+            return;
+
+        try
+        {
+            await loop.WaitAsync(TimeSpan.FromSeconds(2), cancellationToken).ConfigureAwait(false);
+        }
+        catch (TimeoutException)
+        {
+            _logger.Warning(
+                LogCategories.Protection,
+                $"Block page {label} accept loop did not stop in time.");
+        }
+        catch (Exception ex)
+        {
+            _logger.Error(
+                LogCategories.Protection,
+                $"Block page {label} accept loop faulted.",
+                ex);
+        }
+    }
+
+    private static string FailMessage(int port, string label, SocketError error) => error switch
+    {
+        SocketError.AddressAlreadyInUse =>
+            $"Cổng {port} đang bị chiếm; {label} không khả dụng nhưng trạng thái bảo vệ không thay đổi.",
+        SocketError.AccessDenied =>
+            $"Không đủ quyền mở cổng {port}; {label} không khả dụng. Hãy chạy EduFocus với quyền Administrator.",
+        _ =>
+            $"Không mở được {label} trên cổng {port}; trạng thái bảo vệ không thay đổi."
+    };
+
+    private async Task AcceptLoopAsync(
+        TcpListener listener,
+        Func<TcpClient, CancellationToken, Task> handler,
+        CancellationToken cancellationToken)
     {
         while (!cancellationToken.IsCancellationRequested)
         {
@@ -199,7 +298,7 @@ public sealed class BlockPageServer : IBlockPageServer, IAsyncDisposable
                 continue;
             }
 
-            _ = HandleClientAsync(client, cancellationToken);
+            _ = handler(client, cancellationToken);
         }
     }
 
@@ -211,35 +310,7 @@ public sealed class BlockPageServer : IBlockPageServer, IAsyncDisposable
             {
                 client.NoDelay = true;
                 await using var stream = client.GetStream();
-
-                var request = await ReadRequestAsync(stream, cancellationToken).ConfigureAwait(false);
-                if (request is null)
-                    return;
-
-                var isHead = string.Equals(request.Method, "HEAD", StringComparison.Ordinal);
-                if (!string.Equals(request.Method, "GET", StringComparison.Ordinal) && !isHead)
-                {
-                    await WriteResponseAsync(
-                        stream, 405, "Method Not Allowed", BuildNotFoundPage(), includeBody: true, cancellationToken)
-                        .ConfigureAwait(false);
-                    return;
-                }
-
-                var includeBody = !isHead;
-                var domain = ParseHost(request.Host);
-
-                if (domain is null || !Volatile.Read(ref _blockedDomains).Contains(domain.Value))
-                {
-                    await WriteResponseAsync(
-                        stream, 404, "Not Found", BuildNotFoundPage(), includeBody, cancellationToken)
-                        .ConfigureAwait(false);
-                    return;
-                }
-
-                RaiseHit(domain.Value);
-                await WriteResponseAsync(
-                    stream, 200, "OK", BuildBlockPage(domain.Value), includeBody, cancellationToken)
-                    .ConfigureAwait(false);
+                await HandleStreamAsync(stream, cancellationToken).ConfigureAwait(false);
             }
         }
         catch (IOException) { }
@@ -249,6 +320,99 @@ public sealed class BlockPageServer : IBlockPageServer, IAsyncDisposable
         {
             _connectionSlots.Release();
         }
+    }
+
+    private async Task HandleHttpsClientAsync(TcpClient client, CancellationToken cancellationToken)
+    {
+        try
+        {
+            using (client)
+            {
+                client.NoDelay = true;
+                await using var ssl = new SslStream(client.GetStream(), leaveInnerStreamOpen: false);
+
+                using var handshakeTimeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+                handshakeTimeout.CancelAfter(_options.HeaderReadTimeout);
+
+                try
+                {
+                    await ssl.AuthenticateAsServerAsync(
+                        new SslServerAuthenticationOptions
+                        {
+                            ServerCertificateSelectionCallback = (_, hostName) => SelectServerCertificate(hostName),
+                            ClientCertificateRequired = false,
+                            EnabledSslProtocols = SslProtocols.Tls12 | SslProtocols.Tls13,
+                            CertificateRevocationCheckMode = X509RevocationMode.NoCheck,
+                            ApplicationProtocols = [SslApplicationProtocol.Http11]
+                        },
+                        handshakeTimeout.Token).ConfigureAwait(false);
+                }
+                catch (Exception ex) when (ex is
+                    AuthenticationException or IOException or OperationCanceledException or ObjectDisposedException)
+                {
+                    // Unknown SNI, untrusted client or slow handshake: close quietly.
+                    return;
+                }
+                catch (Exception ex)
+                {
+                    _logger.Warning(
+                        LogCategories.Protection,
+                        $"HTTPS block page handshake failed unexpectedly ({ex.GetType().Name}).");
+                    return;
+                }
+
+                await HandleStreamAsync(ssl, cancellationToken).ConfigureAwait(false);
+            }
+        }
+        catch (IOException) { }
+        catch (OperationCanceledException) { }
+        catch (ObjectDisposedException) { }
+        finally
+        {
+            _connectionSlots.Release();
+        }
+    }
+
+    private X509Certificate2 SelectServerCertificate(string? hostName)
+    {
+        var domain = string.IsNullOrWhiteSpace(hostName) ? null : ParseHost(hostName);
+        if (domain is null || !Volatile.Read(ref _blockedDomains).Contains(domain.Value))
+            throw new AuthenticationException("No block page certificate for the requested host.");
+
+        return _certificateAuthority?.GetServerCertificate(domain.Value)
+            ?? throw new AuthenticationException("The block page certificate could not be issued.");
+    }
+
+    private async Task HandleStreamAsync(Stream stream, CancellationToken cancellationToken)
+    {
+        var request = await ReadRequestAsync(stream, cancellationToken).ConfigureAwait(false);
+        if (request is null)
+            return;
+
+        var isHead = string.Equals(request.Method, "HEAD", StringComparison.Ordinal);
+        if (!string.Equals(request.Method, "GET", StringComparison.Ordinal) && !isHead)
+        {
+            await WriteResponseAsync(
+                stream, 405, "Method Not Allowed", BuildNotFoundPage(), includeBody: true, cancellationToken)
+                .ConfigureAwait(false);
+            return;
+        }
+
+        var includeBody = !isHead;
+        var domain = ParseHost(request.Host);
+
+        if (domain is null || !Volatile.Read(ref _blockedDomains).Contains(domain.Value))
+        {
+            await WriteResponseAsync(
+                stream, 404, "Not Found", BuildNotFoundPage(), includeBody, cancellationToken)
+                .ConfigureAwait(false);
+            return;
+        }
+
+        RaiseHit(domain.Value);
+        await WriteResponseAsync(
+            stream, 200, "OK", BuildBlockPage(domain.Value), includeBody, cancellationToken)
+            .ConfigureAwait(false);
     }
 
     private void RaiseHit(string domain)
@@ -270,7 +434,7 @@ public sealed class BlockPageServer : IBlockPageServer, IAsyncDisposable
     }
 
     private async Task<ParsedRequest?> ReadRequestAsync(
-        NetworkStream stream,
+        Stream stream,
         CancellationToken cancellationToken)
     {
         using var buffer = new MemoryStream();
@@ -378,7 +542,7 @@ public sealed class BlockPageServer : IBlockPageServer, IAsyncDisposable
     }
 
     private static async Task WriteResponseAsync(
-        NetworkStream stream,
+        Stream stream,
         int statusCode,
         string reason,
         string body,

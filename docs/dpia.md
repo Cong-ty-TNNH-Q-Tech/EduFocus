@@ -76,6 +76,7 @@ của phụ huynh, nhắc phụ huynh thông báo cho trẻ, không hỗ trợ g
 | Log kỹ thuật | timestamp, level, category, correlation id, message đã redact | App + service | Chẩn đoán lỗi | `%LocalAppData%\EduFocus\logs` (UI), `%ProgramData%\EduFocus\logs` (service) | 14 ngày, 10 MB/tệp | Người dùng máy/Administrators | Không | Trung bình |
 | Backup/khôi phục | bản sao DB (mã hóa SQLCipher), bản sao hosts, journal | App/service | Chống mất dữ liệu/khôi phục chặn | `%ProgramData%\EduFocus\backups`, `hosts-backup`, `runtime` | 3 bản backup; hosts xóa sau restore | SYSTEM/Administrators | Không | Trung bình |
 | Khóa mã hóa DB | 32 byte ngẫu nhiên trong blob DPAPI `LocalMachine` (`EDUFKEY1`) | App/service | Giải mã DB/backup trên máy | `%ProgramData%\EduFocus\edufocus.key` | Theo vòng đời dữ liệu; xóa cùng thư mục khi uninstall chọn xóa dữ liệu | SYSTEM/Administrators (giải mã bởi tiến trình EduFocus) | Không | **Cao** (bảo mật) |
+| Chứng chỉ cục bộ | khóa riêng CA (`EDUCA1` + DPAPI), public root, leaf ngắn hạn theo domain | App/service | Hiển thị trang chặn HTTPS | `%ProgramData%\EduFocus\certificates\block-root-ca.edufocus`; `LocalMachine\Root`; key store của tiến trình | CA theo vòng đời dữ liệu; root gỡ khi bảo vệ OFF/uninstall; leaf bị xóa khi chứng chỉ dispose | SYSTEM/Administrators (khóa CA); tiến trình EduFocus (leaf) | Không | **Cao** (khóa riêng CA) |
 | Bản xuất CSV | tổng hợp phiên, app/domain, sự kiện | Phụ huynh | Chia sẻ nội bộ do phụ huynh chọn | `%LocalAppData%\EduFocus\exports` | Đến khi phụ huynh xóa | Phụ huynh | Phụ huynh quyết định | **Cao** |
 | Yêu cầu cập nhật | IP, User-Agent | GitHub (khi bật) | Kiểm tra phiên bản | Không lưu cục bộ | Không áp dụng | GitHub | GitHub | Thấp |
 
@@ -84,8 +85,9 @@ trang, lịch sử duyệt đầy đủ, vị trí, danh bạ, email, dữ liệ
 
 **Xử lý trong service:** bản cài MSI chạy `EduFocusProtection` (LocalSystem) để giữ bảo vệ khi UI
 đóng. Service chỉ xử lý các nhóm dữ liệu đã có trong bảng trên (cấu hình, phiên học, blocked attempt,
-audit, log, backup) và không thu thêm nhóm dữ liệu mới; camera/attention vẫn chạy trong phiên người
-dùng. IPC giữa UI và service là named pipe cục bộ có ACL, không gửi dữ liệu ra mạng.
+audit, log, backup, chứng chỉ cục bộ cho block page) và không thu thêm nhóm dữ liệu mới;
+camera/attention vẫn chạy trong phiên người dùng. IPC giữa UI và service là named pipe cục bộ có ACL,
+không gửi dữ liệu ra mạng và không có lệnh cấp chứng chỉ.
 
 ---
 
@@ -113,7 +115,7 @@ dùng. IPC giữa UI và service là named pipe cục bộ có ACL, không gửi
 | Giới hạn mục đích | Dữ liệu chỉ dùng cho báo cáo học tập và vận hành bảo vệ; không quảng cáo, không bán |
 | Lưu trữ hạn chế | Retention 30/90/365 ngày + audit 365 + log 14 ngày; retention job hằng ngày |
 | Minh bạch | Thông báo đầy đủ trong app/installer; nhãn camera, trạng thái giám sát; báo cáo nêu coverage thấp |
-| Bảo vệ dữ liệu | ACL Administrators/SYSTEM, **mã hóa SQLCipher cho DB/WAL/backup**, khóa DPAPI `LocalMachine` không nằm plaintext cạnh DB, hash PBKDF2, redaction log, không log domain/title, không secret trong audit |
+| Bảo vệ dữ liệu | ACL Administrators/SYSTEM, **mã hóa SQLCipher cho DB/WAL/backup**, khóa DPAPI `LocalMachine` không nằm plaintext cạnh DB, hash PBKDF2, redaction log, không log domain/title, không secret trong audit; khóa CA cục bộ cũng dùng DPAPI + ACL và public root bị gỡ khi tắt bảo vệ/gỡ cài đặt |
 | Xóa được | Xóa toàn bộ trong Parent Mode (PIN + `XÓA`), uninstall `DELETEUSERDATA=1`, CSV do phụ huynh xóa |
 | Không chuyển dữ liệu | Không cloud/telemetry; update check opt-in chỉ tới GitHub khi phụ huynh bật |
 | Kiểm soát truy cập | Parent Mode khóa sau 5 phút idle, lockout 5 lần/15 phút, PIN không lưu bản rõ |
@@ -147,6 +149,7 @@ Thang điểm: Khả năng (L) và Tác động (I) 1–5; mức = L×I (1–6 t
 | R13 | Sự cố không được phát hiện/kéo dài | 2 | 5 | 10 | Kênh báo cáo riêng tư; quy trình §8; audit cục bộ | Trung bình — cần diễn tập |
 | R14 | Browser extension thu thập/lộ URL ngoài phạm vi rule | 2 | 3 | 6 | Chỉ xử lý URL trong RAM; bỏ query/fragment/credentials; chỉ URL khớp rule đi qua named pipe cục bộ; không storage/telemetry/content script; test quyền và DOM sink mỗi CI | Thấp |
 | R15 | Mất file khóa/đổi máy làm dữ liệu không thể khôi phục | 2 | 2 | 4 | Khóa DPAPI gắn máy; fail-closed, không tự tạo khóa đè DB; hướng dẫn giữ `edufocus.key` cùng backup và khôi phục trên cùng máy trong thông báo/SECURITY/schema §18 | Thấp — ảnh hưởng tính sẵn sàng, không rò dữ liệu |
+| R16 | Lạm dụng root CA cục bộ để mạo danh website trên máy | 1 | 4 | 4 | Khóa riêng CA bảo vệ bằng DPAPI `LocalMachine` + ACL Administrators/SYSTEM; chỉ cài public root khi bảo vệ ON; gỡ trust khi OFF/uninstall; leaf chỉ phát cho domain đang bị chặn, không có IPC ký tùy ý; ghi rõ giới hạn admin/SYSTEM trong SECURITY | Thấp — cần quyền admin/SYSTEM hoặc đọc được file khóa |
 
 Rủi ro cao nhất còn lại là R1/R2/R5 (truy cập gia đình, CSV, đồng thuận). Các biện pháp bổ sung:
 khuyến nghị BitLocker, hướng dẫn phụ huynh dùng tài khoản Windows riêng cho trẻ, nhắc không gửi CSV

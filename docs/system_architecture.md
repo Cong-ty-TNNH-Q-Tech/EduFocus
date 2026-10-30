@@ -277,7 +277,7 @@ Triển khai outbound ports, tương tác Windows.
 | Thành phần | Vai trò |
 |---|---|
 | `ProtectionEngine` | Refactor từ `WindowsStrictEngine`: hosts, block page server, process watcher, rule matching |
-| `BlockPageServer` | Local HTTP server trả trang chặn; refactor từ `LocalRedirectServer` |
+| `BlockPageServer` | Local HTTP/HTTPS server trả trang chặn; refactor từ `LocalRedirectServer` |
 | `ChatbotBlocklist` | Danh sách domain chatbot mặc định, có version |
 | `WindowsForegroundActivityPort` | Win32 foreground window + process + idle time (`GetLastInputInfo`) |
 | `UiAutomationBrowserUrlProvider` | UI Automation đọc address bar (MVP); browser extension native messaging (post-MVP) |
@@ -411,8 +411,9 @@ Parent bấm ON
        → StudySessionUseCase.StartAsync()  (heartbeat bắt đầu)
        → ProtectionEngine.ApplyAsync(rules exact domain/app)
             → tắt Secure DNS (DoH) của Chrome/Edge bằng machine policy
+            → cài public root CA cục bộ vào LocalMachine\Root (nếu chưa có)
+            → start BlockPageServer (HTTP :80 và HTTPS :443 nếu CA sẵn sàng)
             → write hosts block
-            → start BlockPageServer nếu port 80 khả dụng
             → start process watcher
        → ActivityTracker.StartAsync()
        → AttentionMonitor.StartAsync() (nếu enabled + eligible)
@@ -421,7 +422,7 @@ Parent bấm ON
   → UI cập nhật ON + tray icon
 ```
 
-**Rollback:** nếu bước hosts thất bại, gỡ phần đã áp dụng (gồm policy Secure DNS) và giữ OFF. Nếu block page server hoặc policy Secure DNS thất bại nhưng hosts thành công, vẫn giữ protection ON và cảnh báo.
+**Rollback:** nếu bước hosts thất bại, gỡ phần đã áp dụng (gồm policy Secure DNS và trust của CA cục bộ) và giữ OFF. Nếu block page server, CA hoặc policy Secure DNS thất bại nhưng hosts thành công, vẫn giữ protection ON và cảnh báo.
 
 > **Hiện trạng Phase 2 (issue #16):** `EnableAsync` đã thực hiện đúng thứ tự engine → session → lưu
 > `ProtectionEnabled`, rollback engine/phiên khi ghi DB lỗi và bỏ qua việc tạo phiên thứ hai. Rule
@@ -450,11 +451,13 @@ Parent bấm ON
 Student mở chatgpt.com
   → hosts trỏ 127.0.0.1
   → HTTP: BlockPageServer trả trang chặn (nếu đang chạy)
+  → HTTPS: browser TLS tới 127.0.0.1:443, server chọn leaf theo SNI, trả cùng trang chặn
   → ProtectionEngine ghi BlockedAttempt nếu quan sát được (debounce 30s)
   → Report/Dashboard cập nhật
 ```
 
-Hosts không tạo log cho HTTPS. Với HTTPS, browser thường báo lỗi kết nối/SSL; domain vẫn bị chặn nhưng `BlockedAttempt` có thể không được ghi. Dashboard phải ghi rõ số liệu blocked là best-effort, không phải tổng tuyệt đối.
+Với HTTPS, block page chỉ hiển thị khi CA cục bộ đã được tin cậy và phát hành được leaf cho domain; nếu
+không, browser báo lỗi kết nối/SSL và `BlockedAttempt` có thể không được ghi. Dashboard phải ghi rõ số liệu blocked là best-effort, không phải tổng tuyệt đối.
 
 ### 4.3. Attention sampling
 
@@ -576,7 +579,7 @@ retention; UI không bao giờ mở engine cục bộ thứ hai, kể cả khi s
 ```text
 EduFocusProtection (EduFocus.Service.exe, LocalSystem, Session 0)
 ├── ProtectionService: state machine, reconcile, rollback
-├── ProtectionEngine: hosts file + block page :80 + process watcher
+├── ProtectionEngine: hosts file + block page :80/:443 + CA cục bộ + process watcher
 ├── StudySessionHeartbeat + vòng đời session (Active/Recovery/Interrupted)
 ├── ScheduleService (mỗi 30 giây) + RetentionService (một lần lúc khởi động và mỗi ngày ≥ 03:00)
 ├── SQLite %ProgramData%\EduFocus + audit
@@ -672,6 +675,9 @@ Thứ tự:
 - Flush DNS sau khi thay đổi.
 - Self-heal: xóa block mồ côi của EduFocus khi khởi động.
 - `BlockPageServer` bind `127.0.0.1:80` bằng TCP listener loopback (không cần URL ACL), chỉ phục vụ GET/HEAD, trả HTML tĩnh; kiểm tra Host header thuộc domain bị chặn, escape output, không tải tài nguyên ngoài. Nếu port 80 bị chiếm, protection vẫn ON nhưng block page không khả dụng.
+- `BlockPageServer` mở thêm listener TLS `127.0.0.1:443` khi CA cục bộ đã tin cậy; chọn leaf theo SNI,
+  chỉ bật HTTP/1.1 + TLS 1.2/1.3, rồi dùng chung logic Host header/HTML/CSP với HTTP. Nếu port 443 bị
+  chiếm hoặc CA không sẵn sàng, chỉ HTTPS không khả dụng và engine trả cảnh báo.
 - Retry khi file bị antivirus khóa; báo lỗi rõ nếu thất bại.
 
 > **Triển khai hosts file (issue #21):** `IHostsFileBlocker`/`HostsFileBlocker` sở hữu khối marker,
@@ -695,6 +701,19 @@ Thứ tự:
 > ném lỗi, để engine giữ Protection ON và UI cảnh báo. Mỗi request bị chặn phát `BlockPageHit`
 > (domain + UTC); `ProtectionEngine` (issue #24) debounce 30 giây rồi ghi `BlockedAttempt` với
 > `ObservedVia = BlockPage`. Adapter không tự ghi DB hoặc log domain.
+>
+> **Triển khai HTTPS block page + CA cục bộ (issue #149–#152):** `LocalCertificateAuthority` sinh root
+> ECDSA P-256 một lần, lưu PFX dưới dạng `EDUCA1` + DPAPI `LocalMachine` trong
+> `%ProgramData%\EduFocus\certificates` (ACL Administrators/SYSTEM) và chỉ cài public root vào
+> `LocalMachine\Root` khi bảo vệ ON; `RemoveTrustAsync` gỡ mọi root cùng subject khi OFF/uninstall.
+> `EnsureTrustedAsync` chạy **trước** khi `BlockPageServer` mở listener 443; nếu CA chưa `IsReady`,
+> listener HTTPS không được tạo và engine chỉ thêm cảnh báo. `GetServerCertificate(domain)` từ chối
+> domain không nằm trong snapshot bị chặn, phát leaf `CA:FALSE` + EKU serverAuth + SAN đúng domain,
+> cache tối đa 512 leaf. Khóa riêng leaf được import vào user key store (SChannel từ chối khóa
+> ephemeral cho server) và xóa khi cert bị dispose. `BlockPageServer` dùng
+> `SslStream` + `ServerCertificateSelectionCallback` theo SNI, giới hạn ALPN `http/1.1`, TLS 1.2/1.3,
+> `NoCheck` revocation (không có CRL/OCSP), rồi dùng chung `HandleStreamAsync` với HTTP. Cả hai listener
+> cùng dừng khi tắt bảo vệ/rollback. Startup failure của một listener không làm hỏng listener còn lại.
 
 ### 6.3. App blocking (MVP)
 
@@ -716,14 +735,16 @@ Thứ tự:
 > handler không làm dừng vòng polling; log không ghi window title, path hay nội dung tài liệu.
 >
 > **Triển khai engine (issue #24):** `ProtectionEngine` là adapter duy nhất của
-> `IProtectionEnginePort`. Bật theo thứ tự block page → hosts → watcher (listener sẵn sàng trước khi
-> hosts trỏ domain về loopback); cổng 80 bận chỉ là cảnh báo, lỗi adapter khác rollback phần đã áp và
-> ném `ProtectionEngineException`. Tắt gỡ rule watcher/page → dừng watcher/page → restore hosts; lỗi
-> dừng trả cảnh báo nhưng lỗi restore hosts ném lỗi để Protection giữ ON. Reconcile self-heal hosts rồi
-> apply/remove; remove idempotent kể cả khi Protection OFF. Block page/watcher chỉ phát observation;
-> engine debounce 30 giây theo domain/tên app bằng monotonic clock và ghi `BlockedAttempt` qua một
-> writer channel duy nhất, gắn `SessionId` đang hoạt động và tăng `BlockedAttemptCount`; lỗi ghi DB chỉ
-> log và không làm dừng adapter. Không lưu window title/path.
+> `IProtectionEnginePort`. Bật theo thứ tự DNS policy → CA tin cậy → block page (80/443) → hosts →
+> watcher (listener sẵn sàng trước khi hosts trỏ domain về loopback); CA không sẵn sàng hoặc cổng
+> 80/443 bận chỉ là cảnh báo, lỗi adapter khác rollback phần đã áp (gồm trust của CA) và ném
+> `ProtectionEngineException`. Tắt gỡ rule watcher/page → dừng watcher/page → restore hosts → restore
+> DNS policy → gỡ trust CA; lỗi dừng/gỡ trust trả cảnh báo nhưng lỗi restore hosts ném lỗi để
+> Protection giữ ON. Reconcile self-heal hosts rồi apply/remove; remove idempotent kể cả khi Protection
+> OFF. Block page/watcher chỉ phát observation; engine debounce 30 giây theo domain/tên app bằng
+> monotonic clock và ghi `BlockedAttempt` qua một writer channel duy nhất, gắn `SessionId` đang hoạt
+> động và tăng `BlockedAttemptCount`; lỗi ghi DB chỉ log và không làm dừng adapter. Không lưu window
+> title/path.
 >
 > **Triển khai Secure DNS (bổ sung sau issue #22):** `BrowserDnsPolicy` là adapter của
 > `IBrowserDnsPolicyPort`, chạy **trước** hosts vì browser có thể đã resolve qua DoH trước khi hosts
@@ -739,8 +760,11 @@ Thứ tự:
   vệ ON (xem §4.1/§6.3); Firefox DoH/DoT riêng, VPN, proxy, browser khác và ứng dụng tự resolve DNS vẫn
   có thể bypass. Browser đang chạy phải khởi động lại mới áp policy.
 - Hosts không tạo log truy cập HTTPS; không thể đếm đầy đủ blocked attempts.
-- Trang chặn chỉ hiển thị với HTTP; HTTPS thường báo lỗi kết nối/SSL.
-- UI Protection phải hiển thị cảnh báo thường trực: chặn web chỉ áp dụng HTTP/domain exact; HTTPS, DoH/VPN/proxy có thể bypass và blocked attempts HTTPS không được ghi nhận đầy đủ.
+- Trang chặn HTTPS cần CA cục bộ được tin cậy: Chrome/Edge và ứng dụng dùng kho Windows thấy trang;
+  Firefox mặc định dùng root store riêng nên hiện cảnh báo chứng chỉ, và ứng dụng pin certificate hoặc
+  browser khác có thể không thấy trang. Nếu CA không sẵn sàng/cổng 443 bận, HTTPS quay lại báo lỗi
+  kết nối; root CA là trust anchor phạm vi máy nên admin/SYSTEM có thể lợi dụng (giới hạn đã biết).
+- UI Protection phải hiển thị cảnh báo thường trực: chặn web chỉ áp dụng domain exact; DoH/VPN/proxy có thể bypass và blocked attempts HTTPS không được ghi nhận đầy đủ.
 - Browser extension (post-MVP) giải quyết URL/path và logging chính xác hơn.
 - Process watcher dựa trên tên/đường dẫn process; app đổi tên, chạy portable hoặc khởi động/thoát quá nhanh có thể không bị phát hiện.
 - Engine debounce 30 giây cho cùng domain/tên app nên nhiều lần thử liên tiếp chỉ ghi một `BlockedAttempt`; writer ghi bất đồng bộ nên attempt cuối có thể mất nếu app thoát đột ngột.
@@ -1432,15 +1456,19 @@ EduFocus/
 - Job **EduFocus — Build & Test** là required check khi bật branch protection cho `master`.
 
 ### Manual/system tests
-- Chặn web trên Chrome/Edge/Firefox; xác nhận HTTP block page và HTTPS báo lỗi.
+- Chặn web trên Chrome/Edge/Firefox; xác nhận HTTP và HTTPS block page trên Chrome/Edge (root CA cục bộ
+  được tin cậy, không có cảnh báo chứng chỉ), Firefox hiện cảnh báo chứng chỉ nhưng domain vẫn bị chặn.
+- CA cục bộ: bật bảo vệ → `LocalMachine\Root` có "EduFocus Local Blocking CA"; tắt bảo vệ/gỡ cài đặt →
+  root biến mất; xóa file `block-root-ca.edufocus` và bật lại → root mới được tạo, leaf cũ bị từ chối.
 - Secure DNS: bật bảo vệ rồi kiểm tra `DnsOverHttpsMode=off` trong policy Chrome/Edge và backup trong
   `HKLM\SOFTWARE\EduFocus\BrowserDnsPolicy`; khởi động lại Chrome có Secure DNS từng bật, xác nhận
   domain bị chặn; tắt bảo vệ/gỡ cài đặt, xác nhận policy trước đó được khôi phục đúng (hoặc bị xóa).
-- BlockedAttempt best-effort: không kỳ vọng log HTTPS.
+- BlockedAttempt best-effort: HTTPS chỉ ghi nhận khi block page TLS phục vụ được request.
 - Restore hosts sạch sau crash; chỉ xóa marker EduFocus.
 - Auto-start + crash recovery; session cũ `Interrupted`, session mới `Trigger = Recovery`.
 - Camera bận (Meet/Teams) + Multi-App Camera.
-- Port 80 bị chiếm.
+- Port 80 bị chiếm; port 443 bị chiếm; thiếu quyền cài root CA → HTTPS không khả dụng, HTTP/protection
+  vẫn ON và UI có cảnh báo.
 - Không có quyền admin.
 - Sleep/resume qua schedule.
 - Parent PIN/recovery shared lockout.
@@ -1480,6 +1508,7 @@ EduFocus/
 | ADR-16 | Thoát app luôn cần PIN | Nhất quán bảo vệ; Windows shutdown vẫn được phép |
 | ADR-17 | (Đề xuất) OpenCV MSMF + ONNX Runtime + YuNet cho attention Phase 0; Haar chỉ baseline; Drowsy/gaze ở Phase 5 | Face 99,2%/30 phút, CPU 0,23% máy, RAM 184 MB; Haar bỏ sót nhiều; giữ local-first |
 | ADR-18 | Mã hóa DB bằng SQLCipher, khóa 32 byte DPAPI `LocalMachine` + raw key `x'…'` | Bảo vệ dữ liệu trẻ em khi file bị sao chép; raw key tránh PBKDF2 ~525 ms mỗi kết nối; giữ fail-closed khi mất khóa, chấp nhận key gắn thiết bị (issue #47) |
+| ADR-19 | Block page HTTPS bằng CA cục bộ + TLS loopback | Trang chặn nhất quán trên Chrome/Edge, không cần extension/kernel và không gửi dữ liệu ra ngoài; đánh đổi: trust anchor phạm vi máy và Firefox không dùng kho Windows (issue #149–#152) |
 
 ---
 
@@ -1489,7 +1518,8 @@ EduFocus/
 |---|---|---|
 | Camera không chia sẻ được | Mất dữ liệu attention khi Meet/Teams | Multi-App Camera; fallback; companion app |
 | Hosts bị bypass | Chặn không hiệu quả | Extension/firewall/DNS policy |
-| Hosts không log được HTTPS | Số blocked attempts thấp/sai | Ghi rõ best-effort; extension post-MVP; không dùng làm KPI |
+| Hosts không log được HTTPS | Số blocked attempts thấp/sai | Ghi rõ best-effort; block page HTTPS ghi nhận thêm khi phục vụ được; extension post-MVP; không dùng làm KPI |
+| Root CA cục bộ bị lạm dụng | Mạo danh website trên máy | Khóa DPAPI + ACL Administrators/SYSTEM; chỉ cài public root khi ON; gỡ trust khi OFF/uninstall; ghi rõ giới hạn admin/SYSTEM |
 | SQLite bị học sinh đọc | Lộ báo cáo | ACL + mã hóa SQLCipher; key DPAPI gắn thiết bị; admin/SYSTEM vẫn giải mã được (giới hạn đã biết) |
 | App bị kill | Mất protection | Watchdog; service; ghi rõ độ trễ |
 | Quá nhiều sample | DB phình | Aggregate + retention |

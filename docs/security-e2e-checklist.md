@@ -15,7 +15,7 @@ Liên quan: [SECURITY.md](../SECURITY.md), [installer.md](./installer.md) §7,
 |---|---|
 | Onboarding & PIN | Consent bắt buộc, PIN 6–8 số, hash PBKDF2, recovery code dùng một lần, lockout chung 5 lần/15 phút |
 | Protection | Bật/tắt bằng PIN, rollback khi hosts/engine lỗi, reconcile sau crash, lịch bảo vệ |
-| Web/app blocking | Hosts marker domain exact, block page loopback, process watcher, allowlist, tắt Secure DNS Chrome/Edge khi bảo vệ |
+| Web/app blocking | Hosts marker domain exact, block page loopback HTTP/HTTPS với CA cục bộ, process watcher, allowlist, tắt Secure DNS Chrome/Edge khi bảo vệ |
 | Toàn vẹn hosts | Restore đúng byte gốc, giữ chỉnh sửa ngoài marker, self-heal sau crash, dọn backup |
 | Quyền riêng tư camera | Không lưu frame/landmark/embedding, dispose frame trước khi phát sample, camera chỉ theo consent |
 | Dữ liệu & log | ACL `%ProgramData%\EduFocus`, không có PIN/recovery code trong DB/WAL/backup/log, redaction URL/token |
@@ -73,6 +73,9 @@ Các test dưới đây là bằng chứng hồi quy cho từng kiểm soát. T�
 | Block page có CSP/security header, không tài nguyên ngoài | `BlockPageServerTests.Blocked_response_has_static_security_headers`, `Blocked_page_does_not_reference_external_resources` | Đạt |
 | Block page/log không lộ domain, path, query | `BlockPageServerTests.Blocked_request_raises_hit_with_domain_only`, `Logs_never_contain_blocked_domain_or_target` | Đạt |
 | Cổng 80 bận không tắt bảo vệ | `ProtectionEngineTests.Apply_returns_warning_when_block_page_port_is_busy`, `BlockPageServerTests.Port_conflict_returns_warning_without_throwing` | Đạt |
+| Block page HTTPS phục vụ trang chặn với leaf đúng domain, SNI/Host được kiểm tra | `BlockPageServerHttpsTests.Https_listener_serves_the_block_page_with_a_domain_certificate`, `Unknown_sni_fails_the_handshake`, `Host_header_is_validated_even_over_tls`, `Https_hit_records_the_domain_without_path_or_query` | Đạt |
+| CA cục bộ: chỉ public root được tin cậy, khóa lưu DPAPI, tái sử dụng, gỡ idempotent, leaf đúng SAN/EKU/chuỗi | `CertificateAuthorityTests.EnsureTrusted_installs_only_the_public_root`, `Root_is_reused_across_authority_instances`, `Root_file_is_dpapi_protected_and_contains_no_plaintext_key`, `Leaf_has_san_server_auth_and_chains_to_the_root`, `Leaf_certificates_are_cached_per_domain`, `GetServerCertificate_returns_null_before_trust_and_after_removal`, `RemoveTrust_is_idempotent`, `Invalid_domains_are_rejected_without_throwing`, `Corrupt_root_file_is_replaced_by_a_new_root`, `Stale_same_subject_root_is_removed_before_trusting_the_current_one`, `Logs_never_contain_blocked_domains_or_key_material` | Đạt |
+| Engine cài CA trước listener HTTPS, giữ protection khi CA lỗi, gỡ trust khi OFF/rollback | `ProtectionEngineTests.Apply_trusts_the_certificate_authority_before_starting_the_block_page`, `Apply_keeps_protection_when_the_certificate_authority_fails`, `Apply_warns_when_the_certificate_authority_throws`, `Apply_rolls_back_certificate_trust_when_hosts_fails`, `Remove_removes_certificate_authority_trust`, `Remove_returns_warning_when_certificate_trust_removal_fails` | Đạt |
 | App bị chặn: WM_CLOSE trước, kill sau timeout, bỏ qua system/allowlist | `ProcessWatcherTests.Closes_blocked_windowed_process_gracefully`, `Kills_process_and_warns_when_close_times_out`, `Protected_system_and_edufocus_processes_are_skipped`, `Allowlisted_process_is_never_touched` | Đạt |
 | Process watcher không log window title/path/danh sách process | `ProcessWatcherTests.Start_and_stop_are_logged_without_process_details`, `Process_observation_writes_app_attempt_without_window_data` | Đạt |
 | Camera: frame dispose trước khi phát sample, không lưu ảnh | `AttentionPipelineServiceTests.Sample_once_disposes_the_frame_before_publishing_the_sample`, `Loop_samples_repeatedly_until_stopped` | Đạt |
@@ -115,7 +118,7 @@ và một tài khoản standard user để chạy thử. Ghi mã build/MSI SHA-2
 | SEC-E2E-03 | Onboarding: từ chối consent, thử thiết lập PIN; sau đó đồng ý và hoàn tất | Không thể qua bước PIN/hoàn tất khi thiếu consent; recovery code chỉ hiển thị một lần; PIN không hiển thị lại | Ảnh chụp đã che PIN/code | ⬜ | ⬜ |
 | SEC-E2E-04 | Nhập sai PIN 5 lần; thử recovery code sai trong lúc khóa | Khóa 15 phút, đếm chung cho PIN/recovery; hết hạn đăng nhập lại được | Ảnh chụp thông báo khóa (không có mã) | ⬜ | ⬜ |
 | SEC-E2E-05 | Bật bảo vệ | Hosts có marker `EDUFOCUS BLOCK START/END`; block page lắng nghe `127.0.0.1:80`; service `EduFocusProtection` **Running**; marker `HKLM\SOFTWARE\EduFocus\ServiceMode=1`; audit `ProtectionOn` | `Get-Content hosts`, `Get-NetTCPConnection -LocalPort 80`, `Get-Service EduFocusProtection`, `Get-ItemProperty` | ⬜ | ⬜ |
-| SEC-E2E-06 | Truy cập domain bị chặn qua HTTP và HTTPS | HTTP hiển thị trang chặn; HTTPS báo lỗi kết nối/SSL nhưng domain vẫn bị chặn; không có path/query trong `BlockedAttempts`/log | Ảnh chụp trang chặn; query DB/log đã lọc | ⬜ | ⬜ |
+| SEC-E2E-06 | Truy cập domain bị chặn qua HTTP và HTTPS | HTTP hiển thị trang chặn; HTTPS hiển thị cùng trang chặn trên Chrome/Edge **không** có cảnh báo chứng chỉ (root CA cục bộ đã tin cậy); Firefox mặc định cảnh báo chứng chỉ nhưng domain vẫn bị chặn; không có path/query trong `BlockedAttempts`/log | Ảnh chụp trang chặn; query DB/log đã lọc | ⬜ | ⬜ |
 | SEC-E2E-07 | Mở app bị chặn có dữ liệu chưa lưu | App nhận `WM_CLOSE` trước; quá 2 giây mới bị kill; cảnh báo mất dữ liệu được ghi trong tài liệu | Ảnh chụp + log không có window title | ⬜ | ⬜ |
 | SEC-E2E-08 | Thêm app vào allowlist khi đang bị chặn | Allowlist thắng blocklist; process hệ thống/EduFocus không bị tác động | Quan sát + DB `BlockedAttempts` | ⬜ | ⬜ |
 | SEC-E2E-20 | Cài extension, bật rule URL/path, mở URL khớp rule (kèm query/fragment) | Tab chuyển tới trang chặn không lộ URL; `BlockedAttempts` ghi URL đã bỏ query/fragment/credentials; rule allow/protected domain thắng | Ảnh chụp popup/trang chặn; query DB đã lọc | ⬜ | ⬜ |
@@ -128,6 +131,10 @@ và một tài khoản standard user để chạy thử. Ghi mã build/MSI SHA-2
 | SEC-E2E-27 | Kiểm tra DB mã hóa và file khóa sau onboarding | 16 byte đầu `edufocus.db` khác `SQLite format 3\0`; `edufocus.key` tồn tại, chỉ Administrators/SYSTEM đọc, không có chuỗi hex/`x'...'` khóa; backup trong `backups/` cũng mã hóa; standard user không đọc được DB/WAL/backup/khóa | PowerShell đọc 16 byte header; `icacls`; thử đọc bằng standard user; `Select-String` trên file khóa | ⬜ | ⬜ |
 | SEC-E2E-28 | Mô phỏng mất/hỏng/sai khóa (trên VM snapshot) rồi khôi phục | Thiếu khóa: app báo lỗi an toàn, không tạo khóa mới; hỏng khóa: không ghi đè; khôi phục bản sao `edufocus.key` trên cùng máy + backup thì mở lại được, dữ liệu còn nguyên. Copy DB sang VM khác không mở được | Ảnh chụp lỗi; so sánh hash file khóa trước/sau; timeline restore | ⬜ | ⬜ |
 | SEC-E2E-29 | Bật bảo vệ khi Chrome đang bật Secure DNS; mở domain bị chặn; tắt bảo vệ; gỡ cài đặt | Khi ON: `DnsOverHttpsMode=off` dưới policy máy Chrome/Edge (cả 64/32) và backup trong `HKLM\SOFTWARE\EduFocus\BrowserDnsPolicy`; sau khi khởi động lại Chrome, domain bị chặn dù trước đó DoH hoạt động. Khi OFF/gỡ: value policy cũ được khôi phục đúng (hoặc bị xóa nếu trước đó không có) và backup key biến mất; lỗi chỉ là cảnh báo, không tắt bảo vệ | `Get-ItemProperty` policy + backup; ảnh chụp Chrome trước/sau; log không có secret | ⬜ | ⬜ |
+| SEC-E2E-30 | Bật bảo vệ, kiểm tra CA cục bộ và listener HTTPS | `%ProgramData%\EduFocus\certificates\block-root-ca.edufocus` tồn tại, header `EDUCA1`, ACL chỉ Administrators/SYSTEM; `LocalMachine\Root` có "EduFocus Local Blocking CA"; port 443 loopback đang lắng nghe; file khóa không chứa PFX/khóa plaintext; log không có domain/khóa | `Get-ChildItem`/`icacls`, `Get-ChildItem Cert:\LocalMachine\Root`, `Get-NetTCPConnection`, đọc 6 byte đầu | ⬜ | ⬜ |
+| SEC-E2E-31 | Tắt bảo vệ trong Parent Mode | Listener 80/443 đóng, root "EduFocus Local Blocking CA" bị gỡ khỏi `LocalMachine\Root`, hosts sạch marker; thư mục `certificates` còn (khóa CA được tái sử dụng), không tạo root mới ở lần bật sau | `Get-NetTCPConnection`, `Get-ChildItem Cert:\LocalMachine\Root`, `Get-Content hosts` | ⬜ | ⬜ |
+| SEC-E2E-32 | Chiếm port 443 bằng ứng dụng khác rồi bật bảo vệ; sau đó nhả cổng và bật lại | Protection ON, UI cảnh báo HTTPS không khả dụng, HTTP block page và hosts vẫn hoạt động, không có process/port 80 mồ côi; nhả cổng + tắt/bật lại → HTTPS block page hoạt động | Ảnh chụp cảnh báo + `Get-NetTCPConnection` | ⬜ | ⬜ |
+| SEC-E2E-33 | Gỡ cài đặt, **giữ dữ liệu** | Root "EduFocus Local Blocking CA" không còn trong `LocalMachine\Root`; thư mục `certificates` bị xóa; listener 443 đóng; `edufocus.db`/`edufocus.key` còn | `Get-ChildItem Cert:\LocalMachine\Root`, `Test-Path certificates`, `Get-ChildItem %ProgramData%\EduFocus` | ⬜ | ⬜ |
 | SEC-E2E-09 | Bản portable/source: kill app khi Protection ON; sau đó kill watchdog | App được khôi phục ≤ 30 giây; watchdog được task khôi phục trong tối đa ~60 giây; audit `WatchdogRestart` không có dữ liệu người dùng | Timeline + audit | ⬜ | ⬜ |
 | SEC-E2E-10 | Sửa hosts ngoài marker, sau đó tắt bảo vệ | Chỉ mất khối marker; chỉnh sửa ngoài marker còn nguyên; `hosts-backup\journal.json` và `.bak` không còn | Diff hosts trước/sau, `Get-ChildItem hosts-backup` | ⬜ | ⬜ |
 | SEC-E2E-11 | Ép crash giữa lúc apply (kill app sau khi có journal) rồi khởi động lại | `SelfHealAsync` khôi phục đúng byte gốc; không còn marker/journal/backup | So sánh hash hosts | ⬜ | ⬜ |
@@ -157,9 +164,10 @@ Mức độ: **P0** chặn phát hành ngay; **P1** phải sửa trước phát 
 | F-42-03 | P3 | Chấp nhận | Log kỹ thuật có thể chứa đường dẫn `%ProgramData%\EduFocus`/`%LocalAppData%` nhưng không có secret hay nội dung học tập. | Không cần sửa; đã nằm trong ACL/redaction review. |
 | F-42-04 | P3 | Chấp nhận | Hosts có thể bị bypass bằng DoH/DoT, VPN/proxy, quyền Administrator hoặc antivirus khóa file. | Là giới hạn đã biết trong [SECURITY.md](../SECURITY.md); không phải lỗ hổng theo mô hình mối đe dọa. |
 | F-42-05 | P2 | Mở | Chưa có thông báo quyền riêng tư đầy đủ và DPIA chính thức trước phát hành. | Theo dõi ở issue #44; không chặn #42 nhưng **chặn phát hành thương mại**. |
+| F-42-06 | P3 | Chấp nhận | Firefox không dùng root store `LocalMachine\Root` nên vẫn cảnh báo chứng chỉ khi mở trang chặn HTTPS (domain vẫn bị chặn, chỉ trang chặn kém đẹp hơn). | Giới hạn đã biết trong [SECURITY.md](../SECURITY.md); thông báo quyền riêng tư nêu rõ. Không cài root vào Firefox khi chưa có lựa chọn rõ ràng của phụ huynh. |
 
 **Kết luận:** tính đến 2026-10-30, review mã + test tự động **không phát hiện P0/P1**. Các mục thủ công
-SEC-E2E-01…29 là điều kiện bắt buộc; nếu phát hiện P0/P1 khi chạy VM, phát hành bị chặn cho đến khi
+SEC-E2E-01…33 là điều kiện bắt buộc; nếu phát hiện P0/P1 khi chạy VM, phát hành bị chặn cho đến khi
 sửa và chạy lại.
 
 ---
@@ -169,13 +177,14 @@ sửa và chạy lại.
 Chỉ coi là đạt khi:
 
 - [ ] `dotnet test EduFocus.slnx --configuration Release` pass toàn bộ, build 0 warning.
-- [ ] Toàn bộ SEC-E2E-01…29 đạt trên **Windows 10 22H2** và **Windows 11** (hoặc có ngoại lệ được
+- [ ] Toàn bộ SEC-E2E-01…33 đạt trên **Windows 10 22H2** và **Windows 11** (hoặc có ngoại lệ được
       ghi rõ lý do môi trường).
 - [ ] Không còn P0/P1 mở; P2 có issue theo dõi và rủi ro được ghi trong release notes.
 - [ ] Bằng chứng không chứa PIN/recovery code/ảnh camera/URL đầy đủ; artifact release không có
-      `.db`/`.log`/backup hay chứng chỉ/private key.
-- [ ] Sau gỡ cài đặt: hosts sạch marker, listener đóng, scheduled task biến mất, `hosts-backup` và
-      `runtime` bị xóa (khi giữ dữ liệu, chỉ DB/settings còn).
+      `.db`/`.log`/backup hay chứng chỉ/private key (kể cả `block-root-ca.edufocus`).
+- [ ] Sau gỡ cài đặt: hosts sạch marker, listener 80/443 đóng, scheduled task biến mất,
+      `hosts-backup`, `runtime` và `certificates` bị xóa; root **EduFocus Local Blocking CA** không
+      còn trong `LocalMachine\Root` (khi giữ dữ liệu, chỉ DB/settings/key còn).
 - [ ] Kết quả được chép vào release checklist (#43) kèm version, commit, MSI SHA-256, ngày, người chạy.
 
 | Version | Commit | MSI SHA-256 | Win10 22H2 | Win11 | Người chạy | Ngày |
@@ -205,6 +214,18 @@ Get-ItemProperty "HKLM:\SOFTWARE\EduFocus" -Name ServiceMode -ErrorAction Silent
 
 # Block page listener (chỉ nên thấy khi Protection ON)
 Get-NetTCPConnection -LocalAddress 127.0.0.1 -LocalPort 80 -ErrorAction SilentlyContinue
+Get-NetTCPConnection -LocalAddress 127.0.0.1 -LocalPort 443 -ErrorAction SilentlyContinue
+
+# Root CA cục bộ: có khi Protection ON, biến mất sau khi OFF/gỡ cài đặt
+Get-ChildItem Cert:\LocalMachine\Root |
+  Where-Object Subject -like "*EduFocus Local Blocking CA*" |
+  Format-List Subject, Thumbprint, NotAfter
+# Thư mục khóa CA (ACL Administrators/SYSTEM) — luôn bị xóa khi gỡ cài đặt
+Test-Path "$env:ProgramData\EduFocus\certificates"
+icacls "$env:ProgramData\EduFocus\certificates" -ErrorAction SilentlyContinue
+
+# Trang chặn HTTPS trả cùng nội dung trang chặn, không lộ Host/path/query
+curl.exe -k --resolve "example-blocked.test:443:127.0.0.1" https://example-blocked.test/ -o NUL -w "%{http_code}`n"
 
 # ACL dữ liệu và file con
 icacls "$env:ProgramData\EduFocus"

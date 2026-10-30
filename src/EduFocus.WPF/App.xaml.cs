@@ -5,6 +5,7 @@ using EduFocus.Domain.Protection;
 using EduFocus.Infrastructure;
 using EduFocus.Infrastructure.Attention;
 using EduFocus.Infrastructure.Attention.Camera;
+using EduFocus.Infrastructure.Protection.Certificates;
 using EduFocus.Infrastructure.ServiceControl;
 using EduFocus.Infrastructure.Watchdog;
 using EduFocus.Ports.DTOs;
@@ -508,6 +509,30 @@ public partial class App : Application
             exitCode = 1;
             logger.Error(LogCategories.Protection, "Uninstall could not restore the browser Secure DNS policy.", ex);
         }
+
+        try
+        {
+            var trust = await provider.GetRequiredService<ILocalCertificateAuthority>().RemoveTrustAsync();
+            if (!trust.Ready)
+                exitCode = 1;
+            else
+                logger.Info(
+                    LogCategories.Protection,
+                    "Uninstall removed the local block-page root certificate from the machine trust store.");
+        }
+        catch (Exception ex)
+        {
+            exitCode = 1;
+            logger.Error(
+                LogCategories.Protection,
+                "Uninstall could not remove the local block-page root certificate.",
+                ex);
+        }
+
+        exitCode |= TryDeleteDirectory(
+            provider.GetRequiredService<CertificateAuthorityOptions>().Directory,
+            "certificates",
+            logger);
 
         exitCode |= TryDeleteDirectory(
             provider.GetRequiredService<EduFocus.Infrastructure.Protection.HostsFileOptions>().BackupDirectory,

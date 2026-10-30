@@ -105,7 +105,10 @@ Trình tự MSI thực hiện:
 5. Cài service `EduFocusProtection` từ component `ServiceExe` và **start ngay**
    (`ServiceControl Start="install"`). Service khởi tạo `edufocus.key` (DPAPI) và DB SQLCipher nếu
    chưa có, migrate DB, seed rule, reconcile bảo vệ và mở control pipe; screen SCM nhận trạng thái
-   START PENDING → RUNNING. Nếu service không start được, MSI trả lỗi và rollback.
+   START PENDING → RUNNING. Nếu service không start được, MSI trả lỗi và rollback. Khi bảo vệ được
+   bật, service tạo CA cục bộ trong `%ProgramData%\EduFocus\certificates` và cài public root vào
+   `LocalMachine\Root` trước khi mở listener HTTPS 443; thư mục này không có trong MSI và chỉ xuất
+   hiện sau lần bật bảo vệ đầu tiên.
 6. Chạy deferred custom action `--register --scope machine --manifest-dir [INSTALLFOLDER]native-host`
    **as SYSTEM**: ghi `com.edufocus.native_host.json` cạnh host và tạo registry
    `HKLM\Software\Google\Chrome\NativeMessagingHosts\com.edufocus.native_host` +
@@ -148,7 +151,8 @@ Sau khi cài, người dùng mở EduFocus từ shortcut. Lần chạy đầu:
   bị ngắt khi service dừng sẽ được ghi `ServiceStopped` + `Interrupted` và phục hồi ở lần start kế
   tiếp (`Recovery`).
 - Dữ liệu trong `%ProgramData%\EduFocus` không bị MSI chạm tới; marker `ServiceMode` giữ nguyên qua
-  nâng cấp nhờ component GUID cố định.
+  nâng cấp nhờ component GUID cố định. Thư mục `certificates` và root tin cậy cũng được giữ nguyên;
+  service tiếp tục dùng CA hiện có nên không phải cài lại chứng chỉ khi nâng cấp.
 - **Mã hóa dữ liệu:** service mở DB bằng khóa 32 byte lưu qua DPAPI trong
   `%ProgramData%\EduFocus\edufocus.key`. Nếu DB hiện tại còn plaintext (bản trước issue #47),
   initializer tạo backup, export sang SQLCipher, verify rồi thay file; lỗi thì giữ DB cũ + backup.
@@ -199,11 +203,15 @@ xóa registry native messaging và manifest `native-host\com.edufocus.native_hos
 5. `IBrowserDnsPolicyPort.RestoreAsync()` khôi phục policy Secure DNS trước đó của Chrome/Edge (hoặc
    xóa value nếu trước đó chưa có) và xóa backup `HKLM\SOFTWARE\EduFocus\BrowserDnsPolicy`; lỗi được
    log và trả mã lỗi nhưng không chặn gỡ cài đặt;
-6. nếu được yêu cầu, xóa thư mục dữ liệu (kể cả `edufocus.key`) sau khi kiểm tra đường dẫn đúng là
+6. `ILocalCertificateAuthority.RemoveTrustAsync()` gỡ mọi root "EduFocus Local Blocking CA" khỏi
+   `LocalMachine\Root`, rồi xóa thư mục `%ProgramData%\EduFocus\certificates` (khóa CA + file CA).
+   Bước này chạy **kể cả khi giữ dữ liệu**; lỗi được log và trả mã lỗi nhưng không chặn gỡ cài đặt
+   (khi đó phải xóa tay trong Certificate Manager);
+7. nếu được yêu cầu, xóa thư mục dữ liệu (kể cả `edufocus.key`) sau khi kiểm tra đường dẫn đúng là
    `%ProgramData%\EduFocus` và watchdog/service đã dừng.
 
 Block page listener và process watcher chạy trong service; SCM stop là listener đóng theo, không để
-lại port 80 hay process mồ côi. MSI xóa component `ServiceModeRegistry` nên lần cài sau (nếu dùng
+lại port 80/443 hay process mồ côi. MSI xóa component `ServiceModeRegistry` nên lần cài sau (nếu dùng
 bản standalone) không còn marker. Gỡ service cần quyền admin, giống gỡ MSI.
 
 ### Silent uninstall
@@ -222,7 +230,7 @@ Sau khi gỡ, còn lại tối đa:
 - thư mục cài đặt `%ProgramFiles%\EduFocus` (MSI xóa khi rỗng);
 - shortcut/registry/service row (MSI xóa);
 - `%ProgramData%\EduFocus` **chỉ khi** người dùng chọn giữ dữ liệu (gồm DB mã hóa, `edufocus.key`,
-  backup và log service);
+  backup và log service); thư mục `certificates` **luôn** bị xóa cùng root đã gỡ trust;
 - log chẩn đoán `%LocalAppData%\EduFocus\logs` của từng tài khoản Windows (UI, không chứa secret).
 
 ---
@@ -232,7 +240,7 @@ Sau khi gỡ, còn lại tối đa:
 | Đường dẫn | Nội dung | ACL |
 |---|---|---|
 | `%ProgramFiles%\EduFocus` | `EduFocus.exe`, `EduFocus.Service.exe`, `native-host\EduFocus.NativeHost.exe`, manifest native messaging | mặc định Program Files (admin ghi, user đọc/chạy) |
-| `%ProgramData%\EduFocus` | `edufocus.db` (SQLCipher), `edufocus.key`, `backups/` (mã hóa), `runtime/`, `hosts-backup/`, `logs/` (service) | Administrators + SYSTEM full control, protected, kế thừa |
+| `%ProgramData%\EduFocus` | `edufocus.db` (SQLCipher), `edufocus.key`, `backups/` (mã hóa), `runtime/`, `hosts-backup/`, `logs/` (service), `certificates/` (CA cục bộ cho block page HTTPS) | Administrators + SYSTEM full control, protected, kế thừa |
 | `%LocalAppData%\EduFocus\logs` | log kỹ thuật của UI (redacted) | theo tài khoản người dùng |
 | `%LocalAppData%\EduFocus\exports` | CSV phụ huynh tự xuất | theo tài khoản người dùng |
 
@@ -240,7 +248,10 @@ Service chạy SYSTEM nên không có `%LocalAppData%`; `FileLogger` của servi
 `%ProgramData%\EduFocus\logs` với cùng redaction, rotation 10 MB và retention 14 ngày.
 
 Installer và app đều áp ACL qua `DataDirectorySecurity`; file tạo sau (DB, WAL, backup, key)
-kế thừa ACL thư mục. Standard user không đọc/ghi được dữ liệu học tập.
+kế thừa ACL thư mục. Standard user không đọc/ghi được dữ liệu học tập. Thư mục `certificates` do
+`LocalCertificateAuthority` tạo muộn hơn (lần bật bảo vệ đầu tiên) và tự áp ACL
+Administrators/SYSTEM; MSI không đóng gói khóa CA hay chứng chỉ nào, và root tin cậy chỉ được cài
+trong thời gian service chạy bảo vệ.
 
 `edufocus.key` do service (SYSTEM) tạo lần đầu và không nằm trong MSI/backup; khóa được bảo vệ bằng
 DPAPI `LocalMachine` nên chỉ giải mã được trên đúng máy đã tạo. Thiếu key, key hỏng hoặc chép DB
@@ -308,6 +319,17 @@ Chưa thể chạy tự động trong CI (cần VM Windows). Checklist bắt bu�
     key mới và DB giữ nguyên; trả key lại → service Running và dữ liệu còn nguyên. Chép
     `edufocus.db` sang VM khác → không mở được (khóa gắn thiết bị); restore backup trên chính máy
     có key hoạt động (SEC-E2E-28).
+17. CA cục bộ và HTTPS block page: bật bảo vệ → `%ProgramData%\EduFocus\certificates\block-root-ca.edufocus`
+    tồn tại với header `EDUCA1` và ACL Administrators/SYSTEM; Certificate Manager (Local Computer →
+    Trusted Root) có "EduFocus Local Blocking CA"; mở `https://chatgpt.com` trong Chrome/Edge bị chặn
+    → hiển thị trang chặn, **không** có cảnh báo chứng chỉ; `BlockedAttempt` ghi domain (không path).
+    Tắt bảo vệ → root biến mất, listener 443 đóng.
+18. Port 443 đang bị ứng dụng khác chiếm → bật bảo vệ: protection vẫn ON, UI có cảnh báo HTTPS không
+    khả dụng, HTTP block page vẫn hoạt động; đóng ứng dụng chiếm cổng rồi tắt/bật lại → HTTPS hoạt động.
+19. Firefox (nếu có) → trang chặn HTTPS hiện cảnh báo chứng chỉ nhưng domain vẫn bị chặn; ghi nhận là
+    giới hạn đã biết, không phải lỗi cài đặt.
+20. Gỡ cài đặt **giữ dữ liệu** → root "EduFocus Local Blocking CA" không còn trong Trusted Root,
+    thư mục `certificates` bị xóa, `edufocus.db`/`edufocus.key` còn nguyên.
 
 Kết quả từng lần chạy ghi vào [release-checklist.md](./release-checklist.md) §2.4. Quy trình tag,
 ký số, checksum và dry run nằm ở [release-process.md](./release-process.md); ngưỡng hiệu năng và

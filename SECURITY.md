@@ -18,7 +18,9 @@ EduFocus là ứng dụng desktop **local-first** dành cho phụ huynh giám s�
 
 - Ghi file `hosts` để chặn domain (yêu cầu quyền Administrator).
 - Chạy local HTTP block page bind loopback `127.0.0.1:80`, chỉ phục vụ GET/HEAD và HTML tĩnh; port 80 có thể bị ứng dụng khác chiếm.
-- Block page chỉ trả trang khi Host header khớp domain exact đang bị chặn; input không được echo, output escape, CSP chặn tài nguyên ngoài.
+- Chạy local HTTPS block page bind loopback `127.0.0.1:443` với chứng chỉ domain do CA cục bộ phát hành, chỉ khi CA cục bộ đã được cài tin cậy; port 443 có thể bị ứng dụng khác chiếm.
+- Block page chỉ trả trang khi Host header khớp domain exact đang bị chặn; input không được echo, output escape, CSP chặn tài nguyên ngoài. HTTPS chỉ bật HTTP/1.1 + TLS 1.2/1.3, không yêu cầu client certificate.
+- Public root của CA cục bộ được cài vào `LocalMachine\Root` khi bảo vệ ON và bị gỡ khi tắt bảo vệ hoặc gỡ cài đặt; khóa riêng của CA không bao giờ rời máy.
 - Theo dõi foreground window/process.
 - Có thể kill process nằm trong blocklist.
 - Truy cập webcam để ước lượng trạng thái tập trung (nếu bật).
@@ -35,9 +37,9 @@ EduFocus là ứng dụng desktop **local-first** dành cho phụ huynh giám s�
 ### Dịch vụ bảo vệ và IPC
 
 - Service chạy **LocalSystem** vì các thao tác cần thiết đều đòi đặc quyền: ghi file `hosts`, bind
-  cổng 80 loopback, kill process của user khác và ghi DB có ACL Administrators/SYSTEM. Đây là tài
-  khoản tối thiểu đáp ứng đủ các thao tác đó; service chạy headless trong Session 0, không mở
-  webcam/foreground và không có UI.
+  cổng 80/443 loopback, cài public root CA vào `LocalMachine\Root`, kill process của user khác và ghi
+  DB có ACL Administrators/SYSTEM. Đây là tài khoản tối thiểu đáp ứng đủ các thao tác đó; service chạy
+  headless trong Session 0, không mở webcam/foreground và không có UI.
 - IPC là named pipe `\\.\pipe\EduFocus.ServiceControl.v1`, ACL chỉ **SYSTEM + Administrators** (không
   cho standard user), mỗi kết nối một request, payload JSON có length-prefix 4 byte LE, request tối đa
   16 KB và response tối đa 64 KB. Mọi trường được validate; lỗi trả mã lỗi chung, không trả đường dẫn
@@ -60,6 +62,38 @@ EduFocus là ứng dụng desktop **local-first** dành cho phụ huynh giám s�
   restart khi crash; marker `ServiceMode=1` bảo UI không mở engine thứ hai. Gỡ cài đặt dừng service
   trước khi chạy cleanup hosts/dữ liệu.
 
+### Chứng chỉ cục bộ cho trang chặn HTTPS
+
+Trang chặn đẹp cần hiển thị cả khi học sinh mở `https://…`; vì vậy EduFocus chạy thêm listener TLS
+loopback và tự phát hành chứng chỉ cho đúng domain bị chặn (issue #149–#152). Đây là thay đổi an ninh
+lớn nhất của bản này nên được giới hạn chặt:
+
+- Root CA là ECDSA P-256 sinh cục bộ một lần. Khóa riêng được lưu trong
+  `%ProgramData%\EduFocus\certificates\block-root-ca.edufocus` dưới dạng `EDUCA1` + blob DPAPI
+  `DataProtectionScope.LocalMachine` (entropy `EduFocus.CertificateAuthority.v1`), không có PFX hay
+  khóa dạng plaintext; thư mục có ACL Administrators/SYSTEM kế thừa. Root có hiệu lực 10 năm và chỉ
+  được dùng để ký leaf, không xuất hiện trong log hay IPC.
+- Chỉ **public root** được cài vào `LocalMachine\Root`. Root được cài trước khi listener 443 khởi động
+  và bị gỡ khi tắt bảo vệ, khi rollback và khi gỡ cài đặt (kể cả khi giữ dữ liệu). Nếu gỡ cài đặt thất
+  bại giữa chừng, phụ huynh/quản trị viên phải xóa tay mục "EduFocus Local Blocking CA" trong
+  Certificate Manager (Local Computer → Trusted Root).
+- Leaf chỉ được phát cho domain exact nằm trong danh sách đang chặn và chỉ khi trình duyệt gửi SNI
+  khớp domain đó; không có API/IPC phát chứng chỉ tùy ý. Leaf ECDSA P-256, `CA:FALSE`, key usage
+  `DigitalSignature`, EKU `serverAuth`, SAN đúng một `dnsName`, hiệu lực 14 ngày và được cache trong
+  bộ nhớ (tối đa 512 domain). Khóa riêng của leaf nằm trong user key store của tiến trình đang chạy
+  (SChannel không hỗ trợ khóa ephemeral cho server) và được xóa khi đối tượng chứng chỉ bị dispose —
+  thường là khi tắt bảo vệ hoặc thoát tiến trình.
+- Listener TLS chỉ bật khi `ILocalCertificateAuthority.IsReady = true` (root đã cài tin cậy). Nếu
+  không đủ quyền cài root, cổng 443 bận hoặc phát hành leaf lỗi, listener HTTPS không chạy/không bắt
+  tay được, engine vẫn giữ protection ON với cảnh báo; HTTP và hosts vẫn hoạt động.
+- SNI lạ hoặc domain không bị chặn bị từ chối ngay trong handshake; request HTTPS vẫn kiểm tra Host
+  header như HTTP và chỉ trả trang khi khớp domain bị chặn. Log chỉ ghi loại lỗi/cổng, không ghi domain.
+- Rủi ro còn lại: root là trust anchor phạm vi máy, nên tài khoản Administrator/SYSTEM hoặc phần mềm
+  đọc được file khóa có thể mạo danh website trên máy này. ACL + DPAPI + gỡ trust khi OFF là các lớp
+  giảm thiểu; đây là đánh đổi đã được chấp nhận để có trang chặn HTTPS nhất quán, và được ghi trong
+  giới hạn đã biết. Firefox mặc định không dùng kho root của Windows nên sẽ hiện cảnh báo chứng chỉ
+  (domain vẫn bị chặn); Chrome/Edge dùng kho Windows nên hiển thị trang chặn bình thường.
+
 ### Hồ sơ minh bạch
 
 - [docs/privacy-notice.md](docs/privacy-notice.md) — thông báo quyền riêng tư đang áp dụng: dữ liệu thu thập, mục đích, lưu trữ, chia sẻ, quyền của chủ thể dữ liệu, quy trình xóa và xử lý sự cố.
@@ -78,6 +112,13 @@ EduFocus là ứng dụng desktop **local-first** dành cho phụ huynh giám s�
 - **Nâng cấp DB plaintext:** DB từ bản trước #47 được backup plaintext, export sang bản mã hóa, verify `PRAGMA integrity_check` rồi mới thay file; lỗi giữ nguyên DB cũ. Backup plaintext legacy được mã hóa lại khi khởi động/restore.
 - **Backup mã hóa:** SQLite backup API không hỗ trợ DB mã hóa nên backup dùng `ATTACH` + `sqlcipher_export` vào database đích đã key bằng `sqlite3_key_v2`; backup được verify và giữ tối đa 3 bản. Backup mã hóa bằng khóa khác bị từ chối; backup trước migration được kiểm tra `PRAGMA integrity_check`. Khi DB hỏng, ứng dụng giữ nguyên file và yêu cầu khôi phục từ backup, không tự xóa dữ liệu.
 - **Khóa gắn máy và quy trình mất khóa:** DPAPI `LocalMachine` chỉ giải mã trên đúng máy đã tạo khóa. Khi sao lưu thủ công, phải giữ `edufocus.key` cùng DB/backup và chỉ khôi phục trên máy đó; đổi máy hoặc mất file khóa làm dữ liệu 2.0 không thể khôi phục (không có backdoor, không lưu khóa trên cloud). App báo lỗi an toàn kèm hướng dẫn; không gửi file khóa/DB qua kênh công khai. Chi tiết: [docs/database_schema.md](docs/database_schema.md) §18.
+- **Chứng chỉ cục bộ cho block page HTTPS:** khóa riêng của root CA chỉ tồn tại trong
+  `%ProgramData%\EduFocus\certificates` dưới dạng DPAPI `LocalMachine`, không gửi đi đâu và không ghi
+  log; chỉ public root được tin cậy trên máy. Leaf được sinh trong bộ nhớ cho đúng domain đang bị chặn
+  và khóa riêng leaf chỉ nằm trong key store của user đang chạy tiến trình, bị xóa khi dispose. Không
+  có domain, URL hay dữ liệu duyệt web nào được gửi tới CA/OCSP/CRL bên ngoài — chứng chỉ do CA cục bộ
+  ký, kiểm tra thu hồi bị tắt (`NoCheck`) vì không có hạ tầng CRL/OCSP; việc này không ảnh hưởng dữ
+  liệu người dùng và chỉ áp dụng cho block page loopback.
 - Log kỹ thuật của UI nằm trong `%LocalAppData%\EduFocus\logs`; log của service nằm trong `%ProgramData%\EduFocus\logs` (ACL Administrators/SYSTEM). Cả hai tối đa 10 MB/file và giữ 14 ngày. PIN, recovery code, token và URL đầy đủ được redact trước khi ghi — kể cả khi secret không có dấu `=`/`:` (ví dụ `PIN 482915`, `recovery code is ...`); exception lồng nhau cũng được redact. Test quét raw byte DB, WAL và backup xác nhận không có PIN/recovery code dạng plaintext. Audit event quan trọng nằm trong `AuditLogs` của DB, không ghi vào file log.
 - PIN/recovery code chỉ lưu dưới dạng hash PBKDF2-SHA256 600.000 iterations, salt 16 byte, hash 32 byte; so sánh constant-time; dùng chung lockout 5 lần/15 phút. Recovery code 12 ký tự chỉ hiển thị một lần và được xoay sau khi dùng để reset PIN. Mỗi lần sai PIN/recovery code được ghi audit `AuthenticationFailed`; lần thứ 5 ghi thêm `LockoutTriggered`.
 - Parent Mode session chỉ nằm trong bộ nhớ, tự khóa sau 5 phút idle hoặc khi đóng cửa sổ Parent Mode, và không được khôi phục sau khi app khởi động lại; đổi PIN thành công buộc đăng nhập lại.
@@ -97,7 +138,7 @@ EduFocus là ứng dụng desktop **local-first** dành cho phụ huynh giám s�
 - **Installer:** payload MSI được harvest từ thư mục publish self-contained **gồm `EduFocus.exe`, `EduFocus.Service.exe` và native host**; script build **từ chối** nếu thiếu service exe, private key/chứng chỉ (`.pfx`, `.p12`, `.snk`, `.key`, `.pem`...), file secret (`secrets.json`, `id_rsa`...) và marker `-----BEGIN ... PRIVATE KEY-----`, đồng thời chặn `.db`/`.log`/backup trong publish. Bước **Thông báo quyền riêng tư** bắt buộc tick đồng ý trước khi copy file; payload kèm `docs\privacy-notice.md`, `THIRD-PARTY-NOTICES.md` và `LICENSE`. MSI dùng codepage UTF-8 (`65001`) để hiển thị tiếng Việt đúng. MSI cài per-machine, cài service `EduFocusProtection` (LocalSystem, auto-start, restart khi crash), ghi marker `HKLM\SOFTWARE\EduFocus\ServiceMode=1`, tạo `%ProgramData%\EduFocus` + ACL Administrators/SYSTEM bằng custom action deferred as SYSTEM (`--prepare-data-directory`) trước khi service/app tạo DB; nếu bước này lỗi, cài đặt rollback. Nâng cấp dùng `MajorUpgrade` cùng UpgradeCode, dừng service và đóng app trước khi thay file; dữ liệu nằm ngoài thư mục cài nên không bị xóa. Gỡ cài đặt dừng service qua `ServiceControl`, chạy `--uninstall-watchdog` (dọn scheduled task/watchdog cũ, xóa runtime, `SelfHealAsync` gỡ hosts marker + xóa `hosts-backup`) và **chỉ xóa** `%ProgramData%\EduFocus` khi người dùng chọn trong hộp thoại hoặc silent uninstall đặt `DELETEUSERDATA=1`; mặc định giữ dữ liệu. Chi tiết: [docs/installer.md](docs/installer.md).
 - **Phát hành:** GitHub Actions build từ tag, chạy test, publish self-contained `EduFocus.exe`, `EduFocus.Service.exe` và native host, kiểm tra version từng exe, đính kèm `SHA256SUMS.txt` và hướng dẫn cài. Khi repo có chứng chỉ code signing (`CODESIGN_PFX_BASE64`/`CODESIGN_PFX_PASSWORD`, bật `REQUIRE_CODE_SIGNING`), workflow ký **cả ba exe** và MSI bằng `signtool`, xác minh `/pa` và fail nếu chữ ký không hợp lệ. Job build chỉ có `contents: read`; chỉ job công bố mới có `contents: write`. Secret chỉ truyền vào step ký, không ghi log/artifact; workflow quét workspace để chặn chứng chỉ, secret và dữ liệu runtime. Chi tiết: [docs/release-process.md](docs/release-process.md).
 - Adapter hosts file (`HostsFileBlocker`) chỉ sửa khối giữa marker `### EDUFOCUS BLOCK START/END ###`, ghi cả `127.0.0.1` và `::1` cho domain exact và không tự thêm `www.`. Trước lần ghi đầu, hosts được backup vào `%ProgramData%\EduFocus\hosts-backup` kèm `journal.json`; restore trả lại đúng byte gốc nếu ngoài marker không bị sửa, ngược lại chỉ gỡ marker để không đè chỉnh sửa của người dùng. Sau restore/self-heal thành công, journal và file `.bak` đều được xóa; adapter chỉ xóa backup nằm trong thư mục backup của EduFocus. Lỗi quyền/khóa file ném `HostsFileException` để bảo vệ không bị coi là đã tắt; log chỉ ghi số domain, không ghi nội dung hosts.
-- Block page chỉ ghi nhận domain + thời điểm qua `BlockPageHit` (engine debounce rồi ghi `BlockedAttempt`); không ghi path/query/User-Agent hay nội dung trang. Log kỹ thuật chỉ ghi cổng/trạng thái listener, không ghi domain; cổng 80 bận trả warning và không làm tắt bảo vệ.
+- Block page chỉ ghi nhận domain + thời điểm qua `BlockPageHit` (engine debounce rồi ghi `BlockedAttempt`); không ghi path/query/User-Agent hay nội dung trang. Log kỹ thuật chỉ ghi cổng/trạng thái listener và loại lỗi chứng chỉ, không ghi domain; cổng 80/443 bận hoặc CA chưa tin cậy trả warning và không làm tắt bảo vệ.
 - Process watcher chỉ xử lý process có cửa sổ chính, khớp chính xác tên đã chuẩn hóa và không nằm trong allowlist; PID ≤ 4, chính EduFocus và process hệ thống quan trọng bị bỏ qua. Trước khi kill, watcher gửi `WM_CLOSE` và chờ tối đa 2 giây; quá hạn mới kill process tree. `ProcessBlockedObservation` chỉ gồm tên process, PID, kết quả và cảnh báo; không ghi window title, path hay nội dung tài liệu. Log không ghi danh sách process đang chạy.
 - Retention mặc định: sample 30 ngày, event/blocked attempt 90 ngày, session summary/audit 365 ngày.
 - Báo cáo CSV do phụ huynh chủ động xuất từ Parent Mode được ghi vào `%LocalAppData%\EduFocus\exports` (ngoài ACL của `%ProgramData%`), dùng UTF-8 có BOM và không ghi đè file cũ. File chỉ chứa tổng hợp session, app name + domain đã làm sạch, attention state/confidence và thời lượng; không có PIN/recovery code/token, window title, URL đầy đủ, note hay dữ liệu camera. Ô bắt đầu bằng `=`, `+`, `-`, `@` được escape trước khi mở bằng Excel (chống formula injection), và UI nhắc phụ huynh bảo vệ file vì đây là dữ liệu học tập nhạy cảm; ứng dụng không tự gửi file đi đâu.
@@ -115,7 +156,15 @@ Các điểm sau **không được coi là lỗ hổng bảo mật** vì đã đ
   tự resolve DNS vẫn có thể bypass.
 - File `hosts` có thể bị antivirus hoặc ứng dụng khác khóa: adapter thử lại 3 lần rồi báo `Locked`/`AccessDenied` và giữ nguyên trạng thái bảo vệ; phụ huynh cần đóng ứng dụng đang giữ file rồi bật lại bảo vệ.
 - Hosts không tạo log truy cập HTTPS; `BlockedAttempt` là best-effort, không phải tổng tuyệt đối.
-- Trang chặn chỉ hiển thị với HTTP; HTTPS thường báo lỗi kết nối/SSL.
+- Trang chặn HTTPS phụ thuộc CA cục bộ: Chrome/Edge và ứng dụng dùng kho root của Windows thấy trang;
+  Firefox mặc định không tin root Windows nên hiện cảnh báo chứng chỉ (domain vẫn bị chặn). Ứng dụng
+  pin certificate, VPN/proxy hoặc browser dùng root store riêng có thể không thấy trang. Nếu không cài
+  được root (thiếu quyền), cổng 443 bận hoặc phát hành leaf lỗi, listener HTTPS không chạy và HTTPS
+  quay lại báo lỗi kết nối.
+- Root CA cục bộ là trust anchor phạm vi máy: Administrator/SYSTEM hoặc phần mềm đọc được file khóa
+  DPAPI có thể mạo danh website trên máy này. Root bị gỡ khi tắt bảo vệ và khi gỡ cài đặt; nếu cleanup
+  thất bại (ví dụ MSI bị hủy giữa chừng) phải xóa tay "EduFocus Local Blocking CA" trong Certificate
+  Manager (Local Computer → Trusted Root).
 - Block page chỉ bind IPv4 `127.0.0.1`; hosts có thêm bản ghi `::1`, nên kết nối IPv6 thuần có thể báo lỗi kết nối thay vì thấy trang chặn, nhưng domain vẫn bị chặn.
 - Windows shutdown/logoff vẫn là đường bypass được chấp nhận: app không chặn OS và không gỡ chặn trong lúc shutdown, nhưng bảo vệ được phục hồi ở lần đăng nhập kế tiếp (standalone: watchdog khởi động lại app trong ≤ 30 giây sau kill; service mode: service auto-start lại cùng Windows và reconcile engine).
 - Đổi giờ hệ thống có thể làm lịch bảo vệ lệch: app phát hiện nhảy giờ, ghi audit và không tự tắt bảo vệ ở tick phát hiện, nhưng không khôi phục được giờ đúng; các tick sau vẫn đánh giá theo wall clock mới.
@@ -136,7 +185,7 @@ Các điểm sau **không được coi là lỗ hổng bảo mật** vì đã đ
 - Không phát hiện được mọi chatbot mới hoặc chatbot nhúng trong ứng dụng khác.
 - Process watcher khớp chính xác tên process (basename, không phân biệt hoa thường); app đổi tên binary hoặc chạy portable có thể không bị phát hiện. Process không có cửa sổ chính bị bỏ qua, nên app chạy nền không bị đóng.
 - URL/path, wildcard subdomain và AI sidebar chưa được enforce trong MVP.
-- Từ issue #24, `ProtectionEngine` đã nối adapter hosts file (issue #21), block page loopback (issue #22) và process watcher (issue #23); bật bảo vệ chặn domain/app thật. Cổng 80 bận chỉ tạo cảnh báo (Protection vẫn ON); hosts restore thất bại khi tắt ném lỗi để Protection giữ ON thay vì báo OFF giả.
+- Từ issue #24, `ProtectionEngine` đã nối adapter hosts file (issue #21), block page loopback (issue #22) và process watcher (issue #23); bật bảo vệ chặn domain/app thật. Từ issue #149–#152, block page có thêm listener HTTPS 443 với CA cục bộ và root tin cậy được cài/gỡ cùng vòng đời bảo vệ. Cổng 80/443 bận hoặc không cài được root chỉ tạo cảnh báo (Protection vẫn ON); hosts restore thất bại khi tắt ném lỗi để Protection giữ ON thay vì báo OFF giả.
 - Engine debounce 30 giây cho cùng domain/tên app và ghi `BlockedAttempt` bất đồng bộ qua writer channel; số attempt có thể ít hơn thực tế và bản cuối có thể mất nếu app thoát đột ngột.
 - Thay đổi rule khi Protection ON chưa tự áp dụng lại engine; cần tắt/bật hoặc khởi động lại.
 - File CSV đã xuất nằm ngoài DB nên retention không xóa; phụ huynh tự quản lý, di chuyển hoặc xóa file trong `%LocalAppData%\EduFocus\exports`.
@@ -149,8 +198,9 @@ Nếu bạn phát hiện cách vượt qua các giới hạn trên **trong đi�
 ### Kiểm thử bảo mật trước phát hành
 
 Checklist E2E bảo mật/quyền riêng tư nằm ở [docs/security-e2e-checklist.md](docs/security-e2e-checklist.md):
-ma trận bằng chứng tự động (XSS block page, CSV injection, redaction log, ACL, hosts rollback,
-camera không lưu frame, DB/WAL/backup không có secret, DB mã hóa và fail-closed khi thiếu/sai khóa)
+ma trận bằng chứng tự động (XSS block page, HTTP/HTTPS block page và lifecycle của CA cục bộ, CSV
+injection, redaction log, ACL, hosts rollback, camera không lưu frame, DB/WAL/backup không có secret,
+DB mã hóa và fail-closed khi thiếu/sai khóa)
 và checklist thủ công trên VM sạch
 Windows 10 22H2/Windows 11. Checklist này là **cổng bắt buộc** trước khi phát hành; kết quả được ghi
 vào release checklist (#43).

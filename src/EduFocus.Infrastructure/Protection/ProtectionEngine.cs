@@ -5,6 +5,7 @@ using EduFocus.Domain.Enums;
 using EduFocus.Domain.Privacy;
 using EduFocus.Domain.Protection;
 using EduFocus.Domain.ValueObjects;
+using EduFocus.Infrastructure.Protection.Certificates;
 using EduFocus.Ports.Outbound.Persistence;
 using EduFocus.Ports.Outbound.Services;
 using EduFocus.Ports.Protection;
@@ -42,6 +43,10 @@ public sealed class ProtectionEngine : IProtectionEnginePort, IAsyncDisposable
         "Không thể khôi phục policy Secure DNS trước đó của trình duyệt; " +
         "policy sẽ được thử lại ở lần khởi động sau.";
 
+    public const string CertificateAuthorityRemoveWarning =
+        "Không thể gỡ chứng chỉ cục bộ khỏi kho tin cậy khi tắt bảo vệ; " +
+        "hãy kiểm tra Certificate Manager (Local Computer → Trusted Root).";
+
     private readonly IBlockRuleRepository _rules;
     private readonly IHostsFileBlocker _hosts;
     private readonly IBlockPageServer _blockPage;
@@ -54,6 +59,7 @@ public sealed class ProtectionEngine : IProtectionEnginePort, IAsyncDisposable
     private readonly ProtectionEngineOptions _options;
     private readonly IBrowserExtensionBridge? _browserBridge;
     private readonly IBrowserDnsPolicyPort? _browserDnsPolicy;
+    private readonly ILocalCertificateAuthority? _certificateAuthority;
     private readonly SemaphoreSlim _gate = new(1, 1);
     private readonly ConcurrentDictionary<string, TimeSpan> _lastRecorded =
         new(StringComparer.Ordinal);
@@ -75,7 +81,8 @@ public sealed class ProtectionEngine : IProtectionEnginePort, IAsyncDisposable
         TimeProvider timeProvider,
         ProtectionEngineOptions options,
         IBrowserExtensionBridge? browserBridge = null,
-        IBrowserDnsPolicyPort? browserDnsPolicy = null)
+        IBrowserDnsPolicyPort? browserDnsPolicy = null,
+        ILocalCertificateAuthority? certificateAuthority = null)
     {
         _rules = rules ?? throw new ArgumentNullException(nameof(rules));
         _hosts = hosts ?? throw new ArgumentNullException(nameof(hosts));
@@ -95,6 +102,7 @@ public sealed class ProtectionEngine : IProtectionEnginePort, IAsyncDisposable
         _options = options;
         _browserBridge = browserBridge;
         _browserDnsPolicy = browserDnsPolicy;
+        _certificateAuthority = certificateAuthority;
 
         _blockPage.BlockedRequestObserved += OnBlockPageHit;
         _watcher.ProcessBlockedObserved += OnProcessBlocked;
@@ -237,6 +245,11 @@ public sealed class ProtectionEngine : IProtectionEnginePort, IAsyncDisposable
             throw;
         }
 
+        // The HTTPS listener is only started when the root is trusted, so the
+        // trust step must finish before the block page binds port 443.
+        warnings.AddRange(
+            await EnsureCertificateAuthorityAsync(cancellationToken).ConfigureAwait(false));
+
         BlockPageStartResult page;
         try
         {
@@ -331,6 +344,11 @@ public sealed class ProtectionEngine : IProtectionEnginePort, IAsyncDisposable
         await TryAsync(() => _hosts.RestoreAsync(CancellationToken.None), "restore the hosts file")
             .ConfigureAwait(false);
         await RestoreBrowserDnsPolicyAsync(CancellationToken.None).ConfigureAwait(false);
+        await TryAsync(
+                async () => await RemoveCertificateAuthorityTrustAsync(CancellationToken.None)
+                    .ConfigureAwait(false),
+                "remove the block-page root certificate")
+            .ConfigureAwait(false);
 
         await DrainAsync(queue, _writer).ConfigureAwait(false);
         _writer = null;
@@ -421,6 +439,11 @@ public sealed class ProtectionEngine : IProtectionEnginePort, IAsyncDisposable
 
         warnings.AddRange(
             await RestoreBrowserDnsPolicyAsync(CancellationToken.None).ConfigureAwait(false));
+
+        // Protection is OFF and the HTTPS listener has stopped, so the root no
+        // longer needs to be trusted on this machine.
+        warnings.AddRange(
+            await RemoveCertificateAuthorityTrustAsync(CancellationToken.None).ConfigureAwait(false));
 
         await DrainAsync(queue, writer).ConfigureAwait(false);
         _active = false;
@@ -689,6 +712,61 @@ public sealed class ProtectionEngine : IProtectionEnginePort, IAsyncDisposable
                 LogCategories.Protection,
                 $"Could not restore the browser Secure DNS policy ({ex.GetType().Name}).");
             return [BrowserDnsPolicyRestoreWarning];
+        }
+    }
+
+    private async Task<IReadOnlyList<string>> EnsureCertificateAuthorityAsync(
+        CancellationToken cancellationToken)
+    {
+        if (_certificateAuthority is null)
+            return [];
+
+        try
+        {
+            var result = await _certificateAuthority
+                .EnsureTrustedAsync(cancellationToken)
+                .ConfigureAwait(false);
+
+            return result.Warning is null ? [] : [result.Warning];
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            _logger.Error(
+                LogCategories.Protection,
+                "Could not trust the local block-page certificate authority.",
+                ex);
+            return [LocalCertificateAuthority.TrustWarning];
+        }
+    }
+
+    private async Task<IReadOnlyList<string>> RemoveCertificateAuthorityTrustAsync(
+        CancellationToken cancellationToken)
+    {
+        if (_certificateAuthority is null)
+            return [];
+
+        try
+        {
+            var result = await _certificateAuthority
+                .RemoveTrustAsync(cancellationToken)
+                .ConfigureAwait(false);
+
+            return result.Warning is null ? [] : [result.Warning];
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            _logger.Warning(
+                LogCategories.Protection,
+                $"Could not remove the local block-page certificate authority ({ex.GetType().Name}).");
+            return [CertificateAuthorityRemoveWarning];
         }
     }
 

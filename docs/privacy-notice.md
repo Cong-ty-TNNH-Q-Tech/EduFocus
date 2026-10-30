@@ -17,6 +17,9 @@ trong lần thiết lập đầu tiên và luôn mở lại được từ Parent
 - **Không telemetry, không quảng cáo, không chia sẻ dữ liệu với bên thứ ba.**
 - Kiểm tra cập nhật mặc định **tắt**; khi phụ huynh bật, ứng dụng chỉ gọi GitHub Releases API và
   GitHub có thể thấy địa chỉ IP của máy.
+- Để hiển thị trang chặn trên cả trang HTTPS, khi bảo vệ đang bật EduFocus cài một **chứng chỉ gốc
+  cục bộ** (chỉ trên máy này) và tự phát hành chứng chỉ ngắn hạn cho đúng tên miền đang bị chặn;
+  chứng chỉ gốc bị gỡ khi tắt bảo vệ hoặc gỡ cài đặt và khóa riêng không rời khỏi máy.
 - Dữ liệu được giữ theo thời hạn (mặc định 30/90/365 ngày) và có thể xóa toàn bộ trong Parent Mode
   bằng PIN.
 
@@ -62,6 +65,11 @@ EduFocus xử lý các nhóm dữ liệu sau, tất cả đều lưu cục bộ:
   ghi vào `%ProgramData%\EduFocus\logs` với cùng quy tắc che dữ liệu.
 - **Tệp hỗ trợ hệ thống:** bản sao `hosts` trước khi chặn (để khôi phục), tệp trạng thái watchdog
   hoặc service trong `%ProgramData%\EduFocus\runtime`, và bản xuất CSV do phụ huynh chủ động tạo.
+- **Chứng chỉ cục bộ cho trang chặn HTTPS:** một chứng chỉ gốc do EduFocus sinh trên máy, lưu tại
+  `%ProgramData%\EduFocus\certificates` và được Windows DPAPI bảo vệ; chỉ phần công khai được cài
+  vào kho tin cậy của máy trong thời gian bảo vệ ON, và chỉ chứng chỉ ngắn hạn cho đúng tên miền bị
+  chặn mới được phát hành. Không có tên miền hay dữ liệu duyệt web nào được gửi tới bên thứ ba để
+  cấp chứng chỉ.
 - **Khóa mã hóa DB:** 32 byte ngẫu nhiên dùng để mã hóa cơ sở dữ liệu, được Windows DPAPI bảo vệ
   trong `%ProgramData%\EduFocus\edufocus.key`. Khóa không phải PIN/mật khẩu, không nằm dạng văn bản
   thường và không dùng được trên máy khác.
@@ -112,6 +120,11 @@ thương mại.
 
 - Cơ sở dữ liệu: `%ProgramData%\EduFocus\edufocus.db` (kèm WAL/SHM và tối đa 3 bản backup).
   Thư mục được cấp quyền chỉ cho Administrators và SYSTEM; tài khoản Windows chuẩn không đọc được.
+- Chứng chỉ cục bộ: `%ProgramData%\EduFocus\certificates\block-root-ca.edufocus` chứa khóa riêng
+  của CA dưới dạng DPAPI bảo vệ, cùng ACL Administrators/SYSTEM. Thư mục này bị xóa khi gỡ cài đặt.
+  Chứng chỉ gốc công khai nằm trong kho `LocalMachine\Root` chỉ khi bảo vệ đang bật; tắt bảo vệ hoặc
+  gỡ cài đặt sẽ gỡ bỏ. Khóa riêng của chứng chỉ ngắn hạn chỉ tồn tại trong tiến trình đang phục vụ
+  trang chặn và bị xóa khi dừng.
 - Cơ sở dữ liệu, WAL/SHM và backup được **mã hóa bằng SQLCipher**. Khóa mã hóa lưu trong
   `edufocus.key` dưới dạng được Windows DPAPI bảo vệ (không phải văn bản thường), cùng thư mục được
   giới hạn cho Administrators/SYSTEM. Nếu file khóa bị mất hoặc dữ liệu được chuyển sang máy khác,
@@ -139,6 +152,8 @@ thương mại.
   chỉ IP và thông tin kết nối tiêu chuẩn. Phụ huynh có thể tắt lại bất kỳ lúc nào trong Parent
   Mode.
 - Thay đổi `hosts` chỉ định tuyến tên miền trên máy; không gửi dữ liệu ra ngoài.
+- Chứng chỉ cho trang chặn HTTPS được ký bởi CA cục bộ trên máy; EduFocus không liên hệ CA/OCSP/CRL
+  bên ngoài và không gửi tên miền bị chặn đi đâu để cấp chứng chỉ.
 - Browser extension chỉ trao đổi với tiến trình EduFocus qua named pipe/native messaging cục bộ;
   không gửi URL, lịch sử duyệt web hay dữ liệu học tập ra ngoài máy.
 

@@ -4,6 +4,7 @@ using EduFocus.Infrastructure.Auth;
 using EduFocus.Infrastructure.Export;
 using EduFocus.Infrastructure.Logging;
 using EduFocus.Infrastructure.Protection;
+using EduFocus.Infrastructure.Protection.Certificates;
 using EduFocus.Infrastructure.Services;
 using EduFocus.Infrastructure.Watchdog;
 using EduFocus.Ports.Outbound.Services;
@@ -30,6 +31,9 @@ public static class InfrastructureServiceCollectionExtensions
         services.AddSingleton<IDnsFlusher, IpconfigDnsFlusher>();
         services.AddSingleton<IHostsFileBlocker, HostsFileBlocker>();
         services.AddSingleton(new BlockPageOptions());
+        services.AddSingleton(new CertificateAuthorityOptions());
+        services.AddSingleton<ICertificateTrustStore, WindowsRootCertificateTrustStore>();
+        services.AddSingleton<ILocalCertificateAuthority, LocalCertificateAuthority>();
         services.AddSingleton<IBlockPageServer, BlockPageServer>();
         services.AddSingleton(new ProcessWatcherOptions());
         services.AddSingleton<IProcessController, WindowsProcessController>();

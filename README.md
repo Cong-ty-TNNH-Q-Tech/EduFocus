@@ -78,7 +78,7 @@ và thời hạn phản hồi ở
 
 > **Giới hạn:** Webcam thường không phải eye tracker hồng ngoại. "Tập trung" là ước lượng, không phải bằng chứng tuyệt đối. Khi Google Meet/Teams đang dùng camera, app có thể không quan sát được nếu máy chưa hỗ trợ Multi-App Camera.
 >
-> **Blocking:** Hosts chỉ chặn domain và không tạo log HTTPS. Trang chặn chỉ hiển thị với HTTP; HTTPS thường báo lỗi kết nối/SSL. Vì vậy số lần bị chặn là **best-effort**, không phải tổng tuyệt đối.
+> **Blocking:** Hosts chỉ chặn domain và không tạo log HTTPS. Trang chặn hiển thị với cả HTTP và HTTPS: EduFocus dùng root CA cục bộ (chỉ cài khi bảo vệ ON) để ký chứng chỉ tạm cho đúng domain bị chặn. Chrome/Edge thấy trang chặn bình thường; Firefox vẫn cảnh báo chứng chỉ. Vì vậy số lần bị chặn là **best-effort**, không phải tổng tuyệt đối.
 
 ---
 
@@ -93,7 +93,7 @@ Chặn domain chatbot + app ngoài phạm vi cho phép
         ↓
 Ghi nhận phiên học, app/domain (best-effort) và trạng thái tập trung
         ↓
-Phụ huynh xem báo cáo; học sinh thấy trang chặn với HTTP, HTTPS báo lỗi
+Phụ huynh xem báo cáo; học sinh thấy trang chặn với cả HTTP và HTTPS
         ↓
 Tắt Protection bằng PIN hoặc hết khung giờ
 ```
@@ -112,7 +112,7 @@ Tắt Protection bằng PIN hoặc hết khung giờ
 - ✅ **Windows 11 23H2+** (64-bit) — nền tảng chính
 - ⚠️ Windows 10 22H2: chạy được nhưng Windows 10 đã hết hỗ trợ chính thức
 - 🔜 macOS — chưa hỗ trợ
-- 🌐 Chrome/Edge/Firefox chặn domain qua hosts; extension Chrome/Edge 116+ chặn thêm URL/path; block page chỉ với HTTP
+- 🌐 Chrome/Edge/Firefox chặn domain qua hosts; extension Chrome/Edge 116+ chặn thêm URL/path; block page cho cả HTTP và HTTPS (Firefox cảnh báo chứng chỉ)
 - 🎥 Webcam tích hợp hoặc webcam ngoài (tùy chọn, cho tính năng attention)
 
 ---
@@ -124,7 +124,7 @@ Tắt Protection bằng PIN hoặc hết khung giờ
 | **UI** | WPF .NET 10 LTS, CommunityToolkit.Mvvm (lớp UI mới ở Phase 6) |
 | **Architecture** | Clean Architecture + Ports & Adapters |
 | **Database** | SQLite (SQLCipher) + EF Core 10 |
-| **Blocking** | Windows hosts file (domain exact) + local HTTP block page + MV3 extension (URL/path) |
+| **Blocking** | Windows hosts file (domain exact) + local HTTP/HTTPS block page (CA cục bộ) + MV3 extension (URL/path) |
 | **Activity** | Win32 foreground window, WMI, UI Automation |
 | **Attention** | OpenCvSharp4 + ONNX Runtime (MediaPipe Face/Iris) |
 | **Background protection** | Windows Service `EduFocusProtection` (LocalSystem) + named-pipe IPC có ACL/xác thực ảnh tiến trình |
@@ -216,7 +216,7 @@ dotnet test EduFocus.slnx --configuration Release
 - Hosts file có thể bị bypass bởi DoH/DoT, VPN hoặc proxy. Chrome/Edge được tắt Secure DNS khi bảo vệ
   ON (khôi phục khi OFF/gỡ); cần khởi động lại trình duyệt. Firefox DoH/DoT, VPN và proxy vẫn có thể bypass.
 - Hosts không tạo log truy cập HTTPS; số blocked attempts chỉ là best-effort.
-- Trang chặn chỉ hiển thị với HTTP; HTTPS thường báo lỗi kết nối/SSL.
+- Trang chặn HTTPS dựa trên root CA cục bộ: Chrome/Edge hiển thị bình thường, Firefox vẫn cảnh báo chứng chỉ. Root chỉ được tin cậy khi bảo vệ ON và bị gỡ khi OFF/gỡ cài đặt.
 - Chặn app có thể đóng/kill process và làm mất dữ liệu chưa lưu; EduFocus ưu tiên `WM_CLOSE` trước khi kill.
 - Extension Chrome/Edge chặn URL/path cấp tab; chưa hỗ trợ Firefox, iframe/subresource hay wildcard
   subdomain. Extension có thể bị tắt bởi người dùng có quyền quản trị máy.

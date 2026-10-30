@@ -80,7 +80,7 @@ in [privacy notice §10](./docs/privacy-notice.md#10-yêu-cầu-xóa-dữ-liệu
 
 > **Limitation:** A webcam is not an infrared eye tracker. "Focus" is an estimate, not absolute proof. When Google Meet/Teams is using the camera, the app may not be able to observe if the machine does not support Multi-App Camera.
 >
-> **Blocking:** Hosts blocks domains but does not log HTTPS. The block page only appears over HTTP; HTTPS usually shows a connection/SSL error. Blocked-attempt counts are therefore **best-effort**, not absolute totals.
+> **Blocking:** Hosts blocks domains but does not log HTTPS. The block page appears over both HTTP and HTTPS: EduFocus uses a local root CA (trusted only while protection is ON) to sign a temporary certificate for each blocked domain. Chrome/Edge show the block page normally; Firefox still warns about the certificate. Blocked-attempt counts are therefore **best-effort**, not absolute totals.
 
 ---
 
@@ -95,7 +95,7 @@ Blocks chatbot domains + disallowed apps
         ↓
 Records study sessions, apps/domains (best-effort), and attention states
         ↓
-Parent reviews reports; student sees a block page over HTTP, HTTPS shows an error
+Parent reviews reports; student sees a block page over both HTTP and HTTPS
         ↓
 Protection turns off with PIN or when the schedule window ends
 ```
@@ -114,7 +114,7 @@ Protection turns off with PIN or when the schedule window ends
 - ✅ **Windows 11 23H2+** (64-bit) — primary platform
 - ⚠️ Windows 10 22H2: may run, but Windows 10 is out of official support
 - 🔜 macOS — not supported
-- 🌐 Chrome/Edge/Firefox for domain blocking via hosts; Chrome/Edge 116+ extension adds URL/path blocking; block page over HTTP only
+- 🌐 Chrome/Edge/Firefox for domain blocking via hosts; Chrome/Edge 116+ extension adds URL/path blocking; block page over HTTP and HTTPS (Firefox warns about the certificate)
 - 🎥 Built-in or external webcam (optional, for attention)
 
 ---
@@ -126,7 +126,7 @@ Protection turns off with PIN or when the schedule window ends
 | **UI** | WPF .NET 10 LTS, CommunityToolkit.Mvvm (new UI in Phase 6) |
 | **Architecture** | Clean Architecture + Ports & Adapters |
 | **Database** | SQLite (SQLCipher) + EF Core 10 |
-| **Blocking** | Windows hosts file (exact domains) + local HTTP block page + MV3 extension (URL/path) |
+| **Blocking** | Windows hosts file (exact domains) + local HTTP/HTTPS block page (local CA) + MV3 extension (URL/path) |
 | **Activity** | Win32 foreground window, WMI, UI Automation |
 | **Attention** | OpenCvSharp4 + ONNX Runtime (MediaPipe Face/Iris) |
 | **Background protection** | Windows Service `EduFocusProtection` (LocalSystem) + named-pipe IPC with ACL and process-image verification |
@@ -218,7 +218,7 @@ dotnet test EduFocus.slnx --configuration Release
 - The hosts file can be bypassed via DoH/DoT, VPN, or a proxy. Chrome/Edge Secure DNS is disabled while
   protection is ON (restored when OFF/uninstalled); the browser must be restarted. Firefox DoH/DoT, VPN and proxies can still bypass it.
 - Hosts does not log HTTPS access; blocked-attempt counts are best-effort only.
-- The block page only appears over HTTP; HTTPS usually shows a connection/SSL error.
+- The HTTPS block page relies on a local root CA: Chrome/Edge display it normally, Firefox still warns. The root is trusted only while protection is ON and removed on OFF/uninstall.
 - App blocking may close/kill a process and lose unsaved data; EduFocus sends `WM_CLOSE` before killing.
 - The Chrome/Edge extension blocks top-level URL/path navigations; Firefox, iframes/subresources and
   wildcard subdomains are not covered. A user with administrator rights can disable the extension.

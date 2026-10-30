@@ -4,6 +4,7 @@ using EduFocus.Domain.Enums;
 using EduFocus.Domain.Reports;
 using EduFocus.Domain.ValueObjects;
 using EduFocus.Infrastructure.Protection;
+using EduFocus.Infrastructure.Protection.Certificates;
 using EduFocus.Ports.Outbound.Persistence;
 using EduFocus.Ports.Outbound.Services;
 using EduFocus.Ports.Protection;
@@ -24,6 +25,7 @@ public sealed class ProtectionEngineTests
     private readonly FakeClock _clock = new();
     private readonly FakeBrowserExtensionBridge _bridge = new();
     private readonly FakeBrowserDnsPolicy _dnsPolicy = new();
+    private readonly FakeCertificateAuthority _certificateAuthority = new();
     private readonly FixedTimeProvider _time = new(Now.AddMinutes(5));
     private readonly RecordingLogger _logger = new();
     private readonly List<string> _order = [];
@@ -33,6 +35,7 @@ public sealed class ProtectionEngineTests
         _hosts.Order = _order;
         _page.Order = _order;
         _watcher.Order = _order;
+        _certificateAuthority.Order = _order;
     }
 
     [Fact]
@@ -398,6 +401,91 @@ public sealed class ProtectionEngineTests
     }
 
     [Fact]
+    public async Task Apply_trusts_the_certificate_authority_before_starting_the_block_page()
+    {
+        _rules.Rules.Add(Rule(RuleType.Domain, "chatgpt.com"));
+        await using var engine = CreateEngine();
+
+        var warnings = await engine.ApplyAsync();
+
+        warnings.Should().BeEmpty();
+        _certificateAuthority.EnsureCalls.Should().Be(1);
+        _order.Should().ContainInOrder("ca:ensure", "page:start");
+    }
+
+    [Fact]
+    public async Task Apply_keeps_protection_when_the_certificate_authority_fails()
+    {
+        _rules.Rules.Add(Rule(RuleType.Domain, "chatgpt.com"));
+        _certificateAuthority.EnsureResult =
+            new CertificateAuthorityResult(false, "certificate warning");
+        await using var engine = CreateEngine();
+
+        var warnings = await engine.ApplyAsync();
+
+        warnings.Should().ContainSingle().Which.Should().Be("certificate warning");
+        _page.IsRunning.Should().BeTrue();
+        _hosts.Applied.Should().Equal("chatgpt.com");
+        _watcher.IsRunning.Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task Apply_warns_when_the_certificate_authority_throws()
+    {
+        _rules.Rules.Add(Rule(RuleType.Domain, "chatgpt.com"));
+        _certificateAuthority.EnsureException = new InvalidOperationException("dpapi");
+        await using var engine = CreateEngine();
+
+        var warnings = await engine.ApplyAsync();
+
+        warnings.Should().ContainSingle().Which.Should().Be(LocalCertificateAuthority.TrustWarning);
+        _page.IsRunning.Should().BeTrue();
+        _hosts.Applied.Should().Equal("chatgpt.com");
+    }
+
+    [Fact]
+    public async Task Apply_rolls_back_certificate_trust_when_hosts_fails()
+    {
+        _rules.Rules.Add(Rule(RuleType.Domain, "chatgpt.com"));
+        _hosts.ApplyException = new IOException("locked");
+        await using var engine = CreateEngine();
+
+        var act = () => engine.ApplyAsync();
+
+        await act.Should().ThrowAsync<ProtectionEngineException>();
+        _certificateAuthority.EnsureCalls.Should().Be(1);
+        _certificateAuthority.RemoveCalls.Should().Be(1);
+    }
+
+    [Fact]
+    public async Task Remove_removes_certificate_authority_trust()
+    {
+        await using var engine = CreateEngine();
+        await engine.ApplyAsync();
+        _order.Clear();
+
+        var warnings = await engine.RemoveAsync();
+
+        warnings.Should().BeEmpty();
+        _certificateAuthority.RemoveCalls.Should().Be(1);
+        _order.Should().ContainInOrder("hosts:restore", "ca:remove");
+    }
+
+    [Fact]
+    public async Task Remove_returns_warning_when_certificate_trust_removal_fails()
+    {
+        _certificateAuthority.RemoveResult =
+            new CertificateAuthorityResult(false, "certificate remove warning");
+        await using var engine = CreateEngine();
+        await engine.ApplyAsync();
+
+        var warnings = await engine.RemoveAsync();
+
+        warnings.Should().ContainSingle().Which.Should().Be("certificate remove warning");
+        _hosts.RestoreCalls.Should().Be(1);
+    }
+
+    [Fact]
     public async Task Remove_restores_browser_secure_dns()
     {
         await using var engine = CreateEngine();
@@ -574,7 +662,8 @@ public sealed class ProtectionEngineTests
         _time,
         new ProtectionEngineOptions { Debounce = TimeSpan.FromSeconds(30) },
         _bridge,
-        _dnsPolicy);
+        _dnsPolicy,
+        _certificateAuthority);
 
     private static StudySession NewSession() =>
         StudySession.Start(Now, new DateOnly(2026, 10, 30), SessionTrigger.Manual, monitoringEnabled: true);
@@ -619,6 +708,52 @@ public sealed class ProtectionEngineTests
         }
 
         throw new TimeoutException("Condition was not met within 5 seconds.");
+    }
+
+    private sealed class FakeCertificateAuthority : ILocalCertificateAuthority
+    {
+        public List<string> Order { get; set; } = [];
+
+        public int EnsureCalls { get; private set; }
+
+        public int RemoveCalls { get; private set; }
+
+        public CertificateAuthorityResult EnsureResult { get; set; } = new(true, null);
+
+        public CertificateAuthorityResult RemoveResult { get; set; } = new(true, null);
+
+        public Exception? EnsureException { get; set; }
+
+        public Exception? RemoveException { get; set; }
+
+        public bool IsReady => EnsureResult.Ready;
+
+        public Task<CertificateAuthorityResult> EnsureTrustedAsync(
+            CancellationToken cancellationToken = default)
+        {
+            EnsureCalls++;
+            Order.Add("ca:ensure");
+
+            if (EnsureException is not null)
+                throw EnsureException;
+
+            return Task.FromResult(EnsureResult);
+        }
+
+        public Task<CertificateAuthorityResult> RemoveTrustAsync(
+            CancellationToken cancellationToken = default)
+        {
+            RemoveCalls++;
+            Order.Add("ca:remove");
+
+            if (RemoveException is not null)
+                throw RemoveException;
+
+            return Task.FromResult(RemoveResult);
+        }
+
+        public System.Security.Cryptography.X509Certificates.X509Certificate2? GetServerCertificate(
+            string domain) => null;
     }
 
     private sealed class FakeBrowserDnsPolicy : IBrowserDnsPolicyPort
@@ -801,6 +936,8 @@ public sealed class ProtectionEngineTests
         public bool IsRunning { get; private set; }
 
         public int Port => 80;
+
+        public int HttpsPort => 0;
 
         public event Action<BlockPageHit>? BlockedRequestObserved;
 
