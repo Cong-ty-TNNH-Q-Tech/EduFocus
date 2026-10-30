@@ -96,6 +96,28 @@ public sealed class ActivityTrackingServiceTests
     }
 
     [Fact]
+    public async Task Passive_reading_or_online_class_below_idle_threshold_counts_as_active_study_time()
+    {
+        await using var harness = new ActivityHarness();
+        await harness.StartAsync();
+
+        harness.Foreground = harness.Snapshot("chrome", "Google Meet – Lớp Toán", idleSeconds: 120);
+        harness.Urls.Url = "https://meet.google.com/abc-def-ghi";
+
+        await harness.WriteSampleAsync();
+
+        var sample = harness.Samples.Samples.Should().ContainSingle().Subject;
+        sample.Category.Should().Be(ActivityCategory.Study);
+        sample.IsOnlineClass.Should().BeTrue();
+        sample.DurationSeconds.Should().Be(17);
+        sample.IdleSeconds.Should().Be(0);
+
+        harness.Session.StudySeconds.Should().Be(17);
+        harness.Session.OnlineClassSeconds.Should().Be(17);
+        harness.Session.IdleSeconds.Should().Be(0);
+    }
+
+    [Fact]
     public async Task Samples_without_url_still_record_the_app_and_process()
     {
         await using var harness = new ActivityHarness();

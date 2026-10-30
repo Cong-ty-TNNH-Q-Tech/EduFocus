@@ -387,7 +387,7 @@ public sealed class ActivityTrackingService : IActivityUseCase, IAsyncDisposable
             Math.Floor(Math.Max(elapsed.TotalSeconds, 0)),
             Math.Floor(_options.MaxSampleGap.TotalSeconds));
 
-        var idleForSample = Math.Min(idleSeconds, duration);
+        var idleForSample = isIdle ? Math.Min(idleSeconds, duration) : 0;
         var categorySeconds = isIdle ? 0 : duration - idleForSample;
 
         var url = isIdle ? null : ReadUrl(snapshot);
