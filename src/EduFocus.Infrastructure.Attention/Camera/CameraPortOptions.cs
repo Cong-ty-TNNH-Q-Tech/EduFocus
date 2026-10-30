@@ -1,12 +1,15 @@
 namespace EduFocus.Infrastructure.Attention.Camera;
 
 /// <summary>
-/// Capture backend settings (issue #30). MSMF is the default on Windows 10/11;
-/// the first frame is flushed so analyzers do not score a stale buffer.
+/// Capture backend settings (issue #30). DirectShow is the default because
+/// Media Foundation needs 6-8 seconds to open and negotiate a UVC webcam on
+/// some machines, longer than the 5-second camera supervisor timeout; MSMF
+/// remains selectable through <see cref="CaptureApi"/>. The first frame is
+/// flushed so analyzers do not score a stale buffer.
 /// </summary>
 public sealed class CameraPortOptions
 {
-    public string CaptureApi { get; init; } = "msmf";
+    public string CaptureApi { get; init; } = "dshow";
 
     public int Width { get; init; } = 640;
 

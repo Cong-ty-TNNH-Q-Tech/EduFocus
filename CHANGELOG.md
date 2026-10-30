@@ -389,6 +389,10 @@ và dự án tuân theo [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 - **Tài liệu:** SECURITY (trust anchor, rủi ro còn lại, Firefox), architecture §4/§5/§6 + ADR-19, DPIA (data map/R16), privacy notice, installer §3–§7, security E2E thêm SEC-E2E-30…33; Firefox vẫn cảnh báo chứng chỉ (F-42-06, P3 chấp nhận).
 - **Tests:** `CertificateAuthorityTests` 11, `BlockPageServerHttpsTests` 5, `ProtectionEngineTests` +6 cho vòng đời CA/rollback/warning.
 
+### Fixed (Camera — luôn báo không khả dụng vì MSMF chậm)
+- **Nguyên nhân:** `CameraSessionService` bọc `_camera.Open()` trong timeout 5 giây, nhưng backend MSMF mất 6,4-8,2 giây để mở và thương lượng 640×480 trên webcam UVC của máy đo (ADR-17 đã ghi nhận), cộng thêm ~0,2-0,5 giây liệt kê WMI; mọi lần mở đều vượt hạn nên bị báo `Timeout` dù camera vẫn mở được trong tác vụ nền.
+- **Sửa:** `CameraPortOptions.CaptureApi` mặc định chuyển từ `msmf` sang `dshow`; đo lại toàn bộ chuỗi WMI + mở + đặt 640×480 + đọc khung bằng DirectShow là ~1,4 giây (MSMF ~7,3 giây), nằm gọn trong timeout 5 giây. MSMF vẫn chọn được qua options; cập nhật ADR-17 và system architecture.
+
 ### Changed (UI/UX — thiết kế lại giao diện theo độ tuổi)
 - **Design system dùng chung:** thêm `Themes/DesignSystem.xaml` (bảng màu, typography, nút, input, checkbox, progress, tab, card) và chuyển toàn bộ cửa sổ sang style/token thay vì màu hardcode; không thêm thư viện UI bên ngoài.
 - **Student Mode:** `MainWindow` mới với hero trạng thái bảo vệ, thẻ thống kê hôm nay, gợi ý học tập và cập nhật; bỏ các khối "Phase 1"/thông tin dành cho nhà phát triển.

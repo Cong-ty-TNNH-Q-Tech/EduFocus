@@ -284,7 +284,7 @@ Triển khai outbound ports, tương tác Windows.
 | `WindowsSystemPowerEventPort` | `SystemEvents.PowerModeChanged` + `SessionSwitch` → `Suspended`/`Resumed` |
 | `WebcamAttentionMonitor` | Tên cũ trong tài liệu; Phase 5 tách thành `OpenCvCameraPort` + `OpenCvAttentionFrameAnalyzer` |
 | `OpenCvAttentionFrameAnalyzer` | `IAttentionFrameAnalyzer` trên `CameraFrame` managed: YuNet/Haar, luminance, không mở camera, không lưu frame (issue #31) |
-| `OpenCvCameraPort` | `ICameraPort` trên OpenCvSharp MSMF; chọn thiết bị theo PNP id, copy frame sang buffer managed, giải phóng `Mat` ngay |
+| `OpenCvCameraPort` | `ICameraPort` trên OpenCvSharp; backend DirectShow mặc định (MSMF chọn qua `CameraPortOptions`), chọn thiết bị theo PNP id, copy frame sang buffer managed, giải phóng `Mat` ngay |
 | `WindowsCameraDeviceCatalog` | Liệt kê camera qua WMI `Win32_PnPEntity` (best effort) |
 | `Pbkdf2PasswordHasher` | PBKDF2-SHA256 600.000 iterations, salt 16 byte, hash 32 byte, constant-time compare |
 | `RecoveryCodeGenerator` | Sinh recovery code 12 ký tự từ alphabet không nhập nhằng bằng CSPRNG |
@@ -1234,7 +1234,7 @@ AddViews()
 > local time ≥ 03:00 (mỗi ngày một lần). `ServiceProvider.Dispose()` dừng `DispatcherTimer`.
 
 > **Bổ sung sau issue #30:** composition root đăng ký `ICameraDeviceCatalog`/`WindowsCameraDeviceCatalog`,
-> `CameraPortOptions` (MSMF 640×480), `ICameraPort`/`OpenCvCameraPort`, `CameraOptions` (timeout 5 giây,
+> `CameraPortOptions` (DirectShow 640×480, MSMF chọn được), `ICameraPort`/`OpenCvCameraPort`, `CameraOptions` (timeout 5 giây,
 > retry 30 giây → 5 phút, ngưỡng 3 lỗi capture), `ICameraSessionUseCase`/`CameraSessionService` và
 > `CameraStatusViewModel`; WPF tham chiếu project `EduFocus.Infrastructure.Attention`. `ServiceProvider.DisposeAsync()`
 > đóng camera qua `OpenCvCameraPort.Dispose()`. Camera chỉ được start/stop theo vòng đời phiên học ở #33.

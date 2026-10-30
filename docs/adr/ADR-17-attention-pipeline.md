@@ -61,6 +61,7 @@ Chọn **OpenCvSharp + OpenCV MSMF + ONNX Runtime + YuNet 2023mar** làm backend
 
 - Thêm native dependency OpenCV + ONNX Runtime, làm tăng kích thước installer và độ phức tạp đóng gói.
 - Camera MSMF mở 6,4-8,2 giây trên máy đo; nếu mở đồng bộ sẽ vi phạm trải nghiệm startup.
+- **(Cập nhật 2026-10-30)** Runtime đổi mặc định sang **DirectShow**: MSMF vượt timeout 5 giây của `CameraSessionService` nên camera luôn bị báo không khả dụng dù vẫn mở được; đo lại toàn bộ chuỗi WMI + mở + đọc khung bằng DirectShow là ~1,4 giây. MSMF vẫn chọn được qua `CameraPortOptions.CaptureApi`.
 - Head-pose từ 5 landmark là proxy, chưa đủ cho gaze/`Drowsy`; cần calibration trên người dùng thật.
 - Chưa có ground truth để đo accuracy phân loại chú ý.
 - Cần rà soát license của model/runtime trước khi phân phối.
