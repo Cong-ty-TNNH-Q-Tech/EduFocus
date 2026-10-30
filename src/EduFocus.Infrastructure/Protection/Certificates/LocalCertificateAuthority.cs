@@ -40,6 +40,8 @@ public sealed class LocalCertificateAuthority : ILocalCertificateAuthority, IDis
     private readonly string _rootFilePath;
     private readonly X500DistinguishedName _rootSubject;
     private readonly Dictionary<string, X509Certificate2> _leaves = new(StringComparer.Ordinal);
+    private readonly List<X509Certificate2> _retiredLeaves = [];
+    private readonly SemaphoreSlim _trustGate = new(1, 1);
     private readonly object _sync = new();
 
     private X509Certificate2? _root;
@@ -81,6 +83,7 @@ public sealed class LocalCertificateAuthority : ILocalCertificateAuthority, IDis
     public async Task<CertificateAuthorityResult> EnsureTrustedAsync(
         CancellationToken cancellationToken = default)
     {
+        await _trustGate.WaitAsync(cancellationToken).ConfigureAwait(false);
         try
         {
             var root = await Task
@@ -115,15 +118,21 @@ public sealed class LocalCertificateAuthority : ILocalCertificateAuthority, IDis
 
             return new CertificateAuthorityResult(false, TrustWarning);
         }
+        finally
+        {
+            _trustGate.Release();
+        }
     }
 
     public async Task<CertificateAuthorityResult> RemoveTrustAsync(
         CancellationToken cancellationToken = default)
     {
-        _ready = false;
-
+        await _trustGate.WaitAsync(cancellationToken).ConfigureAwait(false);
         try
         {
+            _ready = false;
+            DisposeRetiredLeaves();
+
             var removed = await Task
                 .Run(RemoveInstalledRoots, cancellationToken)
                 .ConfigureAwait(false);
@@ -148,12 +157,22 @@ public sealed class LocalCertificateAuthority : ILocalCertificateAuthority, IDis
 
             return new CertificateAuthorityResult(false, RemoveTrustWarning);
         }
+        finally
+        {
+            _trustGate.Release();
+        }
     }
 
     public X509Certificate2? GetServerCertificate(string domain)
     {
         if (!_ready || _disposed)
             return null;
+
+        if (string.IsNullOrWhiteSpace(domain)
+            || domain.IndexOfAny(['/', '\\', '@', '?', '#', ':', ' ', '\t']) >= 0)
+        {
+            return null;
+        }
 
         if (!DomainName.TryParse(domain, out var parsedDomain) || parsedDomain is null)
             return null;
@@ -162,16 +181,22 @@ public sealed class LocalCertificateAuthority : ILocalCertificateAuthority, IDis
 
         lock (_sync)
         {
-            if (_leaves.TryGetValue(name, out var cached)
-                && cached.NotAfter.ToUniversalTime() > DateTime.UtcNow.Add(_options.LeafRenewBefore))
+            if (_leaves.TryGetValue(name, out var cached))
             {
-                return cached;
+                if (cached.NotAfter.ToUniversalTime() > DateTime.UtcNow.Add(_options.LeafRenewBefore))
+                    return cached;
+
+                _retiredLeaves.Add(cached);
+                _leaves.Remove(name);
             }
 
             try
             {
                 if (_leaves.Count >= _options.MaxCachedLeaves)
+                {
+                    _retiredLeaves.AddRange(_leaves.Values);
                     _leaves.Clear();
+                }
 
                 var leaf = IssueLeaf(name);
                 _leaves[name] = leaf;
@@ -205,8 +230,24 @@ public sealed class LocalCertificateAuthority : ILocalCertificateAuthority, IDis
 
             _leaves.Clear();
 
+            foreach (var leaf in _retiredLeaves)
+                leaf.Dispose();
+
+            _retiredLeaves.Clear();
+
             _root?.Dispose();
             _root = null;
+        }
+    }
+
+    private void DisposeRetiredLeaves()
+    {
+        lock (_sync)
+        {
+            foreach (var leaf in _retiredLeaves)
+                leaf.Dispose();
+
+            _retiredLeaves.Clear();
         }
     }
 

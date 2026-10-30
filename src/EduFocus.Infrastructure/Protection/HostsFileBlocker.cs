@@ -574,8 +574,8 @@ public sealed class HostsFileBlocker : IHostsFileBlocker
         var inBlock = false;
         foreach (var line in lines)
         {
-            var trimmed = line.Trim();
-            if (!inBlock && string.Equals(trimmed, StartMarker, StringComparison.Ordinal))
+            var trimmed = line.AsSpan().Trim(" \t");
+            if (!inBlock && trimmed.SequenceEqual(StartMarker.AsSpan()))
             {
                 inBlock = true;
                 continue;
@@ -583,12 +583,12 @@ public sealed class HostsFileBlocker : IHostsFileBlocker
 
             if (inBlock)
             {
-                if (string.Equals(trimmed, EndMarker, StringComparison.Ordinal))
+                if (trimmed.SequenceEqual(EndMarker.AsSpan()))
                     inBlock = false;
                 continue;
             }
 
-            if (string.Equals(trimmed, EndMarker, StringComparison.Ordinal))
+            if (trimmed.SequenceEqual(EndMarker.AsSpan()))
                 continue;
 
             kept.Add(line);

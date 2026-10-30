@@ -227,6 +227,16 @@ public sealed class BrowserDnsPolicy : IBrowserDnsPolicyPort
             }
         }
 
+        if (view == RegistryView.Registry32
+            && exists
+            && string.Equals(previous, BrowserDnsPolicyOptions.DisabledValue, StringComparison.Ordinal)
+            && TryReadBackupFromView(RegistryView.Registry64, target, out var existed64, out var kind64, out var previous64))
+        {
+            exists = existed64;
+            kind = kind64;
+            previous = previous64;
+        }
+
         using var backup = root.CreateSubKey(backupPath, writable: true)
             ?? throw new InvalidOperationException($"Cannot create the policy backup '{backupPath}'.");
         backup.SetValue(BackupExistedValue, exists ? 1 : 0, RegistryValueKind.DWord);
@@ -282,6 +292,36 @@ public sealed class BrowserDnsPolicy : IBrowserDnsPolicyPort
 
         root.DeleteSubKeyTree(backupPath, throwOnMissingSubKey: false);
         return true;
+    }
+
+    private bool TryReadBackupFromView(
+        RegistryView view,
+        BrowserDnsPolicyTarget target,
+        out bool existed,
+        out RegistryValueKind kind,
+        out string? previous)
+    {
+        existed = false;
+        kind = RegistryValueKind.String;
+        previous = null;
+
+        using var root = RegistryKey.OpenBaseKey(_options.Hive, view);
+        using var backup = root.OpenSubKey(GetBackupPath(target, view), writable: false);
+        if (backup is null)
+            return false;
+
+        existed = Convert.ToInt32(
+            backup.GetValue(BackupExistedValue, 0),
+            CultureInfo.InvariantCulture) == 1;
+
+        if (!existed)
+            return true;
+
+        kind = (RegistryValueKind)Convert.ToInt32(
+            backup.GetValue(BackupKindValue, (int)RegistryValueKind.String),
+            CultureInfo.InvariantCulture);
+        previous = backup.GetValue(BackupDataValue) as string;
+        return previous is not null;
     }
 
     private string GetBackupPath(BrowserDnsPolicyTarget target, RegistryView view) =>

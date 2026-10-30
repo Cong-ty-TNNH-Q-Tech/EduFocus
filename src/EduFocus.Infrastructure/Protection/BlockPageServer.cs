@@ -439,6 +439,8 @@ public sealed class BlockPageServer : IBlockPageServer, IAsyncDisposable
     {
         using var buffer = new MemoryStream();
         var chunk = new byte[1024];
+        using var readTimeoutCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        readTimeoutCts.CancelAfter(_options.HeaderReadTimeout);
 
         while (true)
         {
@@ -446,9 +448,7 @@ public sealed class BlockPageServer : IBlockPageServer, IAsyncDisposable
             try
             {
                 read = await stream
-                    .ReadAsync(chunk, cancellationToken)
-                    .AsTask()
-                    .WaitAsync(_options.HeaderReadTimeout, cancellationToken)
+                    .ReadAsync(chunk, readTimeoutCts.Token)
                     .ConfigureAwait(false);
             }
             catch (TimeoutException) { return null; }
@@ -541,7 +541,7 @@ public sealed class BlockPageServer : IBlockPageServer, IAsyncDisposable
         return set.ToFrozenSet(StringComparer.Ordinal);
     }
 
-    private static async Task WriteResponseAsync(
+    private async Task WriteResponseAsync(
         Stream stream,
         int statusCode,
         string reason,
@@ -549,16 +549,19 @@ public sealed class BlockPageServer : IBlockPageServer, IAsyncDisposable
         bool includeBody,
         CancellationToken cancellationToken)
     {
+        using var writeTimeoutCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        writeTimeoutCts.CancelAfter(_options.HeaderReadTimeout);
+
         var bodyBytes = Encoding.UTF8.GetBytes(body);
         var headerText = string.Create(
             CultureInfo.InvariantCulture,
             $"HTTP/1.1 {statusCode} {reason}\r\nContent-Type: text/html; charset=utf-8\r\nContent-Length: {bodyBytes.Length}\r\nCache-Control: no-store\r\nContent-Security-Policy: {ContentSecurityPolicy}\r\nX-Content-Type-Options: nosniff\r\nX-Frame-Options: DENY\r\nReferrer-Policy: no-referrer\r\nConnection: close\r\n\r\n");
 
-        await stream.WriteAsync(Encoding.ASCII.GetBytes(headerText), cancellationToken).ConfigureAwait(false);
+        await stream.WriteAsync(Encoding.ASCII.GetBytes(headerText), writeTimeoutCts.Token).ConfigureAwait(false);
         if (includeBody)
-            await stream.WriteAsync(bodyBytes, cancellationToken).ConfigureAwait(false);
+            await stream.WriteAsync(bodyBytes, writeTimeoutCts.Token).ConfigureAwait(false);
 
-        await stream.FlushAsync(cancellationToken).ConfigureAwait(false);
+        await stream.FlushAsync(writeTimeoutCts.Token).ConfigureAwait(false);
     }
 
     private static string BuildBlockPage(string domain) => $$"""

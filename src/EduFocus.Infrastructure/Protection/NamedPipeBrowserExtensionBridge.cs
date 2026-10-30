@@ -220,16 +220,8 @@ public sealed class NamedPipeBrowserExtensionBridge : IBrowserExtensionBridge, I
     {
         try
         {
-            await _stateGate.WaitAsync(cancellationToken).ConfigureAwait(false);
-            try
-            {
-                await client.WriteAsync(GetSnapshot(), cancellationToken).ConfigureAwait(false);
-                client.IsReady = true;
-            }
-            finally
-            {
-                _stateGate.Release();
-            }
+            await client.WriteAsync(GetSnapshot(), cancellationToken).ConfigureAwait(false);
+            client.IsReady = true;
 
             while (!cancellationToken.IsCancellationRequested)
             {
@@ -452,16 +444,25 @@ public sealed class NamedPipeBrowserExtensionBridge : IBrowserExtensionBridge, I
             var header = new byte[4];
             BinaryPrimitives.WriteUInt32LittleEndian(header, (uint)payload.Length);
 
-            await _writeGate.WaitAsync(cancellationToken).ConfigureAwait(false);
+            using var writeTimeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+            writeTimeout.CancelAfter(TimeSpan.FromSeconds(2));
+
+            await _writeGate.WaitAsync(writeTimeout.Token).ConfigureAwait(false);
             try
             {
-                await _stream.WriteAsync(header, cancellationToken).ConfigureAwait(false);
-                await _stream.WriteAsync(payload, cancellationToken).ConfigureAwait(false);
-                await _stream.FlushAsync(cancellationToken).ConfigureAwait(false);
+                await _stream.WriteAsync(header, writeTimeout.Token).ConfigureAwait(false);
+                await _stream.WriteAsync(payload, writeTimeout.Token).ConfigureAwait(false);
+                await _stream.FlushAsync(writeTimeout.Token).ConfigureAwait(false);
             }
             finally
             {
-                _writeGate.Release();
+                try
+                {
+                    _writeGate.Release();
+                }
+                catch (ObjectDisposedException)
+                {
+                }
             }
         }
 
