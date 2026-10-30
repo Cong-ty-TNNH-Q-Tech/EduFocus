@@ -7,10 +7,9 @@ và dự án tuân theo [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ---
 
-## [Unreleased] — EduFocus 2.0.0 (2026-10-26)
+## [2.0.0] - 2026-10-30
 
-> **Trạng thái:** Định hướng sản phẩm và tài liệu đã hoàn tất. Mã nguồn sẽ được chuyển đổi theo lộ trình Phase 1–7.
-> Các mục dưới đây **chưa phải tính năng đã phát hành**.
+> **Trạng thái:** Bản phát hành đầu tiên (MVP desktop) của EduFocus 2.0; các mục Phase 1–7 dưới đây đã được triển khai.
 
 ### Added (Docs & Product Definition)
 - **Pivot sản phẩm:** Don't Be Lazy → **EduFocus**, ứng dụng giám sát học tập có trách nhiệm dành cho phụ huynh.
@@ -410,11 +409,6 @@ và dự án tuân theo [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 - Quản lý task, profile học tập, quote động lực và Gemini AI.
 - Cơ chế "friction" bắt gõ câu xác nhận bỏ cuộc.
 - Màn hình Dashboard/Profiles/FocusSession/Analytics của 1.x (sẽ thay bằng view mới).
-
-### Planned
-- Phase 0: Spike camera, blocking, tamper resistance.
-- Phase 1: Schema mới, CI/installer, nâng .NET 10.
-- Phase 2–7: PIN & Parent Mode → blocking engine → session/activity → attention → reports → hardening/release MVP.
 
 ---
 
