@@ -38,11 +38,8 @@ public static class Program
         catch (Exception ex)
         {
             TryLogFatal(provider, ex);
-            return 1;
-        }
-        finally
-        {
             DisposeProvider(provider);
+            return 1;
         }
     }
 

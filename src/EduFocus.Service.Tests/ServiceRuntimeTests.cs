@@ -129,6 +129,29 @@ public sealed class ServiceRuntimeTests
             entry => entry.EventType == AuditEventType.ProtectionServiceStarted);
     }
 
+    [Fact]
+    public async Task Concurrent_requests_reaching_max_clients_do_not_kill_the_pipe_listener()
+    {
+        await using var temp = new TempDatabase();
+        await using var harness = new RuntimeHarness(temp);
+        await harness.Runtime.StartAsync();
+
+        var client = harness.CreateClient();
+        var tasks = Enumerable.Range(0, 8)
+            .Select(_ => client.GetStatusAsync())
+            .ToArray();
+
+        var statuses = await Task.WhenAll(tasks);
+
+        statuses.Should().AllSatisfy(s => s.IsEnabled.Should().BeTrue());
+        harness.Server.IsRunning.Should().BeTrue();
+
+        var afterBurst = await client.GetServiceInfoAsync();
+        afterBurst.ProtectionEnabled.Should().BeTrue();
+
+        await harness.Runtime.StopAsync();
+    }
+
     private static StudySession AddActiveSession(RuntimeHarness harness)
     {
         var now = DateTime.UtcNow;

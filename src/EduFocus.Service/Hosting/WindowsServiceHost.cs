@@ -65,6 +65,7 @@ public sealed class WindowsServiceHost
     private IntPtr _statusHandle;
     private int _stopRequested;
     private int _stopStarted;
+    private int _providerDisposed;
     private int _exitCode;
 
     public WindowsServiceHost(
@@ -109,6 +110,7 @@ public sealed class WindowsServiceHost
         finally
         {
             Marshal.FreeHGlobal(serviceNamePointer);
+            DisposeProviderOnceAsync().GetAwaiter().GetResult();
         }
     }
 
@@ -233,20 +235,30 @@ public sealed class WindowsServiceHost
             exitCode = 1;
         }
 
-        try
-        {
-            await _provider.DisposeAsync().ConfigureAwait(false);
-        }
-        catch (Exception ex)
-        {
-            _logger.Error(LogCategories.App, "Disposing the protection service provider failed.", ex);
+        if (!await DisposeProviderOnceAsync().ConfigureAwait(false))
             exitCode = 1;
-        }
 
         Volatile.Write(ref _exitCode, exitCode);
         _stop.Dispose();
 
         ReportStatus(ServiceStopped, controlsAccepted: 0, checkpoint: 0);
+    }
+
+    private async Task<bool> DisposeProviderOnceAsync()
+    {
+        if (Interlocked.Exchange(ref _providerDisposed, 1) != 0)
+            return true;
+
+        try
+        {
+            await _provider.DisposeAsync().ConfigureAwait(false);
+            return true;
+        }
+        catch (Exception ex)
+        {
+            _logger.Error(LogCategories.App, "Disposing the protection service provider failed.", ex);
+            return false;
+        }
     }
 
     private void HandlePowerEvent(uint eventType)

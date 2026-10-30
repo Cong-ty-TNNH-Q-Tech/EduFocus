@@ -25,6 +25,7 @@ public sealed class ServiceControlServer : IAsyncDisposable
     private readonly IPipeClientVerifier _verifier;
     private readonly IAppLogger _logger;
     private readonly SemaphoreSlim _stateGate = new(1, 1);
+    private readonly SemaphoreSlim _connectionSlots;
     private readonly ConcurrentDictionary<long, Task> _connections = new();
 
     private CancellationTokenSource? _cts;
@@ -49,6 +50,8 @@ public sealed class ServiceControlServer : IAsyncDisposable
             throw new ArgumentOutOfRangeException(nameof(options), "MaxClients must be between 1 and 64.");
         if (options.RequestTimeout <= TimeSpan.Zero || options.RequestTimeout > TimeSpan.FromMinutes(2))
             throw new ArgumentOutOfRangeException(nameof(options), "RequestTimeout must be between 0 and 2 minutes.");
+
+        _connectionSlots = new SemaphoreSlim(options.MaxClients, options.MaxClients);
     }
 
     public bool IsRunning => _running;
@@ -145,24 +148,45 @@ public sealed class ServiceControlServer : IAsyncDisposable
     {
         await StopAsync(CancellationToken.None).ConfigureAwait(false);
         _stateGate.Dispose();
+        _connectionSlots.Dispose();
     }
 
     private async Task AcceptLoopAsync(CancellationToken cancellationToken)
     {
         NamedPipeServerStream? pending = null;
+        var slotAcquired = false;
 
         try
         {
             while (!cancellationToken.IsCancellationRequested)
             {
-                pending = CreateListener();
-                await pending.WaitForConnectionAsync(cancellationToken).ConfigureAwait(false);
+                await _connectionSlots.WaitAsync(cancellationToken).ConfigureAwait(false);
+                slotAcquired = true;
+
+                try
+                {
+                    pending = CreateListener();
+                    await pending.WaitForConnectionAsync(cancellationToken).ConfigureAwait(false);
+                }
+                catch (IOException ex) when (!cancellationToken.IsCancellationRequested)
+                {
+                    pending?.Dispose();
+                    pending = null;
+                    _connectionSlots.Release();
+                    slotAcquired = false;
+                    _logger.Warning(
+                        LogCategories.Protection,
+                        $"Transient pipe listener error ({ex.GetType().Name}); retrying.");
+                    await Task.Delay(TimeSpan.FromMilliseconds(50), cancellationToken).ConfigureAwait(false);
+                    continue;
+                }
 
                 var connected = pending;
                 pending = null;
+                slotAcquired = false;
 
                 var id = Interlocked.Increment(ref _connectionSequence);
-                var task = HandleConnectionAsync(connected, cancellationToken);
+                var task = HandleConnectionWithSlotAsync(connected, cancellationToken);
                 _connections[id] = task;
                 _ = task.ContinueWith(
                     completedTask => RemoveConnection(id),
@@ -179,11 +203,43 @@ public sealed class ServiceControlServer : IAsyncDisposable
         }
         catch (Exception ex)
         {
+            _running = false;
             _logger.Error(LogCategories.Protection, "Service control pipe listener failed.", ex);
         }
         finally
         {
+            if (slotAcquired)
+            {
+                try
+                {
+                    _connectionSlots.Release();
+                }
+                catch (ObjectDisposedException)
+                {
+                }
+            }
+
             pending?.Dispose();
+        }
+    }
+
+    private async Task HandleConnectionWithSlotAsync(
+        NamedPipeServerStream pipe,
+        CancellationToken serverToken)
+    {
+        try
+        {
+            await HandleConnectionAsync(pipe, serverToken).ConfigureAwait(false);
+        }
+        finally
+        {
+            try
+            {
+                _connectionSlots.Release();
+            }
+            catch (ObjectDisposedException)
+            {
+            }
         }
     }
 
@@ -332,7 +388,7 @@ public sealed class ServiceControlServer : IAsyncDisposable
             return new NamedPipeServerStream(
                 _options.PipeName,
                 PipeDirection.InOut,
-                _options.MaxClients,
+                NamedPipeServerStream.MaxAllowedServerInstances,
                 PipeTransmissionMode.Byte,
                 pipeOptions,
                 inputBuffer,
@@ -342,7 +398,7 @@ public sealed class ServiceControlServer : IAsyncDisposable
         return NamedPipeServerStreamAcl.Create(
             _options.PipeName,
             PipeDirection.InOut,
-            _options.MaxClients,
+            NamedPipeServerStream.MaxAllowedServerInstances,
             PipeTransmissionMode.Byte,
             pipeOptions,
             inputBuffer,
