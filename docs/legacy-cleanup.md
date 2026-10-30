@@ -1,0 +1,103 @@
+# Dọn codebase 1.x — Issue #7
+
+> **Trạng thái:** Đã hoàn tất trong Phase 1. Tài liệu này là inventory của issue #7:
+> danh sách thành phần 1.x đã xóa, thành phần được giữ lại và lý do.
+
+## 1. Mục tiêu
+
+- Loại bỏ code, script, asset và tính năng của Don't Be Lazy 1.x không thuộc EduFocus 2.0
+  (theo [BA §6.3](./ba_document.md#63-tính-năng-sẽ-loại-bỏ-khỏi-sản-phẩm-cũ)).
+- Không còn entry point hoặc cấu hình vô tình kích hoạt engine 1.x.
+- Không còn asset/logo/tên sản phẩm cũ trong UI hoặc build output.
+- Giữ lại hạ tầng còn giá trị cho 2.0 để các issue sau tái sử dụng.
+
+## 2. Thành phần đã xóa
+
+| Khu vực | Thành phần | Lý do |
+|---|---|---|
+| `EduFocus.Domain` | `Entities/` (FocusTask, Profile, ProfileEntry, Quote, SessionHistory, SessionProfileSnapshot, SystemSettings) | Mô hình 1.x; 2.0 có entity mới ở issue #8 |
+| `EduFocus.Domain` | `Enums/`, `ValueObjects/` của 1.x | Gắn với entity 1.x |
+| `EduFocus.Domain.Tests` | FocusTask/Profile/SessionHistory/SystemSettings/ValueObject tests | Test cho code đã xóa |
+| `EduFocus.Ports` | Toàn bộ `Inbound/` (8 use-case port) | Không còn use case 1.x |
+| `EduFocus.Ports` | Toàn bộ `Outbound/Repositories/` | Repository 1.x; schema mới ở issue #9 |
+| `EduFocus.Ports` | `IAiGuiltTripPort`, `IAiProfileAssistantPort`, `IAiTaskAssistantPort` | Gemini AI bị loại khỏi sản phẩm |
+| `EduFocus.Ports` | `IStrictEnginePort`, `INotificationPort` | Engine/tray của 1.x |
+| `EduFocus.Ports` | `DTOs/Dtos.cs`, `DTOs/Enums.cs` | DTO 1.x |
+| `EduFocus.UseCases` | Toàn bộ 12 file (FocusTask, Profile, Quote, Settings, Analytics, FocusSession, ActiveSessionState, decorator, mapper, DI) | Nghiệp vụ 1.x; viết lại theo module 2.0 |
+| `EduFocus.Infrastructure` | `GeminiAiServices.cs` | AI/guilt-trip bị loại |
+| `EduFocus.Infrastructure` | `WindowsStrictEngine.cs` | Engine 1.x hard-code whitelist/blacklist, marker hosts `DONTBELAZY` |
+| `EduFocus.Infrastructure` | `LocalRedirectServer.cs` | Trang chặn guilt-trip; thay bằng `BlockPageServer` ở Phase 3 |
+| `EduFocus.Infrastructure` | `LoggingStrictEngineDecorator.cs` | Decorator cho engine đã xóa |
+| `EduFocus.SqliteDataAccess` | `AppDbContext`, factory, 4 migrations, repositories, converters, UnitOfWork | Schema 1.x; `InitialEduFocusSchema` ở issue #9 |
+| `EduFocus.WPF` | 5 view + code-behind (Dashboard, Profiles, FocusSession, Analytics, Settings) | UI 1.x; view mới ở Phase 2–6 |
+| `EduFocus.WPF` | 6 view model (Main, Dashboard, Profiles, FocusSession, Analytics, Settings) | Gắn với UI 1.x |
+| `EduFocus.WPF` | `Converters.cs`, `TrayNotificationService.cs` | Chỉ phục vụ UI 1.x |
+| `EduFocus.WPF` | `Assets/give_up_quotes.txt` | Asset guilt-trip |
+| `EduFocus.WPF` | `app.ico` | Icon thương hiệu cũ; icon 2.0 sẽ bổ sung sau |
+| `assets/` | `logo.png` | Logo "DON'T BE LAZY" cũ, đã gỡ khỏi README |
+| Build/installer | Chuỗi "Don't Be Lazy", mô tả "Stay focused. Don't be lazy.", `AppIcon` trong `Product.wxs` | Rebrand sang EduFocus |
+
+Ngoài ra, `App.xaml.cs` đã bỏ: `Database.Migrate()` + self-heal `__EFMigrationsHistory`,
+seed settings/profile, MaterialDesign theme, `GlobalStrictMode` khởi động, auto-start registry,
+tray icon và logic chặn thoát khi có phiên.
+
+## 3. Thành phần giữ lại
+
+| Thành phần | Lý do |
+|---|---|
+| `EduFocus.Domain/Attention/*` + `Domain.Tests/Attention/*` | Spike pipeline attention (issue #1), dùng lại cho Phase 5 |
+| `EduFocus.Infrastructure.Attention/*` | Adapter OpenCvSharp/ONNX của spike attention |
+| `EduFocus.Ports/Outbound/Services/IAttentionFrameAnalyzer.cs`, `IMonotonicClockPort.cs`, `IAppLogger.cs`, `DTOs/AttentionDtos.cs` | Hợp đồng hạ tầng còn dùng |
+| `EduFocus.Infrastructure/Logging/FileLogger.cs` | Log kỹ thuật có cấu trúc tại `%LocalAppData%\EduFocus\logs` (issue #12) |
+| `EduFocus.Infrastructure/Services/MonotonicClockAdapter.cs` | Đo elapsed/detect clock jump (ADR-06) |
+| `EduFocus.WPF/Services/UpdaterService.cs`, `ViewModels/UpdateViewModel.cs` | Auto-update qua GitHub Releases vẫn dùng cho 2.0 |
+| `EduFocus.WPF/app.manifest`, `app.debug.manifest` | DPI awareness và elevation cho bản Release (ADR-07) |
+| `EduFocus.WPF/AssemblyInfo.cs`, `App.xaml` | Hạ tầng WPF tối thiểu |
+| `src/EduFocus.UseCases`, `src/EduFocus.SqliteDataAccess` | Giữ project scaffold (csproj rỗng) để issue #8/#9 thêm code đúng cấu trúc đích |
+| `installer/Product.wxs` | Giữ WiX v4, đổi tên sản phẩm; `UpgradeCode` giữ nguyên để nâng cấp từ 1.x |
+| `tools/AttentionPipelineSpike`, `tools/HostsBlockingSpike`, `tools/WatchdogSpike` | Bằng chứng spike Phase 0 |
+| `docs/spikes/*` | Báo cáo đánh giá Phase 0 |
+
+## 4. Hành vi sau khi dọn
+
+- App khởi động vào **shell tối thiểu** (version + kiểm tra cập nhật), không mở DB,
+  không chạy migration/seed, không theme MaterialDesign, không tray, không auto-start.
+- Không còn đường nào ghi marker `DONTBELAZY` vào hosts file hay chặn process.
+- Luồng cập nhật (GitHub Releases → MSI/ZIP) giữ nguyên.
+- MSI dùng tên **EduFocus**, shortcut Desktop/Start Menu "EduFocus";
+  `UpgradeCode` cũ giữ nguyên nên cài 2.0 sẽ thay thế bản 1.x.
+- Build Release: 0 warning, test attention 15/15 pass.
+
+## 5. Việc tiếp theo
+
+- Issue #8: domain model 2.0 — đã hoàn tất; xem [domain-invariants.md](./domain-invariants.md).
+- Issue #9: `InitialEduFocusSchema` + DbContext/converter/configuration — đã hoàn tất; xem [database_schema.md](./database_schema.md) §17.
+- Issue #10: ACL thư mục dữ liệu, backup verify/retention và restore — đã hoàn tất.
+- Issue #11: CI .NET 10 với cache/artifact và hướng dẫn branch protection — đã hoàn tất.
+- Issue #12: structured logging, correlation id và audit log tách khỏi log kỹ thuật — đã hoàn tất.
+- Issue #13: PBKDF2 hasher, recovery code, `ParentAuthUseCase` và credential repository — đã hoàn tất.
+- Issue #14: Parent Mode UI, phiên 5 phút, lockout và reset PIN — đã hoàn tất.
+- Issue #15: onboarding thiết lập PIN, privacy consent và tùy chọn an toàn — đã hoàn tất.
+- Issue #16: bật/tắt bảo vệ, session/audit, tray và reconcile sau restart — đã hoàn tất; engine chặn thật đã nối ở issue #24.
+- Issue #17: lịch bảo vệ, scheduler 30 giây, override và UI Parent Mode — đã hoàn tất.
+- Issue #18: thoát bằng PIN, ẩn xuống tray khi đóng cửa sổ và xử lý Windows shutdown — đã hoàn tất.
+- Issue #19: `BlockRuleSet` snapshot, matching `Exact` và repository BlockRules — đã hoàn tất.
+- Issue #20: `BuiltInRuleCatalog`, seed idempotent và thẻ quản lý blocklist trong Parent Mode — đã hoàn tất.
+- Issue #21: adapter hosts file `HostsFileBlocker` (marker, backup/journal, restore/self-heal, lỗi có kiểu) — đã hoàn tất; `ProtectionEngine` (issue #24) gọi apply/restore/self-heal.
+- Issue #22: block page loopback `BlockPageServer` (GET/HEAD, HTML tĩnh, CSP, warning khi cổng bận, `BlockPageHit`) — đã hoàn tất; `ProtectionEngine` (issue #24) nhận hit, debounce và ghi `BlockedAttempt`.
+- Issue #23: process watcher polling `ProcessWatcher` (khớp tên exact, đóng mềm rồi kill tree, debounce 30 giây, `ProcessBlockedObservation`) — đã hoàn tất; `ProtectionEngine` (issue #24) nhận observation, debounce và ghi `BlockedAttempt`.
+- Issue #24: `ProtectionEngine` ghép block page + hosts + watcher (rollback/reconcile/cảnh báo), writer channel ghi `BlockedAttempt` + `BlockedAttemptCount`, debounce trung tâm 30 giây; `DeferredProtectionEngine` đã xóa — đã hoàn tất.
+- Issue #25: heartbeat session 10 giây tách khỏi sampling, `ActiveSeconds` monotonic có điều kiện, serialize enable/disable/reconcile, phục hồi phiên `Recovery` và dừng heartbeat khi thoát/shutdown — đã hoàn tất.
+- Issue #26: `ActivityTrackingService` poll foreground 1 giây, sample 15 giây với debounce 2 giây, một sample idle/chuỗi ≥ 5 phút, `ActivityClassifier` theo `BlockRuleSet` snapshot + overlay `IsOnlineClass`, adapter `WindowsForegroundActivityPort`/`UiAutomationBrowserUrlProvider`, bộ đếm session targeted trước khi insert sample và wiring vào `ProtectionService`/`AppLifecycleService` — đã hoàn tất.
+- Issue #27: `OnlineClassDetector` chặt hơn cho Meet/Teams/Zoom (process đã chuẩn hóa, title Meet có ranh giới, chống nhận nhầm chat), sample idle không đánh dấu lớp online, policy `MonitoringEligibility.IsEligible` cho `MonitorOnlyDuringClasses` (attention #33 dùng) — đã hoàn tất.
+- Issue #28: `ISystemPowerEventPort` + adapter `WindowsSystemPowerEventPort` (power/session events), heartbeat loại thời gian sleep và bỏ gap vượt biên, activity reset cửa sổ sample sau resume, xử lý clock jump tiến/lùi và DST, retry DB bằng `_pendingSeconds` — đã hoàn tất.
+- Issue #29: `IRetentionUseCase`/`RetentionService` + `SqliteRetentionRepository` xóa theo batch 500, bỏ qua session `Active`/event mở, audit `RetentionApplied` (số bản ghi + bảng lỗi), `incremental_vacuum`; `RetentionSchedulerService` chạy lúc khởi động và mỗi ngày sau 03:00 — đã hoàn tất (xóa thủ công/CSV thuộc phần UI UC11 sau).
+- Issue #30: `ICameraPort`/`OpenCvCameraPort` + `WindowsCameraDeviceCatalog`, `ICameraSessionUseCase`/`CameraSessionService` quản lý phiên camera (chọn thiết bị theo PNP id, timeout 5 giây, backoff 30 giây→5 phút, ngưỡng 3 lỗi capture), `CameraStatusViewModel` + mục Camera trong tray — đã hoàn tất; camera tự bật/tắt theo phiên ở #33.
+- Issue #31: `IAttentionFrameAnalyzer` chỉ nhận `CameraFrame` managed (không còn sở hữu camera), `IAttentionPipelineUseCase`/`AttentionPipelineService` sampling 1 FPS qua camera supervisor, dispose frame trước khi phát `AttentionSample`, không lưu ảnh/landmark — đã hoàn tất; state machine/coverage/event thuộc #32–#33.
+- Issue #32: `AttentionStateWindow` + `AttentionStateMachine` (Focused/Distracted/Absent/Drowsy/CameraUnavailable), `AttentionMonitorService` tạo/đóng `AttentionEvent` chỉ khi state đổi, `AddAttentionSecondsAsync` cộng counter/`ConfidenceAvg` trọng số bằng raw SQL, đóng event mở sau crash tại `LastHeartbeatAtUtc` — đã hoàn tất; coverage/eligibility và vòng đời monitor theo phiên thuộc #33.
+- Issue #33: `SessionAttentionSummary` (Monitored/Attention/Coverage, cảnh báo "Dữ liệu chưa đủ tin cậy" khi coverage < 50%), `MonitoringEligibleSeconds` cộng theo activity sample qua `AddActivitySecondsAsync` (idle vẫn tính, `MonitorOnlyDuringClasses` giới hạn theo lớp online), `ProtectionService`/`AppLifecycleService` start monitor→pipeline khi bật/phục hồi và stop pipeline→monitor khi tắt/reconcile/shutdown — đã hoàn tất.
+- Issue #34: `CameraHealth`/`CameraHealthEvaluator`/`CameraGuidance` (quá tối, không mặt, không ảnh, hướng dẫn khắc phục dùng chung), `CameraCheckService` preflight 5 khung trong bộ nhớ luôn nhả camera và từ chối khi pipeline đang chạy, `OpenCvCameraPort` phân loại lỗi mở khi thiết bị hiện diện là `Busy`, `WindowsCameraPlatformInfo` phát hiện Multi-App Camera (Win11 22H2+), `StoredDeviceSubstituted` + suppress retry `NotFound`, `UnobservedSeconds` trong summary, thẻ Camera ở Parent Mode, onboarding dùng check thật thay `CameraPermissionProbe` (đã xóa) — đã hoàn tất.
+- Issue #35: `DailyStudySummary` + `SqliteStudySessionRepository.GetDailySummaryAsync` (aggregate ngày local từ StudySessions, không quét sample), `IDashboardUseCase`/`DashboardService` với ngày theo `TimeProvider`, `DashboardViewModel` polling 15 giây có loading/empty/error/retry, thẻ tổng quan Student Mode ở cửa sổ chính và Parent dashboard đầy đủ counter/coverage — đã hoàn tất; báo cáo 7/30 ngày, timeline, CSV và xóa dữ liệu thuộc #36–#38.
+- Issue #36: `ReportPeriod`/`StudyReport` (ngày, tuần Thứ 2–CN, tối đa 31 ngày), `ReportService`/`IReportUseCase` tổng hợp từ session + sample/event có cap, timeline theo giờ local xử lý DST, top domain/app, attention event, cảnh báo detail hết retention; repository range/projection chỉ trả app name/domain đã làm sạch; thẻ "Báo cáo học tập" trong Parent Mode với kỳ Hôm nay/Tuần này/30 ngày, loading/empty/error và refresh theo yêu cầu — đã hoàn tất; CSV/xuất dữ liệu và xóa dữ liệu thuộc #37–#38.
+- Issue #37: `IReportExportUseCase`/`ReportExportService` xuất đúng `StudyReport` đang hiển thị thành một CSV (dòng Tổng hợp/Ngày/Phiên học/Mẫu hoạt động/Sự kiện tập trung, 27 cột), lọc sample/event theo ngày local, không ghi note/window title/URL đầy đủ/process; `ReportCsvWriter` escape công thức Excel và quote ô đặc biệt; `LocalCsvExportStore` ghi UTF-8 BOM vào `%LocalAppData%\EduFocus\exports`, không ghi đè, từ chối path separator; nút **Xuất CSV** trong Parent Mode hiển thị đường dẫn và nhắc bảo vệ file nhạy cảm — đã hoàn tất; privacy settings & xóa dữ liệu thuộc #38.
+- Các phase sau: privacy settings & xóa dữ liệu (#38), installer/CI/release hoàn chỉnh (#39–#44).

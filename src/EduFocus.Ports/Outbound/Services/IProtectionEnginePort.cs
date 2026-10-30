@@ -1,13 +1,19 @@
-using EduFocus.Domain.Entities;
-
 namespace EduFocus.Ports.Outbound.Services;
 
-/// <summary>Coordinates the operating-system resources that enforce the currently enabled block rules.</summary>
+/// <summary>
+/// Applies and removes system-level protection (hosts entries, block page
+/// listener and process watcher). Implementations must be idempotent and roll
+/// back partial changes when a step fails (UC03, UC04; system architecture §6).
+/// Non-fatal problems are returned as warnings so the UI can show a degraded
+/// state instead of silently pretending everything is enforced.
+/// </summary>
 public interface IProtectionEnginePort
 {
-    bool IsAvailable { get; }
-    bool IsBlockPageAvailable => true;
-    Task StartAsync(IReadOnlyCollection<BlockRule> rules, CancellationToken cancellationToken = default);
-    Task StopAsync(CancellationToken cancellationToken = default);
-    Task ReconcileAsync(bool protectionEnabled, IReadOnlyCollection<BlockRule> rules, CancellationToken cancellationToken = default);
+    Task<IReadOnlyList<string>> ApplyAsync(CancellationToken cancellationToken = default);
+
+    Task<IReadOnlyList<string>> RemoveAsync(CancellationToken cancellationToken = default);
+
+    Task<IReadOnlyList<string>> ReconcileAsync(
+        bool shouldBeActive,
+        CancellationToken cancellationToken = default);
 }

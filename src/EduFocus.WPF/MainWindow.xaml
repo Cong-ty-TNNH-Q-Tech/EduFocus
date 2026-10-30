@@ -1,87 +1,141 @@
 <Window x:Class="EduFocus.WPF.MainWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        Title="EduFocus" Width="760" Height="500" MinWidth="600" MinHeight="420"
-        WindowStartupLocation="CenterScreen" Background="#F5F7FA"
-        PreviewKeyDown="OnUserActivity" PreviewMouseDown="OnUserActivity" Loaded="OnLoaded">
-    <Grid Margin="32">
-        <StackPanel x:Name="StudentPanel" HorizontalAlignment="Center" VerticalAlignment="Center" Width="440">
-            <TextBlock Text="EduFocus" FontSize="36" FontWeight="SemiBold" Foreground="#17324D" HorizontalAlignment="Center" />
-            <TextBlock Text="Student Mode" FontSize="20" Margin="0,8,0,0" Foreground="#34536F" HorizontalAlignment="Center" />
-            <TextBlock x:Name="StudentStatus" Text="Parent settings are protected." FontSize="14" Margin="0,16,0,20" TextWrapping="Wrap" Foreground="#52677A" HorizontalAlignment="Center" />
-            <Button x:Name="OpenLoginButton" Content="Parent Login" Height="42" Click="OpenLogin" />
-        </StackPanel>
+        Title="EduFocus"
+        Height="560" Width="820"
+        MinHeight="480" MinWidth="680"
+        WindowStartupLocation="CenterScreen"
+        Background="#F4F5F9"
+        FontFamily="Segoe UI">
+    <Grid Margin="40">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+            <RowDefinition Height="Auto" />
+        </Grid.RowDefinitions>
 
-        <StackPanel x:Name="LoginPanel" Visibility="Collapsed" HorizontalAlignment="Center" VerticalAlignment="Center" Width="360">
-            <TextBlock Text="Parent Login" FontSize="28" FontWeight="SemiBold" Foreground="#17324D" HorizontalAlignment="Center" />
-            <TextBlock Text="Enter your parent PIN to unlock settings." Margin="0,12,0,16" Foreground="#52677A" TextWrapping="Wrap" HorizontalAlignment="Center" />
-            <PasswordBox x:Name="PinInput" MaxLength="8" Height="38" FontSize="18" PasswordChar="●" />
-            <TextBlock x:Name="LoginStatus" Margin="0,10,0,10" MinHeight="24" Foreground="#9A3412" TextWrapping="Wrap" />
-            <Button x:Name="LoginButton" Content="Unlock" Height="40" Click="Login" />
-            <Button Content="Forgot PIN? Use recovery code" Margin="0,10,0,0" Height="36" Click="OpenRecovery" />
-            <Button Content="Back" Margin="0,8,0,0" Height="34" Click="BackToStudent" />
-        </StackPanel>
+        <Grid Grid.Row="0">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="Auto" />
+            </Grid.ColumnDefinitions>
 
-        <StackPanel x:Name="RecoveryPanel" Visibility="Collapsed" HorizontalAlignment="Center" VerticalAlignment="Center" Width="380">
-            <TextBlock Text="Recover Parent PIN" FontSize="28" FontWeight="SemiBold" Foreground="#17324D" HorizontalAlignment="Center" />
-            <TextBlock Text="Enter your one-time recovery code and choose a new PIN. The code will be replaced." Margin="0,12,0,16" Foreground="#52677A" TextWrapping="Wrap" />
-            <PasswordBox x:Name="RecoveryInput" MaxLength="16" Height="38" FontSize="16" />
-            <TextBlock Text="New PIN (6–8 digits)" Margin="0,12,0,5" Foreground="#34536F" />
-            <PasswordBox x:Name="RecoveryNewPinInput" MaxLength="8" Height="38" FontSize="18" PasswordChar="●" />
-            <TextBlock x:Name="RecoveryStatus" Margin="0,10,0,10" MinHeight="24" Foreground="#9A3412" TextWrapping="Wrap" />
-            <Button x:Name="RecoverButton" Content="Reset PIN" Height="40" Click="RecoverPin" />
-            <Button Content="Back to login" Margin="0,8,0,0" Height="34" Click="OpenLogin" />
-        </StackPanel>
+            <StackPanel Grid.Column="0">
+                <TextBlock Text="EduFocus" FontSize="34" FontWeight="SemiBold" Foreground="#1F2430" />
+                <TextBlock Text="Giám sát học tập có trách nhiệm — nền tảng 2.0 đang được tái thiết kế."
+                           FontSize="14" Foreground="#5B6270" Margin="0,6,0,0" />
+            </StackPanel>
 
-        <StackPanel x:Name="NewRecoveryPanel" Visibility="Collapsed" HorizontalAlignment="Center" VerticalAlignment="Center" Width="420">
-            <TextBlock Text="Save your new recovery code" FontSize="26" FontWeight="SemiBold" Foreground="#17324D" HorizontalAlignment="Center" />
-            <TextBlock Text="This code is shown once. Store it somewhere private. You must sign in with your new PIN next." Margin="0,12,0,18" Foreground="#52677A" TextWrapping="Wrap" HorizontalAlignment="Center" />
-            <TextBlock x:Name="NewRecoveryCodeText" FontFamily="Consolas" FontSize="22" FontWeight="Bold" Foreground="#17324D" HorizontalAlignment="Center" Margin="0,0,0,20" />
-            <Button Content="Continue to login" Height="40" Click="FinishRecovery" />
-        </StackPanel>
+            <Button Grid.Column="1" Content="Parent Mode" Padding="16,8" VerticalAlignment="Center"
+                    Click="ParentModeButton_Click"
+                    ToolTip="Đăng nhập PIN phụ huynh để quản lý các cài đặt được bảo vệ" />
+        </Grid>
 
-        <StackPanel x:Name="ParentPanel" Visibility="Collapsed" HorizontalAlignment="Center" VerticalAlignment="Center" Width="440">
-            <TextBlock Text="Parent Mode" FontSize="30" FontWeight="SemiBold" Foreground="#17324D" HorizontalAlignment="Center" />
-            <TextBlock Text="Parent controls are unlocked." Margin="0,12,0,4" Foreground="#34536F" HorizontalAlignment="Center" />
-            <TextBlock x:Name="SessionCountdown" Margin="0,0,0,20" Foreground="#52677A" HorizontalAlignment="Center" />
-            <TextBlock x:Name="ProtectionStatusText" Margin="0,0,0,10" Foreground="#34536F" TextWrapping="Wrap" HorizontalAlignment="Center" />
-            <TextBlock x:Name="ScheduleStatusText" Margin="0,0,0,10" Foreground="#52677A" TextWrapping="Wrap" HorizontalAlignment="Center" />
-            <Button x:Name="ToggleProtectionButton" Content="Protection unavailable" Height="40" IsEnabled="False" Click="ToggleProtection" />
-            <TextBlock Text="Weekly protection schedules (days: Mon=1 to Sun=64; combine bits)" Margin="0,12,0,4" Foreground="#34536F" TextWrapping="Wrap" />
-            <DockPanel Margin="0,0,0,6">
-                <TextBox x:Name="ScheduleDaysInput" Width="58" Margin="0,0,5,0" ToolTip="Days mask 1-127" Text="31" />
-                <TextBox x:Name="ScheduleStartInput" Width="58" Margin="0,0,5,0" ToolTip="Start minute 0-1439" Text="540" />
-                <TextBox x:Name="ScheduleEndInput" Width="58" Margin="0,0,5,0" ToolTip="End minute 1-1440" Text="1020" />
-                <TextBox x:Name="ScheduleLabelInput" MinWidth="100" ToolTip="Schedule label" />
-                <Button x:Name="SaveScheduleButton" Content="Add" Width="52" Margin="5,0,0,0" Click="AddSchedule" />
-            </DockPanel>
-            <ListBox x:Name="ScheduleList" Height="76" DisplayMemberPath="Label" SelectionChanged="OnScheduleSelectionChanged" />
-            <Button Content="Clear selection / new schedule" Height="28" Margin="0,4,0,0" Click="ClearScheduleSelection" />
-            <Button x:Name="DeleteScheduleButton" Content="Delete selected schedule" Height="30" Margin="0,4,0,10" IsEnabled="False" Click="DeleteSchedule" />
-            <Button Content="Manage built-in blocklist" Height="36" Margin="0,0,0,8" Click="OpenBlocklist" />
-            <Button Content="Change PIN" Height="40" Click="OpenChangePin" />
-            <Button Content="Lock Parent Mode" Margin="0,10,0,0" Height="40" Click="LockNow" />
-        </StackPanel>
+        <Border Grid.Row="1" Margin="0,28,0,0" Padding="24" CornerRadius="12"
+                Background="White" BorderBrush="#E1E4EC" BorderThickness="1">
+            <ScrollViewer VerticalScrollBarVisibility="Auto">
+                <StackPanel>
+                    <TextBlock Text="Bảo vệ học tập" FontSize="18" FontWeight="SemiBold" Foreground="#1F2430" />
+                    <TextBlock Text="{Binding Protection.StatusText}" Margin="0,10,0,0"
+                               FontSize="13" Foreground="#5B6270" TextWrapping="Wrap" />
+                    <TextBlock Text="{Binding Protection.WarningText}" Margin="0,8,0,0"
+                               FontSize="12" Foreground="#B42318" TextWrapping="Wrap"
+                               Visibility="{Binding Protection.HasWarning, Converter={StaticResource BoolToVisibility}}" />
+                    <TextBlock Margin="0,8,0,0" FontSize="12" Foreground="#8A909C" TextWrapping="Wrap"
+                               Text="Bật hoặc tắt bảo vệ trong Parent Mode. Trạng thái được khôi phục tự động sau khi khởi động lại." />
 
-        <StackPanel x:Name="BlocklistPanel" Visibility="Collapsed" HorizontalAlignment="Center" VerticalAlignment="Center" Width="560">
-            <TextBlock Text="Built-in blocklist and learning allowlist" FontSize="26" FontWeight="SemiBold" Foreground="#17324D" HorizontalAlignment="Center" />
-            <TextBlock Text="Rules match exact domains. Allow rules take precedence over block rules. URL/path and wildcard rules are not enforced." Margin="0,10,0,10" Foreground="#52677A" TextWrapping="Wrap" />
-            <TextBlock Text="Blocked apps are closed on a best-effort basis; forced closing can lose unsaved work. Process name or path rules may be bypassed by renaming or relocating an app." Margin="0,0,0,10" Foreground="#9A3412" TextWrapping="Wrap" />
-            <ListBox x:Name="BlockRuleList" Height="340" DisplayMemberPath="Label" SelectionChanged="OnBlockRuleSelectionChanged" />
-            <TextBlock x:Name="BlockRuleStatus" Margin="0,8,0,8" MinHeight="24" Foreground="#52677A" TextWrapping="Wrap" />
-            <Button x:Name="ToggleBuiltInRuleButton" Content="Select a rule" Height="38" IsEnabled="False" Click="ToggleBuiltInRule" />
-            <Button Content="Back to Parent Mode" Margin="0,8,0,0" Height="36" Click="ShowParent" />
-        </StackPanel>
+                    <StackPanel Orientation="Horizontal" Margin="0,16,0,0">
+                        <Ellipse Width="10" Height="10" VerticalAlignment="Center"
+                                 Fill="{Binding Camera.IndicatorBrush}" />
+                        <TextBlock Text="{Binding Camera.StatusText}" Margin="8,0,0,0"
+                                   FontSize="12" Foreground="#5B6270" TextWrapping="Wrap"
+                                   VerticalAlignment="Center" />
+                    </StackPanel>
+                    <TextBlock Text="{Binding Camera.GuidanceText}" Margin="0,6,0,0" FontSize="12"
+                               Foreground="#B42318" TextWrapping="Wrap"
+                               Visibility="{Binding Camera.HasGuidance, Converter={StaticResource BoolToVisibility}}" />
 
-        <StackPanel x:Name="ChangePinPanel" Visibility="Collapsed" HorizontalAlignment="Center" VerticalAlignment="Center" Width="360">
-            <TextBlock Text="Change Parent PIN" FontSize="28" FontWeight="SemiBold" Foreground="#17324D" HorizontalAlignment="Center" />
-            <TextBlock Text="Changing your PIN ends this Parent Mode session." Margin="0,12,0,14" Foreground="#52677A" TextWrapping="Wrap" />
-            <PasswordBox x:Name="CurrentPinInput" MaxLength="8" Height="38" FontSize="18" PasswordChar="●" />
-            <TextBlock Text="New PIN (6–8 digits)" Margin="0,12,0,5" Foreground="#34536F" />
-            <PasswordBox x:Name="NewPinInput" MaxLength="8" Height="38" FontSize="18" PasswordChar="●" />
-            <TextBlock x:Name="ChangePinStatus" Margin="0,10,0,10" MinHeight="24" Foreground="#9A3412" TextWrapping="Wrap" />
-            <Button Content="Change PIN" Height="40" Click="ChangePin" />
-            <Button Content="Cancel" Margin="0,8,0,0" Height="34" Click="ShowParent" />
-        </StackPanel>
+                    <Border Margin="0,22,0,0" Padding="14" CornerRadius="10" Background="#F8F9FC"
+                            BorderBrush="#DDE1EA" BorderThickness="1">
+                        <StackPanel>
+                            <Grid>
+                                <TextBlock Text="Tổng quan hôm nay" FontSize="14" FontWeight="SemiBold"
+                                           Foreground="#1F2430" />
+                                <TextBlock Text="{Binding Dashboard.DateLabel}" FontSize="12"
+                                           Foreground="#8A909C" HorizontalAlignment="Right"
+                                           VerticalAlignment="Center" />
+                            </Grid>
+
+                            <StackPanel Margin="0,10,0,0"
+                                        Visibility="{Binding Dashboard.ShowSummary, Converter={StaticResource BoolToVisibility}}">
+                                <TextBlock Text="{Binding Dashboard.StudentStudyText}" FontSize="18"
+                                           FontWeight="SemiBold" Foreground="#1F2430" TextWrapping="Wrap" />
+                                <TextBlock Text="{Binding Dashboard.ActiveSessionText}" Margin="0,6,0,0"
+                                           FontSize="12.5" Foreground="#5B6270" TextWrapping="Wrap" />
+                            </StackPanel>
+
+                            <TextBlock Text="{Binding Dashboard.EmptyStateText}" Margin="0,10,0,0"
+                                       FontSize="12.5" Foreground="#8A909C" TextWrapping="Wrap"
+                                       Visibility="{Binding Dashboard.ShowEmptyState, Converter={StaticResource BoolToVisibility}}" />
+
+                            <ProgressBar IsIndeterminate="True" Height="4" Margin="0,12,0,0"
+                                         Visibility="{Binding Dashboard.IsLoading, Converter={StaticResource BoolToVisibility}}" />
+
+                            <StackPanel Margin="0,10,0,0"
+                                        Visibility="{Binding Dashboard.HasError, Converter={StaticResource BoolToVisibility}}">
+                                <TextBlock Text="{Binding Dashboard.ErrorMessage}" FontSize="12"
+                                           Foreground="#B42318" TextWrapping="Wrap" />
+                                <Button Content="Thử lại" Margin="0,8,0,0" Padding="12,6"
+                                        HorizontalAlignment="Left"
+                                        Command="{Binding Dashboard.RetryCommand}" />
+                            </StackPanel>
+
+                            <TextBlock Text="{Binding Dashboard.LastUpdatedText}" Margin="0,8,0,0"
+                                       FontSize="11" Foreground="#8A909C" />
+                        </StackPanel>
+                    </Border>
+
+                    <TextBlock Text="Trạng thái bản dựng" Margin="0,24,0,0" FontSize="18" FontWeight="SemiBold"
+                               Foreground="#1F2430" />
+                    <TextBlock Margin="0,10,0,0" FontSize="13" Foreground="#5B6270" TextWrapping="Wrap"
+                               Text="Mã nguồn 1.x đã được loại bỏ. Parent Mode bảo vệ các thao tác nhạy cảm bằng PIN phụ huynh; engine bảo vệ sẽ được bổ sung ở các phase tiếp theo." />
+
+                    <TextBlock Margin="0,20,0,0" FontSize="13" Foreground="#5B6270">
+                        <Run Text="Phiên bản hiện tại: " />
+                        <Run Text="{Binding Update.CurrentVersion, Mode=OneWay}" FontWeight="SemiBold" />
+                    </TextBlock>
+
+                    <StackPanel Orientation="Horizontal" Margin="0,16,0,0">
+                        <Button Content="Kiểm tra cập nhật" Padding="16,8"
+                                Command="{Binding Update.CheckForUpdateCommand}" />
+                        <TextBlock Text="{Binding Update.StatusMessage}" Margin="14,0,0,0"
+                                   VerticalAlignment="Center" FontSize="13" Foreground="#5B6270" />
+                    </StackPanel>
+
+                    <TextBlock Margin="0,8,0,0" FontSize="11.5" Foreground="#8A909C"
+                               TextWrapping="Wrap"
+                               Text="Kiểm tra cập nhật chỉ chạy khi bạn bật trong Dữ liệu &amp; Quyền riêng tư. Khi chạy, EduFocus gửi phiên bản ứng dụng tới GitHub; GitHub thấy địa chỉ IP của bạn. Không có dữ liệu học tập nào được gửi." />
+
+                    <StackPanel Margin="0,18,0,0"
+                                Visibility="{Binding Update.IsUpdateAvailable, Converter={StaticResource BoolToVisibility}}">
+                        <TextBlock FontSize="14" FontWeight="SemiBold" Foreground="#1F2430">
+                            <Run Text="Có bản cập nhật v" />
+                            <Run Text="{Binding Update.LatestVersion, Mode=OneWay}" />
+                        </TextBlock>
+                        <TextBlock Text="{Binding Update.ReleaseNotes}" Margin="0,8,0,0"
+                                   FontSize="12" Foreground="#5B6270" TextWrapping="Wrap" />
+                        <Button Content="Tải và cài đặt" Padding="16,8" Margin="0,12,0,0"
+                                HorizontalAlignment="Left"
+                                Command="{Binding Update.DownloadAndInstallCommand}" />
+                        <ProgressBar Height="6" Margin="0,12,0,0" Minimum="0" Maximum="100"
+                                     Value="{Binding Update.DownloadProgress}"
+                                     Visibility="{Binding Update.IsDownloading, Converter={StaticResource BoolToVisibility}}" />
+                    </StackPanel>
+                </StackPanel>
+            </ScrollViewer>
+        </Border>
+
+        <TextBlock Grid.Row="2" Margin="0,18,0,0" FontSize="12" Foreground="#8A909C"
+                   Text="EduFocus — bản dựng nền tảng Phase 1" />
     </Grid>
 </Window>

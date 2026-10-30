@@ -63,46 +63,51 @@
 **Mô tả:** Lần chạy đầu tiên, ứng dụng hướng dẫn phụ huynh thiết lập PIN và giải thích phạm vi giám sát.
 
 **Tiền điều kiện**
-- Ứng dụng chưa có `ParentCredential`.
+- Ứng dụng chưa có `ParentCredential`, hoặc onboarding trước đó đang dang dở (`OnboardingCompleted = false`).
 - Database EduFocus mới đã được tạo; không có dữ liệu migrate từ 1.x.
 
 **Trigger**
-- Người dùng mở app lần đầu sau khi cài.
+- Người dùng mở app và `OnboardingCompleted = false`.
 
 **Luồng chính**
 1. Hệ thống hiển thị màn hình giới thiệu EduFocus: mục đích, dữ liệu thu thập, giới hạn và cam kết local-only.
 2. Hệ thống yêu cầu phụ huynh xác nhận:
-   - Đã đọc chính sách quyền riêng tư.
-   - Đã thông báo cho học sinh về việc giám sát.
-3. Phụ huynh nhập PIN 6–8 chữ số và xác nhận lại.
-4. Hệ thống kiểm tra:
+   - Đã đọc thông báo quyền riêng tư.
+   - Đã thông báo cho học sinh/gia đình về việc giám sát.
+3. Hệ thống lưu hai mốc `PrivacyAcceptedAtUtc` và `GuardianAcknowledgedAtUtc` vào `AppSettings`.
+4. Hệ thống hiển thị tuỳ chọn an toàn và lưu ngay:
+   - Giám sát attention (mặc định bật).
+   - Ưu tiên khởi động cùng Windows (mặc định bật; việc đăng ký thực tế thuộc issue release).
+   - Kiểm tra quyền camera ở mức Windows consent store; bị từ chối chỉ hiển thị cảnh báo, không chặn thiết lập.
+5. Phụ huynh nhập PIN 6–8 chữ số và xác nhận lại.
+6. Hệ thống kiểm tra:
    - Độ dài 6–8.
    - Chỉ gồm chữ số.
    - Hai lần nhập khớp nhau.
    - Không nằm trong danh sách PIN yếu phổ biến (000000, 111111, 123456, 654321…).
-5. Hệ thống tạo `ParentCredential`:
+7. Hệ thống tạo `ParentCredential`:
    - Salt ngẫu nhiên 16 byte.
    - PBKDF2-SHA256, 600.000 iterations.
-   - Recovery code 16 ký tự ngẫu nhiên từ alphabet 32 ký tự dễ đọc (80 bit entropy), hash tương tự PIN.
-6. Hệ thống hiển thị recovery code **một lần**, yêu cầu phụ huynh lưu lại.
-7. Phụ huynh chọn camera, thử quyền truy cập, bật/tắt monitoring và auto-start; hai tùy chọn này mặc định tắt.
-8. Hệ thống lưu lựa chọn, đăng ký Scheduled Task nếu auto-start được bật, rồi mới đánh dấu `OnboardingCompleted = true`.
-9. Hệ thống mở Student Mode; Parent Mode cần đăng nhập PIN riêng.
+   - Recovery code 12 ký tự ngẫu nhiên, hash tương tự PIN.
+8. Hệ thống hiển thị recovery code **một lần** kèm nút sao chép và cảnh báo không chia sẻ; phụ huynh xác nhận đã lưu mã.
+9. Hệ thống đánh dấu `OnboardingCompleted = true` và mở dashboard. Parent Mode không tự mở sau onboarding.
 
 **Luồng thay thế**
-- **PIN yếu:** Hiển thị cảnh báo và yêu cầu chọn PIN khác.
-- **Không xác nhận đồng ý:** Không cho tạo PIN; chỉ có thể thoát app.
-- **Camera bị từ chối/không có:** Hiển thị lỗi; phụ huynh có thể chọn camera khác hoặc tiếp tục với monitoring tắt.
-- **Hủy hoặc app thoát giữa chừng:** Không đánh dấu onboarding hoàn tất; consent, credential đã băm và preferences đã lưu được giữ để tiếp tục. Nếu recovery code chưa được xác nhận đã lưu, lần chạy sau yêu cầu PIN và tạo mã thay thế.
-- **Lưu tùy chọn hoặc auto-start thất bại:** Không mở app; giữ dữ liệu đã lưu và cho phép thử lại.
+- **PIN yếu hoặc không khớp:** Hiển thị lỗi ngay tại bước PIN và yêu cầu chọn PIN khác; chưa tạo credential.
+- **Không xác nhận đồng ý:** Nút tiếp tục bị vô hiệu hoá; phụ huynh chỉ có thể thoát app.
+- **Đóng app giữa onboarding:** Các bước đã lưu được giữ nguyên. Lần mở sau:
+  - Chưa có PIN → tiếp tục từ bước tuỳ chọn/PIN, không hỏi lại consent đã xác nhận.
+  - Đã có PIN nhưng chưa hoàn tất → yêu cầu nhập PIN để tạo lại recovery code mới (mã cũ không thể hiển thị lại), sau đó hoàn tất.
+- **Camera bị Windows từ chối:** Hiển thị cảnh báo kèm hướng dẫn mở Settings → Privacy & security → Camera; phụ huynh vẫn có thể tiếp tục và cấp quyền sau.
 
 **Ngoại lệ**
-- Ghi file thất bại: hiển thị lỗi quyền truy cập, hướng dẫn chạy với quyền Administrator.
-- Recovery code chỉ lưu hash: phụ huynh có thể tạo lại sau khi đăng nhập; mã cũ bị vô hiệu. Hệ thống không thể hiển thị lại mã cũ.
+- Ghi file thất bại: hiển thị lỗi quyền truy cập, hướng dẫn chạy với quyền Administrator và cho phép thử lại; dữ liệu đã lưu không bị mất.
+- Recovery code chỉ lưu hash: phụ huynh có thể tạo lại sau khi đăng nhập Parent Mode (UC13) hoặc ngay tại bước resume bằng PIN; mã cũ bị vô hiệu.
+- PIN sai khi resume dùng chung lockout 5 lần/15 phút với UC02/UC13.
 
 **Hậu điều kiện**
-- `ParentCredential` tồn tại; `OnboardingCompleted = true`.
-- PIN và recovery code không lưu plaintext.
+- `ParentCredential` tồn tại; hai mốc consent có giá trị; `OnboardingCompleted = true`.
+- PIN và recovery code không lưu plaintext; audit ghi `PrivacyConsentRecorded`, `PinSetup`, `RecoveryCodeRegenerated` (nếu resume) và `OnboardingCompleted`.
 
 **Business rules:** BR-01, BR-02, BR-22.
 
@@ -247,6 +252,14 @@
 
 **Business rules:** BR-05, BR-06, BR-07, BR-17.
 
+> **Hiện trạng Phase 2 (issue #16):** UC03/UC04 đã có state machine bền vững: bật/tắt yêu cầu Parent Mode,
+> tạo/kết thúc `StudySession`, ghi audit `ProtectionOn`/`ProtectionOff`, bật thủ công xóa
+> `ScheduleOverrideUntilUtc`, và lặp lại thao tác không tạo phiên/audit trùng. Khi app khởi động, phiên
+> `Active` mồ côi bị đóng tại heartbeat và phiên `Recovery` được tạo nếu bảo vệ ON (UC14). Engine chặn
+> web/app thật đã được nối ở issue #24 (`ProtectionEngine`); ActivityTracker và attention vẫn thuộc
+> Phase 3–5. Cảnh báo của engine (ví dụ cổng 80 bận) vẫn được hiển thị trên UI thay vì giả định mọi
+> thành phần đều chạy.
+
 ---
 
 ### UC05 — Quản lý blocklist / allowlist
@@ -304,6 +317,23 @@
 
 **Business rules:** BR-08, BR-09, BR-23, BR-24, BR-25.
 
+> **Hiện trạng (issue #19):** domain đã có `BlockRule` (chuẩn hóa domain/app/URL, đánh dấu
+> `NotEnforced` cho rule chưa hỗ trợ), `BlockRuleEvaluator` (allow thắng block) và `BlockRuleSet` —
+> snapshot bất biến bỏ rule disabled/`NotEnforced` lúc tạo, kiểm tra hết hạn mỗi lần đánh giá, coi
+> domain thiết yếu là `Allow` và so khớp `Exact` nên `chatgpt.com.evil.test` không khớp
+> `chatgpt.com`. `IBlockRuleRepository`/`SqliteBlockRuleRepository` lưu rule; `ProtectionEngine`
+> (issue #24) nạp snapshot mỗi lần bật/reconcile nên vòng lặp matching không truy vấn DB. Thay đổi
+> rule khi Protection ON chưa tự áp dụng lại — cần tắt/bật hoặc khởi động lại; live reload chưa có
+> trong bản dựng này.
+>
+> **Hiện trạng (issue #20):** `BuiltInRuleCatalog` phiên bản 1 cung cấp 14 domain chatbot/AI và 7
+> allowlist học tập (Meet, Teams, Classroom, Zoom, trang đăng nhập Google/Microsoft).
+> `BlockRuleSeedService` chạy lúc khởi động, sau onboarding và trước reconcile: seed idempotent theo
+> `(RuleType, MatchType, NormalizedValue, Effect)`, không ghi đè rule phụ huynh và giữ trạng thái
+> bật/tắt của rule mặc định; mỗi lần có thay đổi ghi audit kèm `seedVersion`. Thẻ "Danh sách chặn"
+> trong Parent Mode nhóm rule theo danh mục và cho bật/tắt (kể cả rule mặc định) với audit actor
+> Parent. UI thêm/sửa rule tùy chỉnh và reset mặc định chưa triển khai.
+
 ---
 
 ### UC06 — Cấu hình lịch bảo vệ
@@ -344,6 +374,11 @@
 
 **Hậu điều kiện**
 - Schedule được lưu; trạng thái ON/OFF phản ánh đúng thời điểm.
+
+**Hiện trạng triển khai (issue #17)**
+- `ScheduleService` xử lý CRUD khung giờ (yêu cầu phiên Parent Mode, audit `ScheduleChanged`, chống chồng lấn) và `EvaluateAsync` chạy mỗi 30 giây cùng một lần lúc khởi động. `ProtectionSource` lưu bền vững nguồn bật (`Manual`/`Schedule`) nên lịch chỉ tự tắt bảo vệ do chính nó bật.
+- Tắt thủ công trong khung giờ tạo `ScheduleOverrideUntilUtc` đến hết khung; khi sửa khung đang hoạt động, override được clamp theo giờ kết thúc mới. Bật thủ công xóa override và chuyển nguồn sang `Manual`.
+- UI Parent Mode nhận giờ theo `HH:mm`, hỗ trợ `24:00` cho giờ kết thúc; khung không vắt qua nửa đêm. Lỗi engine khi tự bật/tắt được hiển thị thành cảnh báo và sẽ được thử lại ở lần đánh giá sau.
 
 **Business rules:** BR-07, BR-20.
 
@@ -397,6 +432,38 @@
 - Activity sample và tổng hợp session được cập nhật.
 
 **Business rules:** BR-11, BR-12, BR-17.
+
+> **Triển khai (issue #25):** `StudySessionHeartbeatService` chạy beat mỗi 10 giây bằng `PeriodicTimer`,
+> độc lập với activity sample. `ActiveSeconds` cộng theo monotonic clock và chặn tối đa 60 giây mỗi beat;
+> wall clock lùi được clamp về `LastHeartbeatAtUtc`, nên sleep/tắt máy hoặc đổi giờ không làm sai thời gian.
+> Repository ghi heartbeat bằng `UPDATE` có điều kiện (chỉ session `Active`, không lùi timestamp); lỗi DB
+> được log và thử lại ở beat sau. Heartbeat dừng trước khi session `Complete`/`Interrupt` và tự dừng khi
+> session không còn `Active`.
+
+> **Triển khai (issue #26):** `ActivityTrackingService` poll foreground mỗi giây, debounce 2 giây và ghi
+> tối đa một `ActivitySample` mỗi 15 giây; `DurationSeconds` lấy từ monotonic clock, chặn 60 giây/sample
+> nên suspend không làm phồng thời gian. Idle ≥ 5 phút chỉ ghi một sample cho mỗi chuỗi nghỉ; `IdleSeconds`
+> lưu riêng và bị trừ khỏi category time. `ActivityClassifier` dùng `BlockRuleSet` (Study/Distraction/
+> Neutral/Unknown, allow thắng block); `OnlineClassDetector` nhận Meet/Teams/Zoom qua domain/process/title.
+> URL đọc best-effort qua UI Automation, strip query/fragment/credentials; không có URL thì `UrlSource=None`
+> và sample vẫn ghi app/process. Counters session ghi bằng targeted `AddActivitySecondsAsync` chỉ trên
+> session `Active` trước khi insert sample; lỗi DB được log và thử lại ở beat sau, session kết thúc thì
+> sampling tự dừng. Sampling start/stop cùng heartbeat trong enable/disable/reconcile và shutdown.
+
+> **Triển khai (issue #27):** `OnlineClassDetector` nhận Meet qua `meet.google.com`/title `Google Meet` hoặc
+> `Meet` + dấu phân cách, Teams qua process `ms-teams`/`teams` hoặc `teams.microsoft.com`, Zoom qua process
+> `zoom` hoặc `zoom.us`; path/`.exe`/dấu nháy được chuẩn hóa và chat như Discord/Slack/Messenger/Zalo không
+> bị nhận nhầm. Sample idle không đánh dấu `IsOnlineClass`, nên overlay `OnlineClassSeconds` không cộng
+> trùng với category time. `MonitoringEligibility.IsEligible` là policy dùng chung cho UC08: khi
+> `MonitorOnlyDuringClasses` bật, chỉ thời gian phát hiện lớp online mới được cộng vào
+> `MonitoringEligibleSeconds`.
+
+> **Triển khai (issue #28):** khi máy sleep hoặc phiên bị lock/disconnect, `ISystemPowerEventPort` báo
+> suspend cho heartbeat và activity. Heartbeat chỉ cộng phần trước sleep vào `ActiveSeconds`; activity bỏ
+> khoảng sleep và reset cửa sổ sample, nên không ghi sample cho thời gian máy ngủ và không cộng gap vào
+> sample kế tiếp. Gap vượt `MaxActiveDelta`/`MaxSampleGap` mà không có sự kiện cũng bị bỏ. Thời lượng vẫn
+> tính bằng monotonic clock, nên chỉnh đồng hồ tiến không làm phồng `ActiveSeconds`/`DurationSeconds`;
+> đồng hồ lùi được clamp để timestamp không đảo.
 
 ---
 
@@ -459,6 +526,46 @@
 
 **Business rules:** BR-12, BR-13, BR-14, BR-15.
 
+> **Triển khai (issue #27):** policy `MonitoringEligibility.IsEligible(monitoringEnabled,
+> monitorOnlyDuringClasses, isOnlineClass)` là nguồn quyết định duy nhất cho `MonitoringEligibleSeconds`.
+> Issue #33 cộng eligible theo sample foreground trong `ActivityTrackingService` (không theo tick camera), nên
+> camera outage làm coverage giảm chứ không làm mẫu số ngừng tăng; policy được test với cùng 40 giây monitored
+> cho coverage 20% (mọi lúc) và 80% (chỉ trong lớp).
+
+> **Triển khai (issue #30):** `ICameraSessionUseCase`/`CameraSessionService` chọn camera đã lưu trong
+> `AppSettings.CameraDeviceId` hoặc camera mặc định, mở/đóng tuần tự và bọc open/list/capture trong timeout
+> 5 giây. Camera bận/không quyền/mất kết nối → `CameraUnavailable`, tự mở lại sau 30 giây (backoff nhân đôi
+> tới 5 phút); lỗi capture lẻ không kết luận mất tập trung, chỉ 3 lỗi liên tiếp hoặc `Disconnected` mới đóng
+> thiết bị. `CameraStatusViewModel` hiển thị trạng thái và hướng dẫn quyền trong cửa sổ chính/tray. Việc
+> phân tích frame, ghi `AttentionEvent`/`CameraUnavailable`, cộng thời gian monitored và coverage đã hoàn tất
+> ở #31–#33.
+
+> **Triển khai (issue #32):** `AttentionMonitorService` biến `AttentionSample` thành state ổn định qua
+> `AttentionStateWindow` (cửa sổ 6 giây, tối thiểu 3 mẫu, majority ≥ 60%) rồi `AttentionStateMachine`
+> (Focused ngay, Distracted > 20 giây, Absent > 30 giây, Drowsy > 2 giây). `AttentionEvent` chỉ mở/đóng khi
+> state đổi; `CameraUnavailable` ghi nhận ngay và không vào mẫu số attention; inference lỗi không bị tính là
+> `Absent`; gap > 5 giây không cộng thời gian. `ConfidenceAvg` được cập nhật trọng số trong cùng `UPDATE`
+> với counter. Crash đóng event đang mở tại `LastHeartbeatAtUtc`. Issue #33 start/stop monitor + pipeline
+> theo phiên học, cộng `MonitoringEligibleSeconds` từ activity sample và tính coverage/cảnh báo qua
+> `SessionAttentionSummary`.
+
+> **Triển khai (issue #31):** `AttentionPipelineService` chạy vòng sampling 1 FPS qua `ICameraSessionUseCase`,
+> gọi `IAttentionFrameAnalyzer` trên từng `CameraFrame` và phát `AttentionSample` sau khi đã dispose frame.
+> Sample camera lỗi có `CameraFailure` + `Observation = null`; sample inference lỗi có `Error` nhưng giữ
+> `CameraFailure = None`, để monitor (#32) không biến lỗi kỹ thuật thành `Absent`. `OpenCvAttentionFrameAnalyzer`
+> không còn mở camera; nó chỉ nhận frame BGR24 managed, tính luminance và chạy YuNet/Haar. Classifier,
+> state machine và `AttentionEvent` đã có ở #32; coverage/eligibility đã nối ở #33.
+
+> **Triển khai (issue #34):** trước khi giám sát, onboarding và Parent Mode chạy `CameraCheckService`: mở
+> camera, đọc tối đa 5 khung hình trong bộ nhớ, đánh giá `Ready`/`TooDark`/`NoFace`/`NoImage` bằng
+> `CameraHealthEvaluator` rồi luôn đóng camera — không cần quyền quản trị, không lưu ảnh hay landmark. Check
+> từ chối khi pipeline đang chạy (`MonitoringActive`) để tránh tranh chấp thiết bị. `CameraGuidance` hướng
+> dẫn bật quyền Windows, đóng Meet/Teams/Zoom hoặc bật Multi-App Camera trên Windows 11 22H2+, kết nối
+> webcam, và nhắc chọn lại camera khi thiết bị đã lưu biến mất (`StoredDeviceSubstituted`). `NotFound` dừng
+> retry cho phiên; `PermissionDenied` vẫn retry có backoff. Camera bận/không quyền chỉ tạo
+> `CameraUnavailable`, không tạo `Focused`/`Distracted` giả; coverage giảm và `UnobservedSeconds`
+> (= eligible − monitored) được báo cáo ở #35–#38.
+
 ---
 
 ### UC09 — Trang chặn & chặn ứng dụng
@@ -475,8 +582,8 @@
 - Hoặc app bị chặn được phát hiện ở foreground/process start.
 
 **Luồng chính**
-1. Hosts file trỏ domain về `127.0.0.1` (kèm biến thể `www.` nếu có).
-2. `BlockPageServer` bind `127.0.0.1:80`, chỉ nhận request HTTP và trả HTML tĩnh.
+1. Hosts file trỏ domain về `127.0.0.1` và `::1`; chỉ áp domain exact của rule đang bật — không tự thêm biến thể `www.`.
+2. `BlockPageServer` bind `127.0.0.1:80` bằng TCP listener loopback, chỉ nhận GET/HEAD và trả HTML tĩnh; request khác hoặc Host header lạ bị từ chối.
 3. Trang chặn hiển thị:
    - "Trang này không nằm trong môi trường học tập."
    - Tên miền bị chặn (đã HTML-escape).
@@ -502,6 +609,7 @@
 **Luồng thay thế**
 - **HTTPS:** trình duyệt thường báo lỗi kết nối/SSL thay vì trang chặn; domain vẫn bị chặn. Hosts không tạo log HTTPS; blocked attempt có thể không được ghi.
 - **Port 80 bị chiếm:** blocking vẫn hoạt động; block page không khả dụng; ghi cảnh báo.
+- **Giới hạn hiển thị:** màn hình Protection hiển thị cảnh báo thường trực về HTTPS/DoH/VPN/proxy và về việc block page không khả dụng khi cổng 80 bị chiếm.
 - **Allowlist:** nếu rule Allow còn hiệu lực, không chặn, không ghi blocked attempt.
 - **Parent override:** phụ huynh có thể thêm allowlist tạm thời từ app; block page không có nút mở khóa trực tiếp để tránh học sinh tự bỏ chặn.
 
@@ -519,6 +627,41 @@
 - App bị chặn đã đóng hoặc bị kill; process hệ thống/EduFocus/Allow không bị tác động.
 
 **Business rules:** BR-09, BR-10, BR-23, BR-24, BR-26, BR-29.
+
+> **Triển khai (issue #21):** `HostsFileBlocker` sở hữu khối marker trong hosts; chỉ chấp nhận
+> domain exact và ghi cả IPv4 `127.0.0.1` lẫn IPv6 `::1`, không tự sinh biến thể `www.`. Backup +
+> `journal.json` nằm trong `%ProgramData%\EduFocus\hosts-backup`; restore khôi phục exact khi ngoài
+> marker chưa bị sửa, ngược lại chỉ gỡ marker để giữ chỉnh sửa của người dùng. Sau restore/self-heal
+> thành công, journal và file `.bak` được xóa (chỉ trong thư mục backup) để không để lại bản hosts cũ.
+> Lỗi quyền/khóa file được báo bằng `HostsFileException` để use case không coi là đã tắt; log chỉ ghi
+> số domain. `ProtectionEngine` (issue #24) gọi apply/restore/self-heal adapter này khi bật, tắt và
+> reconcile.
+>
+> **Triển khai block page (issue #22):** `BlockPageServer` dùng `TcpListener` bind `127.0.0.1:80`
+> (cổng 0 cho test) thay vì `HttpListener` nên không cần URL ACL; chỉ phục vụ GET/HEAD và chỉ trả
+> trang khi Host header khớp domain exact đang chặn. Trang tĩnh escape domain, không tài nguyên
+> ngoài, kèm CSP `default-src 'none'`, `no-store`, `nosniff`, `X-Frame-Options: DENY`,
+> `Referrer-Policy: no-referrer`. Cổng bận/thiếu quyền trả warning để engine giữ Protection ON và UI
+> cảnh báo. Mỗi request bị chặn phát `BlockPageHit` (domain + UTC); `ProtectionEngine` (issue #24)
+> debounce 30 giây theo domain rồi ghi `BlockedAttempt` với `ObservedVia = BlockPage`.
+>
+> **Triển khai process watcher (issue #23):** `ProcessWatcher` polling mỗi 2 giây qua
+> `IProcessController` (`WindowsProcessController` dùng `Process.GetProcesses`), chỉ xét process có
+> cửa sổ chính và khớp **chính xác** tên đã chuẩn hóa (bỏ path/`.exe`, lowercase); allowlist thắng
+> blocklist. Process hệ thống quan trọng, PID ≤ 4, process EduFocus và process không có cửa sổ chính
+> bị bỏ qua. Trước khi kill, watcher gửi `WM_CLOSE` và chờ tối đa 2 giây; quá hạn mới kill process
+> tree và cảnh báo dữ liệu chưa lưu có thể bị mất. Attempt được debounce 30 giây theo tên process
+> bằng monotonic clock; `ProcessBlockedObservation` (tên, PID, kết quả, cảnh báo) được
+> `ProtectionEngine` (issue #24) debounce/ghi `BlockedAttempt` với `ObservedVia = ProcessWatcher`.
+> Log không ghi window title, path hay tài liệu.
+>
+> **Triển khai engine (issue #24):** `ProtectionEngine` ghép block page → hosts → watcher khi bật
+> (listener sẵn sàng trước khi hosts trỏ domain về loopback) và gỡ rule watcher/page trước khi dừng
+> adapter + restore hosts khi tắt. Cổng 80 bận chỉ là cảnh báo; lỗi adapter khác khi bật rollback phần
+> đã áp và ném `ProtectionEngineException`; hosts restore thất bại khi tắt ném lỗi để Protection giữ
+> ON. Một writer channel ghi `BlockedAttempt` kèm `SessionId` đang hoạt động và tăng
+> `BlockedAttemptCount`; debounce trung tâm 30 giây theo domain/tên app bằng monotonic clock, lỗi ghi
+> DB chỉ log. Thay đổi rule khi đang ON chưa tự áp dụng lại.
 
 ---
 
@@ -574,6 +717,38 @@
 
 **Business rules:** BR-15, BR-21.
 
+> **Triển khai một phần (issue #33):** `SessionAttentionSummary` cung cấp `MonitoredSeconds`,
+> `AttentionPercent`, `CoveragePercent` và cảnh báo "Dữ liệu chưa đủ tin cậy" khi coverage < 50% để dashboard
+> dùng lại. UI dashboard/báo cáo chi tiết thuộc #35–#38.
+>
+> **Triển khai dashboard hôm nay (issue #35):** `DashboardViewModel` đọc `DailyStudySummary` từ
+> `DashboardService` — ngày local theo `TimeProvider`, tổng hợp một aggregate trên `StudySessions`, không quét
+> sample thô — và polling 15 giây khi cửa sổ hiển thị. Student Mode (cửa sổ chính) chỉ thấy thời gian học và
+> phiên đang hoạt động; Parent Mode thấy đầy đủ study/active/distraction, attention/coverage kèm cảnh báo
+> coverage < 50%, thời gian camera không khả dụng, thời gian không quan sát được, blocked attempts best-effort
+> và số phiên. Empty/loading/error state có retry, không crash khi DB trống. Báo cáo 7/30 ngày, timeline, CSV
+> và xóa dữ liệu thuộc #36–#38.
+>
+> **Triển khai báo cáo (issue #36):** `ReportViewModel` trong Parent Mode cho chọn **Hôm nay**, **Tuần này**
+> (Thứ 2–Chủ nhật chứa ngày hiện tại) và **30 ngày gần nhất**; báo cáo đọc theo yêu cầu khi mở Parent Mode
+> hoặc bấm Làm mới. `ReportService` lấy session theo `StartLocalDate`, sample/event theo session id với cap
+> (50 session, 100.000 sample, 100 event trong service; UI hiển thị 20 session/24 khung giờ/10 event) và dựng
+> `StudyReport`: tổng hợp (kèm coverage và confidence trung bình có trọng số), một dòng mỗi ngày có phiên,
+> timeline theo giờ local (UTC→local lúc đọc nên xử lý
+> đúng DST), top domain/app và attention event. Chi tiết đã hết retention chỉ tạo cảnh báo, summary vẫn
+> hiển thị; báo cáo chỉ dùng app name và domain đã làm sạch, không có window title/URL đầy đủ/process name.
+> Bộ lọc 90/365 ngày chỉ summary vẫn thuộc phần sau; xóa dữ liệu thuộc #38.
+>
+> **Triển khai xuất CSV (issue #37):** nút **Xuất CSV** trong thẻ Báo cáo xuất đúng snapshot đang hiển thị —
+> một dòng `Tổng hợp`, một dòng mỗi ngày có phiên, mỗi phiên, mỗi mẫu hoạt động và mỗi sự kiện tập trung — nên
+> số liệu khớp màn hình. File UTF-8 có BOM (Excel đọc đúng tiếng Việt), một header 27 cột, CRLF; tên
+> `EduFocus-bao-cao-yyyyMMdd-HHmmss.csv` lưu tại `%LocalAppData%\EduFocus\exports`, không ghi đè file cũ.
+> Ô bắt đầu bằng `=`, `+`, `-`, `@` được escape để chống formula injection; ô chứa dấu phẩy/nháy/xuống dòng
+> được quote. Chỉ app name + domain đã làm sạch: không note, window title, URL đầy đủ, process name hay dữ
+> liệu camera; sample/event ngoài khoảng ngày local bị loại. UI hiện đường dẫn file và nhắc bảo vệ file vì chứa
+> dữ liệu học tập nhạy cảm; cảnh báo retention/truncation được đưa vào ghi chú của file CSV. Xóa dữ liệu vẫn
+> thuộc #38.
+
 ---
 
 ### UC11 — Quản lý dữ liệu & quyền riêng tư
@@ -614,6 +789,34 @@
 
 **Business rules:** BR-13, BR-16.
 
+**Hiện trạng issue #29:** retention job tự động đã chạy: `RetentionService` đọc hạn trong `AppSettings`, xóa
+từng bảng theo batch 500 (sample/event/blocked attempt/audit/session), bỏ qua session `Active` và event còn
+mở, ghi audit `RetentionApplied` kèm số bản ghi và danh sách bảng lỗi. Job chạy lúc khởi động và mỗi ngày khi
+local time ≥ 03:00, sau đó `PRAGMA incremental_vacuum`. Xuất CSV đã có trong thẻ Báo cáo (issue #37).
+
+**Triển khai issue #38:** thẻ **Dữ liệu & quyền riêng tư** trong Parent Mode hiển thị dung lượng file DB,
+số row hiện có của từng bảng và số ngày retention đang áp dụng; mọi thao tác đọc/ghi đều qua
+`IPrivacySettingsUseCase`/`IDataDeletionUseCase` và yêu cầu phiên phụ huynh đã xác thực.
+- **Cấu hình:** phụ huynh sửa monitoring, `MonitorOnlyDuringClasses`, ngưỡng distracted/absent, sample interval,
+  ba mốc retention, StartWithWindows, update check và theme/language. Giá trị được validate trong domain
+  (`AppSettings.UpdateThresholds/UpdateRetention/...`), ghi một audit `SettingsChanged` chỉ chứa tên nhóm thay
+  đổi. Monitoring và sample interval áp dụng ngay cho phiên đang chạy qua `RefreshSettingsAsync`; ngưỡng
+  attention áp dụng từ phiên kế tiếp; camera ở lần bật camera sau; retention ở lần dọn kế tiếp. Theme/language
+  được lưu nhưng runtime theming/localization chưa có nên UI ghi rõ điều này. Tắt monitoring chỉ dừng
+  camera/attention, không tắt web/app blocking (xem BR-14).
+- **Update check:** mặc định tắt, chỉ chạy khi phụ huynh bật; gửi `User-Agent: EduFocus/{version}` tới GitHub
+  Releases API (phiên bản + OS nằm trong header mặc định của HTTP client) và UI nói rõ GitHub thấy IP, không
+  gửi dữ liệu học tập/tên máy/nội dung màn hình; không tự kiểm tra lúc khởi động. Không có telemetry hay upload
+  nền nào khác.
+- **Xóa toàn bộ:** yêu cầu PIN đúng và gõ đúng chữ `XÓA`; sai xác nhận bị từ chối trước khi kiểm tra PIN nên
+  không tiêu tốn lượt thử. `DataDeletionService` xóa theo batch 500 đúng thứ tự sample → event → blocked
+  attempt → phiên không `Active`, bỏ qua session đang chạy ở mọi bước, chạy `VACUUM` best-effort, ghi audit
+  `DataDeleted` (kể cả khi một bảng lỗi — khi đó trạng thái `Incomplete` kèm danh sách bảng lỗi). Hủy giữa
+  chừng hoặc sai PIN/lockout không ghi audit thành công. Xóa giữ nguyên settings, PIN, audit và dữ liệu của
+  phiên đang hoạt động; không thể hoàn tác. UI nói rõ phạm vi trước khi xóa.
+- **Chưa có:** xóa theo khoảng thời gian tùy chọn và audit viewer trong UI (audit vẫn ghi DB và xem được bằng
+  công cụ ngoài) — phần còn lại của UC11.
+
 ---
 
 ### UC12 — Vòng đời ứng dụng & chống tắt
@@ -648,19 +851,20 @@
    - Đóng app; watchdog không khởi động lại sau exit sạch.
 
 **Luồng chính — Khởi động cùng Windows**
-1. Khi Protection ON hoặc ScheduleEnabled, app đăng ký auto-start.
-2. Khi user đăng nhập Windows, app khởi động ẩn xuống tray.
+1. Khi Protection ON, hoặc khi Protection OFF nhưng phụ huynh bật `StartWithWindows`, app đăng ký auto-start qua task `EduFocusLogon`.
+2. Khi user đăng nhập Windows, task logon khởi động watchdog; watchdog khởi động app (ẩn xuống tray) nếu app chưa chạy.
 3. Nếu Protection ON trước khi tắt máy, app tự bật lại protection.
 
 **Luồng thay thế — App bị kill**
-1. Watchdog (scheduled task/service) phát hiện process chết.
+1. Watchdog thường trú (`EduFocus.exe --watchdog`) đọc heartbeat mỗi 5 giây.
 2. Chỉ khởi động lại khi `ProtectionEnabled = true` và lần thoát trước không phải clean exit.
-3. Khởi động lại app trong vòng 30–60 giây (scheduled task không đảm bảo chính xác 30 giây).
+3. Nếu process chết, khởi động lại với backoff 5–30 giây (mục tiêu ≤ 30 giây). Nếu process còn sống nhưng heartbeat cũ hơn 30 giây (treo), kill process rồi khởi động lại sau 1 giây.
 4. Áp dụng lại protection nếu trạng thái trước đó là ON.
-5. Ghi audit "unexpected termination".
+5. Ghi audit `WatchdogRestart` (lý do, số lần thử, PID cũ/mới) và log chẩn đoán; không chứa dữ liệu người dùng. Vượt budget 5 lần/10 phút thì ghi `WatchdogGaveUp` một lần và ngừng thử đến hết cửa sổ.
+6. Không tạo app/watchdog trùng: app giữ mutex single-instance, watchdog giữ mutex global; hai scheduled task (logon + mỗi phút) chỉ khôi phục watchdog nếu nó bị kill.
 
 **Ngoại lệ**
-- Windows shutdown/logoff: app cố gắng gỡ hosts và lưu trạng thái; session đang chạy được đóng với `Interrupted` và `Note = SystemShutdown` nếu kịp, nếu không thì self-heal lần sau. Không đặt `LastCleanShutdownAtUtc` và không xóa `ProtectionEnabled`, để lần đăng nhập sau phục hồi bảo vệ. Đây là đường bypass được chấp nhận và phải ghi rõ trong tài liệu.
+- Windows shutdown/logoff: app không gỡ chặn và không đổi trạng thái bảo vệ; chỉ cố gắng đóng session với `Interrupted`/`Note = SystemShutdown` và ghi audit trong thời gian ngắn (tối đa 2 giây) trước khi tiến trình bị dừng. Không đặt `LastCleanShutdownAtUtc` và không xóa `ProtectionEnabled`, để lần đăng nhập sau phục hồi bảo vệ; nếu không kịp đóng session thì reconcile lúc khởi động self-heal. Đây là đường bypass được chấp nhận và phải ghi rõ trong tài liệu.
 - Học sinh kill từ Task Manager: nếu có quyền admin, có thể kill; watchdog khởi động lại; ghi nhận.
 - Uninstall: yêu cầu PIN/cảnh báo nếu Protection ON ở mức best-effort; admin Windows vẫn có thể gỡ (giới hạn đã biết).
 
@@ -669,6 +873,37 @@
 - Protection state được bảo toàn.
 
 **Business rules:** BR-17, BR-18, BR-19, BR-28, BR-30.
+
+> **Hiện trạng Phase 2 (issue #18):** đóng cửa sổ luôn ẩn xuống tray, kèm balloon nhắc bảo vệ đang
+> chạy; thoát app chỉ từ menu tray và luôn yêu cầu PIN qua `ExitWindow`. `AppLifecycleService`
+> xác thực PIN, gỡ chặn (`DisableForExitAsync`, không tạo `ScheduleOverrideUntilUtc` và xóa override
+> còn sót), kết thúc session `Completed`, ghi `LastCleanShutdownAtUtc`, audit `ProtectionOff` +
+> `CleanExit` và luôn khóa Parent Mode sau mỗi lần thử. Khi bảo vệ ON, dialog hiển thị cảnh báo và
+> bắt buộc xác nhận lần hai; gỡ chặn thất bại giữ app chạy với bảo vệ nguyên vẹn, còn lỗi ghi dấu
+> thoát sạch chỉ tạo cảnh báo vì reconcile lúc khởi động tự dọn. `App.OnSessionEnding` không hủy
+> Windows shutdown, chỉ ghi nhận best-effort trong 2 giây: session `Interrupted` với ghi chú
+> `SystemShutdown`, audit `SessionInterrupted`/`SystemShutdown`, giữ nguyên `ProtectionEnabled` và
+> engine; lần đăng nhập sau `ReconcileAsync` phục hồi bảo vệ với session `Recovery`. Watchdog tự
+> khởi động lại sau kill vẫn thuộc Phase 7.
+
+> **Hiện trạng Phase 7 (issue #39):** watchdog thường trú `EduFocus.exe --watchdog` tick 5 giây, đọc
+> heartbeat 5 giây, phát hiện stale sau 30 giây, restart với backoff 5–30 giây và budget bền vững 5
+> lần/10 phút; audit `WatchdogRestart`/`WatchdogGaveUp` chỉ chứa lý do, số lần thử và PID. Hai task
+> `EduFocusLogon` (ONLOGON) và `EduFocusWatchdog` (mỗi phút, HIGHEST) giám sát chính watchdog; app
+> giữ mutex single-instance và watchdog giữ mutex global nên không có instance trùng. `WatchdogCoordinator`
+> đăng ký task khi Protection ON (hoặc Protection OFF + `StartWithWindows`), dừng watchdog khi
+> Protection OFF, và MSI uninstall chạy `--uninstall-watchdog` trước khi xóa file. Windows shutdown
+> vẫn là bypass được chấp nhận: app ghi shutdown flag + stop request để watchdog không restart trong
+> lúc logoff, và lần đăng nhập sau phục hồi bảo vệ.
+
+> **Hiện trạng Phase 7 (issue #46):** bản cài MSI chạy Windows Service `EduFocusProtection`
+> (`EduFocus.Service.exe`, LocalSystem, auto-start) sở hữu protection engine, heartbeat, session,
+> schedule và retention. UI đóng không tắt bảo vệ; service được SCM restart tối đa 3 lần, cách 60
+> giây, reset sau 1 ngày. Lệnh bật/tắt từ UI đi qua named pipe có ACL và xác thực ảnh tiến trình;
+> lệnh cha cần Parent Mode, PIN không đi qua pipe. Khi service dừng, trạng thái bảo vệ và hosts được
+> giữ nguyên, session `Interrupted` với ghi chú `ServiceStopped`, audit `ProtectionServiceStopped`/
+> `SessionInterrupted`; lần khởi động sau reconcile lại. Bản portable/source không có marker service
+> vẫn dùng watchdog như mô tả ở trên.
 
 ---
 
@@ -757,6 +992,16 @@
 - Không còn block mồ côi.
 
 **Business rules:** BR-17, BR-20.
+
+> **Triển khai (issue #25):** `ReconcileAsync` dừng heartbeat, đóng session cũ tại `LastHeartbeatAtUtc`
+> (`Interrupted`) rồi tạo phiên `Recovery` từ thời điểm hiện tại và khởi động lại heartbeat. Mọi thao tác
+> enable/disable/reconcile được serialize bằng semaphore để hai luồng không tạo hai session hoặc hai
+> heartbeat; unique partial index vẫn là chốt cuối ở tầng DB.
+
+> **Triển khai (issue #28):** resume từ sleep không tạo session mới khi app vẫn chạy: heartbeat và activity
+> nhận `Resumed`, bỏ khoảng sleep và tiếp tục trên session `Active` hiện tại. Thời gian sleep không vào
+> `ActiveSeconds` và không sinh sample; nếu app bị tắt trong lúc sleep thì lần khởi động sau đi theo luồng
+> crash/recovery ở trên, đóng session tại `LastHeartbeatAtUtc`.
 
 ---
 

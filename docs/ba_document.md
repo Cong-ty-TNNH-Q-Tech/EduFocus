@@ -192,7 +192,7 @@ EduFocus cung cấp một lớp bảo vệ và quan sát **tối thiểu, minh b
 - Thoát app luôn cần PIN (trừ Windows shutdown/logoff).
 - Tự khởi động cùng Windows bằng Scheduled Task khi Protection ON hoặc ScheduleEnabled.
 - Tự phục hồi trạng thái chặn/session sau crash hoặc restart.
-- Watchdog kiểm tra và khởi động lại app nếu bị kill khi Protection ON (MVP: scheduled task, kiểm tra mỗi 30–60 giây; Production: Windows Service). Không restart sau exit sạch.
+- Bảo vệ nền: bản cài dùng Windows Service `EduFocusProtection` (LocalSystem, auto-start, SCM restart khi crash) nên UI đóng vẫn giữ bảo vệ; bản portable/source dùng watchdog thường trú kiểm tra heartbeat mỗi 5 giây và khởi động lại app nếu bị kill/hang khi Protection ON (mục tiêu ≤ 30 giây; hai scheduled task logon/mỗi phút giám sát chính watchdog). Không restart sau exit sạch.
 - Uninstall có cảnh báo/PIN ở mức best-effort; admin Windows vẫn có thể gỡ.
 - Ghi audit log khi có nỗ lực tắt/sửa.
 
@@ -205,15 +205,15 @@ EduFocus cung cấp một lớp bảo vệ và quan sát **tối thiểu, minh b
   - Attention event / blocked attempt: 90 ngày.
   - Session summary: 365 ngày.
   - Audit log: 365 ngày.
-- Phụ huynh có thể xóa dữ liệu báo cáo theo khoảng thời gian; thao tác xóa không xóa PIN/credential trừ khi chọn reset ứng dụng.
-- Không gửi dữ liệu học tập ra ngoài. Nếu có kiểm tra cập nhật, chỉ gửi phiên bản/OS, có thể tắt; server vẫn có thể thấy IP.
+- Phụ huynh có thể xóa toàn bộ dữ liệu báo cáo bằng PIN + gõ `XÓA`; thao tác không thể hoàn tác nhưng giữ PIN/credential, settings, audit và dữ liệu phiên đang chạy.
+- Không gửi dữ liệu học tập ra ngoài. Kiểm tra cập nhật mặc định tắt; khi bật, chỉ gửi số phiên bản tới GitHub Releases và GitHub vẫn có thể thấy IP.
 
 ### 6.2. Tính năng mở rộng (Post-MVP)
 
 | Mã | Tính năng | Ghi chú |
 |---|---|---|
 | F11 | Browser extension + native messaging | Lấy URL chính xác, chặn theo path, chặn AI sidebar |
-| F12 | Windows Service `EduFocus.Agent` | Chống tắt mạnh hơn, watchdog SYSTEM |
+| F12 | Windows Service `EduFocusProtection` | Đã triển khai ở issue #46: service LocalSystem sở hữu protection engine, heartbeat, schedule, retention và IPC có xác thực |
 | F13 | Companion app điện thoại | Camera thứ hai khi webcam bị Meet/Teams chiếm |
 | F14 | Windows Hello cho phụ huynh | Thay PIN nếu dùng tài khoản Windows riêng |
 | F15 | Nhiều hồ sơ học sinh | Mỗi con có lịch, blocklist, báo cáo riêng |
@@ -229,6 +229,9 @@ EduFocus cung cấp một lớp bảo vệ và quan sát **tối thiểu, minh b
 - Quote / Gemini AI / AI task breakdown / AI profile generator.
 - Focus timer Pomodoro.
 - Dữ liệu và migration từ `DontBeLazy` 1.x.
+
+> Issue #7 đã xóa toàn bộ các thành phần trên khỏi codebase; inventory chi tiết ở
+> [legacy-cleanup.md](./legacy-cleanup.md).
 
 ---
 
@@ -333,6 +336,7 @@ EduFocus cung cấp một lớp bảo vệ và quan sát **tối thiểu, minh b
 - PIN hash PBKDF2-SHA256, salt riêng, constant-time compare.
 - Recovery code hash tương đương PIN; chỉ hiển thị một lần khi tạo/đổi, không thể hiển thị lại.
 - DB và log đặt tại `%ProgramData%\EduFocus`, ACL chỉ cho Administrators/SYSTEM. Phụ huynh thao tác qua app elevated, không đọc file trực tiếp.
+- DB mã hóa toàn phần bằng SQLCipher; khóa 32 byte lưu DPAPI `LocalMachine` trong `edufocus.key` (không phải PIN, gắn thiết bị). Thiếu/hỏng khóa thì fail-closed, không ghi đè DB; backup cũng được mã hóa. (post-MVP, issue #47)
 - Không lưu secret trong source, log hay file cấu hình plaintext.
 - Mọi thao tác nhạy cảm ghi audit log (không ghi PIN).
 - App yêu cầu quyền Administrator cho hosts/process. Firewall là post-MVP.
@@ -398,6 +402,7 @@ EduFocus cung cấp một lớp bảo vệ và quan sát **tối thiểu, minh b
 - Tại Việt Nam, dữ liệu khuôn mặt/sinh trắc học là **dữ liệu cá nhân nhạy cảm**. Việc xử lý cần tuân thủ **Luật Bảo vệ dữ liệu cá nhân 91/2025/QH15** (hiệu lực 01/01/2026) và **Nghị định 356/2025/NĐ-CP** (hiệu lực 01/01/2026, thay thế Nghị định 13/2023/NĐ-CP) cùng các văn bản hướng dẫn hiện hành.
 - Nguyên tắc áp dụng: mục đích rõ ràng, tối thiểu hóa, lưu trữ hạn chế, minh bạch, có sự đồng ý của người đại diện hợp pháp và đánh giá tác động xử lý dữ liệu cá nhân (DPIA) trước khi phát hành.
 - Không lưu ảnh/video làm giảm rủi ro nhưng không loại bỏ hoàn toàn nghĩa vụ thông báo, đồng thuận và đánh giá tác động.
+- Hồ sơ minh bạch đã hoàn thiện ở issue #44: [`docs/privacy-notice.md`](./privacy-notice.md) (thông báo quyền riêng tư tiếng Việt), [`docs/dpia.md`](./dpia.md) (DPIA, bản đồ dữ liệu, người chịu trách nhiệm, quy trình sự cố) và [`THIRD-PARTY-NOTICES.md`](../THIRD-PARTY-NOTICES.md) (giấy phép bên thứ ba). Notice hiển thị trước khi bật monitoring (onboarding/Parent Mode) và trong bộ cài MSI.
 - Tài liệu này không phải tư vấn pháp lý; cần luật sư/DPO xem xét trước khi phát hành thương mại.
 
 ### 10.3. Giới hạn kỹ thuật đã biết
@@ -406,7 +411,7 @@ EduFocus cung cấp một lớp bảo vệ và quan sát **tối thiểu, minh b
 - Hosts không tạo log truy cập HTTPS; blocked attempts chỉ là best-effort.
 - Trang chặn chỉ hiển thị với HTTP; HTTPS thường báo lỗi kết nối/SSL.
 - URL/path, wildcard subdomain và AI sidebar chưa được enforce trong MVP.
-- Windows shutdown/logoff vẫn là đường bypass; watchdog scheduled task có độ trễ 30–60 giây.
+- Windows shutdown/logoff vẫn là đường bypass. Bản cài dùng service: SCM restart sau crash trong khoảng 60 giây (tối đa 3 lần/ngày); admin/SYSTEM vẫn stop/disable/gỡ được service. Bản portable/source dùng watchdog: app được khôi phục trong ≤ 30 giây sau kill, nếu chính watchdog bị kill thì scheduled task có thể mất tới khoảng 60 giây.
 - Webcam không phải eye tracker hồng ngoại; attention chỉ là ước lượng.
 - Meet/Teams có thể chiếm camera trên máy chưa hỗ trợ Multi-App Camera.
 - Không thể đảm bảo phát hiện mọi chatbot mới hoặc chatbot chạy trong app khác.
@@ -420,16 +425,18 @@ EduFocus cung cấp một lớp bảo vệ và quan sát **tối thiểu, minh b
 |---|---|
 | UI | WPF .NET 10 LTS, MaterialDesignInXAML, CommunityToolkit.Mvvm |
 | Architecture | Clean Architecture + Ports & Adapters |
-| Database | SQLite + EF Core 10 |
+| Database | SQLite (SQLCipher) + EF Core 10; khóa DB 32 byte lưu DPAPI, gắn thiết bị (issue #47) |
 | Chặn web | Windows hosts file + local HTTP block page (MVP, domain-level) |
 | Chặn URL/path | Browser extension (Post-MVP) |
 | Process / foreground window | Win32 API (`GetForegroundWindow`, WMI, `Process`) |
 | URL tracking | UI Automation + window title (MVP), browser extension (Post-MVP) |
 | Attention | OpenCvSharp4 + ONNX Runtime + MediaPipe Face/Iris models |
-| Bảo mật PIN | PBKDF2-SHA256; không lưu secret khác |
+| Bảo mật PIN | PBKDF2-SHA256; ngoài khóa mã hóa DB do hệ thống sinh (DPAPI, issue #47) không lưu secret khác |
 | Installer | WiX Toolset v4 (MSI) |
 | CI/CD | GitHub Actions |
 | Logging | File logger xoay vòng theo ngày, không ghi dữ liệu nhạy cảm |
+
+> Spike #4 (2026-10-29) đã xác nhận build/test/publish và MSI trên .NET 10 + EF Core 10; các thay đổi bắt buộc đã áp dụng ở issue #6. Danh sách thay đổi, rollback và checklist DPIA ở [`docs/spikes/net10-ef10-dpia-evaluation.md`](./spikes/net10-ef10-dpia-evaluation.md).
 
 ---
 
@@ -526,5 +533,6 @@ EduFocus cung cấp một lớp bảo vệ và quan sát **tối thiểu, minh b
 - [Use Cases](./use_cases.md)
 - [System Architecture](./system_architecture.md)
 - [Database Schema](./database_schema.md)
+- [Domain Invariants](./domain-invariants.md)
 - [README](../README.md)
 - [Security Policy](../SECURITY.md)

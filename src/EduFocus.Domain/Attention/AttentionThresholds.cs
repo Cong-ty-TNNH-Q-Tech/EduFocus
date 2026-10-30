@@ -7,6 +7,7 @@ public sealed record AttentionThresholds(
     double NoLandmarkPitchRatio = 0.45,
     double DistractedAfterSeconds = 20,
     double AbsentAfterSeconds = 30,
+    double DrowsyAfterSeconds = 2,
     double LowLightAfterSeconds = 30,
     double FocusedAfterSeconds = 0,
     double LowLightLuminance = 40);

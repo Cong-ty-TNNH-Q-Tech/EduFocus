@@ -1,4 +1,4 @@
-name: CI
+name: EduFocus CI
 
 on:
   pull_request:
@@ -15,8 +15,9 @@ concurrency:
 
 jobs:
   build:
-    name: Build & Test
+    name: EduFocus — Build & Test
     runs-on: windows-latest
+    timeout-minutes: 20
 
     steps:
       - name: Checkout
@@ -26,42 +27,72 @@ jobs:
         uses: actions/setup-dotnet@v4
         with:
           dotnet-version: "10.0.x"
+          cache: true
+          cache-dependency-path: |
+            **/*.csproj
+            .config/dotnet-tools.json
 
-      - name: Cache NuGet packages
-        uses: actions/cache@v4
-        with:
-          path: ~/.nuget/packages
-          key: ${{ runner.os }}-nuget-${{ hashFiles('**/*.csproj') }}
-          restore-keys: |
-            ${{ runner.os }}-nuget-
+      - name: Restore local tools
+        run: dotnet tool restore
 
       - name: Restore
         run: dotnet restore EduFocus.slnx
 
-      - name: Build
+      - name: Build (Release)
         run: dotnet build EduFocus.slnx --no-restore --configuration Release
 
-      - name: Test
-        run: dotnet test EduFocus.slnx --no-build --configuration Release --verbosity minimal
+      - name: Test (unit + SQLite integration)
+        run: >
+          dotnet test EduFocus.slnx
+          --no-build
+          --configuration Release
+          --verbosity minimal
+          --logger trx
+          --results-directory "${{ github.workspace }}/artifacts/test-results"
 
-      - name: Publish EduFocus
-        run: dotnet publish src/EduFocus.WPF/EduFocus.WPF.csproj --no-restore --configuration Release --output "${{ runner.temp }}\EduFocus-CI"
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
 
-      - name: Check publish output for local data
+      - name: Test browser extension
+        run: node --test browser-extension/tests
+
+      - name: Package browser extension (smoke)
         shell: pwsh
-        run: |
-          $publishDirectory = Join-Path $env:RUNNER_TEMP "EduFocus-CI"
-          $forbiddenFiles = Get-ChildItem -LiteralPath $publishDirectory -Recurse -File |
-            Where-Object { $_.Extension -in @('.db', '.log') -or $_.Name -like '*.db-*' }
-          if ($forbiddenFiles) {
-            $forbiddenFiles | ForEach-Object { Write-Error "Unexpected local data in publish output: $($_.Name)" }
-            exit 1
-          }
+        run: ./scripts/pack-browser-extension.ps1 -OutputDir "${{ github.workspace }}/artifacts/extension"
 
-      - name: Upload EduFocus build artifact
+      - name: Publish (framework-dependent)
+        run: >
+          dotnet publish src/EduFocus.WPF/EduFocus.WPF.csproj
+          --configuration Release
+          --output "${{ github.workspace }}/artifacts/publish"
+
+      - name: Publish Windows service
+        run: >
+          dotnet publish src/EduFocus.Service/EduFocus.Service.csproj
+          --configuration Release
+          --output "${{ github.workspace }}/artifacts/publish"
+
+      - name: Publish native messaging host
+        run: >
+          dotnet publish src/EduFocus.NativeHost/EduFocus.NativeHost.csproj
+          --configuration Release
+          --output "${{ github.workspace }}/artifacts/publish/native-host"
+
+      - name: Upload test results
+        if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: EduFocus-CI-${{ github.run_number }}
-          path: ${{ runner.temp }}\EduFocus-CI\
-          if-no-files-found: error
+          name: edufocus-test-results
+          path: artifacts/test-results/
+          if-no-files-found: ignore
           retention-days: 7
+
+      - name: Upload publish output
+        uses: actions/upload-artifact@v4
+        with:
+          name: edufocus-ci-publish
+          path: artifacts/publish/
+          if-no-files-found: error
+          retention-days: 3

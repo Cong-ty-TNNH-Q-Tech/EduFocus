@@ -10,7 +10,7 @@ Trước khi bắt đầu, vui lòng đọc:
 - [Code of Conduct](./CODE_OF_CONDUCT.md)
 - [Security Policy](./SECURITY.md)
 
-> **Trạng thái dự án:** EduFocus đang chuyển đổi từ dự án tiền nhiệm **Don't Be Lazy**. Project, namespace và assembly đã dùng tiền tố `EduFocus.*`.
+> **Trạng thái dự án:** EduFocus đang chuyển đổi từ dự án tiền nhiệm **Don't Be Lazy**. Codebase đã dùng tên project `EduFocus.*` từ Phase 1 và code 1.x đã được xóa ở issue #7 ([inventory](./docs/legacy-cleanup.md)).
 
 ---
 
@@ -38,15 +38,13 @@ git checkout -b fix/mo-ta-loi
 **Yêu cầu**
 
 - Windows 11 23H2+ (64-bit) — chính; Windows 10 22H2 chỉ best-effort
-- .NET 10 SDK (all solution projects target .NET 10)
+- .NET 10 SDK (toàn bộ project target `net10.0`/`net10.0-windows`)
 - Visual Studio 2022 (hoặc Rider) với workload **.NET desktop development**
 - SQLite tooling (tùy chọn, để xem DB)
 
 ```bash
-dotnet tool restore
 dotnet restore EduFocus.slnx
-dotnet build EduFocus.slnx --configuration Release
-dotnet test EduFocus.slnx --configuration Release
+dotnet build EduFocus.slnx
 ```
 
 Chạy app:
@@ -55,11 +53,41 @@ Chạy app:
 dotnet run --project src/EduFocus.WPF/EduFocus.WPF.csproj
 ```
 
-> App yêu cầu Administrator approval để thiết lập ACL cho database, backup và log trong `%ProgramData%\EduFocus`.
+> Một số tính năng (ghi hosts, kill process) cần chạy **as Administrator**. Khi debug, hãy chạy Visual Studio với quyền admin nếu cần kiểm thử blocking.
 
-CI GitHub Actions dùng Windows runner và cùng chuỗi lệnh Release ở trên. Nó tạo artifact WPF `EduFocus-CI-*` lưu 7 ngày; cache chỉ chứa NuGet packages, không chứa database/log.
+Chạy test:
 
-Khi thay đổi CI, giữ runner Windows, SDK .NET 10 và test toàn solution (`EduFocus.slnx`) để integration tests SQLite cũng chạy.
+```bash
+dotnet test EduFocus.slnx --configuration Release
+```
+
+> Toàn bộ solution target .NET 10 LTS và EF Core 10. Chạy `dotnet tool restore` để cài đúng `dotnet-ef` 10.0.14 trước khi làm việc với migration.
+
+### CI trên GitHub Actions
+
+[`.github/workflows/ci.yml`](./.github/workflows/ci.yml) chạy trên mọi PR và push vào `master`, job **EduFocus — Build & Test**:
+
+```bash
+dotnet tool restore
+dotnet restore EduFocus.slnx
+dotnet build EduFocus.slnx --configuration Release --no-restore
+dotnet test EduFocus.slnx --configuration Release --no-build --logger trx
+dotnet publish src/EduFocus.WPF/EduFocus.WPF.csproj --configuration Release --output artifacts/publish
+```
+
+- NuGet được cache theo `**/*.csproj` và `.config/dotnet-tools.json`; không cache DB, log hay secret.
+- Kết quả test (TRX) và bản publish framework-dependent được upload làm artifact `edufocus-test-results` / `edufocus-ci-publish`.
+- Repo **chưa bật branch protection** cho `master`. Maintainer nên bật required status check **EduFocus — Build & Test** (Settings → Branches) để PR fail CI không merge được.
+- Log CI chỉ chứa thông tin build/test; không đặt token, PIN hay connection string trong workflow.
+
+Release chạy bằng [`.github/workflows/release.yml`](./.github/workflows/release.yml) khi push tag `v*.*.*`:
+build Release, chạy toàn bộ test, publish self-contained, ký exe/MSI bằng chứng chỉ trong
+GitHub Secrets (nếu có), tạo MSI/ZIP + `SHA256SUMS.txt`, rồi công bố GitHub Release với
+release notes lấy từ `CHANGELOG.md`. Có thể chạy **dry run** trên branch thử nghiệm bằng
+`workflow_dispatch` với `dry_run = true` — artifact được upload nhưng không tạo release.
+Secret chỉ được truyền vào step ký số, không được echo hay đính kèm artifact; job build chạy
+với `contents: read`, chỉ job công bố có `contents: write`. Chi tiết versioning, ký số và
+checklist phát hành: [docs/release-process.md](./docs/release-process.md).
 
 ### 4. Commit
 
@@ -119,7 +147,7 @@ WPF → UseCases → Ports ← Infrastructure
 1. Xác định entity/value object trong `Domain`.
 2. Định nghĩa Port (nếu cần).
 3. Viết UseCase + unit test.
-4. Triển khai adapter ở `Infrastructure` hoặc `Infrastructure.Persistence`.
+4. Triển khai adapter ở `Infrastructure`/`SqliteDataAccess`.
 5. Đăng ký DI và làm UI.
 6. Cập nhật docs/CHANGELOG nếu hành vi thay đổi.
 
@@ -132,6 +160,7 @@ Mọi PR có tương tác với webcam, dữ liệu học sinh hoặc quyền h�
 - **Không lưu ảnh, video, audio, frame, face embedding.**
 - **Không gửi dữ liệu ra network** (trừ update check đã được duyệt).
 - **Không log PIN, recovery code, token, URL đầy đủ có query nhạy cảm.**
+- **Log qua `IAppLogger` kèm category; mọi dữ liệu bên ngoài (message, exception) phải đi qua `LogSanitizer` và không ghi toàn bộ window title/nội dung trang.**
 - **Không thêm telemetry/analytics** khi chưa có quyết định rõ ràng.
 - **Không thêm hành vi giám sát bí mật** (keylogger, screenshot, clipboard, đọc tin nhắn).
 - Thay đổi hosts phải giữ nguyên các dòng không thuộc EduFocus và có cơ chế self-heal; chỉ chặn domain exact trong MVP.

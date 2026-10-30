@@ -1,0 +1,443 @@
+{
+  "StartedAt": "2026-10-29T12:35:48.2155757+00:00",
+  "FinishedAt": "2026-10-29T12:36:29.3981841+00:00",
+  "CommandLine": "C:\\Coding Space\\Projects\\EduFocus\\tools\\HostsBlockingSpike\\bin\\Release\\net9.0-windows\\HostsBlockingSpike.dll --apply-hosts --output-dir C:\\Coding Space\\Projects\\EduFocus\\docs\\spikes\\results",
+  "OsDescription": "Microsoft Windows 10.0.19045",
+  "FrameworkDescription": ".NET 9.0.15",
+  "IsElevated": true,
+  "ApplyHostsRequested": true,
+  "HostsPath": "C:\\Windows\\System32\\drivers\\etc\\hosts",
+  "BackupDir": "C:\\ProgramData\\EduFocus\\spike-backup",
+  "Proxy": {
+    "EffectiveProxy": "(none)",
+    "UsesProxy": false
+  },
+  "Note": null,
+  "FatalError": null,
+  "SelfTests": [
+    {
+      "Name": "fresh apply \u002B idempotency",
+      "Passed": true,
+      "Detail": "domains=example.com,www.example.com; firstChanged=True; secondChanged=False; identical=True",
+      "DurationMs": 49
+    },
+    {
+      "Name": "restore exact bytes",
+      "Passed": true,
+      "Detail": "blockRemoved=True; exact=True; bytesEqual=True",
+      "DurationMs": 11
+    },
+    {
+      "Name": "restore without trailing newline",
+      "Passed": true,
+      "Detail": "exact=True; bytesEqual=True",
+      "DurationMs": 11
+    },
+    {
+      "Name": "external edit preserved",
+      "Passed": true,
+      "Detail": "blockRemoved=True; exact=False; editKept=True",
+      "DurationMs": 10
+    },
+    {
+      "Name": "orphan marker self-heal",
+      "Passed": true,
+      "Detail": "performed=True; fromJournal=False; markersGone=True",
+      "DurationMs": 2
+    },
+    {
+      "Name": "crash recovery via journal",
+      "Passed": true,
+      "Detail": "performed=True; fromJournal=True; bytesEqual=True; journalRemoved=True",
+      "DurationMs": 9
+    },
+    {
+      "Name": "invalid domains rejected",
+      "Passed": true,
+      "Detail": "rejected=5/5; hostsUnchanged=True",
+      "DurationMs": 1
+    }
+  ],
+  "BlockPageChecks": [
+    {
+      "Name": "blocked host",
+      "HostHeader": "example.com",
+      "Path": "/",
+      "StatusCode": 200,
+      "MarkerFound": true,
+      "NoExternalResources": true,
+      "DurationMs": 34
+    },
+    {
+      "Name": "blocked host with port",
+      "HostHeader": "example.com:1234",
+      "Path": "/",
+      "StatusCode": 200,
+      "MarkerFound": true,
+      "NoExternalResources": true,
+      "DurationMs": 1
+    },
+    {
+      "Name": "blocked host trailing dot",
+      "HostHeader": "example.com.",
+      "Path": "/",
+      "StatusCode": 200,
+      "MarkerFound": true,
+      "NoExternalResources": true,
+      "DurationMs": 0
+    },
+    {
+      "Name": "blocked host with path/query",
+      "HostHeader": "example.com",
+      "Path": "/some/path?q=1",
+      "StatusCode": 200,
+      "MarkerFound": true,
+      "NoExternalResources": true,
+      "DurationMs": 0
+    },
+    {
+      "Name": "www variant",
+      "HostHeader": "www.example.com",
+      "Path": "/",
+      "StatusCode": 200,
+      "MarkerFound": true,
+      "NoExternalResources": true,
+      "DurationMs": 0
+    },
+    {
+      "Name": "unblocked host",
+      "HostHeader": "not-blocked.test",
+      "Path": "/",
+      "StatusCode": 404,
+      "MarkerFound": false,
+      "NoExternalResources": true,
+      "DurationMs": 0
+    },
+    {
+      "Name": "HTML escape",
+      "HostHeader": "\u003Cscript\u003Ealert(1)\u003C/script\u003E",
+      "Path": "-",
+      "StatusCode": 0,
+      "MarkerFound": true,
+      "NoExternalResources": true,
+      "DurationMs": 0
+    }
+  ],
+  "Recovery": {
+    "Performed": false,
+    "FromJournal": false,
+    "Detail": "No block section or journal found."
+  },
+  "HostsApply": {
+    "HostsPath": "C:\\Windows\\System32\\drivers\\etc\\hosts",
+    "BackupPath": "C:\\ProgramData\\EduFocus\\spike-backup\\hosts-20261029-123548-399.bak",
+    "Domains": [
+      "example.com",
+      "www.example.com"
+    ],
+    "Changed": true,
+    "BlockLineCount": 4,
+    "OriginalSha256": "CAA4AA3216BDC45355940D65B34E2869F69331AB4FB35AC112CD3BC24C483024",
+    "UpdatedSha256": "BA6E77E074C2FBAF3BE6505DC77C69308E744F8713B54FA2FDDD78FE836A45EB"
+  },
+  "HostsRestore": {
+    "HostsPath": "C:\\Windows\\System32\\drivers\\etc\\hosts",
+    "BlockRemoved": true,
+    "RestoredExact": true,
+    "FinalSha256": "CAA4AA3216BDC45355940D65B34E2869F69331AB4FB35AC112CD3BC24C483024"
+  },
+  "HostsSha256Before": "CAA4AA3216BDC45355940D65B34E2869F69331AB4FB35AC112CD3BC24C483024",
+  "HostsSha256After": "CAA4AA3216BDC45355940D65B34E2869F69331AB4FB35AC112CD3BC24C483024",
+  "PortConflict": {
+    "ConflictDetected": true,
+    "ErrorType": "SocketException",
+    "ErrorMessage": "Only one usage of each socket address (protocol/network address/port) is normally permitted.",
+    "SucceededAfterRelease": true,
+    "DurationMs": 0
+  },
+  "DnsFlush": {
+    "Success": true,
+    "ExitCode": 0,
+    "DurationMs": 42,
+    "Output": "Windows IP Configuration\r\n\r\nSuccessfully flushed the DNS Resolver Cache."
+  },
+  "DnsResults": [
+    {
+      "Host": "example.com",
+      "Resolved": true,
+      "Addresses": [
+        "127.0.0.1"
+      ],
+      "DurationMs": 5
+    },
+    {
+      "Host": "www.example.com",
+      "Resolved": true,
+      "Addresses": [
+        "127.0.0.1"
+      ],
+      "DurationMs": 0
+    }
+  ],
+  "HttpResults": [
+    {
+      "Url": "http://example.com/",
+      "Mode": "GET-direct",
+      "Success": true,
+      "StatusCode": 200,
+      "BlockPageMarker": true,
+      "DurationMs": 1,
+      "ErrorType": null,
+      "ErrorMessage": null,
+      "BodySnippet": "\u003C!doctype html\u003E \u003Chtml lang=\u0022vi\u0022\u003E \u003Chead\u003E \u003Cmeta charset=\u0022utf-8\u0022\u003E \u003Cmeta name=\u0022viewport\u0022 content=\u0022width=device-width, initial-scale=1\u0022\u003E \u003Ctitle\u003ETrang b\u1ECB ch\u1EB7n - EduFocus\u003C/title\u003E \u003Cstyle\u003E :root { color-scheme: light dark; } body { margin: 0; min-height: 100vh; display: grid; place-items: center;        font..."
+    },
+    {
+      "Url": "http://example.com/some/path?q=1",
+      "Mode": "GET-direct",
+      "Success": true,
+      "StatusCode": 200,
+      "BlockPageMarker": true,
+      "DurationMs": 0,
+      "ErrorType": null,
+      "ErrorMessage": null,
+      "BodySnippet": "\u003C!doctype html\u003E \u003Chtml lang=\u0022vi\u0022\u003E \u003Chead\u003E \u003Cmeta charset=\u0022utf-8\u0022\u003E \u003Cmeta name=\u0022viewport\u0022 content=\u0022width=device-width, initial-scale=1\u0022\u003E \u003Ctitle\u003ETrang b\u1ECB ch\u1EB7n - EduFocus\u003C/title\u003E \u003Cstyle\u003E :root { color-scheme: light dark; } body { margin: 0; min-height: 100vh; display: grid; place-items: center;        font..."
+    },
+    {
+      "Url": "https://example.com/",
+      "Mode": "GET-https",
+      "Success": false,
+      "StatusCode": null,
+      "BlockPageMarker": false,
+      "DurationMs": 2033,
+      "ErrorType": "HttpRequestException",
+      "ErrorMessage": "No connection could be made because the target machine actively refused it. (example.com:443)",
+      "BodySnippet": ""
+    },
+    {
+      "Url": "http://example.com/",
+      "Mode": "GET-after-restore",
+      "Success": true,
+      "StatusCode": 200,
+      "BlockPageMarker": false,
+      "DurationMs": 156,
+      "ErrorType": null,
+      "ErrorMessage": null,
+      "BodySnippet": "\u003C!doctype html\u003E\u003Chtml lang=en\u003E\u003Chead\u003E\u003Cmeta charset=utf-8\u003E\u003Clink rel=icon href=data:,\u003E\u003Cmeta name=viewport content=\u0022width=device-width,initial-scale=1\u0022\u003E\u003Ctitle\u003EExample Domain\u003C/title\u003E\u003Cstyle\u003Ehtml{color-scheme:light dark;background:light-dark(#eee,#222)}body{font:16px/1.6 system-ui,sans-serif;max-width:26em;..."
+    }
+  ],
+  "Browsers": [
+    {
+      "Name": "Chrome",
+      "ExecutablePath": "C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe",
+      "Version": "156.0.8078.73"
+    },
+    {
+      "Name": "Edge",
+      "ExecutablePath": "C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe",
+      "Version": "156.0.4314.50"
+    },
+    {
+      "Name": "Firefox",
+      "ExecutablePath": "C:\\Program Files\\Mozilla Firefox\\firefox.exe",
+      "Version": "158.0.1"
+    }
+  ],
+  "BrowserRuns": [
+    {
+      "Browser": "Chrome",
+      "Url": "http://example.com/",
+      "Mode": "http",
+      "ProcessStarted": true,
+      "TimedOut": false,
+      "ExitCode": 0,
+      "DurationMs": 133,
+      "BlockPageInDom": false,
+      "BlockPageServerHit": true,
+      "ServerHitUserAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/156.0.0.0 Safari/537.36",
+      "ScreenshotPath": null,
+      "StandardOutputSnippet": "",
+      "StandardErrorSnippet": ""
+    },
+    {
+      "Browser": "Chrome",
+      "Url": "https://example.com/",
+      "Mode": "https",
+      "ProcessStarted": true,
+      "TimedOut": false,
+      "ExitCode": 0,
+      "DurationMs": 75,
+      "BlockPageInDom": false,
+      "BlockPageServerHit": false,
+      "ServerHitUserAgent": null,
+      "ScreenshotPath": null,
+      "StandardOutputSnippet": "",
+      "StandardErrorSnippet": ""
+    },
+    {
+      "Browser": "Edge",
+      "Url": "http://example.com/",
+      "Mode": "http",
+      "ProcessStarted": true,
+      "TimedOut": false,
+      "ExitCode": 0,
+      "DurationMs": 102,
+      "BlockPageInDom": false,
+      "BlockPageServerHit": true,
+      "ServerHitUserAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/156.0.0.0 Safari/537.36 Edg/156.0.0.0",
+      "ScreenshotPath": null,
+      "StandardOutputSnippet": "",
+      "StandardErrorSnippet": ""
+    },
+    {
+      "Browser": "Edge",
+      "Url": "https://example.com/",
+      "Mode": "https",
+      "ProcessStarted": true,
+      "TimedOut": false,
+      "ExitCode": 0,
+      "DurationMs": 61,
+      "BlockPageInDom": false,
+      "BlockPageServerHit": false,
+      "ServerHitUserAgent": null,
+      "ScreenshotPath": null,
+      "StandardOutputSnippet": "",
+      "StandardErrorSnippet": ""
+    },
+    {
+      "Browser": "Firefox",
+      "Url": "http://example.com/",
+      "Mode": "http",
+      "ProcessStarted": true,
+      "TimedOut": false,
+      "ExitCode": 0,
+      "DurationMs": 3164,
+      "BlockPageInDom": null,
+      "BlockPageServerHit": true,
+      "ServerHitUserAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:158.0) Gecko/20100101 Firefox/158.0",
+      "ScreenshotPath": "C:\\Coding Space\\Projects\\EduFocus\\docs\\spikes\\results\\firefox-http-f88c09e9c9cf4d568abc0615ee1d8de1.png",
+      "StandardOutputSnippet": "[GFX1-]: RenderCompositorSWGL failed mapping default framebuffer, no dt",
+      "StandardErrorSnippet": "*** You are running in headless mode."
+    },
+    {
+      "Browser": "Firefox",
+      "Url": "https://example.com/",
+      "Mode": "https",
+      "ProcessStarted": true,
+      "TimedOut": true,
+      "ExitCode": -1,
+      "DurationMs": 20052,
+      "BlockPageInDom": null,
+      "BlockPageServerHit": false,
+      "ServerHitUserAgent": null,
+      "ScreenshotPath": null,
+      "StandardOutputSnippet": "[GFX1-]: RenderCompositorSWGL failed mapping default framebuffer, no dt",
+      "StandardErrorSnippet": "*** You are running in headless mode.  Exiting due to channel error."
+    }
+  ],
+  "ServerRequests": [
+    {
+      "TimestampUtc": "2026-10-29T12:35:48.4610429+00:00",
+      "Method": "GET",
+      "Host": "example.com",
+      "Target": "/",
+      "UserAgent": null,
+      "StatusCode": 200
+    },
+    {
+      "TimestampUtc": "2026-10-29T12:35:48.462517+00:00",
+      "Method": "GET",
+      "Host": "example.com",
+      "Target": "/some/path?q=1",
+      "UserAgent": null,
+      "StatusCode": 200
+    },
+    {
+      "TimestampUtc": "2026-10-29T12:35:51.0029872+00:00",
+      "Method": "GET",
+      "Host": "example.com",
+      "Target": "/",
+      "UserAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/156.0.0.0 Safari/537.36",
+      "StatusCode": 200
+    },
+    {
+      "TimestampUtc": "2026-10-29T12:35:51.0338808+00:00",
+      "Method": "GET",
+      "Host": "example.com",
+      "Target": "/favicon.ico",
+      "UserAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/156.0.0.0 Safari/537.36",
+      "StatusCode": 200
+    },
+    {
+      "TimestampUtc": "2026-10-29T12:35:56.4604567+00:00",
+      "Method": "GET",
+      "Host": "example.com",
+      "Target": "/",
+      "UserAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/156.0.0.0 Safari/537.36 Edg/156.0.0.0",
+      "StatusCode": 200
+    },
+    {
+      "TimestampUtc": "2026-10-29T12:35:56.4961906+00:00",
+      "Method": "GET",
+      "Host": "example.com",
+      "Target": "/favicon.ico",
+      "UserAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/156.0.0.0 Safari/537.36 Edg/156.0.0.0",
+      "StatusCode": 200
+    },
+    {
+      "TimestampUtc": "2026-10-29T12:36:03.6709597+00:00",
+      "Method": "GET",
+      "Host": "example.com",
+      "Target": "/",
+      "UserAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:158.0) Gecko/20100101 Firefox/158.0",
+      "StatusCode": 200
+    },
+    {
+      "TimestampUtc": "2026-10-29T12:36:03.673084+00:00",
+      "Method": "GET",
+      "Host": "example.com",
+      "Target": "/",
+      "UserAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:158.0) Gecko/20100101 Firefox/158.0",
+      "StatusCode": 200
+    }
+  ],
+  "Log": [
+    "[19:35:48] OS: Microsoft Windows 10.0.19045; runtime: .NET 9.0.15; elevated=True",
+    "[19:35:48] System proxy: (none); usesProxy=False",
+    "[19:35:48] Browsers: Chrome 156.0.8078.73; Edge 156.0.4314.50; Firefox 158.0.1",
+    "[19:35:48] Self-test \u0027fresh apply \u002B idempotency\u0027: PASS - domains=example.com,www.example.com; firstChanged=True; secondChanged=False; identical=True",
+    "[19:35:48] Self-test \u0027restore exact bytes\u0027: PASS - blockRemoved=True; exact=True; bytesEqual=True",
+    "[19:35:48] Self-test \u0027restore without trailing newline\u0027: PASS - exact=True; bytesEqual=True",
+    "[19:35:48] Self-test \u0027external edit preserved\u0027: PASS - blockRemoved=True; exact=False; editKept=True",
+    "[19:35:48] Self-test \u0027orphan marker self-heal\u0027: PASS - performed=True; fromJournal=False; markersGone=True",
+    "[19:35:48] Self-test \u0027crash recovery via journal\u0027: PASS - performed=True; fromJournal=True; bytesEqual=True; journalRemoved=True",
+    "[19:35:48] Self-test \u0027invalid domains rejected\u0027: PASS - rejected=5/5; hostsUnchanged=True",
+    "[19:35:48] Loopback block page listening on 127.0.0.1:50997 (start 0 ms)",
+    "[19:35:48] Loopback block page checks: 6 HTTP checks \u002B escape check.",
+    "[19:35:48] Pre-run recovery: performed=False, fromJournal=False, detail=No block section or journal found.",
+    "[19:35:48] Hosts applied: domains=2, blockLines=4, changed=True, backup=C:\\ProgramData\\EduFocus\\spike-backup\\hosts-20261029-123548-399.bak",
+    "[19:35:48] DNS flush after apply: success=True, exit=0, 42 ms",
+    "[19:35:48] DNS example.com: resolved=True, addresses=127.0.0.1",
+    "[19:35:48] DNS www.example.com: resolved=True, addresses=127.0.0.1",
+    "[19:35:48] Port 80 conflict detected: Only one usage of each socket address (protocol/network address/port) is normally permitted.",
+    "[19:35:48] Port 80 usable after release.",
+    "[19:35:48] Block page server listening on 127.0.0.1:80",
+    "[19:35:48] HTTP http://example.com/: status=200, blockPage=True, 1 ms",
+    "[19:35:48] HTTP path probe: status=200, blockPage=True (path kh\u00F4ng \u0111\u01B0\u1EE3c enforce ri\u00EAng)",
+    "[19:35:50] HTTPS probe: success=False, error=HttpRequestException, blockPage=False",
+    "[19:35:53] Chrome http: exit=0, timeout=False, domMarker=False, serverHit=True, matchedUa=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/156.0.0.0 Safari/537.36, 133 ms",
+    "[19:35:55] Chrome https: exit=0, timeout=False, domMarker=False, serverHit=False, matchedUa=(none), 75 ms",
+    "[19:35:58] Edge http: exit=0, timeout=False, domMarker=False, serverHit=True, matchedUa=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/156.0.0.0 Safari/537.36 Edg/156.0.0.0, 102 ms",
+    "[19:36:00] Edge https: exit=0, timeout=False, domMarker=False, serverHit=False, matchedUa=(none), 61 ms",
+    "[19:36:06] Firefox http: exit=0, timeout=False, domMarker=n/a, serverHit=True, matchedUa=Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:158.0) Gecko/20100101 Firefox/158.0, 3164 ms",
+    "[19:36:29] Firefox https: exit=-1, timeout=True, domMarker=n/a, serverHit=False, matchedUa=(none), 20052 ms",
+    "[19:36:29] Hosts restored: blockRemoved=True, exact=True, sha=CAA4AA3216BDC453...; DNS flush success=True",
+    "[19:36:29] HTTP after restore: success=True, status=200, blockPage=False"
+  ],
+  "Limitations": [
+    "Hosts ch\u1EC9 ch\u1EB7n domain exact; kh\u00F4ng ph\u00E2n bi\u1EC7t URL/path, n\u00EAn block page \u00E1p d\u1EE5ng cho m\u1ECDi path c\u1EE7a domain.",
+    "Block page ch\u1EC9 ph\u1EE5c v\u1EE5 HTTP; truy c\u1EADp HTTPS th\u01B0\u1EDDng b\u00E1o l\u1ED7i k\u1EBFt n\u1ED1i/SSL thay v\u00EC hi\u1EC3n th\u1ECB trang ch\u1EB7n.",
+    "Hosts kh\u00F4ng t\u1EA1o log truy c\u1EADp HTTPS; server ch\u1EC9 ghi nh\u1EADn request HTTP th\u1EF1c t\u1EBF \u0111\u1EBFn c\u1ED5ng block page.",
+    "DoH/DoT, VPN, proxy ho\u1EB7c browser extension c\u00F3 th\u1EC3 bypass hosts.",
+    "H\u1ECDc sinh c\u00F3 quy\u1EC1n admin c\u00F3 th\u1EC3 s\u1EEDa hosts ho\u1EB7c d\u1EEBng ti\u1EBFn tr\u00ECnh; self-heal/journal ch\u1EC9 gi\u1EA3m thi\u1EC3u, kh\u00F4ng ch\u1ED1ng admin."
+  ]
+}

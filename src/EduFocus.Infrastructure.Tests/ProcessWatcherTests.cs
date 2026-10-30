@@ -1,168 +1,508 @@
-using EduFocus.Domain.Entities;
-using EduFocus.Domain.Enums;
-using EduFocus.Infrastructure.Services;
+using System.Collections.Concurrent;
+using System.Threading.Channels;
+using EduFocus.Infrastructure.Protection;
 using EduFocus.Ports.Outbound.Services;
-using Microsoft.Extensions.DependencyInjection;
+using FluentAssertions;
 
 namespace EduFocus.Infrastructure.Tests;
 
 public sealed class ProcessWatcherTests
 {
-    private static readonly DateTimeOffset Now = new(2026, 10, 26, 10, 0, 0, TimeSpan.Zero);
+    private static readonly TimeSpan EventTimeout = TimeSpan.FromSeconds(5);
+
+    private readonly FakeProcessController _controller = new();
+    private readonly FakeClock _clock = new();
+    private readonly RecordingLogger _logger = new();
 
     [Fact]
-    public async Task Matching_app_sends_close_and_records_observed_attempt_once_per_debounce_window()
+    public async Task Closes_blocked_windowed_process_gracefully()
     {
-        var process = new FakeProcess(2001, "blocked", "C:\\Apps\\blocked.exe") { CloseSucceeds = true };
-        var provider = new FakeProvider(() => [process.Clone()]);
-        var recorder = new FakeRecorder();
-        await using var watcher = CreateWatcher(provider, recorder, new FakeLogger());
-        await watcher.UpdateRulesAsync([AppRule("blocked.exe")]);
+        _controller.SetProcesses(new ProcessSnapshot(100, "chrome", HasMainWindow: true));
+        var reader = Track(out var watcher);
 
-        await watcher.ScanOnceAsync(Now);
-        await watcher.ScanOnceAsync(Now.AddSeconds(10));
+        await using (watcher)
+        {
+            await watcher.StartAsync(["chrome"], []);
 
-        Assert.Equal(2, provider.ScanCount);
-        Assert.Single(recorder.Attempts);
-        Assert.Equal("blocked", recorder.Attempts[0]);
-        Assert.Equal(1, provider.LastProcesses.Sum(x => x.CloseCalls));
-        Assert.DoesNotContain(provider.LastProcesses, x => x.Killed);
+            var observation = await NextAsync(reader);
+
+            observation.ProcessName.Should().Be("chrome");
+            observation.ProcessId.Should().Be(100);
+            observation.Outcome.Should().Be(ProcessBlockOutcome.ClosedGracefully);
+            observation.Warning.Should().BeNull();
+            _controller.CloseCalls.Should().Equal(100);
+            _controller.KillCalls.Should().BeEmpty();
+        }
     }
 
     [Fact]
-    public async Task Hung_blocked_app_is_killed_as_a_process_tree_after_close_grace()
+    public async Task Kills_process_and_warns_when_close_times_out()
     {
-        var instance = new FakeProcess(2002, "blocked", "C:\\Apps\\blocked.exe") { CloseSucceeds = false };
-        var provider = new FakeProvider(() => [instance]);
-        var recorder = new FakeRecorder();
-        await using var watcher = CreateWatcher(provider, recorder, new FakeLogger(), closeGrace: TimeSpan.FromSeconds(2));
-        await watcher.UpdateRulesAsync([AppRule("C:\\Apps\\blocked.exe")]);
+        _controller.SetProcesses(new ProcessSnapshot(101, "discord", HasMainWindow: true));
+        _controller.CloseResult = _ => false;
+        var reader = Track(out var watcher);
 
-        await watcher.ScanOnceAsync(Now);
+        await using (watcher)
+        {
+            await watcher.StartAsync(["discord"], []);
 
-        Assert.Equal(1, instance.CloseCalls);
-        Assert.Equal(TimeSpan.FromSeconds(2), instance.LastWait);
-        Assert.True(instance.Killed);
-        Assert.Single(recorder.Attempts);
+            var observation = await NextAsync(reader);
+
+            observation.Outcome.Should().Be(ProcessBlockOutcome.Killed);
+            observation.Warning.Should().Contain("dữ liệu chưa lưu");
+            _controller.KillCalls.Should().Equal(101);
+            _logger.Messages.Should().Contain(message => message.Contains("unsaved data"));
+        }
     }
 
     [Fact]
-    public async Task Allow_rules_system_processes_and_processes_without_windows_are_never_killed()
+    public async Task Kills_process_when_close_request_throws()
     {
-        var allowed = new FakeProcess(2003, "allowed", null);
-        var system = new FakeProcess(2004, "svchost", null);
-        var headless = new FakeProcess(2005, "blocked", null) { HasWindow = false };
-        var provider = new FakeProvider(() => [allowed, system, headless]);
-        var recorder = new FakeRecorder();
-        await using var watcher = CreateWatcher(provider, recorder, new FakeLogger());
-        await watcher.UpdateRulesAsync([
-            AppRule("allowed.exe", BlockRuleEffect.Block),
-            AppRule("allowed.exe", BlockRuleEffect.Allow),
-            AppRule("blocked.exe")
-        ]);
+        _controller.SetProcesses(new ProcessSnapshot(102, "steam", HasMainWindow: true));
+        _controller.CloseException = new InvalidOperationException("access denied");
+        var reader = Track(out var watcher);
 
-        await watcher.ScanOnceAsync(Now);
+        await using (watcher)
+        {
+            await watcher.StartAsync(["steam"], []);
 
-        Assert.False(allowed.Killed);
-        Assert.False(system.Killed);
-        Assert.False(headless.Killed);
-        Assert.Empty(recorder.Attempts);
+            var observation = await NextAsync(reader);
+
+            observation.Outcome.Should().Be(ProcessBlockOutcome.Killed);
+            _controller.KillCalls.Should().Equal(102);
+            _logger.Messages.Should().Contain(message => message.Contains("Close request failed"));
+        }
     }
 
     [Fact]
-    public async Task Access_denied_does_not_crash_watcher_or_repeat_notifications_and_lifecycle_stops()
+    public async Task Reports_failed_outcome_when_kill_throws()
     {
-        var denied = new FakeProcess(2006, "blocked", "C:\\Apps\\blocked.exe") { ThrowOnKill = true };
-        var provider = new FakeProvider(() => [denied.Clone(), denied.Clone()]);
-        var recorder = new FakeRecorder();
-        var logger = new FakeLogger();
-        await using var watcher = CreateWatcher(provider, recorder, logger);
-        await watcher.UpdateRulesAsync([AppRule("blocked.exe")]);
+        _controller.SetProcesses(new ProcessSnapshot(103, "game", HasMainWindow: true));
+        _controller.CloseResult = _ => false;
+        _controller.KillException = new InvalidOperationException("denied");
+        var reader = Track(out var watcher);
 
-        await watcher.ScanOnceAsync(Now);
-        await watcher.ScanOnceAsync(Now.AddSeconds(10));
+        await using (watcher)
+        {
+            await watcher.StartAsync(["game"], []);
 
-        Assert.Single(logger.Warnings);
-        Assert.Single(recorder.Attempts);
-        Assert.False(watcher.IsRunning);
-        await watcher.StartAsync([]);
-        Assert.True(watcher.IsRunning);
+            var observation = await NextAsync(reader);
+
+            observation.Outcome.Should().Be(ProcessBlockOutcome.Failed);
+            observation.Warning.Should().Contain("quyền");
+            _controller.KillCalls.Should().Equal(103);
+        }
+    }
+
+    [Fact]
+    public async Task Allowlisted_process_is_never_touched()
+    {
+        _controller.SetProcesses(
+            new ProcessSnapshot(200, "chrome", HasMainWindow: true),
+            new ProcessSnapshot(201, "notepad", HasMainWindow: true));
+        var reader = Track(out var watcher);
+
+        await using (watcher)
+        {
+            await watcher.StartAsync(["chrome", "notepad"], [@"C:\Program Files\Google\Chrome\chrome.exe"]);
+
+            var observation = await NextAsync(reader);
+
+            observation.ProcessId.Should().Be(201);
+            _controller.CloseCalls.Should().Equal(201);
+            _controller.KillCalls.Should().BeEmpty();
+        }
+    }
+
+    [Fact]
+    public async Task Windowless_process_is_skipped()
+    {
+        _controller.SetProcesses(
+            new ProcessSnapshot(300, "chrome", HasMainWindow: false),
+            new ProcessSnapshot(301, "notepad", HasMainWindow: true));
+        var reader = Track(out var watcher);
+
+        await using (watcher)
+        {
+            await watcher.StartAsync(["chrome", "notepad"], []);
+
+            var observation = await NextAsync(reader);
+
+            observation.ProcessId.Should().Be(301);
+            _controller.CloseCalls.Should().Equal(301);
+        }
+    }
+
+    [Fact]
+    public async Task Protected_system_and_edufocus_processes_are_skipped()
+    {
+        _controller.SetProcesses(
+            new ProcessSnapshot(400, "explorer", HasMainWindow: true),
+            new ProcessSnapshot(401, "edufocus", HasMainWindow: true),
+            new ProcessSnapshot(402, "notepad", HasMainWindow: true));
+        var reader = Track(out var watcher);
+
+        await using (watcher)
+        {
+            await watcher.StartAsync(["explorer", "edufocus", "notepad"], []);
+
+            var observation = await NextAsync(reader);
+
+            observation.ProcessId.Should().Be(402);
+            _controller.CloseCalls.Should().Equal(402);
+        }
+    }
+
+    [Fact]
+    public async Task Own_process_and_pid_four_or_lower_are_skipped()
+    {
+        _controller.SetProcesses(
+            new ProcessSnapshot(3, "chrome", HasMainWindow: true),
+            new ProcessSnapshot(Environment.ProcessId, "chrome", HasMainWindow: true),
+            new ProcessSnapshot(500, "notepad", HasMainWindow: true));
+        var reader = Track(out var watcher);
+
+        await using (watcher)
+        {
+            await watcher.StartAsync(["chrome", "notepad"], []);
+
+            var observation = await NextAsync(reader);
+
+            observation.ProcessId.Should().Be(500);
+            _controller.CloseCalls.Should().Equal(500);
+        }
+    }
+
+    [Fact]
+    public async Task Matches_normalized_process_names()
+    {
+        _controller.SetProcesses(new ProcessSnapshot(600, "Chrome.EXE", HasMainWindow: true));
+        var reader = Track(out var watcher);
+
+        await using (watcher)
+        {
+            await watcher.StartAsync([@"C:\Program Files\Google\Chrome\chrome.exe"], []);
+
+            var observation = await NextAsync(reader);
+
+            observation.ProcessName.Should().Be("chrome");
+            observation.ProcessId.Should().Be(600);
+        }
+    }
+
+    [Fact]
+    public async Task Debounces_repeated_attempts_until_clock_advances()
+    {
+        _controller.SetProcesses(new ProcessSnapshot(700, "chrome", HasMainWindow: true));
+        var reader = Track(out var watcher);
+
+        await using (watcher)
+        {
+            await watcher.StartAsync(["chrome"], []);
+
+            var first = await NextAsync(reader);
+            first.Outcome.Should().Be(ProcessBlockOutcome.ClosedGracefully);
+
+            await Task.Delay(TimeSpan.FromMilliseconds(150));
+            reader.TryRead(out _).Should().BeFalse();
+            _controller.CloseCalls.Should().Equal(700);
+
+            _clock.Advance(TimeSpan.FromSeconds(31));
+
+            var second = await NextAsync(reader);
+            second.ProcessId.Should().Be(700);
+            _controller.CloseCalls.Should().Equal(700, 700);
+        }
+    }
+
+    [Fact]
+    public async Task Update_rules_apply_without_restarting()
+    {
+        _controller.SetProcesses(new ProcessSnapshot(800, "notepad", HasMainWindow: true));
+        var reader = Track(out var watcher);
+
+        await using (watcher)
+        {
+            await watcher.StartAsync([], []);
+
+            watcher.UpdateRules(["notepad"], []);
+
+            var observation = await NextAsync(reader);
+
+            observation.ProcessId.Should().Be(800);
+            watcher.IsRunning.Should().BeTrue();
+        }
+    }
+
+    [Fact]
+    public async Task Stop_halts_scanning_and_restart_works()
+    {
+        var reader = Track(out var watcher);
+
+        await using (watcher)
+        {
+            await watcher.StartAsync(["notepad"], []);
+            await watcher.StopAsync();
+
+            watcher.IsRunning.Should().BeFalse();
+
+            _controller.SetProcesses(new ProcessSnapshot(900, "notepad", HasMainWindow: true));
+            await Task.Delay(TimeSpan.FromMilliseconds(150));
+            reader.TryRead(out _).Should().BeFalse();
+            _controller.CloseCalls.Should().BeEmpty();
+
+            await watcher.StartAsync(["notepad"], []);
+
+            var observation = await NextAsync(reader);
+            observation.ProcessId.Should().Be(900);
+        }
+    }
+
+    [Fact]
+    public async Task Stop_before_start_is_a_noop()
+    {
+        await using var watcher = CreateWatcher();
+
         await watcher.StopAsync();
-        Assert.False(watcher.IsRunning);
+
+        watcher.IsRunning.Should().BeFalse();
+        _logger.Messages.Should().BeEmpty();
     }
 
-    private static ProcessWatcher CreateWatcher(FakeProvider provider, FakeRecorder recorder, FakeLogger logger, TimeSpan? closeGrace = null)
+    [Fact]
+    public async Task Handler_failure_does_not_stop_the_watcher()
     {
-        var services = new ServiceCollection();
-        services.AddSingleton<IBlockedAttemptRecorder>(recorder);
-        var root = services.BuildServiceProvider();
-        return new ProcessWatcher(provider, root.GetRequiredService<IServiceScopeFactory>(), logger,
-            pollInterval: TimeSpan.FromHours(1), closeGrace: closeGrace);
-    }
+        _controller.SetProcesses(new ProcessSnapshot(1000, "chrome", HasMainWindow: true));
+        await using var watcher = CreateWatcher();
+        var first = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var second = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var calls = 0;
 
-    private static BlockRule AppRule(string value, BlockRuleEffect effect = BlockRuleEffect.Block) =>
-        BlockRule.Create(BlockRuleType.App, BlockMatchType.Exact, value, BlockRuleCategory.Custom, effect, Now);
-
-    private sealed class FakeProvider(Func<IReadOnlyList<IWatchedProcess>> create) : IProcessSnapshotProvider
-    {
-        public int ScanCount { get; private set; }
-        public IReadOnlyList<FakeProcess> LastProcesses { get; private set; } = [];
-        public IReadOnlyList<IWatchedProcess> GetProcesses()
+        watcher.ProcessBlockedObserved += _ =>
         {
-            ScanCount++;
-            LastProcesses = create().Cast<FakeProcess>().ToArray();
-            return LastProcesses;
+            if (Interlocked.Increment(ref calls) == 1)
+            {
+                first.TrySetResult();
+                throw new InvalidOperationException("handler boom");
+            }
+
+            second.TrySetResult();
+        };
+
+        await watcher.StartAsync(["chrome"], []);
+
+        await first.Task.WaitAsync(EventTimeout);
+        _clock.Advance(TimeSpan.FromSeconds(31));
+        await second.Task.WaitAsync(EventTimeout);
+
+        calls.Should().Be(2);
+        watcher.IsRunning.Should().BeTrue();
+        _logger.Messages.Should().Contain(message => message.Contains("handler failed"));
+    }
+
+    [Fact]
+    public async Task Scan_failure_is_logged_once_and_recovers()
+    {
+        _controller.GetFailuresRemaining = 1;
+        _controller.SetProcesses(new ProcessSnapshot(1100, "notepad", HasMainWindow: true));
+        var reader = Track(out var watcher);
+
+        await using (watcher)
+        {
+            await watcher.StartAsync(["notepad"], []);
+
+            var observation = await NextAsync(reader);
+
+            observation.ProcessId.Should().Be(1100);
+            _logger.Messages.Should().ContainSingle(message => message.Contains("scan failed"));
         }
     }
 
-    private sealed class FakeProcess(int id, string name, string? path) : IWatchedProcess
+    [Fact]
+    public async Task Invalid_process_names_are_rejected()
     {
-        public int Id { get; } = id;
-        public string Name { get; } = name;
-        public string? ExecutablePath { get; } = path;
-        public bool HasWindow { get; set; } = true;
-        public bool IsExited { get; private set; }
-        public bool CloseSucceeds { get; set; }
-        public bool ThrowOnKill { get; set; }
-        public bool Killed { get; private set; }
-        public int CloseCalls { get; private set; }
-        public TimeSpan LastWait { get; private set; }
-        public bool TryCloseMainWindow()
-        {
-            CloseCalls++;
-            if (CloseSucceeds) IsExited = true;
-            return CloseSucceeds;
-        }
-        public Task<bool> WaitForExitAsync(TimeSpan timeout, CancellationToken cancellationToken)
-        {
-            LastWait = timeout;
-            return Task.FromResult(IsExited);
-        }
-        public void KillTree()
-        {
-            if (ThrowOnKill) throw new UnauthorizedAccessException("simulated process access denied");
-            Killed = true;
-            IsExited = true;
-        }
-        public IWatchedProcess Clone() => new FakeProcess(Id, Name, ExecutablePath)
-        { HasWindow = HasWindow, CloseSucceeds = CloseSucceeds, ThrowOnKill = ThrowOnKill };
-        public void Dispose() { }
+        await using var watcher = CreateWatcher();
+
+        var blank = () => watcher.StartAsync(["   "], []);
+        var tooLong = () => watcher.StartAsync([new string('a', 129)], []);
+        var updateBlank = () => watcher.UpdateRules([""], []);
+
+        await blank.Should().ThrowAsync<ArgumentException>();
+        await tooLong.Should().ThrowAsync<ArgumentException>();
+        updateBlank.Should().Throw<ArgumentException>();
+        watcher.IsRunning.Should().BeFalse();
     }
 
-    private sealed class FakeRecorder : IBlockedAttemptRecorder
+    [Fact]
+    public void Invalid_options_are_rejected()
     {
-        public List<string> Attempts { get; } = [];
-        public Task RecordBlockedAppAsync(string processName, DateTimeOffset occurredAtUtc, CancellationToken cancellationToken = default)
-        { if (!Attempts.Contains(processName, StringComparer.OrdinalIgnoreCase)) Attempts.Add(processName); return Task.CompletedTask; }
-        public Task RecordBlockedDomainAsync(string domain, DateTimeOffset occurredAtUtc, CancellationToken cancellationToken = default)
-        { if (!Attempts.Contains(domain, StringComparer.OrdinalIgnoreCase)) Attempts.Add(domain); return Task.CompletedTask; }
+        var poll = () => new ProcessWatcher(
+            new ProcessWatcherOptions { PollInterval = TimeSpan.FromMilliseconds(1) },
+            _controller,
+            _clock,
+            _logger);
+        var close = () => new ProcessWatcher(
+            new ProcessWatcherOptions { CloseTimeout = TimeSpan.Zero },
+            _controller,
+            _clock,
+            _logger);
+        var debounce = () => new ProcessWatcher(
+            new ProcessWatcherOptions { Debounce = TimeSpan.FromSeconds(-1) },
+            _controller,
+            _clock,
+            _logger);
+
+        poll.Should().Throw<ArgumentOutOfRangeException>();
+        close.Should().Throw<ArgumentOutOfRangeException>();
+        debounce.Should().Throw<ArgumentOutOfRangeException>();
     }
 
-    private sealed class FakeLogger : IAppLogger
+    [Fact]
+    public async Task Start_and_stop_are_logged_without_process_details()
     {
-        public List<string> Warnings { get; } = [];
-        public void Info(string message) { }
-        public void Warning(string message) => Warnings.Add(message);
-        public void Error(string message, Exception? ex = null) { }
+        await using var watcher = CreateWatcher();
+
+        await watcher.StartAsync([], []);
+        await watcher.StopAsync();
+
+        _logger.Messages.Should().Contain("Process watcher started.");
+        _logger.Messages.Should().Contain("Process watcher stopped.");
+        _logger.Messages.Should().NotContain(message => message.Contains("chrome"));
+    }
+
+    private ProcessWatcher CreateWatcher() => new(
+        new ProcessWatcherOptions
+        {
+            PollInterval = TimeSpan.FromMilliseconds(20),
+            CloseTimeout = TimeSpan.FromMilliseconds(50),
+            Debounce = TimeSpan.FromSeconds(30)
+        },
+        _controller,
+        _clock,
+        _logger);
+
+    private ChannelReader<ProcessBlockedObservation> Track(out ProcessWatcher watcher)
+    {
+        watcher = CreateWatcher();
+        var channel = Channel.CreateUnbounded<ProcessBlockedObservation>();
+        watcher.ProcessBlockedObserved += observation => channel.Writer.TryWrite(observation);
+        return channel.Reader;
+    }
+
+    private static async Task<ProcessBlockedObservation> NextAsync(
+        ChannelReader<ProcessBlockedObservation> reader)
+    {
+        using var cts = new CancellationTokenSource(EventTimeout);
+        try
+        {
+            return await reader.ReadAsync(cts.Token);
+        }
+        catch (OperationCanceledException)
+        {
+            throw new TimeoutException("No process observation arrived within 5 seconds.");
+        }
+    }
+
+    private sealed class FakeProcessController : IProcessController
+    {
+        private readonly object _lock = new();
+        private readonly List<ProcessSnapshot> _processes = [];
+        private readonly List<int> _closeCalls = [];
+        private readonly List<int> _killCalls = [];
+        private int _getFailuresRemaining;
+
+        public Func<int, bool> CloseResult { get; set; } = _ => true;
+
+        public Exception? CloseException { get; set; }
+
+        public Exception? KillException { get; set; }
+
+        public int GetFailuresRemaining
+        {
+            get => Volatile.Read(ref _getFailuresRemaining);
+            set => Volatile.Write(ref _getFailuresRemaining, value);
+        }
+
+        public IReadOnlyList<int> CloseCalls
+        {
+            get
+            {
+                lock (_lock)
+                    return _closeCalls.ToArray();
+            }
+        }
+
+        public IReadOnlyList<int> KillCalls
+        {
+            get
+            {
+                lock (_lock)
+                    return _killCalls.ToArray();
+            }
+        }
+
+        public void SetProcesses(params ProcessSnapshot[] processes)
+        {
+            lock (_lock)
+            {
+                _processes.Clear();
+                _processes.AddRange(processes);
+            }
+        }
+
+        public IReadOnlyList<ProcessSnapshot> GetProcesses()
+        {
+            if (Interlocked.Decrement(ref _getFailuresRemaining) >= 0)
+                throw new InvalidOperationException("enumeration failed");
+
+            lock (_lock)
+                return _processes.ToArray();
+        }
+
+        public Task<bool> CloseMainWindowAsync(
+            int processId,
+            TimeSpan timeout,
+            CancellationToken cancellationToken = default)
+        {
+            lock (_lock)
+                _closeCalls.Add(processId);
+
+            if (CloseException is not null)
+                throw CloseException;
+
+            return Task.FromResult(CloseResult(processId));
+        }
+
+        public void KillProcessTree(int processId)
+        {
+            lock (_lock)
+                _killCalls.Add(processId);
+
+            if (KillException is not null)
+                throw KillException;
+        }
+    }
+
+    private sealed class FakeClock : IMonotonicClockPort
+    {
+        private long _ticks;
+
+        public TimeSpan GetTickCount() => TimeSpan.FromTicks(Volatile.Read(ref _ticks));
+
+        public void Advance(TimeSpan delta) => Interlocked.Add(ref _ticks, delta.Ticks);
+    }
+
+    private sealed class RecordingLogger : IAppLogger
+    {
+        private readonly ConcurrentQueue<string> _messages = new();
+
+        public IReadOnlyList<string> Messages => _messages.ToArray();
+
+        public void Info(string category, string message) => _messages.Enqueue(message);
+
+        public void Warning(string category, string message) => _messages.Enqueue(message);
+
+        public void Error(string category, string message, Exception? exception = null) =>
+            _messages.Enqueue(message);
     }
 }

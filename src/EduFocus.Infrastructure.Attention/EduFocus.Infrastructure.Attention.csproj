@@ -9,11 +9,10 @@
     <PackageReference Include="Microsoft.ML.OnnxRuntime" Version="1.31.0" />
     <PackageReference Include="OpenCvSharp4" Version="4.13.0.20260627" />
     <PackageReference Include="OpenCvSharp4.runtime.win" Version="4.13.0.20260627" />
+    <PackageReference Include="System.Management" Version="10.0.14" />
   </ItemGroup>
 
   <PropertyGroup>
-    <AssemblyName>EduFocus.Infrastructure.Attention</AssemblyName>
-    <RootNamespace>EduFocus.Infrastructure.Attention</RootNamespace>
     <TargetFramework>net10.0-windows</TargetFramework>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>

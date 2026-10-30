@@ -1,6 +1,6 @@
 using System.Diagnostics;
 using EduFocus.Domain.Attention;
-using EduFocus.Ports.Outbound.Services;
+using EduFocus.Infrastructure.Attention;
 
 namespace AttentionPipelineSpike.Metrics;
 
@@ -16,7 +16,7 @@ public sealed class BenchmarkRunner
 
     public async Task<BenchmarkResult> RunAsync(
         string backendName,
-        Func<IAttentionFrameAnalyzer> analyzerFactory,
+        Func<SpikeCameraAnalyzer> analyzerFactory,
         CancellationToken cancellationToken = default)
     {
         var notes = new List<string>();
@@ -248,7 +248,7 @@ public sealed class BenchmarkRunner
             Notes: notes);
     }
 
-    private static double Warmup(IAttentionFrameAnalyzer analyzer, int frames)
+    private static double Warmup(SpikeCameraAnalyzer analyzer, int frames)
     {
         if (frames <= 0)
             return 0;
@@ -265,7 +265,7 @@ public sealed class BenchmarkRunner
         return stopwatch.Elapsed.TotalMilliseconds;
     }
 
-    private static (bool Ok, double Ms, string? Error) TryFirstInference(IAttentionFrameAnalyzer analyzer)
+    private static (bool Ok, double Ms, string? Error) TryFirstInference(SpikeCameraAnalyzer analyzer)
     {
         var frame = analyzer.AnalyzeFrame();
         if (!frame.Captured)

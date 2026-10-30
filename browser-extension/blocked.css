@@ -1,0 +1,123 @@
+:root {
+  color-scheme: light dark;
+  --bg: #f2f6f3;
+  --card: #ffffff;
+  --ink: #14261c;
+  --muted: #53665b;
+  --accent: #2e7d32;
+  --accent-strong: #1b5e20;
+  --border: #d8e4dc;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #0f1712;
+    --card: #17221b;
+    --ink: #e8f2ea;
+    --muted: #a3b8aa;
+    --accent: #66bb6a;
+    --accent-strong: #81c784;
+    --border: #2a3a30;
+  }
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  min-height: 100vh;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background: radial-gradient(circle at top, var(--bg), transparent 70%), var(--bg);
+  color: var(--ink);
+  font-family: "Segoe UI", system-ui, -apple-system, sans-serif;
+}
+
+.card {
+  width: min(440px, 100%);
+  padding: 40px 36px 28px;
+  border: 1px solid var(--border);
+  border-radius: 24px;
+  background: var(--card);
+  box-shadow: 0 24px 60px rgb(20 38 28 / 12%);
+  text-align: center;
+}
+
+.mark {
+  width: 64px;
+  height: 64px;
+  margin: 0 auto 18px;
+  display: grid;
+  place-items: center;
+  border-radius: 20px;
+  background: linear-gradient(135deg, var(--accent), var(--accent-strong));
+  color: #ffffff;
+  font-size: 30px;
+  font-weight: 700;
+}
+
+.eyebrow {
+  margin: 0;
+  color: var(--accent);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+
+h1 {
+  margin: 10px 0 14px;
+  font-size: 26px;
+  line-height: 1.25;
+}
+
+.lead {
+  margin: 0;
+  color: var(--muted);
+  font-size: 15px;
+  line-height: 1.6;
+}
+
+.actions {
+  display: flex;
+  gap: 12px;
+  margin: 26px 0 0;
+}
+
+button {
+  flex: 1;
+  padding: 12px 16px;
+  border-radius: 12px;
+  font-size: 15px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.primary {
+  border: 1px solid var(--accent-strong);
+  background: var(--accent);
+  color: #ffffff;
+}
+
+.primary:hover {
+  background: var(--accent-strong);
+}
+
+.secondary {
+  border: 1px solid var(--border);
+  background: transparent;
+  color: var(--ink);
+}
+
+.secondary:hover {
+  border-color: var(--accent);
+}
+
+.footnote {
+  margin: 22px 0 0;
+  color: var(--muted);
+  font-size: 12px;
+}

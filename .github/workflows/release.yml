@@ -4,46 +4,122 @@ on:
   push:
     tags:
       - "v*.*.*"
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "SemVer to build (e.g. 2.0.0 or 2.0.0-rc.1)"
+        required: true
+        type: string
+      dry_run:
+        description: "Build, sign and upload artifacts without creating a GitHub Release"
+        required: false
+        type: boolean
+        default: true
 
+# Least privilege: only the release job may write repository contents.
 permissions:
-  contents: write
+  contents: read
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  DOTNET_NOLOGO: "true"
+  DOTNET_CLI_TELEMETRY_OPTOUT: "true"
 
 jobs:
-  build-and-release:
-    name: Build & Release
+  build:
+    name: Build, test and package
     runs-on: windows-latest
+    timeout-minutes: 60
+    permissions:
+      contents: read
+    outputs:
+      version: ${{ steps.ver.outputs.version }}
+      numeric: ${{ steps.ver.outputs.numeric }}
+      tag: ${{ steps.ver.outputs.tag }}
+      dry_run: ${{ steps.ver.outputs.dry_run }}
+      signed: ${{ steps.sign_exe.outputs.signed }}
 
     steps:
-      # ── 1. Checkout ────────────────────────────────────────────
       - name: Checkout
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
+          persist-credentials: false
 
-      # ── 2. Setup .NET 10 ────────────────────────────────────────
       - name: Setup .NET 10
         uses: actions/setup-dotnet@v4
         with:
           dotnet-version: "10.0.x"
+          cache: true
+          cache-dependency-path: |
+            **/*.csproj
+            .config/dotnet-tools.json
 
-      # ── 3. Extract version from tag ────────────────────────────
-      - name: Extract version
+      - name: Resolve version
         id: ver
-        shell: bash
+        shell: pwsh
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          REF_TYPE: ${{ github.ref_type }}
+          REF_NAME: ${{ github.ref_name }}
+          INPUT_VERSION: ${{ inputs.version }}
+          INPUT_DRY_RUN: ${{ inputs.dry_run }}
         run: |
-          TAG="${GITHUB_REF_NAME}"          # e.g. v0.1.0-beta
-          VER="${TAG#v}"                    # e.g. 0.1.0-beta
-          NUM="${VER%%-*}"                  # e.g. 0.1.0  (numeric only, for MSI/csproj)
-          echo "tag=$TAG"     >> "$GITHUB_OUTPUT"
-          echo "version=$VER" >> "$GITHUB_OUTPUT"
-          echo "semver=$NUM"  >> "$GITHUB_OUTPUT"
+          $version = if ($env:REF_TYPE -eq "tag") { $env:REF_NAME } else { $env:INPUT_VERSION }
+          if ([string]::IsNullOrWhiteSpace($version)) {
+              throw "A SemVer version is required. Push a v* tag or pass the 'version' input."
+          }
+          $version = ($version.Trim() -replace "^[vV]", "")
+          if ($version -notmatch "^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?(\+[0-9A-Za-z.-]+)?$") {
+              throw "Version '$version' is not a valid SemVer value."
+          }
+          $numeric = ($version -split "[-+]", 2)[0]
+          $tag = "v$version"
+          $dryRun = $env:EVENT_NAME -eq "workflow_dispatch" -and $env:INPUT_DRY_RUN -eq "true"
+          "version=$version" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
+          "numeric=$numeric" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
+          "tag=$tag" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
+          "dry_run=$($dryRun.ToString().ToLowerInvariant())" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
+          Write-Host "Release version: $version (MSI $numeric), tag $tag, dry run: $dryRun"
 
-      # ── 4. Restore ─────────────────────────────────────────────
+      - name: Validate CHANGELOG and build release notes
+        shell: pwsh
+        run: >
+          ./installer/Get-ReleaseNotes.ps1
+          -Version "${{ steps.ver.outputs.version }}"
+          -OutputPath "${{ github.workspace }}/release_notes.md"
+
+      - name: Restore local tools
+        run: dotnet tool restore
+
       - name: Restore
         run: dotnet restore EduFocus.slnx
 
-      # ── 5. Publish — win-x64 self-contained single file ────────
-      - name: Publish
+      - name: Build (Release)
+        run: dotnet build EduFocus.slnx --no-restore --configuration Release
+
+      - name: Test
+        run: >
+          dotnet test EduFocus.slnx
+          --no-build
+          --configuration Release
+          --verbosity minimal
+          --logger trx
+          --results-directory "${{ github.workspace }}/artifacts/test-results"
+
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: edufocus-release-test-results
+          path: artifacts/test-results/
+          if-no-files-found: ignore
+          retention-days: 7
+
+      - name: Publish (self-contained single file)
         shell: pwsh
         run: |
           dotnet publish src/EduFocus.WPF/EduFocus.WPF.csproj `
@@ -53,66 +129,296 @@ jobs:
             -p:PublishSingleFile=true `
             -p:IncludeNativeLibrariesForSelfExtract=true `
             -p:EnableCompressionInSingleFile=true `
-            -p:Version="${{ steps.ver.outputs.semver }}" `
+            -p:IncludeSourceRevisionInInformationalVersion=false `
+            -p:Version="${{ steps.ver.outputs.version }}" `
+            -p:FileVersion="${{ steps.ver.outputs.numeric }}" `
             --output publish/
 
-      # ── 6-8. Install WiX v4, add UI extension, build MSI ───────
+      - name: Publish Windows service
+        shell: pwsh
+        run: |
+          dotnet publish src/EduFocus.Service/EduFocus.Service.csproj `
+            --configuration Release `
+            --runtime win-x64 `
+            --self-contained true `
+            -p:PublishSingleFile=true `
+            -p:IncludeNativeLibrariesForSelfExtract=true `
+            -p:EnableCompressionInSingleFile=true `
+            -p:IncludeSourceRevisionInInformationalVersion=false `
+            -p:Version="${{ steps.ver.outputs.version }}" `
+            -p:FileVersion="${{ steps.ver.outputs.numeric }}" `
+            --output publish/
+
+      - name: Publish native messaging host
+        shell: pwsh
+        run: |
+          dotnet publish src/EduFocus.NativeHost/EduFocus.NativeHost.csproj `
+            --configuration Release `
+            --runtime win-x64 `
+            --self-contained true `
+            -p:PublishSingleFile=true `
+            -p:IncludeNativeLibrariesForSelfExtract=true `
+            -p:EnableCompressionInSingleFile=true `
+            -p:IncludeSourceRevisionInInformationalVersion=false `
+            -p:Version="${{ steps.ver.outputs.version }}" `
+            -p:FileVersion="${{ steps.ver.outputs.numeric }}" `
+            --output publish/native-host/
+
+      - name: Verify executable versions
+        shell: pwsh
+        env:
+          VERSION: ${{ steps.ver.outputs.version }}
+          NUMERIC: ${{ steps.ver.outputs.numeric }}
+        run: |
+          $executables = @(
+              "publish/EduFocus.exe",
+              "publish/EduFocus.Service.exe",
+              "publish/native-host/EduFocus.NativeHost.exe"
+          )
+          $parts = $env:NUMERIC.Split(".")
+          foreach ($path in $executables) {
+              if (-not (Test-Path -LiteralPath $path -PathType Leaf)) {
+                  throw "Expected executable '$path' was not produced."
+              }
+              $info = (Get-Item $path).VersionInfo
+              if ($info.ProductVersion -notlike "$($env:VERSION)*") {
+                  throw "$path ProductVersion '$($info.ProductVersion)' does not match '$($env:VERSION)'."
+              }
+              if ($info.FileMajorPart -ne [int]$parts[0] -or
+                  $info.FileMinorPart -ne [int]$parts[1] -or
+                  $info.FileBuildPart -ne [int]$parts[2]) {
+                  throw "$path FileVersion '$($info.FileVersion)' does not match '$($env:NUMERIC)'."
+              }
+              Write-Host "$path version: Product $($info.ProductVersion) / File $($info.FileVersion)"
+          }
+
+      - name: Trim publish output
+        shell: pwsh
+        run: |
+          Get-ChildItem publish -Recurse -File -Include *.pdb, *.lib |
+            Remove-Item -Force
+          Get-ChildItem publish -Recurse -File |
+            ForEach-Object { "{0}  {1:N0}" -f $_.Name, $_.Length }
+
+      # CODE SIGNING
+      # CODESIGN_PFX_BASE64 / CODESIGN_PFX_PASSWORD are repository secrets.
+      # Set the REQUIRE_CODE_SIGNING repository variable to "true" once the
+      # certificate is provisioned so a release cannot ship unsigned.
+      - name: Sign executables
+        id: sign_exe
+        shell: pwsh
+        env:
+          CODESIGN_PFX_BASE64: ${{ secrets.CODESIGN_PFX_BASE64 }}
+          CODESIGN_PFX_PASSWORD: ${{ secrets.CODESIGN_PFX_PASSWORD }}
+          REQUIRE_CODE_SIGNING: ${{ vars.REQUIRE_CODE_SIGNING }}
+        run: |
+          $required = $env:REQUIRE_CODE_SIGNING -match "^(?i:true|1|yes)$"
+          $signed = ./installer/Sign-Artifacts.ps1 `
+            -Files publish/EduFocus.exe, publish/EduFocus.Service.exe, publish/native-host/EduFocus.NativeHost.exe `
+            -PfxBase64 $env:CODESIGN_PFX_BASE64 `
+            -PfxPassword $env:CODESIGN_PFX_PASSWORD `
+            -Description "EduFocus" `
+            -RequireSigning:$required
+          "signed=$($signed.ToString().ToLowerInvariant())" |
+            Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
+
       - name: Build MSI
         shell: pwsh
         run: |
-          # Install WiX globally
           dotnet tool install --global wix --version 4.*
 
-          # Refresh PATH so wix.exe is available in this step
-          $env:PATH = [System.Environment]::GetEnvironmentVariable("PATH", "Machine") + ";" +
-                      [System.Environment]::GetEnvironmentVariable("PATH", "User")
+          # Refresh PATH so wix.exe is available in this step.
+          $env:PATH = [Environment]::GetEnvironmentVariable("PATH", "Machine") + ";" +
+                      [Environment]::GetEnvironmentVariable("PATH", "User")
 
-          # Add UI extension — pin to 4.x to match WiX 4.0.6
           wix extension add --global WixToolset.UI.wixext/4.0.6
+          wix extension add --global WixToolset.Util.wixext/4.0.6
 
-          $ver    = "${{ steps.ver.outputs.version }}"
-          $semver = "${{ steps.ver.outputs.semver }}"
-          wix build installer/Product.wxs `
-            -ext WixToolset.UI.wixext `
-            -d Version="$semver" `
-            -d PublishDir="publish/" `
-            -o "EduFocus-$ver-win-x64.msi" `
-            -arch x64
+          $version = "${{ steps.ver.outputs.version }}"
+          $numeric = "${{ steps.ver.outputs.numeric }}"
 
+          ./installer/Build-Installer.ps1 `
+            -PublishDir publish `
+            -Version $numeric `
+            -OutputPath "EduFocus-$version-win-x64.msi"
 
-      # ── 9. Package portable zip ────────────────────────────────
+      - name: Verify installer version
+        shell: pwsh
+        env:
+          NUMERIC: ${{ steps.ver.outputs.numeric }}
+        run: |
+          $msi = (Resolve-Path "EduFocus-${{ steps.ver.outputs.version }}-win-x64.msi").Path
+          $installer = New-Object -ComObject WindowsInstaller.Installer
+          $database = $installer.GetType().InvokeMember(
+              "OpenDatabase", "InvokeMethod", $null, $installer, @($msi, 0))
+          $view = $database.GetType().InvokeMember(
+              "OpenView", "InvokeMethod", $null, $database,
+              @('SELECT `Value` FROM `Property` WHERE `Property` = ''ProductVersion'''))
+          $view.GetType().InvokeMember("Execute", "InvokeMethod", $null, $view, $null) | Out-Null
+          $record = $view.GetType().InvokeMember("Fetch", "InvokeMethod", $null, $view, $null)
+          if (-not $record) {
+              throw "The MSI does not define ProductVersion."
+          }
+          $productVersion = $record.GetType().InvokeMember(
+              "StringData", "GetProperty", $null, $record, @(1))
+          if ($productVersion -ne $env:NUMERIC) {
+              throw "MSI ProductVersion '$productVersion' does not match '$($env:NUMERIC)'."
+          }
+          Write-Host "MSI ProductVersion: $productVersion"
+
+      - name: Sign installer
+        if: steps.sign_exe.outputs.signed == 'true'
+        shell: pwsh
+        env:
+          CODESIGN_PFX_BASE64: ${{ secrets.CODESIGN_PFX_BASE64 }}
+          CODESIGN_PFX_PASSWORD: ${{ secrets.CODESIGN_PFX_PASSWORD }}
+        run: |
+          $signed = ./installer/Sign-Artifacts.ps1 `
+            -Files "EduFocus-${{ steps.ver.outputs.version }}-win-x64.msi" `
+            -PfxBase64 $env:CODESIGN_PFX_BASE64 `
+            -PfxPassword $env:CODESIGN_PFX_PASSWORD `
+            -Description "EduFocus installer"
+          if (-not $signed) {
+              throw "The installer was not signed even though the executable was."
+          }
+
       - name: Create portable zip
         shell: pwsh
         run: |
-          $ver = "${{ steps.ver.outputs.version }}"
           Compress-Archive `
             -Path publish/* `
-            -DestinationPath "EduFocus-$ver-win-x64-portable.zip" `
+            -DestinationPath "EduFocus-${{ steps.ver.outputs.version }}-win-x64-portable.zip" `
             -Force
 
-      # ── 10. Generate release notes ─────────────────────────────
-      - name: Extract changelog section
-        id: notes
+      - name: Package browser extension
         shell: pwsh
         run: |
-          $ver = "${{ steps.ver.outputs.version }}"
-          $cl  = Get-Content CHANGELOG.md -Raw -ErrorAction SilentlyContinue
-          if ($cl -match "(?s)## \[$ver\][^\n]*\n(.+?)(?=\n## \[|\z)") {
-            $notes = $Matches[1].Trim()
-          } else {
-            $notes = "See [CHANGELOG.md](CHANGELOG.md) for details."
-          }
-          $notes | Out-File -FilePath release_notes.md -Encoding utf8
+          ./scripts/pack-browser-extension.ps1 `
+            -OutputDir "${{ github.workspace }}" `
+            -Version "${{ steps.ver.outputs.numeric }}"
 
-      # ── 11. Create GitHub Release ──────────────────────────────
+      - name: Prepare install guides
+        shell: pwsh
+        run: |
+          Copy-Item `
+            docs/installer.md `
+            "EduFocus-${{ steps.ver.outputs.version }}-install-guide.md"
+          Copy-Item `
+            docs/browser-extension.md `
+            "EduFocus-${{ steps.ver.outputs.version }}-browser-extension.md"
+
+      - name: Generate SHA-256 checksums
+        shell: pwsh
+        run: |
+          $version = "${{ steps.ver.outputs.version }}"
+          $files = @(
+              "EduFocus-$version-win-x64.msi",
+              "EduFocus-$version-win-x64-portable.zip",
+              "EduFocus-$version-browser-extension.zip",
+              "EduFocus-$version-install-guide.md",
+              "EduFocus-$version-browser-extension.md"
+          )
+          $lines = foreach ($file in $files) {
+              if (-not (Test-Path -LiteralPath $file -PathType Leaf)) {
+                  throw "Missing release artifact '$file'."
+              }
+              $hash = (Get-FileHash -LiteralPath $file -Algorithm SHA256).Hash.ToLowerInvariant()
+              "$hash  $file"
+          }
+          [IO.File]::WriteAllText(
+              (Join-Path $PWD "SHA256SUMS.txt"),
+              (($lines -join "`n") + "`n"),
+              [Text.ASCIIEncoding]::new())
+
+          foreach ($line in Get-Content -LiteralPath SHA256SUMS.txt) {
+              $name = ($line -split "\s+", 2)[1]
+              $expected = ($line -split "\s+", 2)[0]
+              $actual = (Get-FileHash -LiteralPath $name -Algorithm SHA256).Hash.ToLowerInvariant()
+              if ($expected -ne $actual) {
+                  throw "Checksum verification failed for '$name'."
+              }
+          }
+          Get-Content -LiteralPath SHA256SUMS.txt
+
+      - name: Verify artifacts contain no secrets
+        shell: pwsh
+        run: |
+          $forbiddenExtensions = @(
+              ".pfx", ".p12", ".snk", ".key", ".pem", ".cer", ".crt",
+              ".jks", ".keystore", ".pvk", ".env",
+              ".db", ".db-shm", ".db-wal", ".log", ".bak", ".tmp"
+          )
+          $forbiddenNames = @(
+              "secrets.json", "credentials.json", "id_rsa", "id_ed25519"
+          )
+          $files = Get-ChildItem -LiteralPath $env:GITHUB_WORKSPACE -Recurse -File -Force |
+              Where-Object { $_.FullName -notmatch "\\\.git\\" }
+          $offenders = $files | Where-Object {
+              $forbiddenExtensions -contains $_.Extension.ToLowerInvariant() -or
+              $forbiddenNames -contains $_.Name.ToLowerInvariant()
+          }
+          if ($offenders) {
+              throw "Forbidden certificate, secret or runtime files found: $($offenders.Name -join ', ')"
+          }
+          Write-Host "No certificate, secret or runtime files found in $($files.Count) files."
+
+      - name: Upload release assets
+        uses: actions/upload-artifact@v4
+        with:
+          name: edufocus-release-${{ steps.ver.outputs.version }}
+          path: |
+            EduFocus-${{ steps.ver.outputs.version }}-win-x64.msi
+            EduFocus-${{ steps.ver.outputs.version }}-win-x64-portable.zip
+            EduFocus-${{ steps.ver.outputs.version }}-browser-extension.zip
+            EduFocus-${{ steps.ver.outputs.version }}-install-guide.md
+            EduFocus-${{ steps.ver.outputs.version }}-browser-extension.md
+            SHA256SUMS.txt
+            release_notes.md
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Write job summary
+        if: always()
+        shell: pwsh
+        run: |
+          $lines = @(
+              "## EduFocus ${{ steps.ver.outputs.version }}",
+              "",
+              "- Tag: ``${{ steps.ver.outputs.tag }}``",
+              "- Code signed: ``${{ steps.sign_exe.outputs.signed }}``",
+              "- Dry run: ``${{ steps.ver.outputs.dry_run }}``",
+              "- Artifacts: MSI, portable ZIP, browser extension ZIP, install guides, SHA256SUMS.txt, release notes"
+          )
+          $lines | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8
+
+  release:
+    name: Publish GitHub Release
+    needs: build
+    if: needs.build.outputs.dry_run != 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Download release assets
+        uses: actions/download-artifact@v4
+        with:
+          name: edufocus-release-${{ needs.build.outputs.version }}
+          path: release-assets
+
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: ${{ steps.ver.outputs.tag }}
-          name: "EduFocus ${{ steps.ver.outputs.tag }}"
-          body_path: release_notes.md
+          tag_name: ${{ needs.build.outputs.tag }}
+          name: "EduFocus ${{ needs.build.outputs.tag }}"
+          body_path: release-assets/release_notes.md
           draft: false
-          prerelease: ${{ contains(steps.ver.outputs.tag, '-') }}
+          prerelease: ${{ contains(needs.build.outputs.version, '-') }}
+          fail_on_unmatched_files: true
           files: |
-            EduFocus-${{ steps.ver.outputs.version }}-win-x64.msi
-            EduFocus-${{ steps.ver.outputs.version }}-win-x64-portable.zip
+            release-assets/EduFocus-${{ needs.build.outputs.version }}-win-x64.msi
+            release-assets/EduFocus-${{ needs.build.outputs.version }}-win-x64-portable.zip
+            release-assets/EduFocus-${{ needs.build.outputs.version }}-browser-extension.zip
+            release-assets/EduFocus-${{ needs.build.outputs.version }}-install-guide.md
+            release-assets/EduFocus-${{ needs.build.outputs.version }}-browser-extension.md
+            release-assets/SHA256SUMS.txt

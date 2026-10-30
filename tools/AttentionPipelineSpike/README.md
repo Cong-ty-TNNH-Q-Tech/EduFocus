@@ -18,9 +18,11 @@ Không nằm trong phạm vi: `Drowsy` (cần eye-aspect-ratio hoặc model riê
 - `src/EduFocus.Domain/Attention/`: trạng thái, classifier, state machine thuần business rule.
 - `src/EduFocus.Ports/`: `IAttentionFrameAnalyzer` + DTO, không phụ thuộc OpenCV/ONNX.
 - `src/EduFocus.Infrastructure.Attention/`: adapter OpenCV MSMF/DSHOW + YuNet ONNX + Haar cascade.
+- `src/EduFocus.UseCases.Attention.AttentionPipelineService`: sampling 1 FPS, dispose frame trước khi phát `AttentionSample` (issue #31).
 - `tools/AttentionPipelineSpike/`: harness đo lường/báo cáo dùng một lần, không nằm trong `EduFocus.slnx`.
 
-Adapter chưa được wire vào WPF/DI; việc đó thuộc Phase 5 sau khi chốt ADR.
+Từ issue #30/#31, harness dùng `OpenCvCameraPort` để capture và analyzer mới chỉ nhận `CameraFrame`;
+adapter đã được đăng ký trong DI của WPF nhưng pipeline chưa được start cho tới khi tích hợp phiên học (#33).
 
 ## Quyền riêng tư
 

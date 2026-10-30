@@ -3,7 +3,7 @@
 > **Trạng thái:** Thiết kế đích / đang chuyển đổi từ **Don't Be Lazy**.
 > **Phiên bản:** 2.0 — 2026-10-26
 >
-> Project, namespace và assembly trong mã nguồn đã được đổi sang `EduFocus.*`. Tài liệu này mô tả kiến trúc **đích** của EduFocus.
+> Mã nguồn đã dùng tên project `EduFocus.*` từ Phase 1 (issue #5). Tài liệu này mô tả kiến trúc **đích** của EduFocus.
 
 ---
 
@@ -53,9 +53,9 @@ EduFocus kế thừa nền **Clean Architecture + Ports & Adapters** của dự 
               │ ProgramData     │        │ Win32 / WMI     │
               └─────────────────┘        └─────────────────┘
 
-             (Post-MVP) EduFocus.Agent (Windows Service)
-             - watchdog, policy enforcement, ACL, auto-start
-             - giao tiếp với app qua named pipe
+             (Bản cài, issue #46) EduFocusProtection (Windows Service)
+             - protection engine, heartbeat/session, schedule, retention, ACL
+             - IPC named pipe có xác thực với app; UI đóng vẫn giữ bảo vệ
 ```
 
 ---
@@ -65,6 +65,9 @@ EduFocus kế thừa nền **Clean Architecture + Ports & Adapters** của dự 
 ### 3.1. Domain (`EduFocus.Domain`)
 
 Không phụ thuộc project ngoài. Chứa entity, enum, value object và business rules thuần túy.
+
+> Domain model 2.0 đã được triển khai ở issue #8. Chi tiết invariant và ranh giới trách nhiệm:
+> [domain-invariants.md](./domain-invariants.md).
 
 **Entity chính**
 
@@ -80,7 +83,7 @@ Không phụ thuộc project ngoài. Chứa entity, enum, value object và busin
 | `BlockedAttempt` | Lần truy cập bị chặn |
 | `AuditLog` | Thao tác nhạy cảm |
 
-**Value Object:** giữ pattern `StronglyTypedId` (`SessionId`, `RuleId`, `CredentialId`…).
+**Value Object:** `StronglyTypedId` cho từng entity (`StudySessionId`, `BlockRuleId`, `ParentCredentialId`…) và `DomainName`; helper privacy `UrlSanitizer`, `TextSanitizer`.
 
 **Business rules tiêu biểu**
 - PIN phải 6–8 chữ số, không yếu.
@@ -96,15 +99,20 @@ Chỉ chứa interface và DTO.
 
 **Inbound**
 ```text
+IOnboardingUseCase
 IParentAuthUseCase
+IParentModeUseCase
 IProtectionUseCase
+IAppLifecycleUseCase
 IStudySessionUseCase
+IStudySessionHeartbeatUseCase
 IActivityUseCase
-IAttentionUseCase
+ICameraSessionUseCase
+IAttentionMonitorUseCase
 IBlockRuleUseCase
 IScheduleUseCase
 IReportUseCase
-IDataRetentionUseCase
+IRetentionUseCase
 ```
 
 **Outbound**
@@ -113,14 +121,19 @@ IProtectionEnginePort
 IBlockPageHostPort
 IForegroundActivityPort
 IBrowserUrlProviderPort
-IWebcamAttentionPort
+ICameraPort
+IAttentionFrameAnalyzer
 IMonotonicClockPort
+IPasswordHasher
+IRecoveryCodeGenerator
 IParentCredentialRepository
 IAppSettingsRepository
 IBlockRuleRepository
-IScheduleRepository
+IScheduleWindowRepository
 IStudySessionRepository
 IActivitySampleRepository
+IRetentionRepository
+ISystemPowerEventPort
 IAttentionEventRepository
 IBlockedAttemptRepository
 IAuditLogRepository
@@ -136,17 +149,126 @@ IProcessWatchdogPort
 
 | UseCase | Chức năng |
 |---|---|
-| `ParentAuthUseCase` | Setup PIN, login, lockout, đổi PIN, recovery |
-| `ProtectionUseCase` | Bật/tắt bảo vệ, áp dụng/gỡ rule, phục hồi trạng thái |
+| `ParentAuthUseCase` | Setup PIN, login, lockout, đổi PIN, recovery, tạo lại recovery code sau khi xác thực PIN |
+| `ParentModeService` | Parent session: login mở phiên, đổi PIN/reset kết thúc phiên |
+| `OnboardingService` | First-run: consent, tuỳ chọn an toàn, PIN, resume và hoàn tất UC01 |
+| `ProtectionService` | Bật/tắt bảo vệ, đồng bộ phiên học và engine, phục hồi trạng thái sau restart |
+| `AppLifecycleService` | Thoát bằng PIN (clean exit) và ghi nhận Windows shutdown/logoff (UC12) |
 | `StudySessionUseCase` | Bắt đầu/kết thúc session, tổng hợp thời gian |
 | `ActivityUseCase` | Ghi sample, phân loại app/URL, phát hiện lớp online |
-| `AttentionUseCase` | Nhận trạng thái từ camera, tạo event, tính score |
+| `CameraSessionService` | Chọn/mở/đóng camera, báo lỗi quyền/bận/mất kết nối, retry backoff (issue #30) |
+| `AttentionPipelineService` | Sampling camera 1 FPS qua camera supervisor, inference trên frame managed, dispose frame trước khi phát `AttentionSample` (issue #31) |
+| `AttentionMonitorService` | Nhận `AttentionSample`, làm mượt 5–10 giây, chạy state machine, mở/đóng `AttentionEvent` và cộng giây attention (issue #32); `ProtectionService` start/stop monitor + pipeline theo phiên học (issue #33) |
 | `BlockRuleUseCase` | CRUD rule, validate, allowlist override |
-| `ScheduleUseCase` | Đánh giá khung giờ, auto ON/OFF |
-| `ReportUseCase` | Query dashboard, timeline, export |
-| `DataRetentionUseCase` | Xóa dữ liệu quá hạn, xóa theo yêu cầu |
+| `ScheduleService` | CRUD khung giờ, đánh giá 30 giây, auto ON/OFF và override |
+| `ReportUseCase` | Query dashboard, báo cáo ngày/tuần, timeline (issue #35/#36) |
+| `ReportExportService` | Xuất đúng snapshot báo cáo ra một CSV, lọc sample/event theo ngày local, chống formula injection (issue #37) |
+| `RetentionService` | Xóa dữ liệu quá hạn theo AppSettings, batch và audit (issue #29); xóa theo yêu cầu/audit viewer thuộc UC11 UI sau |
+
+`ParentSessionState` (singleton, chỉ trong bộ nhớ) triển khai `IParentAuthorizer` để các use case
+nhạy cảm kiểm tra phiên trước khi thực thi.
 
 **Decorator:** giữ pattern logging decorator cho các use case nhạy cảm (Protection, ParentAuth).
+
+**Hiện trạng issue #16:** `ProtectionService` chỉ phụ thuộc `IProtectionEnginePort`, nên không biết hosts,
+process hay block page. Thứ tự bền vững là engine → session → `ProtectionEnabled` khi bật và
+engine → kết thúc session → `ProtectionEnabled = false` khi tắt; lỗi ghi DB kích hoạt rollback tương ứng
+và lỗi gỡ engine giữ nguyên trạng thái ON. Từ issue #24, `ProtectionEngine` là adapter thật ghép block
+page, hosts và process watcher; "bật bảo vệ" chặn domain/app thật và UI hiển thị cảnh báo của engine
+(ví dụ cổng 80 bận) thay vì cảnh báo "engine chưa có".
+
+**Hiện trạng issue #17:** `ProtectionSource` lưu bền vững nguồn bật bảo vệ (`None`/`Manual`/`Schedule`).
+`ProtectionService.EnableForScheduleAsync`/`DisableForScheduleAsync` dùng actor `System` và chỉ tắt được
+bảo vệ do lịch sở hữu; `DisableAsync` của phụ huynh trong khung giờ đang hoạt động ghi
+`ScheduleOverrideUntilUtc` đến hết khung. `ScheduleService` serialize mọi thao tác bằng semaphore, kiểm tra
+parent auth cho CRUD, chống chồng lấn qua `ScheduleValidator`, ghi audit `ScheduleChanged`, và chạy
+`EvaluateAsync` mỗi 30 giây lẫn lúc khởi động. Khi phát hiện lệch wall clock > 2 phút so với monotonic,
+service ghi `TamperDetected` và bỏ qua auto-disable trong tick đó. Lỗi engine được chuyển thành cảnh báo
+thay vì làm hỏng vòng đánh giá.
+
+**Hiện trạng issue #18:** `IAppLifecycleUseCase`/`AppLifecycleService` tách hai đường thoát. Thoát bằng
+PIN luôn xác thực qua `IParentModeUseCase` (kể cả khi bảo vệ OFF), sau đó gọi
+`IProtectionUseCase.DisableForExitAsync` — biến thể không tạo `ScheduleOverrideUntilUtc` — để gỡ engine,
+kết thúc phiên `Completed`, đặt `ProtectionEnabled = false` và ghi audit `ProtectionOff`/`CleanExit`.
+Sau đó service ghi `LastCleanShutdownAtUtc`; lỗi ghi dấu này chỉ tạo cảnh báo vì startup reconcile tự dọn
+theo trạng thái đã lưu. Windows shutdown/logoff chỉ đóng phiên đang chạy với `Interrupted` +
+`Note = SystemShutdown`, ghi audit `SessionInterrupted`/`SystemShutdown`, giữ nguyên
+`ProtectionEnabled` và `LastCleanShutdownAtUtc`; mọi lỗi DB được log và nuốt để không chặn hệ điều hành.
+`ParentSessionState` luôn bị khóa sau khi luồng thoát kết thúc, kể cả khi PIN sai.
+
+**Hiện trạng issue #25:** `IStudySessionHeartbeatUseCase`/`StudySessionHeartbeatService` chạy beat 10 giây
+bằng `PeriodicTimer`, cộng `ActiveSeconds` theo monotonic clock (tối đa 60 giây/beat), clamp wall clock
+lùi và dừng trước khi session kết thúc. `ProtectionService` serialize enable/disable/reconcile bằng
+semaphore, khởi động heartbeat trước khi lưu `ProtectionEnabled = true`, dừng heartbeat trước khi
+`Complete`/`Interrupt` và rollback khi bật thất bại. Reconcile đóng session cũ tại `LastHeartbeatAtUtc`
+rồi tạo phiên `Recovery` tại thời điểm hiện tại, nên thời gian app tắt không bị cộng. Thoát sạch và
+Windows shutdown đều dừng heartbeat trước khi kết thúc phiên; `App.OnExit` dispose `ServiceProvider`
+bất đồng bộ để ghi beat cuối và nhả timer. Repository ghi heartbeat/increment bằng targeted update có
+điều kiện nên heartbeat không hồi sinh session đã kết thúc hoặc đè lên bộ đếm blocked attempt.
+
+**Hiện trạng issue #26:** `IActivityUseCase`/`ActivityTrackingService` poll foreground mỗi giây, chỉ ghi
+sample khi context ổn định đủ 2 giây và cách sample trước 15 giây; idle ≥ 5 phút ghi đúng một sample cho
+mỗi chuỗi idle. Thời lượng lấy từ monotonic clock, cap 60 giây/sample; wall clock lùi bị clamp. Mỗi sample
+được phân loại bằng `BlockRuleSet` snapshot (load một lần lúc `StartAsync`), `OnlineClassDetector` phủ
+overlay `IsOnlineClass`; URL được sanitize qua `UrlSanitizer` trước khi suy domain. Bộ đếm session được ghi
+bằng `AddActivitySecondsAsync` targeted (chỉ session `Active`) **trước** khi insert sample, nên lỗi DB
+không đếm đôi; lỗi insert chỉ log và thử lại ở beat sau. Activity là observability: lỗi start/stop không
+làm hỏng Protection. Adapter Windows: `WindowsForegroundActivityPort` (Win32 + `GetLastInputInfo`) và
+`UiAutomationBrowserUrlProvider` (UIA address bar, allowlist trình duyệt).
+
+**Hiện trạng issue #27:** `OnlineClassDetector` nhận Meet/Teams/Zoom theo domain, process đã chuẩn hóa
+(path, `.exe`, dấu nháy) và title Meet có kiểm tra ranh giới; title chat chung và process chat như Discord,
+Slack, Messenger, Zalo không bị nhận nhầm. Sample idle luôn có `IsOnlineClass = false`, còn
+`OnlineClassSeconds` vẫn chỉ là overlay của category time nên không cộng trùng. Policy domain
+`MonitoringEligibility.IsEligible(monitoringEnabled, monitorOnlyDuringClasses, isOnlineClass)` chuẩn bị cho
+attention pipeline (#33): khi `MonitorOnlyDuringClasses` bật, chỉ thời gian phát hiện lớp online mới vào
+`MonitoringEligibleSeconds`, nên coverage không bị chia cho thời gian ngoài lớp.
+
+**Hiện trạng issue #28:** `ISystemPowerEventPort` phát `Suspended`/`Resumed`; adapter WPF nghe
+`SystemEvents.PowerModeChanged` và `SessionSwitch` (lock/disconnect/unlock/connect). Heartbeat và activity
+subscribe trong `StartAsync` và unsubscribe trong `StopCore`, nên handler không sống qua stop. Heartbeat
+cộng dồn phần hoạt động vào lúc suspend rồi neo lại monotonic tick, nên resume chỉ cộng tiếp từ mốc thức;
+suspend lặp lại giữ mốc sớm nhất và nhiều chu kỳ trước một beat chỉ cộng các slice active. Beat định kỳ
+trong lúc lock/disconnect chờ resume mà không cộng thời gian; nếu timer bị pause (sleep) và resume event mất,
+gap vượt `MaxActiveDelta` bị bỏ rồi đếm lại. Activity reset `_lastSampleTick` khi resume, bỏ gap vượt
+`MaxSampleGap` và khởi động lại cửa sổ 15 giây; cả hai dùng monotonic clock nên forward wall clock không
+làm phồng thời lượng, còn backward wall clock vẫn clamp timestamp. Khi ghi heartbeat lỗi, `_pendingSeconds`
+được cộng vào beat sau và clamp `MaxActiveDelta`.
+
+**Hiện trạng issue #29:** `IRetentionUseCase`/`RetentionService` đọc retention từ `AppSettings`, tính cutoff
+UTC cho từng bảng rồi xóa `ActivitySamples` → `AttentionEvents` → `BlockedAttempts` → `AuditLogs` →
+`StudySessions` bằng batch 500 (lặp đến khi batch ngắn). `SqliteRetentionRepository` dùng raw SQL subquery
+`LIMIT @batch` vì SQLite không hỗ trợ `DELETE ... LIMIT`; sample/event thuộc session `Active` và attention
+event còn mở bị loại khỏi batch, session chỉ bị xóa khi đã kết thúc và quá hạn. Mỗi bảng lỗi độc lập, giữ số
+đã xóa và ghi vào `Failures`; lỗi vacuum/audit cũng được báo thay vì giả thành công. Audit `RetentionApplied`
+(actor `System`) chứa số bản ghi từng bảng và danh sách bảng lỗi, không có nội dung nhạy cảm. Thiếu hoặc lỗi
+đọc settings thì bỏ qua toàn bộ pass. Sau khi xóa, service chạy `PRAGMA incremental_vacuum`.
+`RetentionSchedulerService` chạy một pass lúc khởi động và mỗi ngày khi local time ≥ 03:00; pass chạy trên
+thread pool, chống chồng bằng cờ `_running`. Xóa dữ liệu thủ công theo yêu cầu phụ huynh (UC11) vẫn thuộc
+phần UI sau; xuất CSV đã có ở issue #37.
+
+**Hiện trạng issue #30:** `ICameraSessionUseCase`/`CameraSessionService` sở hữu vòng đời một camera: đọc
+`AppSettings.CameraDeviceId`, liệt kê thiết bị qua `ICameraPort.ListDevices`, fallback camera mặc định khi
+thiết bị đã lưu không còn, mở/đóng tuần tự bằng semaphore. Open/list/capture chạy trên thread pool với
+timeout 5 giây (`CameraOptions`), nên driver treo không chặn UI. Lỗi mở → `Unavailable` + `LastFailure`,
+tự mở lại sau 30 giây và backoff nhân đôi tới 5 phút; capture trước hạn trả lỗi mà không mở lại. Capture
+lỗi liên tiếp 3 lần hoặc `Disconnected` mới đóng camera và chuyển `Unavailable`; lỗi lẻ không kết luận mất
+kết nối. `CameraOptions` validate timeout/backoff/ngưỡng. Adapter `OpenCvCameraPort` copy `Mat` sang
+`CameraFrame` BGR24 managed và giải phóng native buffer trước khi trả về; `WindowsCameraDeviceCatalog` liệt
+kê PNP camera qua WMI (best effort). `CameraStatusViewModel` hiển thị trạng thái và hướng dẫn quyền trong
+cửa sổ chính/tray. Camera **chưa tự bật**; #33 nối vòng đời phiên học: `ProtectionService` start monitor rồi
+pipeline khi bật bảo vệ/phục hồi và stop pipeline rồi monitor khi tắt/reconcile, còn `AttentionMonitorService`
+(#32) đã ghi `AttentionEvent`/`CameraUnavailable` từ sample.
+
+**Hiện trạng issue #31:** `IAttentionPipelineUseCase`/`AttentionPipelineService` chạy vòng sampling mặc định
+1 giây (validate 0–5 giây), `StartAsync` mở camera qua `ICameraSessionUseCase` và tick đầu tiên chạy ngay.
+Mỗi tick lấy `CameraFrame`, gọi `IAttentionFrameAnalyzer.Analyze`, dispose frame **trước** khi phát
+`AttentionSample`, nên subscriber không thể giữ ảnh. Camera lỗi/không quyền → sample có `CameraFailure` và
+`Observation = null`; lỗi inference → sample `Error` nhưng `CameraFailure = None`, không bị hiểu nhầm là
+`Absent`. Lỗi camera chỉ log khi loại lỗi đổi, lỗi inference lặp được gộp; exception của subscriber không làm
+dừng loop. `OpenCvAttentionFrameAnalyzer` không còn sở hữu camera: nó nhận `CameraFrame` BGR24, copy sang
+`Mat`, tính luminance và chạy detector. Phân loại trạng thái và ghi `AttentionEvent` đã có ở #32; cộng
+coverage và start pipeline theo phiên học đã nối ở #33.
 
 ### 3.4. Infrastructure (`EduFocus.Infrastructure`)
 
@@ -157,23 +279,66 @@ Triển khai outbound ports, tương tác Windows.
 | `ProtectionEngine` | Refactor từ `WindowsStrictEngine`: hosts, block page server, process watcher, rule matching |
 | `BlockPageServer` | Local HTTP server trả trang chặn; refactor từ `LocalRedirectServer` |
 | `ChatbotBlocklist` | Danh sách domain chatbot mặc định, có version |
-| `ForegroundActivityTracker` | Win32 foreground window + process + idle time |
-| `BrowserUrlProvider` | UI Automation (MVP); browser extension native messaging (post-MVP) |
-| `WebcamAttentionMonitor` | OpenCV + ONNX; face/head/iris/EAR; không lưu frame |
-| `CameraAvailabilityProbe` | Kiểm tra camera bận/không có quyền |
-| `ParentAuthService` | PBKDF2, constant-time compare, recovery code, shared lockout |
-| `ParentAuthorizer` | Kiểm tra Parent Mode cho use case nhạy cảm; chặn exit khi chưa PIN |
-| `WatchdogService` | Scheduled task (MVP, poll 30–60 giây) / Windows Service (post-MVP) |
+| `WindowsForegroundActivityPort` | Win32 foreground window + process + idle time (`GetLastInputInfo`) |
+| `UiAutomationBrowserUrlProvider` | UI Automation đọc address bar (MVP); browser extension native messaging (post-MVP) |
+| `WindowsSystemPowerEventPort` | `SystemEvents.PowerModeChanged` + `SessionSwitch` → `Suspended`/`Resumed` |
+| `WebcamAttentionMonitor` | Tên cũ trong tài liệu; Phase 5 tách thành `OpenCvCameraPort` + `OpenCvAttentionFrameAnalyzer` |
+| `OpenCvAttentionFrameAnalyzer` | `IAttentionFrameAnalyzer` trên `CameraFrame` managed: YuNet/Haar, luminance, không mở camera, không lưu frame (issue #31) |
+| `OpenCvCameraPort` | `ICameraPort` trên OpenCvSharp MSMF; chọn thiết bị theo PNP id, copy frame sang buffer managed, giải phóng `Mat` ngay |
+| `WindowsCameraDeviceCatalog` | Liệt kê camera qua WMI `Win32_PnPEntity` (best effort) |
+| `Pbkdf2PasswordHasher` | PBKDF2-SHA256 600.000 iterations, salt 16 byte, hash 32 byte, constant-time compare |
+| `RecoveryCodeGenerator` | Sinh recovery code 12 ký tự từ alphabet không nhập nhằng bằng CSPRNG |
+| `WatchdogService` / `WatchdogHost` | Tick 5 giây: heartbeat, phát hiện kill/hang, backoff 5–30 giây, budget 5 lần/10 phút, audit `WatchdogRestart`/`WatchdogGaveUp`; chạy thường trú qua `EduFocus.exe --watchdog` (bản cài dùng service thay thế — §5.2) |
+| `WindowsWatchdogAutoStart` | Đăng ký/xóa task `EduFocusLogon` (ONLOGON) và `EduFocusWatchdog` (mỗi phút, HIGHEST) bằng `schtasks`; bỏ qua khi app không elevated (ví dụ bản Debug) |
 | `FileLogger` | Log xoay vòng theo ngày, redact dữ liệu nhạy cảm |
 | `MonotonicClockAdapter` | Giữ từ dự án cũ |
 
-### 3.5. Persistence (`EduFocus.Infrastructure.Persistence`)
+### 3.5. Data Access (`EduFocus.SqliteDataAccess`)
 
-- `AppDbContext` ánh xạ domain 2.0 sang SQLite; timestamp được chuyển sang ISO-8601 UTC.
-- Migration đầu `InitialEduFocusSchema` tạo các bảng, index và foreign key theo `docs/database_schema.md`.
-- Partial unique index bảo đảm tối đa một session `Active`; foreign keys bật trên mọi kết nối.
-- `DatabaseInitializer` dùng `%ProgramData%\EduFocus\edufocus.db`, bật WAL và incremental auto-vacuum, backup trước migration và chỉ giữ 3 backup gần nhất.
-- Migration lỗi được log; DB hiện có được giữ nguyên để phục hồi thủ công từ backup. DB không có EF migration history sẽ bị từ chối; không mở/migrate DB ở đường dẫn `DontBeLazy` 1.x.
+- `EduFocusDbContext` với 9 DbSet mới; Fluent API cấu hình index, unique constraint, converter và check constraint.
+- Migration `InitialEduFocusSchema` + `AddOnboardingConsent` (hai mốc consent nullable trên `AppSettings`) + `AddProtectionSource` (cột `ProtectionSource`, backfill `Manual`); **không migrate** dữ liệu từ `DontBeLazy` 1.x.
+- DB path: `%ProgramData%\EduFocus\edufocus.db` (mặc định trong `EduFocusDatabaseOptions`); DB được
+  mã hóa toàn phần bằng SQLCipher, khóa lưu tại `%ProgramData%\EduFocus\edufocus.key` (xem §3.5.1).
+- `SqliteDatabaseInitializer`: tạo/khóa thư mục dữ liệu, nạp khóa (hoặc tạo mới khi chưa có), kiểm tra
+  integrity DB hiện có, nâng cấp DB plaintext cũ sang SQLCipher (backup → export → verify → thay file),
+  backup trước migration (verified, giữ 3 bản), giữ DB nếu lỗi và ghi log hướng dẫn khôi phục; thiếu/
+  hỏng khóa thì fail-closed, không tạo khóa mới và không ghi đè DB.
+- `SqliteBackupStore`: tạo/verify/rotate backup và `Restore` an toàn (snapshot trước khi thay thế);
+  backup của DB mã hóa được mã hóa cùng khóa, backup plaintext cũ được mã hóa khi restore hoặc lúc
+  khởi động.
+- `DatabaseKeyStore`: sinh khóa 32 byte bằng CSPRNG, lưu file `edufocus.key` (magic `EDUFKEY1` +
+  DPAPI `LocalMachine`, entropy `EduFocus.DatabaseKey.v1`); không ghi khóa vào log, không đặt khóa
+  cạnh DB dưới dạng plaintext; khóa gắn thiết bị.
+- `SqliteCipher`: nhận diện DB plaintext/mã hóa qua header, áp `PRAGMA key = x'<64 hex>'` (raw key,
+  bỏ qua PBKDF2 ~525 ms), và `sqlcipher_export` qua `ATTACH` cho nâng cấp/backup vì backup API không
+  hỗ trợ DB mã hóa.
+- `DataDirectorySecurity`: ACL Administrators/SYSTEM, kế thừa cho file DB, WAL, backup và `edufocus.key`.
+- `SqliteParentCredentialRepository`: đọc/ghi singleton `ParentCredentials` (hash + lockout state), không lưu plaintext.
+- `SqliteAppSettingsRepository`: đọc/ghi singleton `AppSettings`, gồm consent onboarding và tuỳ chọn an toàn.
+- `SqliteStudySessionRepository`: đọc phiên `Active` hiện tại, thêm/cập nhật phiên; unique partial index đảm bảo tối đa một phiên active. Heartbeat và `BlockedAttemptCount` được ghi bằng `ExecuteUpdateAsync` có điều kiện (chỉ session `Active`, không lùi timestamp).
+- `SqliteScheduleWindowRepository`: CRUD `ScheduleWindows`, list theo `StartMinutes`/`EndMinutes`/`DaysMask` cho scheduler và UI.
+- `SqliteAuditLogRepository`: ghi audit event kèm `CorrelationId`, tách khỏi file log kỹ thuật.
+- `SqliteRetentionRepository`: xóa theo batch bằng raw SQL subquery `LIMIT` (SQLite không hỗ trợ `DELETE ... LIMIT`), loại session `Active`/event còn mở, và chạy `PRAGMA incremental_vacuum`.
+- `SqlitePragmaInterceptor`: áp khóa (một lần cho mỗi native handle, kể cả handle pool) rồi
+  `PRAGMA foreign_keys = ON` mỗi kết nối; WAL và `auto_vacuum` do initializer thiết lập.
+- Các repository còn lại sẽ được thêm ở các issue sau.
+
+#### 3.5.1. Mã hóa cơ sở dữ liệu (issue #47)
+
+- **Thư viện:** SQLCipher 4.5.2 qua `SQLitePCLRaw.bundle_e_sqlcipher` 2.1.11 +
+  `Microsoft.EntityFrameworkCore.Sqlite.Core` (thay `bundle_e_sqlite3`); native `e_sqlcipher.dll`
+  đi kèm bundle self-contained.
+- **Khóa:** 32 byte CSPRNG, không phải PIN/mật khẩu; lưu DPAPI `LocalMachine` trong `edufocus.key`,
+  ACL Administrators/SYSTEM. `PRAGMA key` được áp trước mọi PRAGMA/DDL/DML; raw key tránh PBKDF2.
+- **Fail-closed:** thiếu khóa → `DatabaseKeyException`; khóa hỏng/không giải mã → giữ nguyên file,
+  không ghi đè; sai khóa hoặc integrity lỗi → `SqliteDatabaseCorruptException` và hướng dẫn backup.
+- **Nâng cấp:** DB plaintext (bản trước #47) được backup rồi `sqlcipher_export` sang DB mã hóa,
+  verify, thay thế; backup plaintext được mã hóa lại.
+- **Backup/restore:** backup DB mã hóa cũng mã hóa bằng cùng khóa; restore chỉ nhận backup giải mã
+  được bằng khóa hiện tại; backup plaintext hợp lệ được export sang định dạng mã hóa.
+- **Giới hạn:** Administrator/SYSTEM vẫn giải mã được khi DB đang mở; `edufocus.key` gắn thiết bị nên
+  mất khóa hoặc chép DB sang máy khác là không thể khôi phục; CSV/log không được mã hóa. Quy trình
+  hỗ trợ mất khóa nằm ở [database_schema.md](./database_schema.md) §18.
 
 ### 3.6. UI (`EduFocus.WPF`)
 
@@ -198,6 +363,39 @@ Views/
 - ViewModel chỉ gọi Inbound Ports.
 - Parent Mode được quản lý bởi `ParentSessionState` singleton.
 - Không hiển thị chi tiết nhạy cảm ở Student Mode.
+
+Triển khai (issue #14): `ParentModeWindow` + `ParentModeViewModel` cung cấp đăng nhập PIN,
+trạng thái phiên, đổi PIN, reset bằng recovery code và hiển thị mã khôi phục mới đúng một lần.
+`DatabaseBootstrapper` khởi tạo DB lazily; lỗi dữ liệu hiển thị trong cửa sổ và có thể thử lại.
+
+Triển khai (issue #15): `OnboardingWindow` + `OnboardingViewModel` là wizard 5 bước (giới thiệu,
+quyền riêng tư, tuỳ chọn an toàn, PIN, mã khôi phục) và là cửa sổ đầu tiên khi app khởi động.
+App chỉ mở dashboard sau khi onboarding hoàn tất; đóng wizard trước khi xong sẽ thoát app. Wizard
+kiểm tra quyền camera qua Windows consent store (chỉ cảnh báo) và hỗ trợ copy mã khôi phục một lần.
+Các bước đã lưu cho phép resume sau restart; nếu PIN đã tạo nhưng chưa hoàn tất, phụ huynh nhập PIN
+để tạo lại mã khôi phục mới.
+
+Triển khai (issue #16): `ProtectionStatusViewModel` là nguồn hiển thị dùng chung cho `MainWindow`,
+`ParentModeWindow` và tray. Parent Mode có nút Bật/Tắt bảo vệ (gọi `IProtectionUseCase`, hiển thị cảnh báo
+engine); cửa sổ chính chỉ hiển thị trạng thái và cảnh báo. Trước khi mở cửa sổ chính, `App` gọi
+`IProtectionUseCase.ReconcileAsync()` để đồng bộ DB, phiên học, engine và tray; lỗi reconcile được log và
+hiển thị trên UI. `TrayIconService` dùng `NotifyIcon` (WinForms) với icon/tooltip theo trạng thái; luồng
+thoát bằng PIN được bổ sung ở issue #18.
+
+Triển khai (issue #17): thẻ "Lịch bảo vệ" trong màn hình quản lý của `ParentModeWindow` hiển thị trạng thái
+lịch, khung giờ đang hoạt động và override; phụ huynh thêm/sửa/xóa khung giờ (7 ngày, `HH:mm`, hỗ trợ
+`24:00`, nhãn) và bật/tắt lịch. `ScheduleViewModel` là singleton dùng chung, chỉ gọi `IScheduleUseCase` và
+không giữ secret. `ScheduleSchedulerService` dùng `DispatcherTimer` 30 giây, chạy `EvaluateAsync` một lần
+trước khi mở cửa sổ chính rồi khởi động timer; lỗi được log và hiển thị cảnh báo, không làm sập app.
+`ScheduleViewModel.ApplyEvaluationAsync` chỉ thay danh sách khi dữ liệu đổi nên không ghi đè editor khi
+tick 30 giây.
+
+Triển khai (issue #18): `MainWindow.OnClosing` luôn hủy đóng và ẩn xuống tray trừ khi `AppExitState`
+đã được duyệt bởi luồng thoát; tray balloon nhắc "ứng dụng vẫn đang bảo vệ" khi bảo vệ ON. Menu tray có
+"Thoát EduFocus..." mở `ExitWindow`/`ExitViewModel` — nhập PIN và, khi bảo vệ ON, tick xác nhận tắt bảo vệ
+lần hai. Thành công đặt `AppExitState.ApproveExit()` rồi `Application.Shutdown()`; lỗi hiển thị tại chỗ và
+app tiếp tục chạy. `App.OnSessionEnding` chạy `NotifySystemShutdownAsync()` trên background với chờ tối đa
+2 giây và không bao giờ gán `e.Cancel`, nên Windows shutdown không bị app chặn.
 
 ---
 
@@ -224,6 +422,16 @@ Parent bấm ON
 
 **Rollback:** nếu bước hosts thất bại, gỡ phần đã áp dụng và giữ OFF. Nếu block page server thất bại nhưng hosts thành công, vẫn giữ protection ON và cảnh báo.
 
+> **Hiện trạng Phase 2 (issue #16):** `EnableAsync` đã thực hiện đúng thứ tự engine → session → lưu
+> `ProtectionEnabled`, rollback engine/phiên khi ghi DB lỗi và bỏ qua việc tạo phiên thứ hai. Rule
+> validation, ActivityTracker và attention thuộc các issue #26/#28 trở đi. Engine thật
+> `ProtectionEngine` đã được nối ở issue #24 — apply/remove/reconcile điều phối block page, hosts và
+> watcher; cảnh báo của adapter được trả về UI thay vì tuyên bố đã chặn mọi thứ.
+>
+> **Heartbeat (issue #25):** `ProtectionService` giữ thứ tự engine → session → heartbeat → lưu
+> `ProtectionEnabled`; heartbeat dừng trước khi session kết thúc và được khởi động lại nếu disable lỗi.
+> Enable/disable/reconcile serialize bằng semaphore nên không tạo hai session hoặc hai heartbeat.
+
 ### 4.2. Học sinh truy cập chatbot
 
 ```text
@@ -244,86 +452,164 @@ Timer 1–2s
   → Face detection (ONNX)
   → Head pose + iris + EAR
   → State classification (Focused/Distracted/Absent/Drowsy/CameraUnavailable)
-  → AttentionUseCase.RecordAsync(state, confidence)
-  → aggregate every 10s
+  → AttentionMonitorService.ProcessAsync(sample)
   → AttentionEvent (khi state đổi)
+  → aggregate every 10s
   → frame disposed (không ghi disk)
 ```
+
+> **Triển khai issue #31:** `AttentionPipelineService` là nửa đầu của luồng trên: timer 1 giây → camera
+> supervisor → `IAttentionFrameAnalyzer` → `AttentionSample` → frame disposed. **Issue #32** nối nửa sau:
+> classifier + cửa sổ trượt 5–10 giây + state machine → `AttentionEvent` khi state đổi → cộng giây attention.
+> **Issue #33** nối vòng đời phiên học: monitor subscribe pipeline trước, pipeline start sau; stop pipeline
+> trước rồi monitor drain/đóng event. Coverage và cảnh báo độ tin cậy tính từ counter session, không cần
+> aggregate riêng mỗi 10 giây.
 
 ### 4.4. Schedule
 
 ```text
-Dispatcher timer (30s)
-  → ScheduleService.EvaluateAsync(TimeZoneInfo.Local wall clock)
-  → nếu vào window và OFF → ProtectionCoordinator.ApplyScheduledStateAsync(ON)
-  → nếu hết window và session được tạo bởi Schedule → ProtectionCoordinator.ApplyScheduledStateAsync(OFF)
-  → Parent Mode CRUD validates [start,end), Monday-first day masks, and overlap; changes are audited
-  → manual OFF within an active window persists an override through that window's local end
+DispatcherTimer 30s (+ một lần trước khi mở cửa sổ chính)
+  → IScheduleUseCase.EvaluateAsync()
+  → đọc AppSettings + ScheduleWindows, tính localNow theo TimeProvider.LocalTimeZone
+  → clamp/xóa ScheduleOverrideUntilUtc theo khung đang hoạt động
+  → trong khung & OFF & không override → ProtectionService.EnableForScheduleAsync() (actor System)
+  → ngoài khung & ON & ProtectionSource=Schedule → ProtectionService.DisableForScheduleAsync() (actor System)
+  → wall-clock lệch > 2 phút so với monotonic → audit TamperDetected, bỏ qua auto-disable trong tick
 ```
 
+Phụ huynh tắt bảo vệ trong khung giờ tạo override đến hết khung; bật thủ công xóa override và chuyển
+`ProtectionSource` sang `Manual`, nên lịch không tự tắt bảo vệ thủ công khi hết khung. Khi phụ huynh sửa
+khung đang hoạt động, override được clamp lại theo giờ kết thúc mới. CRUD khung giờ yêu cầu Parent Mode,
+chống chồng lấn và ghi audit `ScheduleChanged`.
+
 Schedule dùng **wall clock/local time** để xác định khung giờ. Monotonic clock chỉ dùng đo elapsed trong một process và phát hiện nhảy giờ; không dùng monotonic xuyên reboot. Khi phát hiện nhảy giờ, ghi audit `TamperDetected` và không tự tắt protection chỉ vì thay đổi giờ.
+
+### 4.5. Thoát ứng dụng & Windows shutdown
+
+```text
+Đóng cửa sổ (X / Alt+F4)
+  → MainWindow.OnClosing: chưa có exit được duyệt → e.Cancel = true, ẩn xuống tray
+  → tray balloon "EduFocus vẫn đang chạy" (nhắc PIN nếu bảo vệ ON)
+
+Tray → "Thoát EduFocus..."
+  → ExitWindow (modal): nhập PIN, bắt buộc tick xác nhận nếu bảo vệ ON
+  → IAppLifecycleUseCase.ExitWithPinAsync(pin)
+       → IParentModeUseCase.LoginAsync(pin)  (PIN luôn bắt buộc)
+       → ProtectionService.DisableForExitAsync()  (không tạo override)
+            → heartbeat.StopAsync()  (flush beat cuối)
+            → ProtectionEngine.RemoveAsync()
+            → session Completed (nếu có)
+            → ProtectionEnabled = false, ScheduleOverrideUntilUtc = null
+            → audit ProtectionOff
+       → AppSettings.RecordCleanShutdown()
+       → audit CleanExit
+       → Parent Mode luôn bị khóa
+  → AppExitState.ApproveExit() → Application.Shutdown()
+
+Windows shutdown / logoff
+  → Application.OnSessionEnding (không bao giờ e.Cancel)
+  → best-effort NotifySystemShutdownAsync() trong tối đa 2 giây
+       → heartbeat.StopAsync()
+       → session Note = "SystemShutdown" + Interrupted
+       → audit SessionInterrupted, SystemShutdown
+       → giữ ProtectionEnabled, không đặt LastCleanShutdownAtUtc
+  → lần đăng nhập sau: ReconcileAsync interrupts orphan (nếu kịp lỡ) rồi phục hồi engine + phiên Recovery
+```
+
+Nếu gỡ engine thất bại, `DisableForExitAsync` giữ nguyên trạng thái ON và `ExitWithPinAsync` trả
+`CanExit = false`; app tiếp tục chạy để tránh thoát khỏi trạng thái chặn dở dang. Lỗi ghi
+`LastCleanShutdownAtUtc` không chặn thoát: phiên và bảo vệ đã về trạng thái sạch, lần khởi động sau chỉ
+reconcile theo `ProtectionEnabled = false`. Trong `SessionEnding`, app không gỡ hosts hay đổi settings vì
+Windows có thể kết thúc tiến trình trước khi hoàn tất và shutdown có thể bị hủy bởi ứng dụng khác; giữ
+`ProtectionEnabled` để reconcile phục hồi, đúng đường bypass đã ghi trong UC12/SECURITY.
 
 ---
 
 ## 5. Mô hình tiến trình
 
-### 5.1. MVP — một app elevated
+### 5.1. MVP — một app elevated + watchdog thường trú
 
 ```text
-EduFocus.App (WPF, elevated)
-├── UI
-├── ProtectionEngine
-├── ActivityTracker
+EduFocus.exe (WPF, elevated)                  EduFocus.exe --watchdog (elevated)
+├── UI                                        ├── WatchdogService (tick 5 giây)
+├── ProtectionEngine                          ├── heartbeat + restart budget
+├── ActivityTracker                           └── start lại app khi cần
 ├── AttentionMonitor
 ├── SQLite access
-└── Tray icon / auto-start
+└── heartbeat mỗi 5 giây ───────────────────► %ProgramData%\EduFocus\runtime\app-heartbeat.json
+
+Task Scheduler
+├── EduFocusLogon    (ONLOGON, HIGHEST)  ──► "EduFocus.exe" --watchdog --login
+└── EduFocusWatchdog (mỗi phút, HIGHEST) ──► "EduFocus.exe" --watchdog
 ```
 
-**Ưu điểm:** đơn giản, nhanh.
-**Nhược điểm:** học sinh có admin có thể kill; watchdog chỉ ở mức scheduled task.
+**Ưu điểm:** một binary duy nhất; phát hiện kill/hang và restart trong mục tiêu ≤ 30 giây.
+**Nhược điểm:** hai tiến trình elevated; người dùng có admin vẫn kill được cả hai.
 
-Watchdog MVP kiểm tra mỗi 30–60 giây và chỉ restart khi `ProtectionEnabled = true` và lần thoát trước không phải clean exit. Exit hợp lệ bằng PIN đặt `ProtectionEnabled = false`, ghi `LastCleanShutdownAtUtc` và không tự bật lại. Windows shutdown giữ nguyên `ProtectionEnabled` và không ghi clean exit để lần đăng nhập sau phục hồi bảo vệ.
+App ghi heartbeat mỗi 5 giây (PID + process start time + timestamp); watchdog tick mỗi 5 giây. Watchdog chỉ restart khi `ProtectionEnabled = true` và lần thoát trước không phải clean exit. Exit hợp lệ bằng PIN đặt `ProtectionEnabled = false`, ghi `LastCleanShutdownAtUtc` và không tự bật lại. Windows shutdown giữ nguyên `ProtectionEnabled`; app ghi shutdown flag + stop request trong `OnSessionEnding` nên watchdog không restart trong lúc logoff, và lần đăng nhập sau `ReconcileAsync` phục hồi bảo vệ.
 
-### 5.2. Production — Service + Session Agent
+Chống trùng instance: app giữ mutex `EduFocus_SingleInstance_Mutex`; watchdog giữ mutex global (local khi chạy Debug). Hai task dùng chung một exe và bị khóa bởi mutex nên chỉ một watchdog sống. Nếu process còn sống nhưng heartbeat cũ hơn 30 giây, watchdog chỉ kill sau grace 30 giây và bỏ qua lần kiểm tra ngay sau khi máy resume từ sleep (phát hiện bằng monotonic clock). Restart budget bền vững 5 lần/10 phút, backoff 5 → 10 → 20 → 30 giây, reset sau 10 phút ổn định; vượt budget ghi `WatchdogGaveUp` một lần và dừng thử đến hết cửa sổ.
+
+`WatchdogCoordinator` đồng bộ task theo settings: onboarding chưa xong → không task; Protection ON → task logon + health và đảm bảo watchdog chạy; Protection OFF + `StartWithWindows` → chỉ task logon (watchdog khởi động app một lần rồi thoát); còn lại → xóa task. Thay đổi `StartWithWindows` trong Parent Mode được đồng bộ ngay sau khi lưu.
+
+Spike #3 đề xuất task-only 60 giây. Issue #39 chấp nhận **sai lệch có chủ đích** so với khuyến nghị đó vì acceptance yêu cầu restart ≤ 30 giây: watchdog thường trú đạt độ trễ, còn hai scheduled task (logon + mỗi phút) là lớp ngoài giám sát chính watchdog. Nếu watchdog bị kill, task health khởi động lại nó trong tối đa khoảng 60 giây; chi tiết và đánh đổi ở `docs/spikes/watchdog-evaluation.md` §7.
+
+### 5.2. Service mode — Windows Service sở hữu protection (issue #46)
+
+Installer cài `EduFocus.Service.exe` thành service `EduFocusProtection` (LocalSystem, auto-start)
+và ghi marker `HKLM\SOFTWARE\EduFocus\ServiceMode = 1`. Khi marker tồn tại, UI chạy ở **service
+mode**: service là chủ sở hữu duy nhất của Protection state, engine, heartbeat, schedule và
+retention; UI không bao giờ mở engine cục bộ thứ hai, kể cả khi service không phản hồi.
 
 ```text
-EduFocus.Agent (Windows Service, SYSTEM)
-├── policy enforcement
-├── watchdog + auto-restart
-├── hosts/firewall rules
-├── process ACL
-└── named pipe server
-
-EduFocus.App (WPF, user session)
-├── parent UI
-├── named pipe client
-└── student status
-
-EduFocus.Monitor (user session, hidden)
-├── webcam attention
-├── foreground activity
-└── gửi event qua named pipe/DB
+EduFocusProtection (EduFocus.Service.exe, LocalSystem, Session 0)
+├── ProtectionService: state machine, reconcile, rollback
+├── ProtectionEngine: hosts file + block page :80 + process watcher
+├── StudySessionHeartbeat + vòng đời session (Active/Recovery/Interrupted)
+├── ScheduleService (mỗi 30 giây) + RetentionService (một lần lúc khởi động và mỗi ngày ≥ 03:00)
+├── SQLite %ProgramData%\EduFocus + audit
+├── Log kỹ thuật %ProgramData%\EduFocus\logs (SYSTEM không có LocalAppData)
+└── Named pipe \\.\pipe\EduFocus.ServiceControl.v1
+        ▲ ACL chỉ SYSTEM + Administrators, một request/kết nối,
+        │ 4-byte LE length + JSON, request ≤ 16 KB / response ≤ 64 KB
+EduFocus.exe (WPF, user session; vẫn elevated trong bản này)
+├── Onboarding, Parent Mode, dashboard, báo cáo, settings, xuất CSV
+├── ServiceControlClient → pipe; ServiceStatusPoller mỗi 10 giây
+├── camera/attention + activity sampling (chỉ trong user session)
+└── không có ProtectionEngine, watchdog, schedule hay retention cục bộ
 ```
 
-**Lý do tách:** Windows Service chạy Session 0 **không truy cập được webcam** và không thấy foreground window của user. Vì vậy enforcement ở service, monitoring ở user session.
+**Lý do tách:** Windows Service chạy Session 0 **không truy cập được webcam** và không thấy
+foreground window của user. Vì vậy enforcement + session + schedule ở service, camera/activity ở
+user session. UI gửi lệnh qua IPC và poll trạng thái; camera/activity chỉ chạy khi UI đang mở và
+service báo phiên đang giám sát.
 
-**Không thuộc MVP** nhưng kiến trúc Ports cho phép thêm sau mà không đổi UseCase.
+**Phân định quyền sở hữu:** `ProtectionEnabled` trong DB vẫn là nguồn sự thật, nhưng chỉ service
+được đổi giá trị này trong service mode. Lệnh phụ huynh (`enable`, `disable`, `disable-for-exit`)
+yêu cầu UI đã mở Parent Mode; `ServiceControlClient` kiểm tra `IParentAuthorizer` **trước khi gửi**
+và service mở `ServiceRequestAuthorizer` chỉ cho các lệnh đó. PIN không bao giờ đi qua pipe. Lệnh
+hệ thống (`reconcile`, `enable-for-schedule`, `disable-for-schedule`) do service tự chạy theo lịch.
+Client xác minh tiến trình server đúng là `EduFocus.Service.exe` trong thư mục cài; server xác
+minh client đúng là `EduFocus.exe` trong cùng thư mục; pipe ACL chặn mọi tài khoản khác.
+
+**Fail-closed khi service dừng:** stop service (SCM, nâng cấp hoặc lỗi) **không** gỡ hosts section
+và **không** đổi `ProtectionEnabled`. Service dừng heartbeat, đóng session đang chạy với
+`Note = ServiceStopped` tại beat cuối và ghi audit `ProtectionServiceStopped`; lần khởi động kế
+tiếp reconcile lại engine và tạo phiên `Recovery` như crash thông thường. SCM cấu hình restart 3
+lần cách nhau 60 giây, reset sau 1 ngày (`util:ServiceConfig`), nên service bị kill được khôi phục
+trong khoảng 60 giây; hosts section còn nguyên trong thời gian gián đoạn.
+
+**Service mode trong UI:** bỏ qua seed/reconcile/schedule/watchdog/retention cục bộ; xóa scheduled
+task và dừng watchdog còn sót từ bản cũ; khi poll trạng thái lỗi, UI dừng camera/activity chứ không
+tự bật engine (không có hai protection owner). UI vẫn chạy elevated trong bản này vì đọc/ghi trực
+tiếp DB có ACL Administrators/SYSTEM cho onboarding, báo cáo và settings; service mode không xóa
+UAC. Chuyển toàn bộ truy cập dữ liệu qua service để UI chạy standard user là việc tiếp theo.
+
+Nếu marker không có (chạy từ source/Debug), app dùng mô hình §5.1: app + watchdog tự quản lý bảo vệ.
 
 ---
 
-## Application exit and OS shutdown
-
-`WM_CLOSE` (including Alt+F4) opens a parent PIN prompt. A valid PIN stops engine resources, completes the active session, persists Protection OFF and `LastCleanShutdownAtUtc`, then permits close. If authentication, engine stop or persistence fails, the window stays open. Windows `SessionEnding` is never cancelled: the app interrupts the active session at its last heartbeat, records a system shutdown audit event, and preserves Protection ON for startup reconciliation.
-
 ## 6. Protection Engine
-
-The application has a `ProtectionCoordinator` and an `IProtectionEnginePort` contract for state, session, audit and restart reconciliation. Until the hosts, block-page and process-watcher adapters are integrated, runtime DI uses `UnavailableProtectionEngine`: a request to turn Protection ON fails without changing SQLite state. The real adapters and engine orchestration are implemented in the later blocking issues; a test fake exercises the coordinator contract.
-
-`IHostsFilePort` owns only an atomically replaced `EduFocus` marker region. It writes active, enabled, unexpired exact Domain Block rules; an exact Allow for the same host wins. The original hosts bytes are backed up before the first write, DNS flush failure rolls the write back, and restore removes only the managed region while retaining other lines. The backup lives under the ACL-protected `%ProgramData%\EduFocus` directory. File/permission/DNS errors are surfaced so Protection cannot be persisted ON after failed enforcement.
-
-`IBlockPagePort` binds a TCP listener only to `127.0.0.1:80`. It serves a small static UTF-8 page, escapes the Host value, excludes paths and query strings, and sets a restrictive CSP with no remote assets. If port 80 cannot bind, the listener reports unavailable while block enforcement may continue through hosts; it does not change Protection state.
-
-`IProcessWatcherPort` polls interactive processes every second and matches enabled exact App rules against process name or executable path. It skips protected Windows/EduFocus processes, allow matches, and processes without a main window. It sends close, waits at most two seconds, then attempts process-tree termination. This is best-effort, may lose unsaved work, and can be bypassed by renaming/moving an executable; attempts are debounced and recorded without storing window titles or executable paths.
 
 ### 6.1. Rule matching
 
@@ -344,22 +630,59 @@ Thứ tự:
 
 `BlockRules` cho phép tồn tại đồng thời Allow và Block cùng domain; unique key gồm `Effect`.
 
+> **Triển khai (issue #19):** `BlockRuleEvaluator` là hàm thuần cho domain/app; `BlockRuleSet` là
+> snapshot bất biến dựng từ `IBlockRuleRepository.ListAsync()`. Snapshot bỏ rule `IsEnabled = false`
+> và `NotEnforced` khi tạo, kiểm tra `ExpiresAtUtc` theo `nowUtc` mỗi lần gọi, trả `Allow` cho domain
+> trong `ProtectedDomains` và so khớp `Exact` bằng `Ordinal` — không substring, không suffix.
+> `ProtectionEngine` (issue #24) nạp snapshot mỗi lần bật/reconcile nên vòng lặp matching không truy
+> vấn DB; thay đổi rule khi đang ON chưa tự áp dụng lại (cần tắt/bật hoặc khởi động lại).
+>
+> **Seed mặc định (issue #20):** `BuiltInRuleCatalog` phiên bản 1 cung cấp 21 rule (14 chatbot/AI,
+> 7 allowlist học tập). `BlockRuleSeedService` chạy sau onboarding và trước reconcile: seed theo
+> identity `(RuleType, MatchType, NormalizedValue, Effect)` nên idempotent, không ghi đè rule phụ
+> huynh, giữ trạng thái bật/tắt và hạn dùng của rule mặc định, chỉ cập nhật `Category` khi catalog
+> đổi; lần seed có thay đổi ghi audit `BlockRuleChanged` (actor System) với metadata `seedVersion`.
+> Thẻ "Danh sách chặn" trong Parent Mode dùng `IBlockRuleUseCase`, nhóm theo category và cho bật/tắt
+> rule; thao tác yêu cầu phiên Parent Mode và được audit với actor Parent.
+
 ### 6.2. Website blocking
 
 - Ghi block vào `%SystemRoot%\System32\drivers\etc\hosts` giữa marker riêng:
   ```text
   ### EDUFOCUS BLOCK START ###
   127.0.0.1 chatgpt.com
-  127.0.0.1 www.chatgpt.com
+  ::1 chatgpt.com
   ...
   ### EDUFOCUS BLOCK END ###
   ```
-- Chỉ chặn domain exact; không dùng wildcard/suffix. Thêm biến thể `www.` khi phù hợp, trừ khi có rule Allow cho chính biến thể đó.
+- Chỉ chặn domain exact; không dùng wildcard/suffix và không tự thêm biến thể `www.` — muốn chặn `www.` phải có rule riêng.
 - Không sửa các dòng khác của hosts; chỉ xóa block trong marker EduFocus.
 - Flush DNS sau khi thay đổi.
 - Self-heal: xóa block mồ côi của EduFocus khi khởi động.
-- `BlockPageServer` bind `127.0.0.1:80`, chỉ phục vụ HTTP, trả HTML tĩnh; kiểm tra Host header thuộc domain bị chặn, escape output, không tải tài nguyên ngoài. Nếu port 80 bị chiếm, protection vẫn ON nhưng block page không khả dụng.
+- `BlockPageServer` bind `127.0.0.1:80` bằng TCP listener loopback (không cần URL ACL), chỉ phục vụ GET/HEAD, trả HTML tĩnh; kiểm tra Host header thuộc domain bị chặn, escape output, không tải tài nguyên ngoài. Nếu port 80 bị chiếm, protection vẫn ON nhưng block page không khả dụng.
 - Retry khi file bị antivirus khóa; báo lỗi rõ nếu thất bại.
+
+> **Triển khai hosts file (issue #21):** `IHostsFileBlocker`/`HostsFileBlocker` sở hữu khối marker,
+> chỉ nhận domain exact (chuẩn hóa lowercase/trailing dot; từ chối scheme/path/port/wildcard/IP) và
+> ghi cặp `127.0.0.1` + `::1`. Ghi bằng temp file + replace, thử tối đa 3 lần; lỗi được phân loại
+> `NotFound`/`AccessDenied`/`Locked`/`WriteFailed` qua `HostsFileException` để use case giữ nguyên
+> trạng thái thay vì coi là OFF. Trước lần ghi đầu, bản gốc được backup vào
+> `%ProgramData%\EduFocus\hosts-backup` kèm `journal.json`; restore trả lại đúng byte gốc nếu ngoài
+> marker chưa bị sửa, ngược lại chỉ gỡ marker để giữ chỉnh sửa của người dùng. `SelfHealAsync` xử lý
+> journal sau crash và marker mồ côi. `IpconfigDnsFlusher` flush DNS best-effort (timeout 5 giây);
+> log chỉ ghi số domain, không ghi nội dung hosts. Việc nối hosts + block page + process watcher do
+> `ProtectionEngine` (issue #24) đảm nhiệm.
+>
+> **Triển khai block page (issue #22):** `IBlockPageServer`/`BlockPageServer` dùng `TcpListener`
+> loopback thay vì `HttpListener` (không cần URL ACL), mặc định cổng 80 và nhận cổng 0 cho test.
+> Chỉ GET/HEAD; Host header phải là domain exact trong danh sách, input không được echo. Trang chặn
+> escape domain, không tài nguyên ngoài, kèm `Content-Security-Policy: default-src 'none';
+> style-src 'unsafe-inline'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'`,
+> `Cache-Control: no-store`, `X-Content-Type-Options: nosniff`, `X-Frame-Options: DENY` và
+> `Referrer-Policy: no-referrer`. Cổng bận/thiếu quyền trả `BlockPageStartResult.Warning` thay vì
+> ném lỗi, để engine giữ Protection ON và UI cảnh báo. Mỗi request bị chặn phát `BlockPageHit`
+> (domain + UTC); `ProtectionEngine` (issue #24) debounce 30 giây rồi ghi `BlockedAttempt` với
+> `ObservedVia = BlockPage`. Adapter không tự ghi DB hoặc log domain.
 
 ### 6.3. App blocking (MVP)
 
@@ -370,13 +693,36 @@ Thứ tự:
 - Ghi `BlockedAttempt` với `ObservedVia = ProcessWatcher`; debounce 30 giây theo process.
 - Kill process có thể làm mất dữ liệu chưa lưu; UI phải thông báo và giới hạn này phải được ghi trong known limitations.
 
+> **Triển khai watcher (issue #23):** MVP dùng polling `Process.GetProcesses()` mỗi 2 giây qua seam
+> `IProcessController` (chưa cần WMI eventing); chỉ process có `MainWindowHandle` khác 0 mới được xử
+> lý. Tên process được chuẩn hóa (bỏ path/`.exe`, lowercase) và so khớp **exact**; allowlist thắng
+> blocklist. Watcher bỏ qua PID ≤ 4, chính EduFocus và danh sách process hệ thống quan trọng
+> (`explorer`, `lsass`, `svchost`…). `WM_CLOSE` qua `CloseMainWindow()` + chờ tối đa 2 giây; hết hạn
+> thì `Kill(entireProcessTree: true)`. Kết quả `ClosedGracefully`/`Killed`/`Failed` được phát qua
+> `ProcessBlockedObservation`; watcher tự debounce 30 giây theo tên process bằng monotonic clock và
+> `ProtectionEngine` (issue #24) debounce trung tâm trước khi ghi `BlockedAttempt`. Lỗi đóng/kill hoặc
+> handler không làm dừng vòng polling; log không ghi window title, path hay nội dung tài liệu.
+>
+> **Triển khai engine (issue #24):** `ProtectionEngine` là adapter duy nhất của
+> `IProtectionEnginePort`. Bật theo thứ tự block page → hosts → watcher (listener sẵn sàng trước khi
+> hosts trỏ domain về loopback); cổng 80 bận chỉ là cảnh báo, lỗi adapter khác rollback phần đã áp và
+> ném `ProtectionEngineException`. Tắt gỡ rule watcher/page → dừng watcher/page → restore hosts; lỗi
+> dừng trả cảnh báo nhưng lỗi restore hosts ném lỗi để Protection giữ ON. Reconcile self-heal hosts rồi
+> apply/remove; remove idempotent kể cả khi Protection OFF. Block page/watcher chỉ phát observation;
+> engine debounce 30 giây theo domain/tên app bằng monotonic clock và ghi `BlockedAttempt` qua một
+> writer channel duy nhất, gắn `SessionId` đang hoạt động và tăng `BlockedAttemptCount`; lỗi ghi DB chỉ
+> log và không làm dừng adapter. Không lưu window title/path.
+
 ### 6.4. Hạn chế đã biết
 
 - DoH/DoT, VPN, proxy có thể bypass hosts.
 - Hosts không tạo log truy cập HTTPS; không thể đếm đầy đủ blocked attempts.
 - Trang chặn chỉ hiển thị với HTTP; HTTPS thường báo lỗi kết nối/SSL.
+- UI Protection phải hiển thị cảnh báo thường trực: chặn web chỉ áp dụng HTTP/domain exact; HTTPS, DoH/VPN/proxy có thể bypass và blocked attempts HTTPS không được ghi nhận đầy đủ.
 - Browser extension (post-MVP) giải quyết URL/path và logging chính xác hơn.
 - Process watcher dựa trên tên/đường dẫn process; app đổi tên, chạy portable hoặc khởi động/thoát quá nhanh có thể không bị phát hiện.
+- Engine debounce 30 giây cho cùng domain/tên app nên nhiều lần thử liên tiếp chỉ ghi một `BlockedAttempt`; writer ghi bất đồng bộ nên attempt cuối có thể mất nếu app thoát đột ngột.
+- Thay đổi rule khi Protection ON chưa tự áp dụng lại engine; cần tắt/bật hoặc khởi động lại.
 - Học sinh có admin có thể sửa hosts/tắt app; không chống được.
 - Không dùng kernel driver/WinDivert trong MVP để tránh antivirus và rủi ro ổn định.
 
@@ -406,18 +752,45 @@ Không lưu query string/fragment trong `ActivitySamples`; chỉ lưu domain và
 
 ### 7.3. Nhận diện lớp online
 
-- Google Meet: `meet.google.com` hoặc window title chứa `Meet`.
-- Microsoft Teams: process `ms-teams`/`Teams` hoặc URL `teams.microsoft.com`.
-- Zoom: process `Zoom`.
-- Lưu `IsOnlineClass` để báo cáo riêng.
+- Google Meet: domain `meet.google.com` (kể cả subdomain); window title chứa `Google Meet` hoặc bắt đầu bằng
+  `Meet` theo sau là dấu phân cách (`-`, `–`, `—`, `|`, `:`). Title như `Meeting notes`/`Meet the team`
+  không khớp.
+- Microsoft Teams: process `ms-teams` (Teams mới) hoặc `teams` (Teams classic) sau khi chuẩn hóa path/`.exe`;
+  domain `teams.microsoft.com`. Title `Microsoft Teams` một mình không đủ vì chat cũng dùng title đó.
+- Zoom: process `zoom` sau chuẩn hóa; domain `zoom.us` (kể cả subdomain như `us02web.zoom.us`).
+- Không nhận nhầm ứng dụng chat: Discord, Slack, Messenger, Zalo và process không khớp exact (ví dụ
+  `zoominfo`) đều trả `false`.
+- Sample idle không đánh dấu `IsOnlineClass`, vì cửa sổ lớp bị bỏ quên không phải thời gian học.
+- Lưu `IsOnlineClass` để báo cáo riêng; `OnlineClassSeconds` là overlay, không cộng trùng category.
+- `MonitoringEligibility.IsEligible` quyết định `MonitoringEligibleSeconds` có tăng hay không: monitoring
+  phải bật và, khi `MonitorOnlyDuringClasses`, phải đang trong lớp online.
 
 ### 7.4. Sampling
 
 - Mỗi 10–30 giây.
-- Heartbeat session mỗi 10 giây, độc lập với sample.
+- Heartbeat session mỗi 10 giây, độc lập với sample: `StudySessionHeartbeatService` dùng `PeriodicTimer`,
+  cộng `ActiveSeconds` theo monotonic clock (tối đa 60 giây/beat), clamp wall clock lùi; lỗi DB được log và
+  thử lại ở beat sau; heartbeat dừng trước khi session kết thúc.
 - Không ghi khi idle > 5 phút (chỉ ghi một sample idle); `IdleSeconds` lưu riêng.
 - Debounce chuyển foreground 2 giây.
 - Sample cũ bị retention job xóa; báo cáo dài hạn đọc session summary.
+
+> **Triển khai issue #26:** poll 1 giây, sample 15 giây, foreground debounce 2 giây; idle ≥ 5 phút ghi một
+> sample/chuỗi. `ActivityTrackingService` đọc `IForegroundActivityPort` + `IBrowserUrlProviderPort`, phân
+> loại bằng `ActivityClassifier`/`BlockRuleSet` snapshot, phủ `IsOnlineClass`, rồi ghi bộ đếm session
+> targeted trước khi insert `ActivitySample` (lỗi insert chỉ log và thử lại ở sample sau). `StopAsync`
+> không flush sample cuối; vòng lặp dừng khi session kết thúc.
+
+> **Triển khai issue #28:** `ISystemPowerEventPort` (adapter WPF `WindowsSystemPowerEventPort`) báo
+> suspend/resume. Heartbeat chỉ cộng phần trước sleep khi resume; activity bỏ gap và reset cửa sổ sample.
+> Forward wall clock không đổi `DurationSeconds`/`ActiveSeconds` vì cả hai tính bằng monotonic clock; wall
+> clock lùi vẫn clamp timestamp. Gap không có sự kiện và vượt ngưỡng bị bỏ thay vì cộng dồn.
+
+> **Triển khai issue #33:** `ActivityTrackingService` đọc policy monitoring (`MonitoringEnabled`,
+> `MonitorOnlyDuringClasses`) một lần khi start và cộng `MonitoringEligibleSeconds` cùng transaction với
+> category/idle/online-class qua `AddActivitySecondsAsync`. Idle vẫn là thời gian monitoring được kỳ vọng
+> (trừ khi chỉ-monitor-trong-lớp); `IdleSeconds`/`OnlineClassSeconds` vẫn là overlay nên không cộng trùng.
+> Lỗi đọc settings giữ coverage là unknown thay vì chặn sampling.
 
 ---
 
@@ -440,6 +813,10 @@ Camera (640×480, 1–2 FPS)
 ```
 
 > Phase 0 (ADR-17): dùng OpenCV MSMF + YuNet ONNX để phát hiện mặt và suy ra yaw/pitch proxy; EAR/iris/gaze và `Drowsy` để Phase 5. Adapter nằm ở `EduFocus.Infrastructure.Attention`; Domain/Ports không phụ thuộc OpenCV/ONNX.
+>
+> Issue #31 tách capture khỏi inference: `OpenCvCameraPort` (issue #30) giữ camera và trả `CameraFrame`
+> BGR24 managed; `OpenCvAttentionFrameAnalyzer` chỉ nhận frame, chạy detector và tính luminance, không mở
+> thiết bị. `AttentionPipelineService` điều phối hai phần ở nhịp 1 FPS.
 
 ### 8.2. State machine
 
@@ -451,6 +828,13 @@ Camera (640×480, 1–2 FPS)
 | `Drowsy` | Mắt nhắm lặp lại > 2 giây |
 | `CameraUnavailable` | Không mở được camera / camera bận / không có quyền |
 
+> **Triển khai issue #32:** `AttentionClassifier` phân loại từng mẫu (camera, no-face, low-light, yaw/pitch,
+> eyes-closed); `AttentionStateWindow` làm mượt bằng majority trong cửa sổ 6 giây (3 mẫu tối thiểu, ≥ 60%)
+> và `AttentionStateMachine` giữ debounce 20/30/2 giây. `CameraUnavailable` bỏ qua cửa sổ, reset mẫu và mở
+> event ngay; lỗi inference (`Observation = null`) không được tính là `Absent`. Event chỉ mở khi state đổi
+> và event cũ đóng tại mốc chuyển. YuNet hiện không đo EAR nên `EyesClosed = null` và production chưa phát
+> `Drowsy`; classifier/state machine đã sẵn cho model mắt sau này.
+
 ### 8.3. Scoring
 
 ```text
@@ -461,11 +845,58 @@ AttentionPercent =
 - `MonitoredSeconds` = tổng bốn trạng thái trên (camera khả dụng).
 - Không tính `CameraUnavailable` vào mẫu số attention.
 - `MonitoringEligibleSeconds` = thời gian monitoring được kỳ vọng (toàn session hoặc chỉ lúc lớp online nếu `MonitorOnlyDuringClasses`).
+  - Quyết định bởi `MonitoringEligibility.IsEligible`: monitoring phải bật; nếu `MonitorOnlyDuringClasses` thì chỉ cộng khi `IsOnlineClass` (issue #27).
 - Báo cáo luôn hiển thị:
   - `Coverage = MonitoredSeconds / MonitoringEligibleSeconds`; null nếu eligible = 0.
+  - `UnobservedSeconds = MonitoringEligibleSeconds − MonitoredSeconds`: thời gian camera không quan sát được, gồm cả `CameraUnavailable` (issue #34).
   - `ConfidenceAvg` trung bình có trọng số theo thời lượng event, dựa trên face detection score, ánh sáng, số khuôn mặt.
 - Nếu coverage < 50%, dashboard hiển thị cảnh báo "Dữ liệu chưa đủ tin cậy".
 - Khi crash, mọi `AttentionEvent` đang mở được đóng tại `LastHeartbeatAtUtc`; khi session/monitoring dừng bình thường, đóng tại thời điểm dừng.
+
+> **Triển khai issue #32:** `SqliteStudySessionRepository.AddAttentionSecondsAsync` cộng counter và tính
+> `ConfidenceAvg` trọng số ngay trong một câu `UPDATE` (SQLite đánh giá mọi biểu thức SET trên dòng cũ), vì
+> `MonitoredSeconds`/`AttentionPercent` là stored generated column không thể ghi qua EF. `CameraUnavailable`
+> truyền confidence `null` và không vào mẫu số. Thời gian chỉ cộng khi state đã xác định; gap >
+> `MaxSampleGap` (5 giây) bị bỏ, không cộng dồn. Reconcile sau crash đóng event mở tại `LastHeartbeatAtUtc`;
+> stop bình thường đóng tại mẫu cuối.
+>
+> **Triển khai issue #33:** `SessionAttentionSummary` là view tự nhất quán cho báo cáo: `MonitoredSeconds`
+> luôn là tổng bốn counter, `AttentionPercent`/`CoveragePercent` null khi mẫu số 0, `CoveragePercent < 50`
+> trả `Warning = "Dữ liệu chưa đủ tin cậy"`. `MonitoringEligibleSeconds` do `ActivityTrackingService` cộng
+> theo sample foreground (kể cả idle nếu không giới hạn lớp), nên camera outage làm coverage giảm chứ không
+> làm attention giảm. `ProtectionService` start monitor rồi pipeline khi bật/phục hồi bảo vệ và stop
+> pipeline rồi monitor khi tắt, reconcile hoặc Windows shutdown; mọi lỗi camera/attention chỉ log và không
+> tắt bảo vệ.
+>
+> **Triển khai issue #35:** `DashboardService.GetTodayAsync` lấy ngày local từ `TimeProvider` rồi gọi
+> `IStudySessionRepository.GetDailySummaryAsync`, một aggregate `GROUP BY` trên `StudySessions` (không đọc
+> `ActivitySamples`/`AttentionEvents`). `DailyStudySummary` là projection bất biến dùng lại
+> `SessionAttentionSummary` nên coverage/attention/cảnh báo giống từng phiên; `ActiveSessionStartedAtUtc`
+> được lấy từ session `Active` duy nhất. `DashboardViewModel` polling 15 giây, bỏ qua tick chồng lấp bằng
+> `SemaphoreSlim`, giữ số liệu cũ khi query lỗi và chỉ hiện loading lần đầu; Student Mode chỉ bind thời gian
+> học/phiên đang hoạt động, Parent Mode bind toàn bộ counter nên PIN/cấu hình không xuất hiện ở cửa sổ chính.
+> MainWindow dừng polling khi ẩn xuống tray; Parent Mode tái dùng timer 1 giây và đọc dữ liệu mỗi 15 tick.
+>
+> **Triển khai issue #36:** `ReportService.GetAsync(ReportPeriod)` đọc session theo khoảng `StartLocalDate`
+> (index sẵn có), rồi sample/event theo danh sách session id với `maxCount + 1` để phát hiện truncation; không
+> quét toàn bộ sample của năm. `ReportPeriod` giới hạn 31 ngày chi tiết và tuần bắt đầu Thứ 2.
+> `StudyReport` giữ projection tổng hợp + `DailyStudySummary` mỗi ngày + timeline + top + event; session được
+> nhóm theo `StartLocalDate` đã lưu nên DST không làm session nhảy ngày, còn timeline chuyển `SampledAtUtc`
+> bằng `TimeProvider.LocalTimeZone` tại thời điểm đọc. `SqliteActivitySampleRepository.ListForReportAsync`
+> chỉ trả `AppName`/`Domain` đã làm sạch (không `WindowTitle`, URL đầy đủ, `ProcessName`) và bỏ sample fully
+> idle. Session có counter nhưng không còn sample/event bị đánh dấu detail hết retention thay vì báo lỗi.
+> `ReportViewModel` trong Parent Mode đọc theo yêu cầu (mở Parent Mode, đổi kỳ, nút Làm mới) và cap hiển thị
+> 20 session/24 khung giờ/10 event; Student Mode không bị ảnh hưởng.
+>
+> **Triển khai issue #37:** `ReportExportService` nhận chính `StudyReport` mà Parent Mode đang hiển thị nên
+> dòng `Tổng hợp`/`Ngày`/`Phiên học` khớp số liệu màn hình; sample hoạt động được đọc lại qua projection
+> privacy-safe của #36 (không window title/URL/process), event lấy từ snapshot, cả hai chuyển UTC → local bằng
+> `TimeProvider.LocalTimeZone` rồi lọc theo `ReportPeriod` nên không lọt dữ liệu ngoài khoảng đã chọn.
+> `ReportCsvWriter` phát một header 27 cột + các dòng theo `Loại bản ghi`, quote ô có dấu phẩy/nháy/xuống dòng
+> và thêm `'` trước ô bắt đầu bằng `=`, `+`, `-`, `@` để chặn formula injection. `LocalCsvExportStore` ghi
+> UTF-8 **có BOM** (Excel nhận đúng tiếng Việt), chỉ nhận tên file phẳng, không ghi đè và lưu tại
+> `%LocalAppData%\EduFocus\exports`. `ReportViewModel.ExportCommand` chỉ bật khi có phiên và không tải; kết quả
+> hiện đường dẫn file kèm nhắc bảo vệ file nhạy cảm. Không có bảng mới — export chỉ đọc dữ liệu hiện có.
 
 ### 8.4. Camera contention
 
@@ -477,6 +908,31 @@ AttentionPercent =
   - Báo cáo ghi rõ thời gian không quan sát được.
 - Post-MVP: companion phone camera hoặc virtual camera.
 
+> **Triển khai issue #30:** `CameraSessionService` coi camera bận/không quyền/mất kết nối là `Unavailable`
+> và tự mở lại sau 30 giây (backoff nhân đôi tới 5 phút); chỉ `Disconnected` hoặc 3 lỗi capture liên tiếp
+> mới đóng thiết bị. `CameraStatusViewModel` hiển thị trạng thái và hướng dẫn bật quyền Camera trong cửa
+> sổ chính/tray. Việc ghi event `CameraUnavailable` đã có ở #32; #33 cộng `MonitoringEligibleSeconds` độc
+> lập với sample attention nên thời gian camera bận làm giảm coverage và hiện cảnh báo dữ liệu chưa đủ tin cậy.
+
+> **Triển khai issue #31:** camera bận/không quyền vẫn tạo sample mỗi giây với `CameraFailure` và
+> `Observation = null`; pipeline không tự suy đoán `Absent` khi không có frame hay khi inference lỗi. #32
+> chuyển sample lỗi thành event `CameraUnavailable` ngay và bỏ qua khi inference lỗi; #33 tính coverage từ
+> mẫu số độc lập nên outage không bị tính là mất tập trung.
+
+> **Triển khai issue #34:** `CameraHealthEvaluator` + `CameraGuidance` (Domain) đánh giá ảnh kiểm tra
+> (quá tối/không thấy mặt/không có ảnh/không khả dụng) và giữ một bộ câu hướng dẫn dùng chung cho status bar
+> lẫn kết quả kiểm tra. `CameraCheckService` chạy preflight tối đa 5 khung hình trong bộ nhớ, luôn đóng
+> camera trong `finally` và từ chối khi pipeline đang chạy (`MonitoringActive`) để không tranh thiết bị;
+> kiểm tra không cần quyền quản trị. Khi mở camera thất bại nhưng thiết bị vẫn hiện diện,
+> `OpenCvCameraPort` phân loại `Busy` (Meet/Teams/Zoom đang giữ camera); Windows 11 22H2+ được phát hiện
+> qua `WindowsCameraPlatformInfo` để hướng dẫn bật Multi-App Camera. Thiết bị đã lưu không còn kết nối →
+> `StoredDeviceSubstituted`, UI nhắc chọn lại; `NotFound` dừng retry cho phiên (mở lại tường minh khi phụ
+> huynh bấm kiểm tra), `PermissionDenied` vẫn retry có backoff để tự phục hồi sau khi cấp quyền. Parent Mode
+> có thẻ Camera (trạng thái, hướng dẫn, kiểm tra, chọn camera/mặc định); onboarding chạy cùng preflight
+> trước khi lưu tùy chọn. `SessionAttentionSummary.UnobservedSeconds` bổ sung thời gian eligible nhưng
+> không quan sát được để báo cáo (#35–#38) hiển thị cạnh coverage. Camera bận/không quyền chỉ tạo
+> `CameraUnavailable` và giảm coverage, không tạo `Focused`/`Distracted` giả.
+
 ### 8.5. Privacy
 
 - Không ghi frame, không gửi network.
@@ -484,6 +940,36 @@ AttentionPercent =
 - Frame được `Dispose()` ngay sau xử lý.
 - Không nhận diện danh tính.
 - Có chỉ báo camera đang hoạt động (tray + UI).
+- `AttentionSample` chỉ chứa timestamp, trạng thái lỗi, luminance, thời gian capture/inference và các
+  trường số của khuôn mặt (confidence, yaw/pitch, số mắt); không chứa pixel, ảnh hay landmark thô. Frame
+  được dispose trước khi sample được phát cho subscriber (issue #31).
+- Issue #44 bổ sung lớp minh bạch: `PrivacyNoticeWindow` + `PrivacyNoticeRenderer` render Markdown nhúng
+  (`docs/privacy-notice.md`) và mở được từ bước Privacy/Preferences của onboarding cùng thẻ
+  **Dữ liệu & quyền riêng tư** trong Parent Mode; MSI có bước consent trước khi copy file. Nội dung
+  notice, DPIA, bản đồ dữ liệu và quy trình sự cố nằm ở
+  [privacy-notice.md](./privacy-notice.md), [dpia.md](./dpia.md) và
+  [THIRD-PARTY-NOTICES.md](../THIRD-PARTY-NOTICES.md).
+
+### 8.6. Settings, update check & xóa dữ liệu (issue #38)
+
+- `IPrivacySettingsUseCase`/`PrivacySettingsService` đọc snapshot cho thẻ **Dữ liệu & quyền riêng tư**:
+  `AppSettings`, `PrivacyDataCounts` và dung lượng file DB (`page_count * page_size`). Save gọi
+  `ParentSessionState.EnsureAuthorized`, validate trong domain, cập nhật từng nhóm setting, rồi ghi một audit
+  `SettingsChanged` với metadata `{"changed":[...]}` liệt kê nhóm thực sự đổi. Save không đổi gì thì không ghi
+  audit; giá trị ngoài biên ném `ArgumentOutOfRangeException` trước khi chạm DB.
+- Monitoring/sample interval áp dụng ngay cho phiên đang chạy qua `IActivityUseCase.RefreshSettingsAsync`;
+  ngưỡng attention được đọc khi phiên kế tiếp bắt đầu; camera đọc `CameraDeviceId` ở lần mở sau. Theme/language
+  chỉ được lưu (runtime theming/localization chưa triển khai) và UI ghi rõ. Tắt monitoring không đổi
+  `ProtectionEnabled`/`ProtectionSource` nên web/app blocking vẫn chạy.
+- Update check mặc định tắt (`AppSettings.UpdateCheckEnabled = false`, migration `AddUpdateCheckOptIn`).
+  Không còn lời gọi lúc khởi động; `UpdateViewModel.CheckForUpdateCommand` đọc setting và từ chối gọi mạng khi
+  tắt. `UpdaterService` chỉ GET GitHub Releases API với `User-Agent: EduFocus/{version}`; UI nói rõ GitHub thấy
+  IP và không có dữ liệu học tập/tên máy/nội dung màn hình được gửi.
+- `IDataDeletionUseCase`/`DataDeletionService` xác thực xác nhận trước (`XÓA`) rồi mới kiểm tra PIN qua
+  `IParentAuthUseCase.VerifyPinAsync` (dùng chung lockout). `SqlitePrivacyDataRepository` xóa theo batch 500
+  đúng thứ tự sample → event → blocked attempt → session không `Active`, không chọn dữ liệu của phiên đang
+  chạy, chạy `VACUUM` best-effort, ghi audit `DataDeleted` kèm số bản ghi và trạng thái `Incomplete` nếu có
+  bảng lỗi. Hủy giữa chừng hoặc lockout ném lỗi/trả trạng thái thất bại và không ghi audit thành công.
 
 ---
 
@@ -493,19 +979,33 @@ AttentionPercent =
 
 - PIN 6–8 chữ số.
 - PBKDF2-SHA256, 600.000 iterations, salt 16 byte.
-- Recovery code 16 ký tự ngẫu nhiên (80 bit entropy), hash tương tự PIN; chỉ hiển thị một lần, không thể xem lại.
+- Recovery code 12 ký tự, hash tương tự PIN; chỉ hiển thị một lần, không thể xem lại.
 - Constant-time compare.
 - Lockout 5 lần / 15 phút, dùng chung cho PIN và recovery code.
 - Không lưu plaintext; không log PIN/recovery code.
 
+Triển khai (issue #13): `ParentAuthUseCase` điều phối `IParentCredentialRepository`,
+`IPasswordHasher`, `IRecoveryCodeGenerator`, `IAuditLogRepository` và `ICorrelationContext`.
+`Pbkdf2PasswordHasher` dùng `Rfc2898DeriveBytes.Pbkdf2` + `CryptographicOperations.FixedTimeEquals`;
+`RecoveryCodeGenerator` dùng `RandomNumberGenerator.GetInt32`. Recovery code được chuẩn hóa
+(uppercase, bỏ dấu gạch/space) trước khi hash; setup trả mã một lần, reset xoay mã mới.
+Mỗi lần sai PIN/recovery code ghi audit `AuthenticationFailed`; lần thứ 5 ghi thêm
+`LockoutTriggered`. Không có migration mới vì schema `ParentCredentials` đã đủ cột.
+
 ### 9.2. Parent session
 
-- Parent Mode is an in-memory authorization window; it is never restored after app restart.
-- User activity renews the five-minute idle timeout. The UI returns to Student Mode and clears credential fields when it expires or the parent locks manually.
-- Recovery requires both the one-time recovery code and a new PIN. A successful recovery rotates the recovery code and returns to PIN login; it does not open Parent Mode.
-- The login, PIN change and recovery screens use masked inputs. Parent login, failed attempts and credential changes are audited without credentials or hashes.
-- Future sensitive use cases must check the active Parent Mode session before executing. There are no protection controls in the foundation UI yet.
+- `ParentSessionState` singleton:
+  - `IsAuthenticated`
+  - `LastActivityAt`
+  - `LockAsync()` sau 5 phút idle.
+- Mọi use case nhạy cảm kiểm tra `IParentAuthorizer` trước khi thực thi.
 - Thoát app luôn yêu cầu PIN, kể cả Protection OFF; Windows shutdown/logoff không chặn.
+
+Triển khai (issue #14): `ParentModeService` bọc `IParentAuthUseCase` + `ParentSessionState`;
+login thành công mở phiên, đổi PIN thành công khóa phiên, reset bằng recovery code luôn khóa phiên.
+`ParentModeWindow` hiển thị số phút lockout còn lại và tự quay về màn hình đăng nhập khi phiên
+hết hạn; đóng cửa sổ khóa phiên ngay. Session chỉ nằm trong bộ nhớ nên khởi động lại app phải
+đăng nhập lại.
 
 ### 9.3. Protection state machine
 
@@ -517,58 +1017,107 @@ ON  ──Schedule end───────────> OFF (Completed)
 ON  ──Parent override────────> OFF (until current window end)
 ```
 
-Trạng thái lưu trong `AppSettings.ProtectionEnabled`; session active lưu trong `StudySessions`. Khi phục hồi trong thời gian bảo vệ, tạo session mới với `Trigger = Recovery`, không cộng thời gian app tắt.
+Trạng thái lưu trong `AppSettings.ProtectionEnabled`; session active lưu trong `StudySessions`. Khi phục hồi trong thời gian bảo vệ, tạo session mới với `Trigger = Recovery`, không cộng thời gian app tắt. Heartbeat 10 giây xác định điểm kết thúc khi crash; beat cuối được flush trước khi session `Complete`/`Interrupt`.
+
+### 9.4. First-run onboarding & consent
+
+- `OnboardingService` điều phối UC01 và lưu từng bước: `PrivacyAcceptedAtUtc` +
+  `GuardianAcknowledgedAtUtc`, tuỳ chọn `MonitoringEnabled`/`StartWithWindows`, `ParentCredential`,
+  cuối cùng là `OnboardingCompleted`.
+- Không thể tạo PIN trước khi consent được lưu; không thể hoàn tất nếu thiếu PIN hoặc consent.
+  `AppSettings.CompleteOnboarding` cũng từ chối khi thiếu consent.
+- Wizard chỉ hiển thị mã khôi phục một lần và yêu cầu phụ huynh xác nhận đã lưu. Nếu app đóng sau
+  khi tạo PIN, lần mở sau yêu cầu PIN để xoay mã mới (`RecoveryCodeRegenerated`), vì mã cũ chỉ tồn tại
+  dưới dạng hash.
+- PIN sai khi resume dùng chung lockout 5 lần/15 phút; audit ghi `PrivacyConsentRecorded` và
+  `OnboardingCompleted`, không chứa PIN/recovery code.
 
 ---
 
 ## 10. Persistence & Privacy
 
 - DB: `%ProgramData%\EduFocus\edufocus.db`.
-- Logs: `%ProgramData%\EduFocus\logs`.
-- Technical logs are UTF-8 JSON Lines (`app-yyyyMMdd-NNN.jsonl`) with UTC timestamp, level, category and correlation ID. A correlation scope flows through async work; begin one at each top-level operation and pass its ID into any corresponding `AuditLog` record. The current foundation has only the startup scope; protection/session/block-page flows do not exist yet.
-- Each file is limited to 5 MiB; files older than 14 days are removed and the directory is capped at 112 files. Credential-like assignments, bearer tokens and full URLs in text are redacted. Structured fields for URLs, window/page titles or content, and camera/media data are omitted. Do not put sensitive data in event messages. The database `AuditLogs` table is a separate business audit trail; credential and onboarding events are written there without secrets.
-- To collect diagnostics, have an administrator copy the newest relevant `.jsonl` files from `%ProgramData%\EduFocus\logs` to a support location after checking that they contain no unexpected sensitive data. Include the incident time and correlation ID where available. Never send camera frames, page contents, full URLs, PINs, recovery codes or tokens.
-- ACL không kế thừa: chỉ Administrators/SYSTEM Full Control trên thư mục dữ liệu, DB, backup và log; app yêu cầu elevated startup. Standard-user validation script: `tools/verify-data-directory-acl.ps1`.
-- Nếu dùng chung tài khoản Windows, ACL không tách được phụ huynh và học sinh; dùng tài khoản riêng, học sinh dùng standard user.
+- Logs: UI ghi `%LOCALAPPDATA%\EduFocus\logs`; service ghi `%ProgramData%\EduFocus\logs` (xem §12).
+- ACL: Administrators/SYSTEM full; học sinh standard user không đọc/ghi. Phụ huynh thao tác qua app elevated, không cấp quyền file trực tiếp.
+- `DataDirectorySecurity` áp ACL khi initializer chạy; quyền kế thừa cho DB, WAL và `backups`; lỗi ACL ném `DataDirectorySecurityException` và không xóa dữ liệu.
+- Backup trước migration bằng `SqliteBackupStore`: verify `PRAGMA integrity_check`, tên file duy nhất, giữ tối đa 3 bản.
+- DB hỏng integrity check: giữ nguyên file, ném `SqliteDatabaseCorruptException`; `RestoreBackup` thay thế bằng backup đã verify và snapshot DB hiện tại khi có thể.
 - Timestamp lưu **UTC**; hiển thị local. Query theo ngày dùng local boundary chuyển sang UTC.
 - Session summary giữ lâu hơn sample chi tiết (365 ngày vs 30 ngày).
-- Retention job chạy mỗi ngày; xóa theo batch để tránh khóa DB lâu.
-- Backup integrity-checked trước migration schema; giữ 3 bản có tên duy nhất. Restore kiểm tra integrity trước và cách ly DB/sidecar cũ. Không migrate dữ liệu từ 1.x.
+- Retention job chạy lúc khởi động và mỗi ngày khi local time ≥ 03:00; xóa theo batch 500 để tránh khóa DB lâu, bỏ qua session `Active`/event còn mở và chạy `PRAGMA incremental_vacuum` sau mỗi pass.
+- Backup trước migration schema; giữ 3 bản gần nhất. Không migrate dữ liệu từ 1.x.
 - Không lưu ảnh/video/audio.
-- Không network call chứa dữ liệu học tập. Update check nếu có phải opt-in, chỉ gửi version/OS và có thể tắt; server vẫn thấy IP và điều này phải được thông báo.
+- Không network call chứa dữ liệu học tập. Update check mặc định tắt, chỉ chạy khi phụ huynh bật; request chỉ gồm `User-Agent: EduFocus/{version}` tới GitHub Releases API (GitHub thấy IP), không tự chạy lúc khởi động. Xóa toàn bộ dữ liệu theo yêu cầu dùng PIN + `XÓA` và chỉ xóa bản ghi chi tiết/session đã kết thúc, giữ settings, PIN, audit và phiên đang chạy.
 
 ---
 
 ## 11. Tamper resistance
 
-| Lớp | MVP | Production |
+| Lớp | Standalone (§5.1) | Service mode (§5.2) |
 |---|---|---|
 | Ẩn xuống tray khi đóng | ✅ | ✅ |
-| Thoát cần PIN | ✅ (kể cả OFF) | ✅ |
-| Auto-start | Scheduled Task | Service |
-| Watchdog | Scheduled Task restart khi Protection ON, poll 30–60 giây; không restart sau exit sạch | Windows Service |
-| Chặn kill process | Hạn chế | Process ACL + SYSTEM |
-| Chống sửa hosts | Self-heal | Service + ACL |
-| Chống uninstall | Best-effort PIN prompt | Service + policy |
-| Phát hiện đổi giờ | Ghi audit | Ghi audit + policy |
-| Chống admin | ❌ (giới hạn đã biết) | Một phần |
+| Thoát cần PIN | ✅ (kể cả OFF) | ✅ (chỉ UI; service vẫn chạy) |
+| Auto-start | Scheduled Task | Windows Service auto-start + SCM recovery |
+| Watchdog | `EduFocus.exe --watchdog` thường trú (heartbeat 5 giây, stale 30 giây) + 2 scheduled task logon/mỗi phút giám sát chính watchdog; budget 5 lần/10 phút; không restart sau exit sạch | SCM restart 3 lần, delay 60 giây, reset 1 ngày; hosts section giữ nguyên khi service dừng |
+| Chặn kill process | Hạn chế | Service chạy LocalSystem; IPC chỉ SYSTEM/Administrators và xác thực ảnh tiến trình hai chiều |
+| Chống sửa hosts | Self-heal | Service self-heal khi reconcile; hosts section giữ nguyên khi UI đóng |
+| Chống uninstall | Best-effort PIN prompt | PIN prompt cho UI; gỡ MSI vẫn cần admin và dừng service có kiểm soát |
+| Phát hiện đổi giờ | Ghi audit | Service ghi audit; lịch chạy trong service |
+| Chống admin | ❌ (giới hạn đã biết) | ❌ admin/SYSTEM vẫn tắt được service |
 
-**Tuyên bố đúng:** EduFocus chống tắt **ở mức hợp lý**, không chống được admin/SYSTEM, không chặn Windows shutdown, và scheduled-task watchdog có độ trễ 30–60 giây. Không quảng cáo "không thể tắt".
+**Tuyên bố đúng:** EduFocus chống tắt **ở mức hợp lý**, không chống được admin/SYSTEM, không chặn
+Windows shutdown. Trong service mode, protection tiếp tục khi UI đóng và sau reboot; service bị kill
+được SCM khôi phục trong khoảng 60 giây (tối đa 3 lần/ngày), và hosts section vẫn còn trong thời
+gian gián đoạn. Standalone mode (chạy từ source) vẫn dùng watchdog như mô tả ở §5.1. Không quảng cáo
+"không thể tắt".
 
 ---
 
 ## 12. Logging & Observability
 
-- `FileLogger` ghi theo ngày: `app-YYYY-MM-DD.log`.
-- Mức log: Info, Warning, Error.
-- Redact:
-  - Không log PIN/recovery code.
-  - Không log URL đầy đủ/query string; chỉ domain đã chuẩn hóa.
-  - Không log window title đầy đủ nếu có khả năng chứa nội dung nhạy cảm.
-  - Không log frame/camera data.
-- Correlation ID cho mỗi phiên và thao tác.
-- Audit log riêng trong DB cho thao tác phụ huynh.
-- Không gửi log ra ngoài.
+### Technical log
+
+- `FileLogger` triển khai `IAppLogger`; không gửi log ra network.
+- Mỗi dòng có dạng:
+  `2026-10-29T14:08:16.123Z [INFO ] [Database] [cid=6f1c...] message`
+  → timestamp **UTC**, level, category, correlation id.
+- Level: `INFO`, `WARN`, `ERROR`. Category chuẩn: `App`, `Database`, `Security`, `Protection`, `Session`, `UI`;
+  module mới thêm hằng số trong `LogCategories`.
+- Vị trí:
+  - UI: `%LOCALAPPDATA%\EduFocus\logs\edufocus-YYYYMMDD.log` (theo user, không cần admin).
+  - Service: `%PROGRAMDATA%\EduFocus\logs\edufocus-YYYYMMDD.log` (SYSTEM không có LocalAppData;
+    thư mục kế thừa ACL Administrators/SYSTEM). Cùng format, redaction và rotation 10 MB/14 ngày.
+- Xoay vòng theo ngày và dung lượng: tối đa **10 MB/file** (`edufocus-YYYYMMDD-001.log`, ...),
+  giữ **14 ngày**; file cũ bị dọn khi khởi động hoặc sang ngày mới.
+- Correlation: `ICorrelationContext` dùng `AsyncLocal`. App tạo id khi khởi động; mỗi thao tác
+  phụ huynh, phiên học, protection engine và block page request mở scope riêng. Log ngoài scope
+  ghi `cid=-`.
+- Redaction tập trung ở `LogSanitizer` trước khi ghi: PIN, password, recovery code, token/API key,
+  `Authorization`/`Bearer`, URL đầy đủ (chỉ còn domain đã chuẩn hóa) và control character;
+  message tối đa 4.096 ký tự, exception message/stack cũng được redact.
+- Không log toàn bộ window title, nội dung trang, query string, frame/camera hay dữ liệu sinh trắc học.
+  Activity/attention code chỉ ghi domain đã chuẩn hóa và app/process đã `TextSanitizer`.
+- Ghi log là best-effort: lỗi file/ổ đĩa bị nuốt, không làm app crash và không tạo dữ liệu ngoài máy.
+
+### Audit log
+
+- `AuditLogs` trong SQLite tách khỏi file log kỹ thuật; ghi qua `IAuditLogRepository`
+  (`SqliteAuditLogRepository`).
+- Chỉ thao tác phụ huynh/hệ thống quan trọng (PIN, protection, xóa dữ liệu, tamper...) mới ghi audit,
+  kèm `CorrelationId` để đối chiếu với file log.
+- Audit không chứa PIN, recovery code, token hoặc nội dung camera.
+- Retention audit 365 ngày theo [database_schema.md](./database_schema.md) §14.
+
+### Thu thập log khi báo lỗi
+
+1. Mở `%LOCALAPPDATA%\EduFocus\logs` (UI, thường là `C:\Users\<user>\AppData\Local\EduFocus\logs`)
+   và `%PROGRAMDATA%\EduFocus\logs` (service, thường là `C:\ProgramData\EduFocus\logs`; cần quyền
+   admin để đọc). Log service ghi các sự kiện reconcile, lịch, pipe và vòng đời session.
+2. Gửi các file `edufocus-*.log` quanh thời điểm lỗi (nén lại).
+3. Kèm thời điểm UTC, phiên bản EduFocus, phiên bản Windows, trạng thái service (`EduFocus.Service.exe --health`)
+   và các bước tái hiện.
+4. Không đính kèm DB, ảnh/video webcam hoặc dữ liệu học sinh; dù log đã redact, vẫn kiểm tra trước khi chia sẻ.
+
 
 ---
 
@@ -577,7 +1126,7 @@ Trạng thái lưu trong `AppSettings.ProtectionEnabled`; session active lưu tr
 `App.xaml.cs` (hoặc composition root mới) đăng ký:
 
 ```text
-AddEduFocusPersistence(databasePath)
+AddSqliteDataAccess()
 AddUseCases()
 AddInfrastructureServices()
 AddViewModels()
@@ -586,63 +1135,279 @@ AddViews()
 
 - Singleton: `ParentSessionState`, `ProtectionEngine`, `WebcamAttentionMonitor`, `WatchdogService`, logger.
 - Scoped/transient: repositories, use cases (trừ stateful).
-- `IProtectionEnginePort` được bọc bởi `LoggingProtectionEngineDecorator`.
+- `IProtectionEnginePort` dự kiến được bọc bởi `LoggingProtectionEngineDecorator` (chưa triển khai).
+
+> **Hiện trạng sau issue #16:** composition root gọi `AddInfrastructureServices()` (logger,
+> monotonic clock), đăng ký SQLite repositories
+> (`IParentCredentialRepository`, `IAppSettingsRepository`, `IStudySessionRepository`,
+> `IAuditLogRepository`), `ParentAuthUseCase`, `ParentSessionState`, `ParentModeService`,
+> `OnboardingService`, `ProtectionService`, `DatabaseBootstrapper`, `ProtectionStatusViewModel`,
+> `MainWindowViewModel`, `TrayIconService` và các cửa sổ/ViewModel. Onboarding được mở trước dashboard
+> ở mỗi lần khởi động; sau onboarding, `App` reconcile protection trước khi hiện cửa sổ chính.
+> `IProtectionEnginePort` do `ProtectionEngine` triển khai từ issue #24; decorator logging chưa có.
+
+> **Bổ sung sau issue #17:** composition root đăng ký thêm `IScheduleWindowRepository`,
+> `IScheduleUseCase`/`ScheduleService`, `ScheduleViewModel` (singleton) và `ScheduleSchedulerService`.
+> `App` chạy `ScheduleSchedulerService.EvaluateNowAsync()` sau reconcile protection và trước khi hiện
+> cửa sổ chính, sau đó gọi `Start()` để timer 30 giây hoạt động; `ServiceProvider.Dispose()` dừng timer.
+
+> **Bổ sung sau issue #18:** composition root đăng ký `IAppLifecycleUseCase`/`AppLifecycleService`,
+> `AppExitState` (singleton), `ExitViewModel`/`ExitWindow` (transient) và `Func<ExitWindow>` cho tray.
+> `MainWindow` nhận `TrayIconService` + `AppExitState` để chặn đóng cửa sổ; `App.OnSessionEnding` gọi
+> lifecycle với timeout 2 giây. Việc thoát sạch đi qua `Application.Shutdown()` sau khi được duyệt, nên
+> `ShutdownMode=OnMainWindowClose` không thể vô tình đóng app khi người dùng bấm X.
+
+> **Bổ sung sau issue #24:** `AddInfrastructureServices()` đăng ký singleton `ProtectionEngine` cho
+> `IProtectionEnginePort` kèm options debounce 30 giây; `DeferredProtectionEngine` đã bị xóa. Composition
+> root đăng ký thêm `IBlockedAttemptRepository`/`SqliteBlockedAttemptRepository`. `ProtectionEngine`
+> resolve `IHostsFileBlocker`, `IBlockPageServer`, `IProcessWatcher`, repository rule/session/attempt,
+> monotonic clock, `TimeProvider` và logger qua DI.
+
+> **Bổ sung sau issue #25:** composition root đăng ký `StudySessionHeartbeatOptions` và singleton
+> `IStudySessionHeartbeatUseCase`/`StudySessionHeartbeatService`. `ProtectionService` và
+> `AppLifecycleService` nhận heartbeat qua DI; `App.OnExit` dispose `ServiceProvider` bằng `DisposeAsync`
+> để service ghi beat cuối và dừng timer. `ProtectionEngine` dùng targeted increment cho
+> `BlockedAttemptCount` thay vì cập nhật toàn bộ entity session.
+
+> **Bổ sung sau issue #26:** composition root đăng ký singleton `ActivityTrackingOptions`,
+> `IActivitySampleRepository`/`SqliteActivitySampleRepository`, `IActivityUseCase`/`ActivityTrackingService`
+> và `IBrowserUrlProviderPort`/`UiAutomationBrowserUrlProvider`; `AddInfrastructureServices()` đăng ký
+> `IForegroundActivityPort`/`WindowsForegroundActivityPort`. `ProtectionService` và `AppLifecycleService`
+> nhận `IActivityUseCase` qua DI; enable start activity sau heartbeat, disable/exit/shutdown stop trước khi
+> kết thúc phiên, và lỗi start/stop activity chỉ được log để không chặn Protection.
+
+> **Bổ sung sau issue #28:** composition root đăng ký singleton `ISystemPowerEventPort`/
+> `WindowsSystemPowerEventPort`; `ActivityTrackingService` và `StudySessionHeartbeatService` nhận port này
+> qua constructor, subscribe khi start và unsubscribe khi stop. Adapter giữ `SystemEvents` subscription
+> trong suốt vòng đời singleton và dispose cùng `ServiceProvider`.
+
+> **Bổ sung sau issue #29:** composition root đăng ký `IRetentionRepository`/`SqliteRetentionRepository`,
+> `RetentionOptions` (batch 500, audit 365 ngày), singleton `IRetentionUseCase`/`RetentionService` và
+> `RetentionSchedulerService`. `App` gọi `RetentionSchedulerService.Start()` sau khi hiện cửa sổ chính và
+> scheduler đã chạy; service chạy pass đầu tiên trên thread pool, sau đó kiểm tra mỗi phút và chạy khi
+> local time ≥ 03:00 (mỗi ngày một lần). `ServiceProvider.Dispose()` dừng `DispatcherTimer`.
+
+> **Bổ sung sau issue #30:** composition root đăng ký `ICameraDeviceCatalog`/`WindowsCameraDeviceCatalog`,
+> `CameraPortOptions` (MSMF 640×480), `ICameraPort`/`OpenCvCameraPort`, `CameraOptions` (timeout 5 giây,
+> retry 30 giây → 5 phút, ngưỡng 3 lỗi capture), `ICameraSessionUseCase`/`CameraSessionService` và
+> `CameraStatusViewModel`; WPF tham chiếu project `EduFocus.Infrastructure.Attention`. `ServiceProvider.DisposeAsync()`
+> đóng camera qua `OpenCvCameraPort.Dispose()`. Camera chỉ được start/stop theo vòng đời phiên học ở #33.
+
+> **Bổ sung sau issue #31:** composition root đăng ký `AttentionAnalyzerOptions`,
+> `AttentionPipelineOptions.Default` (1 giây), `IAttentionFrameAnalyzer` qua `AttentionAnalyzerFactory` với
+> backend YuNet và thư mục `models/` cạnh executable, cùng singleton `IAttentionPipelineUseCase`/
+> `AttentionPipelineService`. Pipeline **không được resolve/start** ở startup: model ONNX chỉ được tải khi
+> `ProtectionService` start camera theo phiên học (#33); thiếu model hoặc lỗi camera chỉ log và không chặn
+> bảo vệ. `ServiceProvider.DisposeAsync()` dừng sampling và đóng camera nếu pipeline đã start.
+
+> **Bổ sung sau issue #32:** composition root đăng ký `IAttentionEventRepository`/
+> `SqliteAttentionEventRepository`, `AttentionThresholds`, `AttentionMonitoringOptions.Default` (cửa sổ 6
+> giây, 3 mẫu tối thiểu, majority 0.6, gap tối đa 5 giây) và singleton `IAttentionMonitorUseCase`/
+> `AttentionMonitorService`. Monitor **chưa được start** ở startup; #33 start/stop theo phiên học.
+> `ServiceProvider.DisposeAsync()` đóng event đang mở nếu monitor đã start.
+
+> **Bổ sung sau issue #33:** `ProtectionService` và `AppLifecycleService` nhận thêm
+> `IAttentionPipelineUseCase` + `IAttentionMonitorUseCase`. Khi bật bảo vệ hoặc phục hồi sau crash, monitor
+> start trước (subscribe sample) rồi pipeline; khi tắt, reconcile hoặc Windows shutdown, pipeline stop trước
+> rồi monitor drain và đóng event. Session có `MonitoringEnabled = false` không mở camera. `ActivityTrackingService`
+> nhận `IAppSettingsRepository` để cộng `MonitoringEligibleSeconds` theo policy tại thời điểm start.
+
+> **Bổ sung sau issue #46:** có hai composition root. `App.xaml.cs` chọn theo marker
+> `HKLM\SOFTWARE\EduFocus\ServiceMode` (đọc bởi `ServiceInstallationProbe`):
+> - **service mode:** `IProtectionUseCase` là `ServiceMonitoredProtectionUseCase` bọc
+>   `ServiceControlClient`; `ServiceMonitoringCoordinator` sở hữu camera/activity overlay theo
+>   status từ service; `ServiceStatusPoller` (10 giây) cập nhật tray/UI; không resolve watchdog,
+>   schedule hay retention cục bộ.
+> - **standalone:** giữ nguyên `ProtectionService` + `WatchdogAwareProtectionService` như trước.
+>
+> `ServiceComposition.Build()` là root của `EduFocus.Service`: dùng chung `AddInfrastructureServices()`
+> và SQLite repositories, nhưng thay `IProtectionEnginePort`-related monitoring ports bằng no-op
+> (`NullActivityUseCase`, `NullAttentionMonitorUseCase`, `NullAttentionPipelineUseCase` — Session 0
+> không có webcam/foreground), đăng ký `ServiceRuntime`, `ServiceControlServer` với
+> `ExpectedClientImagePath = <install>\EduFocus.exe`, và ghi log vào
+> `%ProgramData%\EduFocus\logs`.
 
 ---
 
-## 14. Cấu trúc hiện có trong repository
+## 14. Cấu trúc thư mục đích
 
 ```text
 EduFocus/
 ├── EduFocus.slnx
 ├── src/
-│   ├── EduFocus.Domain/Attention/
-│   ├── EduFocus.Domain.Tests/Attention/
-│   ├── EduFocus.Ports/DTOs/AttentionDtos.cs
-│   ├── EduFocus.Ports/Outbound/Services/
-│   ├── EduFocus.Infrastructure/Logging/
-│   ├── EduFocus.Infrastructure/Services/MonotonicClockAdapter.cs
+│   ├── EduFocus.Domain/
+│   │   ├── Entities/
+│   │   ├── Enums/
+│   │   ├── ValueObjects/
+│   │   └── EduFocus.Domain.csproj
+│   ├── EduFocus.Ports/
+│   │   ├── Inbound/
+│   │   ├── Outbound/
+│   │   ├── DTOs/
+│   │   └── EduFocus.Ports.csproj
+│   ├── EduFocus.UseCases/
+│   │   ├── Auth/
+│   │   ├── Protection/
+│   │   ├── Sessions/
+│   │   ├── Retention/
+│   │   ├── Attention/
+│   │   ├── Reports/
+│   │   └── EduFocus.UseCases.csproj
+│   ├── EduFocus.Infrastructure/
+│   │   ├── Protection/
+│   │   ├── Activity/
+│   │   ├── Attention/
+│   │   ├── Auth/
+│   │   ├── Watchdog/
+│   │   ├── ServiceControl/  (ServiceControlServer/Client, framing, process verification)
+│   │   └── EduFocus.Infrastructure.csproj
 │   ├── EduFocus.Infrastructure.Attention/
-│   └── EduFocus.WPF/ (App.xaml, MainWindow.xaml, manifests)
-├── tools/
-│   ├── AttentionPipelineSpike/
-│   ├── BlockingPipelineSpike/
-│   └── WatchdogSpike/
-├── installer/Product.wxs
+│   │   ├── Camera/          (OpenCvCameraPort, WindowsCameraDeviceCatalog, OpenCvCameraSource)
+│   │   └── ... (adapter OpenCvSharp/ONNX từ spike attention)
+│   ├── EduFocus.SqliteDataAccess/
+│   │   ├── AppDbContext.cs
+│   │   ├── Repositories/
+│   │   ├── Migrations/
+│   │   └── EduFocus.SqliteDataAccess.csproj
+│   ├── EduFocus.Service/
+│   │   ├── Hosting/         (WindowsServiceHost, ServiceHealthProbe, ServicePowerNotifier)
+│   │   ├── Runtime/         (ServiceRuntime, options, status)
+│   │   ├── Control/         (ServiceCommandHandler, ServiceRequestAuthorizer)
+│   │   ├── Composition/     (ServiceComposition)
+│   │   └── NoOps/           (Null activity/attention ports cho Session 0)
+│   ├── EduFocus.WPF/
+│   │   ├── Views/
+│   │   ├── ViewModels/
+│   │   ├── Services/       (PrivacyNoticeRenderer, logging, watchdog host, ServiceStatusPoller, ...)
+│   │   ├── PrivacyNoticeWindow.xaml(.cs)
+│   │   ├── App.xaml
+│   │   └── EduFocus.WPF.csproj
+│   ├── EduFocus.Service.Tests/
+│   └── EduFocus.Domain.Tests/
+├── installer/
+│   ├── Product.wxs
+│   ├── Build-Installer.ps1
+│   ├── Sign-Artifacts.ps1
+│   └── Get-ReleaseNotes.ps1
+├── scripts/
+│   └── Measure-Soak.ps1
+├── docs/
+│   ├── ba_document.md
+│   ├── use_cases.md
+│   ├── system_architecture.md
+│   ├── database_schema.md
+│   ├── domain-invariants.md
+│   ├── privacy-notice.md
+│   ├── dpia.md
+│   ├── installer.md
+│   ├── release-process.md
+│   ├── release-checklist.md
+│   ├── security-e2e-checklist.md
+│   ├── performance-report.md
+│   └── legacy-cleanup.md
+├── THIRD-PARTY-NOTICES.md
 └── .github/workflows/
 ```
 
-Các project trong solution chứa domain 2.0, persistence SQLite/migration, mô hình attention và dịch vụ nền dùng chung, cùng cửa sổ EduFocus 2.0. WPF khởi tạo SQLite, onboarding, Parent Mode và ProtectionCoordinator; các spike cũ trong `tools/` không được đăng ký hoặc khởi chạy. Protection chưa thể bật cho tới khi adapters blocking được tích hợp.
+> Phase 1 (issue #5) đã đổi đồng bộ tên file, namespace, solution và CI sang `EduFocus.*`.
+>
+> Issue #7 đã xóa toàn bộ code 1.x; issue #8 đã thêm domain model 2.0; issue #9 đã thêm
+> `EduFocus.SqliteDataAccess` (DbContext, configuration, converter, migration
+> `InitialEduFocusSchema`, initializer + backup); issue #10 thêm ACL thư mục dữ liệu và
+> quy trình verify/restore backup; issue #11 cập nhật CI; issue #12 thêm structured logging,
+> correlation id và audit repository; issue #13 thêm `ParentAuthUseCase`, PBKDF2 hasher,
+> recovery-code generator và credential repository; issue #14 thêm `ParentSessionState`,
+> `ParentModeService` và cửa sổ Parent Mode trong WPF (login, lockout, đổi/reset PIN);
+> issue #15 thêm consent/repository AppSettings, migration `AddOnboardingConsent`, use case
+> onboarding có resume và wizard first-run chặn dashboard đến khi hoàn tất; issue #16 thêm
+> `IProtectionEnginePort`, state machine `ProtectionService`, session repository, reconcile và tray;
+> issue #17 thêm lịch bảo vệ: `ScheduleService`, `ProtectionSource` + migration `AddProtectionSource`,
+> repository `ScheduleWindows`, scheduler 30 giây và thẻ lịch trong Parent Mode.
+> Issue #40 hoàn thiện gói cài: `installer/Build-Installer.ps1` harvest payload self-contained
+> (chặn secret/runtime data), MSI per-machine với ACL `%ProgramData%\EduFocus` qua
+> `--prepare-data-directory`, shortcut/registry dùng chung, `util:CloseApplication` khi nâng cấp,
+> hộp thoại gỡ cài đặt hỏi giữ/xóa dữ liệu và CLI `--uninstall-watchdog --delete-user-data`
+> gỡ hosts marker/listener + runtime. Chi tiết và checklist máy sạch ở
+> [installer.md](./installer.md).
+> Issue #41 hoàn thiện release CI: workflow theo tag + dry run, chạy test trước publish,
+> version từ tag được kiểm tra trên exe/MSI, ký số tùy chọn qua GitHub Secrets với
+> `signtool verify`, checksum SHA-256, release notes bắt buộc `### Breaking changes`,
+> tách job build (`contents: read`) và job công bố (`contents: write`). Chi tiết:
+> [release-process.md](./release-process.md).
+> Issue #42 bổ sung hardening bảo mật và checklist E2E: redaction PIN/recovery khi không có dấu
+> phân cách, xóa file hosts backup sau restore/self-heal (chỉ trong thư mục backup), test quét
+> DB/WAL/backup cho plaintext secret, test ACL file kế thừa, test schema không có cột ảnh/BLOB,
+> và ma trận Host header/path/query cho block page. Checklist và findings:
+> [security-e2e-checklist.md](./security-e2e-checklist.md).
+> Issue #43 thêm cổng hiệu năng/độ bền trước phát hành: `PerformanceBudgetTests` (khởi tạo DB,
+> bộ dữ liệu 30 ngày, báo cáo tháng, retention và dung lượng DB một năm), `BlockPagePerformanceTests`
+> (độ trễ loopback p95, start/stop listener lặp), `scripts/Measure-Soak.ps1` (soak 8 giờ cho
+> Idle/Protection/Attention) và [release-checklist.md](./release-checklist.md) có ký duyệt; số đo
+> thực tế và ngưỡng ở [performance-report.md](./performance-report.md).
+> Issue #44 hoàn thiện hồ sơ minh bạch trước phát hành: privacy notice tiếng Việt + trình xem trong app,
+> DPIA/bản đồ dữ liệu/quy trình sự cố, consent hai lớp (MSI + onboarding), third-party notices và
+> cập nhật README/SECURITY/installer/release checklist.
+> Issue #45 thêm URL/path rule (`Suffix`/`Contains`), native messaging host có xác thực tiến trình và
+> extension MV3. Issue #46 thêm `EduFocus.Service` (Windows Service `EduFocusProtection`), IPC
+> named-pipe có ACL + xác thực ảnh hai chiều, service mode trong WPF, marker `ServiceMode` trong MSI và
+> publish/ký `EduFocus.Service.exe` trong release workflow; chi tiết ở §5.2.
+> Inventory 1.x ở [legacy-cleanup.md](./legacy-cleanup.md), invariant domain ở
+> [domain-invariants.md](./domain-invariants.md).
 
-## 15. Dọn codebase 1.x
+---
 
-| Thành phần cũ | Trạng thái sau cleanup |
+## 15. Migration từ codebase hiện tại
+
+| Hiện tại | Đích |
 |---|---|
-| Task, profile, Pomodoro/session, analytics, settings và quote entities/use cases | Đã xóa khỏi solution; thay thế theo các phase tính năng 2.0, chưa được kích hoạt. |
-| Gemini AI, guilt-trip, friction gate và quote asset | Đã xóa khỏi product code và output. |
-| WindowsStrictEngine, LocalRedirectServer, tray, updater và auto-start cũ | Đã xóa khỏi WPF/runtime registrations; blocking/watchdog hiện chỉ có spike thủ công trong `tools/`. Onboarding có thể đăng ký Scheduled Task tự chạy nếu phụ huynh chọn bật. |
-| DbContext, EF migrations và repositories dựa trên model 1.x | Đã xóa. Persistence 2.0 tạo DB riêng, không import dữ liệu 1.x; DB có schema không nhận diện sẽ không được migrate. |
-| Icon, UI và tên Don't Be Lazy | Asset icon và các màn hình cũ đã xóa; app/MSI dùng tên EduFocus. Lịch sử Git và tài liệu ghi nhận 1.x được giữ lại. |
-| Attention classifier/camera spike | Giữ lại riêng như nền tảng spike; WPF chỉ mở/đóng camera để kiểm tra quyền trong onboarding, chưa khởi chạy analyzer hoặc thu thập mẫu. |
+| `WindowsStrictEngine.cs` | `ProtectionEngine.cs` — rule động, không hard-code whitelist |
+| `LocalRedirectServer.cs` | `BlockPageServer.cs` — trang chặn mới, không guilt-trip |
+| `_distractingDomains` | `ChatbotBlocklist.cs` + `BlockRules` trong DB |
+| `SystemSettings.cs` | `AppSettings.cs` + `ParentCredential.cs` |
+| `FocusSessionUseCase.cs` | `StudySessionUseCase.cs` + `ProtectionUseCase.cs` |
+| `FocusTaskUseCase.cs`, `ProfileUseCase.cs` | Xóa |
+| `QuoteUseCase.cs`, `GeminiAiServices.cs` | Xóa |
+| `ActiveSessionState.cs` | `ProtectionSessionState.cs` |
+| `DashboardView`, `ProfilesView`, `FocusSessionView`, `AnalyticsView` | Thay bằng view mới |
+| `AppDbContext` + migrations | Schema mới, DB mới `edufocus.db` |
+| `installer/Product.wxs` | Đổi tên/sản phẩm, thêm scheduled task/service |
+| CI release | Đổi artifact, app name, product name |
 
-Không migrate dữ liệu 1.x vì mục đích và schema sản phẩm khác. Blocklist tùy chỉnh chỉ được nhập nếu có công cụ riêng được thiết kế và kiểm thử sau này.
+**Không migrate dữ liệu 1.x** vì schema và mục đích sản phẩm khác. Nếu cần giữ blocklist tùy chỉnh, cung cấp tool import riêng (post-MVP).
+
+> **Đã thực thi ở issue #7:** các dòng "Xóa"/"Thay thế" trong bảng đã được áp dụng cho code 1.x;
+> `WindowsStrictEngine`, `LocalRedirectServer`, `GeminiAiServices`, entity/usecase/repository/
+> migration và view 1.x không còn trong build. Installer và GitHub Release đã đổi tên EduFocus.
+> Xem [legacy-cleanup.md](./legacy-cleanup.md).
 
 ---
 
 ## 16. Testing Strategy
 
-> Test tự động hiện bao gồm unit test domain/attention và integration test SQLite cho migration, UTC mapping, active-session unique index, backup, PRAGMA và từ chối đường dẫn DB 1.x.
-
-
 ### Unit tests
 - Domain: PIN validation, rule matching, attention score, session totals, schedule.
+- Privacy: `LogSanitizer` che PIN/token/URL, giữ exception đọc được; `FileLogger` format UTC/category/correlation, rotation và retention.
 - UseCases: protection enable/disable, permission checks, lockout, retention.
+- Parent auth: setup/đổi PIN, xác thực, lockout dùng chung PIN + recovery code, xoay recovery code; fake hasher/repository/audit.
 - Fake ports; không chạm Windows API.
 
 ### Integration tests
-- SQLite migration, UTC conversion, foreign keys and unique active-session index.
-- Backup-before-migration and retained DB on failure.
-- Rule persistence, session aggregation and retention deletion (future issues).
+- SQLite repositories + migrations.
+- Rule persistence, session aggregation.
+- Retention deletion.
+- Audit log ghi kèm `CorrelationId`.
+- Parent credential round-trip với PBKDF2 thật; PIN/recovery hoạt động sau khi tạo lại repository (mô phỏng restart).
+- Backup verify/rotation/restore, corrupt DB, data-directory ACL.
+- Service control: framing (độ dài, quá lớn, cắt cụt), pipe ACL/xác thực ảnh tiến trình, timeout,
+  request hỏng, lệnh trái phép; `ServiceCommandHandler` mapping lỗi và sanitize; `ServiceRuntime`
+  start/stop/reconcile/seed/audit, session `ServiceStopped`, khởi động lại trên cùng DB.
+- Service mode UI: `ServiceMonitoredProtectionUseCase` gọi service trước/sau thao tác và
+  `ServiceMonitoringCoordinator` bật/tắt attention + activity theo status, kể cả khi service lỗi.
+
+### CI
+- `.github/workflows/ci.yml` — Windows runner, .NET 10: restore, build/test Release, publish framework-dependent.
+- Cache NuGet theo csproj/tool manifest; upload TRX và bản publish làm artifact; không cache/upload DB hay secret.
+- Job **EduFocus — Build & Test** là required check khi bật branch protection cho `master`.
 
 ### Manual/system tests
 - Chặn web trên Chrome/Edge/Firefox; xác nhận HTTP block page và HTTPS báo lỗi.
@@ -686,9 +1451,10 @@ Không migrate dữ liệu 1.x vì mục đích và schema sản phẩm khác. B
 | ADR-12 | Không dùng kernel driver/WinDivert | Tránh antivirus, BSOD, signing |
 | ADR-13 | BlockedAttempt là best-effort | Hosts không cung cấp log HTTPS; không được quảng cáo số liệu tuyệt đối |
 | ADR-14 | URL/path rules chỉ enforce khi có extension | Hosts không thể match path; tránh UI hứa hẹn sai |
-| ADR-15 | Không có secret phụ trợ | Chỉ lưu hash PIN/recovery; giảm bề mặt tấn công và phức tạp |
+| ADR-15 | Không có secret người dùng phụ trợ | Chỉ lưu hash PIN/recovery; ngoại lệ duy nhất là khóa mã hóa DB do hệ thống sinh và bảo vệ bằng DPAPI (ADR-18) |
 | ADR-16 | Thoát app luôn cần PIN | Nhất quán bảo vệ; Windows shutdown vẫn được phép |
 | ADR-17 | (Đề xuất) OpenCV MSMF + ONNX Runtime + YuNet cho attention Phase 0; Haar chỉ baseline; Drowsy/gaze ở Phase 5 | Face 99,2%/30 phút, CPU 0,23% máy, RAM 184 MB; Haar bỏ sót nhiều; giữ local-first |
+| ADR-18 | Mã hóa DB bằng SQLCipher, khóa 32 byte DPAPI `LocalMachine` + raw key `x'…'` | Bảo vệ dữ liệu trẻ em khi file bị sao chép; raw key tránh PBKDF2 ~525 ms mỗi kết nối; giữ fail-closed khi mất khóa, chấp nhận key gắn thiết bị (issue #47) |
 
 ---
 
@@ -699,7 +1465,7 @@ Không migrate dữ liệu 1.x vì mục đích và schema sản phẩm khác. B
 | Camera không chia sẻ được | Mất dữ liệu attention khi Meet/Teams | Multi-App Camera; fallback; companion app |
 | Hosts bị bypass | Chặn không hiệu quả | Extension/firewall/DNS policy |
 | Hosts không log được HTTPS | Số blocked attempts thấp/sai | Ghi rõ best-effort; extension post-MVP; không dùng làm KPI |
-| SQLite bị học sinh đọc | Lộ báo cáo | ACL; mã hóa DB post-MVP nếu cần |
+| SQLite bị học sinh đọc | Lộ báo cáo | ACL + mã hóa SQLCipher; key DPAPI gắn thiết bị; admin/SYSTEM vẫn giải mã được (giới hạn đã biết) |
 | App bị kill | Mất protection | Watchdog; service; ghi rõ độ trễ |
 | Quá nhiều sample | DB phình | Aggregate + retention |
 | ONNX model nặng | CPU/RAM cao | Model nhẹ, 1–2 FPS, thread limit |
@@ -713,5 +1479,6 @@ Không migrate dữ liệu 1.x vì mục đích và schema sản phẩm khác. B
 - [BA Document](./ba_document.md)
 - [Use Cases](./use_cases.md)
 - [Database Schema](./database_schema.md)
+- [Domain Invariants](./domain-invariants.md)
 - [Security Policy](../SECURITY.md)
 - [Contributing](../CONTRIBUTING.md)

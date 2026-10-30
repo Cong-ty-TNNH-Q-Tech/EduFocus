@@ -3,7 +3,7 @@ using OpenCvSharp;
 
 namespace EduFocus.Infrastructure.Attention.Camera;
 
-internal sealed record CameraOpenResult(bool Success, double ElapsedMs, string Api, string? Error);
+internal sealed record OpenCvOpenResult(bool Success, double ElapsedMs, string Api, string? Error);
 
 internal sealed class OpenCvCameraSource : IDisposable
 {
@@ -23,7 +23,7 @@ internal sealed class OpenCvCameraSource : IDisposable
 
     public bool IsOpen => _capture?.IsOpened() == true;
 
-    public CameraOpenResult Open()
+    public OpenCvOpenResult Open()
     {
         Dispose();
         var sw = Stopwatch.StartNew();
@@ -43,18 +43,18 @@ internal sealed class OpenCvCameraSource : IDisposable
             if (!capture.IsOpened())
             {
                 capture.Dispose();
-                return new CameraOpenResult(false, sw.Elapsed.TotalMilliseconds, _captureApi, "camera-open-failed");
+                return new OpenCvOpenResult(false, sw.Elapsed.TotalMilliseconds, _captureApi, "camera-open-failed");
             }
 
             _capture = capture;
             capture = null;
-            return new CameraOpenResult(true, sw.Elapsed.TotalMilliseconds, _captureApi, null);
+            return new OpenCvOpenResult(true, sw.Elapsed.TotalMilliseconds, _captureApi, null);
         }
         catch (Exception ex)
         {
             sw.Stop();
             capture?.Dispose();
-            return new CameraOpenResult(false, sw.Elapsed.TotalMilliseconds, _captureApi, $"{ex.GetType().Name}: {ex.Message}");
+            return new OpenCvOpenResult(false, sw.Elapsed.TotalMilliseconds, _captureApi, $"{ex.GetType().Name}: {ex.Message}");
         }
     }
 

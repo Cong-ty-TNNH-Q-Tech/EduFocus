@@ -1,0 +1,588 @@
+{
+  "StartedAt": "2026-10-29T19:59:36.6137469+07:00",
+  "FinishedAt": "2026-10-29T20:01:06.2586617+07:00",
+  "ConcludedAt": "2026-10-29T20:01:06.2587718+07:00",
+  "OsDescription": "Microsoft Windows 10.0.19045",
+  "FrameworkDescription": ".NET 9.0.15",
+  "Elevated": false,
+  "UserName": "Admin",
+  "WorkRoot": "C:\\Users\\Admin\\AppData\\Local\\Temp\\edufocus-watchdog-spike\\20261029-195936",
+  "Config": {
+    "PollMs": 200,
+    "RestartBaseMs": 1000,
+    "RestartMaxMs": 4000,
+    "MaxRestarts": 5,
+    "ResetSeconds": 600,
+    "StaleSeconds": 3,
+    "TaskIntervalSeconds": 60
+  },
+  "Phases": [
+    {
+      "Name": "restart \u002B duplicate",
+      "Passed": true,
+      "Summary": "Watchdog restart target sau kill, ch\u1EB7n tr\u00F9ng instance v\u00E0 backoff t\u0103ng d\u1EA7n.",
+      "Metrics": {
+        "duplicate watchdog exit": "2",
+        "duplicate target exit": "4",
+        "original target v\u1EABn s\u1ED1ng": "True",
+        "kill 1 \u2192 restart": "1356 ms",
+        "kill 2 \u2192 restart": "2276 ms",
+        "kill 3 \u2192 restart": "4312 ms",
+        "restart events": "3",
+        "unexpected exits": "3",
+        "duplicate watchdog events": "1",
+        "duplicate target events": "1",
+        "target d\u1EEBng sau stop": "True",
+        "backoff t\u0103ng d\u1EA7n": "True",
+        "watchdog exit": "0"
+      },
+      "Audit": [
+        {
+          "TimestampUtc": "2026-10-29T12:59:36.7641519Z",
+          "Event": "watchdog_start",
+          "Pid": 26584,
+          "Attempt": null,
+          "DelayMs": null,
+          "Detail": "C:\\Users\\Admin\\AppData\\Local\\Temp\\edufocus-watchdog-spike\\20261029-195936\\01-restarts"
+        },
+        {
+          "TimestampUtc": "2026-10-29T12:59:36.7938464Z",
+          "Event": "target_start",
+          "Pid": 8344,
+          "Attempt": null,
+          "DelayMs": null,
+          "Detail": null
+        },
+        {
+          "TimestampUtc": "2026-10-29T12:59:36.895011Z",
+          "Event": "target_process_start",
+          "Pid": 8344,
+          "Attempt": null,
+          "DelayMs": null,
+          "Detail": null
+        },
+        {
+          "TimestampUtc": "2026-10-29T12:59:37.0810013Z",
+          "Event": "watchdog_duplicate",
+          "Pid": 16800,
+          "Attempt": null,
+          "DelayMs": null,
+          "Detail": null
+        },
+        {
+          "TimestampUtc": "2026-10-29T12:59:37.1958299Z",
+          "Event": "target_duplicate",
+          "Pid": 17636,
+          "Attempt": null,
+          "DelayMs": null,
+          "Detail": "M\u1ED9t target kh\u00E1c \u0111ang ch\u1EA1y trong c\u00F9ng work dir."
+        },
+        {
+          "TimestampUtc": "2026-10-29T12:59:37.4335433Z",
+          "Event": "target_exit_unexpected",
+          "Pid": 8344,
+          "Attempt": 1,
+          "DelayMs": null,
+          "Detail": null
+        },
+        {
+          "TimestampUtc": "2026-10-29T12:59:38.456607Z",
+          "Event": "restart",
+          "Pid": 8612,
+          "Attempt": 1,
+          "DelayMs": 1000,
+          "Detail": null
+        },
+        {
+          "TimestampUtc": "2026-10-29T12:59:38.5606264Z",
+          "Event": "target_process_start",
+          "Pid": 8612,
+          "Attempt": null,
+          "DelayMs": null,
+          "Detail": null
+        },
+        {
+          "TimestampUtc": "2026-10-29T12:59:38.6726614Z",
+          "Event": "target_exit_unexpected",
+          "Pid": 8612,
+          "Attempt": 2,
+          "DelayMs": null,
+          "Detail": null
+        },
+        {
+          "TimestampUtc": "2026-10-29T12:59:40.6959844Z",
+          "Event": "restart",
+          "Pid": 25684,
+          "Attempt": 2,
+          "DelayMs": 2000,
+          "Detail": null
+        },
+        {
+          "TimestampUtc": "2026-10-29T12:59:40.8026649Z",
+          "Event": "target_process_start",
+          "Pid": 25684,
+          "Attempt": null,
+          "DelayMs": null,
+          "Detail": null
+        },
+        {
+          "TimestampUtc": "2026-10-29T12:59:40.8974408Z",
+          "Event": "target_exit_unexpected",
+          "Pid": 25684,
+          "Attempt": 3,
+          "DelayMs": null,
+          "Detail": null
+        },
+        {
+          "TimestampUtc": "2026-10-29T12:59:44.9655833Z",
+          "Event": "restart",
+          "Pid": 24176,
+          "Attempt": 3,
+          "DelayMs": 4000,
+          "Detail": null
+        },
+        {
+          "TimestampUtc": "2026-10-29T12:59:45.0702479Z",
+          "Event": "target_process_start",
+          "Pid": 24176,
+          "Attempt": null,
+          "DelayMs": null,
+          "Detail": null
+        },
+        {
+          "TimestampUtc": "2026-10-29T12:59:45.7083529Z",
+          "Event": "target_clean_exit",
+          "Pid": 24176,
+          "Attempt": null,
+          "DelayMs": null,
+          "Detail": null
+        },
+        {
+          "TimestampUtc": "2026-10-29T12:59:45.7142512Z",
+          "Event": "target_exit",
+          "Pid": 24176,
+          "Attempt": null,
+          "DelayMs": null,
+          "Detail": null
+        },
+        {
+          "TimestampUtc": "2026-10-29T12:59:45.7319568Z",
+          "Event": "watchdog_stopped",
+          "Pid": 26584,
+          "Attempt": null,
+          "DelayMs": null,
+          "Detail": "stop-watchdog.flag"
+        }
+      ],
+      "WorkDir": "C:\\Users\\Admin\\AppData\\Local\\Temp\\edufocus-watchdog-spike\\20261029-195936\\01-restarts"
+    },
+    {
+      "Name": "hang detection",
+      "Passed": true,
+      "Summary": "Watchdog ph\u00E1t hi\u1EC7n heartbeat c\u0169, kill target treo v\u00E0 kh\u1EDFi \u0111\u1ED9ng l\u1EA1i.",
+      "Metrics": {
+        "freeze \u2192 target m\u1EDBi": "4254 ms",
+        "hang events": "1",
+        "restart events": "1"
+      },
+      "Audit": [
+        {
+          "TimestampUtc": "2026-10-29T12:59:46.390509Z",
+          "Event": "watchdog_start",
+          "Pid": 20340,
+          "Attempt": null,
+          "DelayMs": null,
+          "Detail": "C:\\Users\\Admin\\AppData\\Local\\Temp\\edufocus-watchdog-spike\\20261029-195936\\02-hang"
+        },
+        {
+          "TimestampUtc": "2026-10-29T12:59:46.421334Z",
+          "Event": "target_start",
+          "Pid": 23040,
+          "Attempt": null,
+          "DelayMs": null,
+          "Detail": null
+        },
+        {
+          "TimestampUtc": "2026-10-29T12:59:46.5385451Z",
+          "Event": "target_process_start",
+          "Pid": 23040,
+          "Attempt": null,
+          "DelayMs": null,
+          "Detail": null
+        },
+        {
+          "TimestampUtc": "2026-10-29T12:59:46.8597697Z",
+          "Event": "target_frozen",
+          "Pid": 23040,
+          "Attempt": null,
+          "DelayMs": null,
+          "Detail": "Heartbeat d\u1EEBng nh\u01B0ng process v\u1EABn s\u1ED1ng."
+        },
+        {
+          "TimestampUtc": "2026-10-29T12:59:49.6226959Z",
+          "Event": "hang_detected",
+          "Pid": 23040,
+          "Attempt": null,
+          "DelayMs": null,
+          "Detail": "Heartbeat c\u0169 h\u01A1n 3 gi\u00E2y."
+        },
+        {
+          "TimestampUtc": "2026-10-29T12:59:50.6559179Z",
+          "Event": "restart",
+          "Pid": 24804,
+          "Attempt": 1,
+          "DelayMs": 1000,
+          "Detail": null
+        },
+        {
+          "TimestampUtc": "2026-10-29T12:59:50.7624883Z",
+          "Event": "target_process_start",
+          "Pid": 24804,
+          "Attempt": null,
+          "DelayMs": null,
+          "Detail": null
+        },
+        {
+          "TimestampUtc": "2026-10-29T12:59:51.0931141Z",
+          "Event": "target_clean_exit",
+          "Pid": 24804,
+          "Attempt": null,
+          "DelayMs": null,
+          "Detail": null
+        },
+        {
+          "TimestampUtc": "2026-10-29T12:59:51.1013423Z",
+          "Event": "target_exit",
+          "Pid": 24804,
+          "Attempt": null,
+          "DelayMs": null,
+          "Detail": null
+        },
+        {
+          "TimestampUtc": "2026-10-29T12:59:51.1935888Z",
+          "Event": "watchdog_stopped",
+          "Pid": 20340,
+          "Attempt": null,
+          "DelayMs": null,
+          "Detail": "stop-watchdog.flag"
+        }
+      ],
+      "WorkDir": "C:\\Users\\Admin\\AppData\\Local\\Temp\\edufocus-watchdog-spike\\20261029-195936\\02-hang"
+    },
+    {
+      "Name": "clean exit",
+      "Passed": true,
+      "Summary": "Target tho\u00E1t \u00EAm; watchdog d\u1EEBng v\u00E0 kh\u00F4ng restart.",
+      "Metrics": {
+        "watchdog exit": "0",
+        "stop \u2192 watchdog exit": "446 ms",
+        "target c\u00F2n s\u1ED1ng": "False",
+        "clean exit events": "1",
+        "restart events": "0",
+        "clean-exit.flag": "True"
+      },
+      "Audit": [
+        {
+          "TimestampUtc": "2026-10-29T12:59:51.4230101Z",
+          "Event": "watchdog_start",
+          "Pid": 24760,
+          "Attempt": null,
+          "DelayMs": null,
+          "Detail": "C:\\Users\\Admin\\AppData\\Local\\Temp\\edufocus-watchdog-spike\\20261029-195936\\03-clean-exit"
+        },
+        {
+          "TimestampUtc": "2026-10-29T12:59:51.4546727Z",
+          "Event": "target_start",
+          "Pid": 16536,
+          "Attempt": null,
+          "DelayMs": null,
+          "Detail": null
+        },
+        {
+          "TimestampUtc": "2026-10-29T12:59:51.5560525Z",
+          "Event": "target_process_start",
+          "Pid": 16536,
+          "Attempt": null,
+          "DelayMs": null,
+          "Detail": null
+        },
+        {
+          "TimestampUtc": "2026-10-29T12:59:51.8727086Z",
+          "Event": "target_clean_exit",
+          "Pid": 16536,
+          "Attempt": null,
+          "DelayMs": null,
+          "Detail": null
+        },
+        {
+          "TimestampUtc": "2026-10-29T12:59:51.8795655Z",
+          "Event": "target_exit",
+          "Pid": 16536,
+          "Attempt": null,
+          "DelayMs": null,
+          "Detail": null
+        },
+        {
+          "TimestampUtc": "2026-10-29T12:59:52.0936812Z",
+          "Event": "clean_exit_detected",
+          "Pid": 24760,
+          "Attempt": null,
+          "DelayMs": null,
+          "Detail": null
+        }
+      ],
+      "WorkDir": "C:\\Users\\Admin\\AppData\\Local\\Temp\\edufocus-watchdog-spike\\20261029-195936\\03-clean-exit"
+    },
+    {
+      "Name": "uninstall stop",
+      "Passed": true,
+      "Summary": "D\u1EEBng watchdog tr\u01B0\u1EDBc backoff: kh\u00F4ng restart, exit s\u1EA1ch.",
+      "Metrics": {
+        "watchdog exit": "0",
+        "target m\u1EDBi sau stop": "False",
+        "restart events": "0",
+        "stop events": "1"
+      },
+      "Audit": [
+        {
+          "TimestampUtc": "2026-10-29T12:59:53.7177522Z",
+          "Event": "watchdog_start",
+          "Pid": 22704,
+          "Attempt": null,
+          "DelayMs": null,
+          "Detail": "C:\\Users\\Admin\\AppData\\Local\\Temp\\edufocus-watchdog-spike\\20261029-195936\\04-uninstall"
+        },
+        {
+          "TimestampUtc": "2026-10-29T12:59:53.7462729Z",
+          "Event": "target_start",
+          "Pid": 8572,
+          "Attempt": null,
+          "DelayMs": null,
+          "Detail": null
+        },
+        {
+          "TimestampUtc": "2026-10-29T12:59:53.8472091Z",
+          "Event": "target_process_start",
+          "Pid": 8572,
+          "Attempt": null,
+          "DelayMs": null,
+          "Detail": null
+        },
+        {
+          "TimestampUtc": "2026-10-29T12:59:54.1739302Z",
+          "Event": "watchdog_stopped",
+          "Pid": 22704,
+          "Attempt": null,
+          "DelayMs": null,
+          "Detail": "stop-watchdog.flag"
+        }
+      ],
+      "WorkDir": "C:\\Users\\Admin\\AppData\\Local\\Temp\\edufocus-watchdog-spike\\20261029-195936\\04-uninstall"
+    },
+    {
+      "Name": "restart budget",
+      "Passed": true,
+      "Summary": "Sau 2 restart trong c\u1EEDa s\u1ED5, watchdog b\u1ECF cu\u1ED9c v\u00E0 kh\u00F4ng restart v\u00F4 h\u1EA1n.",
+      "Metrics": {
+        "kill 1 \u2192 restart": "783 ms",
+        "kill 2 \u2192 restart": "1255 ms",
+        "watchdog exit": "3",
+        "give up events": "1",
+        "target sau give up": "False",
+        "restart cu\u1ED1i": "1255 ms"
+      },
+      "Audit": [
+        {
+          "TimestampUtc": "2026-10-29T12:59:56.7940272Z",
+          "Event": "watchdog_start",
+          "Pid": 23312,
+          "Attempt": null,
+          "DelayMs": null,
+          "Detail": "C:\\Users\\Admin\\AppData\\Local\\Temp\\edufocus-watchdog-spike\\20261029-195936\\05-budget"
+        },
+        {
+          "TimestampUtc": "2026-10-29T12:59:56.8236088Z",
+          "Event": "target_start",
+          "Pid": 24696,
+          "Attempt": null,
+          "DelayMs": null,
+          "Detail": null
+        },
+        {
+          "TimestampUtc": "2026-10-29T12:59:56.925103Z",
+          "Event": "target_process_start",
+          "Pid": 24696,
+          "Attempt": null,
+          "DelayMs": null,
+          "Detail": null
+        },
+        {
+          "TimestampUtc": "2026-10-29T12:59:57.0434823Z",
+          "Event": "target_exit_unexpected",
+          "Pid": 24696,
+          "Attempt": 1,
+          "DelayMs": null,
+          "Detail": null
+        },
+        {
+          "TimestampUtc": "2026-10-29T12:59:57.5963871Z",
+          "Event": "restart",
+          "Pid": 27340,
+          "Attempt": 1,
+          "DelayMs": 500,
+          "Detail": null
+        },
+        {
+          "TimestampUtc": "2026-10-29T12:59:57.7041091Z",
+          "Event": "target_process_start",
+          "Pid": 27340,
+          "Attempt": null,
+          "DelayMs": null,
+          "Detail": null
+        },
+        {
+          "TimestampUtc": "2026-10-29T12:59:57.8055316Z",
+          "Event": "target_exit_unexpected",
+          "Pid": 27340,
+          "Attempt": 2,
+          "DelayMs": null,
+          "Detail": null
+        },
+        {
+          "TimestampUtc": "2026-10-29T12:59:58.8356602Z",
+          "Event": "restart",
+          "Pid": 23504,
+          "Attempt": 2,
+          "DelayMs": 1000,
+          "Detail": null
+        },
+        {
+          "TimestampUtc": "2026-10-29T12:59:58.9395237Z",
+          "Event": "target_process_start",
+          "Pid": 23504,
+          "Attempt": null,
+          "DelayMs": null,
+          "Detail": null
+        },
+        {
+          "TimestampUtc": "2026-10-29T12:59:59.2722412Z",
+          "Event": "target_exit_unexpected",
+          "Pid": 23504,
+          "Attempt": 3,
+          "DelayMs": null,
+          "Detail": null
+        },
+        {
+          "TimestampUtc": "2026-10-29T12:59:59.2726697Z",
+          "Event": "give_up",
+          "Pid": 23312,
+          "Attempt": 2,
+          "DelayMs": null,
+          "Detail": "\u0110\u00E3 restart 2 l\u1EA7n trong c\u1EEDa s\u1ED5 600 gi\u00E2y."
+        }
+      ],
+      "WorkDir": "C:\\Users\\Admin\\AppData\\Local\\Temp\\edufocus-watchdog-spike\\20261029-195936\\05-budget"
+    },
+    {
+      "Name": "watchdog kill (bypass)",
+      "Passed": true,
+      "Summary": "Kill watchdog: target v\u1EABn ch\u1EA1y nh\u01B0ng kh\u00F4ng c\u00F3 g\u00EC restart target sau \u0111\u00F3 \u2014 c\u1EA7n l\u1EDBp ngo\u00E0i (scheduled task/service).",
+      "Metrics": {
+        "watchdog killed": "True",
+        "target s\u1ED1ng sau khi watchdog ch\u1EBFt": "True",
+        "restart sau khi c\u1EA3 hai ch\u1EBFt": "False",
+        "restart events": "0"
+      },
+      "Audit": [
+        {
+          "TimestampUtc": "2026-10-29T13:00:00.9148385Z",
+          "Event": "watchdog_start",
+          "Pid": 1392,
+          "Attempt": null,
+          "DelayMs": null,
+          "Detail": "C:\\Users\\Admin\\AppData\\Local\\Temp\\edufocus-watchdog-spike\\20261029-195936\\06-watchdog-kill"
+        },
+        {
+          "TimestampUtc": "2026-10-29T13:00:00.9439989Z",
+          "Event": "target_start",
+          "Pid": 25660,
+          "Attempt": null,
+          "DelayMs": null,
+          "Detail": null
+        },
+        {
+          "TimestampUtc": "2026-10-29T13:00:01.0453304Z",
+          "Event": "target_process_start",
+          "Pid": 25660,
+          "Attempt": null,
+          "DelayMs": null,
+          "Detail": null
+        }
+      ],
+      "WorkDir": "C:\\Users\\Admin\\AppData\\Local\\Temp\\edufocus-watchdog-spike\\20261029-195936\\06-watchdog-kill"
+    },
+    {
+      "Name": "scheduled task (simulation)",
+      "Passed": true,
+      "Summary": "M\u00F4 ph\u1ECFng chu k\u1EF3 scheduled task: ph\u00E1t hi\u1EC7n target ch\u1EBFt v\u00E0 restart trong m\u1ED9t chu k\u1EF3.",
+      "Metrics": {
+        "registered task": "false (m\u00F4 ph\u1ECFng)",
+        "kill \u2192 task restart": "60169 ms",
+        "task restart events": "2",
+        "interval": "60 gi\u00E2y"
+      },
+      "Audit": [
+        {
+          "TimestampUtc": "2026-10-29T13:00:05.7437026Z",
+          "Event": "task_loop_start",
+          "Pid": 26904,
+          "Attempt": null,
+          "DelayMs": null,
+          "Detail": "M\u00F4 ph\u1ECFng scheduled task m\u1ED7i 60 gi\u00E2y."
+        },
+        {
+          "TimestampUtc": "2026-10-29T13:00:05.8053733Z",
+          "Event": "task_restart",
+          "Pid": 17276,
+          "Attempt": null,
+          "DelayMs": null,
+          "Detail": "Scheduled task ph\u00E1t hi\u1EC7n target kh\u00F4ng ch\u1EA1y."
+        },
+        {
+          "TimestampUtc": "2026-10-29T13:00:05.9034929Z",
+          "Event": "target_process_start",
+          "Pid": 17276,
+          "Attempt": null,
+          "DelayMs": null,
+          "Detail": null
+        },
+        {
+          "TimestampUtc": "2026-10-29T13:01:05.9740851Z",
+          "Event": "task_restart",
+          "Pid": 25624,
+          "Attempt": null,
+          "DelayMs": null,
+          "Detail": "Scheduled task ph\u00E1t hi\u1EC7n target kh\u00F4ng ch\u1EA1y."
+        },
+        {
+          "TimestampUtc": "2026-10-29T13:01:06.0787409Z",
+          "Event": "target_process_start",
+          "Pid": 25624,
+          "Attempt": null,
+          "DelayMs": null,
+          "Detail": null
+        },
+        {
+          "TimestampUtc": "2026-10-29T13:01:06.2419016Z",
+          "Event": "task_loop_stopped",
+          "Pid": 26904,
+          "Attempt": null,
+          "DelayMs": null,
+          "Detail": null
+        }
+      ],
+      "WorkDir": "C:\\Users\\Admin\\AppData\\Local\\Temp\\edufocus-watchdog-spike\\20261029-195936\\07-task-simulation"
+    }
+  ],
+  "AllPassed": true
+}

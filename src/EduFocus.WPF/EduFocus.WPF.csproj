@@ -1,34 +1,63 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
-    <RootNamespace>EduFocus.WPF</RootNamespace>
     <OutputType>WinExe</OutputType>
     <TargetFramework>net10.0-windows</TargetFramework>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <UseWPF>true</UseWPF>
+    <UseWindowsForms>true</UseWindowsForms>
+    <!-- WFO0003: the manifest DPI settings are for WPF; WinForms is only used for the tray icon. -->
+    <NoWarn>$(NoWarn);WFO0003</NoWarn>
     <!-- Version is injected by CI from git tag, e.g. 1.2.3 -->
     <Version>1.0.0</Version>
     <AssemblyVersion>$(Version)</AssemblyVersion>
     <FileVersion>$(Version)</FileVersion>
     <AssemblyName>EduFocus</AssemblyName>
     <Product>EduFocus</Product>
-    <Copyright>Copyright © 2025 ThanhTrunggDEV</Copyright>
+    <Copyright>Copyright © 2026 ThanhTrunggDEV</Copyright>
     <!-- Debug: asInvoker → dotnet run works without elevation -->
-    <!-- Both configurations run without elevation; foundation contains no privileged action. -->
+    <!-- Release: requireAdministrator → UAC auto-prompt on launch -->
     <ApplicationManifest Condition="'$(Configuration)' == 'Debug'">app.debug.manifest</ApplicationManifest>
     <ApplicationManifest Condition="'$(Configuration)' != 'Debug'">app.manifest</ApplicationManifest>
   </PropertyGroup>
 
+  <!-- WinForms adds implicit usings that collide with WPF (Application, MessageBox, ...). -->
   <ItemGroup>
-    <PackageReference Include="Microsoft.Extensions.DependencyInjection" Version="10.0.13" />
+    <Using Remove="System.Drawing" />
+    <Using Remove="System.Windows.Forms" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="CommunityToolkit.Mvvm" Version="8.4.2" />
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection" Version="10.0.14" />
   </ItemGroup>
 
   <ItemGroup>
     <ProjectReference Include="..\EduFocus.Ports\EduFocus.Ports.csproj" />
     <ProjectReference Include="..\EduFocus.Infrastructure\EduFocus.Infrastructure.csproj" />
     <ProjectReference Include="..\EduFocus.Infrastructure.Attention\EduFocus.Infrastructure.Attention.csproj" />
-    <ProjectReference Include="..\EduFocus.Infrastructure.Persistence\EduFocus.Infrastructure.Persistence.csproj" />
+    <ProjectReference Include="..\EduFocus.UseCases\EduFocus.UseCases.csproj" />
+    <ProjectReference Include="..\EduFocus.SqliteDataAccess\EduFocus.SqliteDataAccess.csproj" />
+  </ItemGroup>
+
+  <!-- Privacy notice and license texts are embedded for the in-app viewer and
+       copied next to the executable so the installer ships them unchanged. -->
+  <ItemGroup>
+    <EmbeddedResource Include="..\..\docs\privacy-notice.md"
+                      LogicalName="EduFocus.Resources.privacy-notice.md" />
+    <Content Include="..\..\docs\privacy-notice.md"
+             Link="docs\privacy-notice.md"
+             CopyToOutputDirectory="PreserveNewest"
+             CopyToPublishDirectory="PreserveNewest" />
+    <Content Include="..\..\THIRD-PARTY-NOTICES.md"
+             Link="THIRD-PARTY-NOTICES.md"
+             CopyToOutputDirectory="PreserveNewest"
+             CopyToPublishDirectory="PreserveNewest" />
+    <Content Include="..\..\LICENSE"
+             Link="LICENSE"
+             CopyToOutputDirectory="PreserveNewest"
+             CopyToPublishDirectory="PreserveNewest" />
   </ItemGroup>
 
 </Project>

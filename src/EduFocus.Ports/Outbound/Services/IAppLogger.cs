@@ -1,24 +1,15 @@
 namespace EduFocus.Ports.Outbound.Services;
 
+/// <summary>
+/// Technical application log. Implementations add an UTC timestamp and the
+/// current correlation id, and must redact secrets and URL detail before
+/// writing (system architecture §12).
+/// </summary>
 public interface IAppLogger
 {
-    void Info(string message);
-    void Warning(string message);
-    void Error(string message, Exception? ex = null);
+    void Info(string category, string message);
 
-    void Log(string level, string category, string message, Exception? exception = null, IReadOnlyDictionary<string, object?>? properties = null)
-    {
-        var detail = $"[{category}] {message}";
-        if (string.Equals(level, "Error", StringComparison.OrdinalIgnoreCase)) Error(detail, exception);
-        else if (string.Equals(level, "Warning", StringComparison.OrdinalIgnoreCase)) Warning(detail);
-        else Info(detail);
-    }
+    void Warning(string category, string message);
 
-    IDisposable BeginCorrelationScope(Guid? correlationId = null) => EmptyCorrelationScope.Instance;
-
-    private sealed class EmptyCorrelationScope : IDisposable
-    {
-        public static readonly EmptyCorrelationScope Instance = new();
-        public void Dispose() { }
-    }
+    void Error(string category, string message, Exception? exception = null);
 }

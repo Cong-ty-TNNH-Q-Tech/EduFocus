@@ -72,6 +72,7 @@ public sealed class AttentionStateMachine
         RawAttentionState.Focused => _thresholds.FocusedAfterSeconds,
         RawAttentionState.Distracted => _thresholds.DistractedAfterSeconds,
         RawAttentionState.Absent => _thresholds.AbsentAfterSeconds,
+        RawAttentionState.Drowsy => _thresholds.DrowsyAfterSeconds,
         RawAttentionState.LowLight => _thresholds.LowLightAfterSeconds,
         _ => 0
     };
@@ -81,6 +82,7 @@ public sealed class AttentionStateMachine
         RawAttentionState.Focused => AttentionState.Focused,
         RawAttentionState.Distracted => AttentionState.Distracted,
         RawAttentionState.Absent => AttentionState.Absent,
+        RawAttentionState.Drowsy => AttentionState.Drowsy,
         RawAttentionState.LowLight => AttentionState.CameraUnavailable,
         RawAttentionState.CameraUnavailable => AttentionState.CameraUnavailable,
         _ => null

@@ -11,7 +11,7 @@ public static class AttentionAnalyzerFactory
         string modelDirectory)
     {
         var detector = CreateDetector(backend, options, modelDirectory);
-        return new OpenCvAttentionFrameAnalyzer(detector, options);
+        return new OpenCvAttentionFrameAnalyzer(detector);
     }
 
     public static IFaceDetector CreateDetector(
