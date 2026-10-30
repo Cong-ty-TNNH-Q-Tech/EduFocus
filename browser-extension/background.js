@@ -1,7 +1,13 @@
-import { evaluateSnapshot, normalizeSnapshot, sanitizeUrl } from './matcher.js';
+import {
+  countActiveBlockingRules,
+  evaluateSnapshot,
+  normalizeSnapshot,
+  sanitizeUrl
+} from './matcher.js';
 
 const HOST_NAME = 'com.edufocus.native_host';
 const RECONNECT_ALARM = 'edufocus-bridge';
+const SESSION_SNAPSHOT_KEY = 'edufocusSnapshot';
 const RETRY_WINDOW_MS = 15_000;
 const DUPLICATE_WINDOW_MS = 5_000;
 const REDIRECT_WINDOW_MS = 1_000;
@@ -11,6 +17,22 @@ let port = null;
 let lastConnectAttempt = 0;
 const blockedTabs = new Map();
 const reportedUrls = new Map();
+
+const restoreSnapshotPromise = (async () => {
+  try {
+    if (!chrome.storage?.session) return;
+    const stored = await chrome.storage.session.get(SESSION_SNAPSHOT_KEY);
+    if (snapshot === null && stored && stored[SESSION_SNAPSHOT_KEY]) {
+      const restored = normalizeSnapshot(stored[SESSION_SNAPSHOT_KEY]);
+      if (restored !== null) {
+        snapshot = restored;
+        updateBadge();
+      }
+    }
+  } catch {
+    // Session storage is best-effort.
+  }
+})();
 
 function ensureAlarm() {
   chrome.alarms.create(RECONNECT_ALARM, { periodInMinutes: 1 });
@@ -53,11 +75,24 @@ function handleNativeMessage(message) {
 
 function setSnapshot(next) {
   snapshot = next;
+  try {
+    if (chrome.storage?.session) {
+      if (next === null) {
+        chrome.storage.session.remove(SESSION_SNAPSHOT_KEY).catch(() => {});
+      } else {
+        chrome.storage.session
+          .set({ [SESSION_SNAPSHOT_KEY]: { type: 'snapshot', protocol: 1, ...next } })
+          .catch(() => {});
+      }
+    }
+  } catch {
+    // Ignore storage errors.
+  }
   updateBadge();
 }
 
 function hasBlockingRules() {
-  return snapshot !== null && snapshot.rules.some((rule) => rule.effect === 'block');
+  return countActiveBlockingRules(snapshot) > 0;
 }
 
 function updateBadge() {
@@ -70,12 +105,13 @@ function updateBadge() {
     .catch(() => {});
 }
 
-function handleNavigation(details) {
+async function handleNavigation(details) {
   if (!details || details.frameId !== 0 || details.tabId < 0) return;
 
   if (snapshot === null) {
     connectBridge();
-    return;
+    await restoreSnapshotPromise;
+    if (snapshot === null) return;
   }
 
   const verdict = evaluateSnapshot(snapshot, details.url);
@@ -134,10 +170,11 @@ chrome.runtime.onInstalled.addListener(() => {
 chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
   if (message && message.type === 'status') {
     connectBridge();
+    const ruleCount = countActiveBlockingRules(snapshot);
     sendResponse({
-      connected: port !== null,
-      active: hasBlockingRules(),
-      ruleCount: snapshot === null ? 0 : snapshot.rules.length
+      connected: snapshot !== null,
+      active: ruleCount > 0,
+      ruleCount
     });
   }
 

@@ -90,7 +90,7 @@ internal static class Program
         }
     }
 
-    private static bool IsAllowedOrigin(string[] args)
+    internal static bool IsAllowedOrigin(string[] args)
     {
         // Chrome passes the calling origin; Edge uses the same scheme. Manual
         // runs without an origin are allowed for diagnostics.
@@ -98,13 +98,16 @@ internal static class Program
             return true;
 
         var origin = args[0];
-        if (!origin.StartsWith("chrome-extension://", StringComparison.OrdinalIgnoreCase))
-            return true;
+        if (origin.StartsWith("--parent-window=", StringComparison.OrdinalIgnoreCase))
+            return args.Length > 1 && IsMatchingOrigin(args[1]);
 
-        return origin.TrimEnd('/').Equals(
+        return IsMatchingOrigin(origin);
+    }
+
+    private static bool IsMatchingOrigin(string origin) =>
+        origin.TrimEnd('/').Equals(
             ExpectedExtensionOrigin.TrimEnd('/'),
             StringComparison.OrdinalIgnoreCase);
-    }
 
     private static async Task<bool> FillAsync(
         Stream source,

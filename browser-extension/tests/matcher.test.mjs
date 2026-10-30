@@ -1,6 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
+  countActiveBlockingRules,
   ensureTrailingSlash,
   evaluateSnapshot,
   isProtectedHost,
@@ -235,4 +236,19 @@ test('HTML-looking paths are matched as plain text and never evaluated as markup
 test('matchesRule rejects non-domain and non-url rule types', () => {
   assert.equal(matchesRule({ type: 'app', match: 'exact', value: 'discord' },
     'https://example.com/', 'example.com'), false);
+});
+
+test('countActiveBlockingRules excludes allow and expired rules', () => {
+  const now = Date.parse('2026-10-30T08:00:00Z');
+  const ruleset = snapshot([
+    rule('domain', 'exact', 'chatgpt.com', 'block', null),
+    rule('domain', 'exact', 'expired.test', 'block', '2026-10-30T07:59:00Z'),
+    rule('domain', 'exact', 'meet.google.com', 'allow', null)
+  ]);
+
+  assert.equal(countActiveBlockingRules(ruleset, now), 1);
+});
+
+test('sanitizeUrl decodes unreserved percent-encoded characters', () => {
+  assert.equal(sanitizeUrl('https://example.com/%7Euser/lesson'), 'https://example.com/~user/lesson');
 });

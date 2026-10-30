@@ -12,6 +12,24 @@ const MATCH_TYPES = new Set(['exact', 'suffix', 'contains']);
 const RULE_TYPES = new Set(['domain', 'url']);
 const EFFECTS = new Set(['block', 'allow']);
 
+function decodeUnreservedPercentEncoding(value) {
+  return value.replace(/%([0-9A-Fa-f]{2})/g, (match, hex) => {
+    const code = Number.parseInt(hex, 16);
+    if (
+      (code >= 0x41 && code <= 0x5A) ||
+      (code >= 0x61 && code <= 0x7A) ||
+      (code >= 0x30 && code <= 0x39) ||
+      code === 0x2D ||
+      code === 0x2E ||
+      code === 0x5F ||
+      code === 0x7E
+    ) {
+      return String.fromCharCode(code);
+    }
+    return match.toUpperCase();
+  });
+}
+
 export function sanitizeUrl(rawUrl) {
   if (typeof rawUrl !== 'string') return null;
 
@@ -28,7 +46,8 @@ export function sanitizeUrl(rawUrl) {
   if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') return null;
   if (!parsed.hostname) return null;
 
-  const path = parsed.pathname && parsed.pathname.length > 0 ? parsed.pathname : '/';
+  const rawPath = parsed.pathname && parsed.pathname.length > 0 ? parsed.pathname : '/';
+  const path = decodeUnreservedPercentEncoding(rawPath);
   const sanitized = parsed.origin + path;
 
   return sanitized.length > MAX_URL_LENGTH ? null : sanitized;
@@ -72,7 +91,8 @@ export function matchesRule(rule, sanitizedUrl, host) {
   }
 
   const candidate = ensureTrailingSlash(sanitizedUrl).toLowerCase();
-  const value = ensureTrailingSlash(rule.value).toLowerCase();
+  const normalizedRuleValue = sanitizeUrl(rule.value) ?? rule.value;
+  const value = ensureTrailingSlash(normalizedRuleValue).toLowerCase();
 
   switch (rule.match) {
     case 'exact':
@@ -104,11 +124,23 @@ export function isProtectedHost(snapshot, host) {
   });
 }
 
-function isExpired(rule, nowMs) {
+export function isExpired(rule, nowMs = Date.now()) {
   if (!rule.expiresAtUtc) return false;
 
   const expiresAt = Date.parse(rule.expiresAtUtc);
   return !Number.isFinite(expiresAt) || expiresAt <= nowMs;
+}
+
+export function countActiveBlockingRules(snapshot, nowMs = Date.now()) {
+  if (!snapshot || !Array.isArray(snapshot.rules)) return 0;
+
+  let count = 0;
+  for (const rule of snapshot.rules) {
+    if (!rule || rule.effect !== 'block') continue;
+    if (isExpired(rule, nowMs)) continue;
+    count++;
+  }
+  return count;
 }
 
 /**
