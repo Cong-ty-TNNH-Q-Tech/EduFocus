@@ -229,6 +229,30 @@ public sealed class ScheduleServiceTests
     }
 
     [Fact]
+    public async Task Backward_clock_jump_does_not_crash_schedule_or_protection_mutations()
+    {
+        var harness = CreateActiveSchedule(out _);
+        await harness.Service.EvaluateAsync();
+        Advance(harness, TimeSpan.FromMinutes(10));
+        harness.Authenticate();
+        await harness.Protection.DisableAsync();
+
+        // Simulate wall clock moving backwards by 30 minutes while monotonic advances
+        harness.Clock.Advance(TimeSpan.FromMinutes(-30));
+        harness.Monotonic.Ticks += TimeSpan.FromSeconds(30);
+
+        var jump = await harness.Service.EvaluateAsync();
+        jump.ClockJumpDetected.Should().BeTrue();
+
+        // Parent can still re-enable and disable protection even after backward clock drift
+        var enabled = await harness.Protection.EnableAsync();
+        enabled.Status.IsEnabled.Should().BeTrue();
+
+        var disabled = await harness.Protection.DisableAsync();
+        disabled.Status.IsEnabled.Should().BeFalse();
+    }
+
+    [Fact]
     public async Task Evaluate_is_a_no_op_when_the_schedule_is_disabled()
     {
         var harness = new ScheduleHarness();

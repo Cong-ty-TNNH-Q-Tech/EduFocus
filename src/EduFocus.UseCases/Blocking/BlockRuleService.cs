@@ -74,7 +74,8 @@ public sealed class BlockRuleService : IBlockRuleUseCase
             return new BlockRuleOperationResult(Changed: false, ToInfo(rule));
 
         var now = _timeProvider.GetUtcNow().UtcDateTime;
-        rule.SetEnabled(isEnabled, now);
+        var effectiveNow = now < rule.UpdatedAtUtc ? rule.UpdatedAtUtc : now;
+        rule.SetEnabled(isEnabled, effectiveNow);
         await _rules.UpdateAsync(rule, cancellationToken);
 
         await WriteAuditAsync(

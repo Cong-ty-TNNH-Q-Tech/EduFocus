@@ -58,6 +58,8 @@ public sealed class PrivacySettingsService : IPrivacySettingsUseCase
 
         var now = UtcNow();
         var current = await GetSettingsAsync(cancellationToken).ConfigureAwait(false);
+        if (now < current.UpdatedAtUtc)
+            now = current.UpdatedAtUtc;
         var before = ToDto(current);
 
         current.UpdateMonitoring(settings.MonitoringEnabled, settings.MonitorOnlyDuringClasses, now);

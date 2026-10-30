@@ -165,7 +165,8 @@ public sealed class ProtectionService : IProtectionUseCase
                 await TryStartAttentionAsync(active);
             }
 
-            settings.EnableProtection(now, source);
+            var settingsNow = now < settings.UpdatedAtUtc ? settings.UpdatedAtUtc : now;
+            settings.EnableProtection(settingsNow, source);
             await _settings.UpdateAsync(settings, cancellationToken);
             await WriteAuditAsync(
                 actor,
@@ -263,7 +264,8 @@ public sealed class ProtectionService : IProtectionUseCase
             if (!overrideToClear)
                 return new ProtectionOperationResult(CreateStatus(settings, null), Changed: false, []);
 
-            settings.ClearScheduleOverride(now);
+            var clearNow = now < settings.UpdatedAtUtc ? settings.UpdatedAtUtc : now;
+            settings.ClearScheduleOverride(clearNow);
             await _settings.UpdateAsync(settings, cancellationToken);
 
             return new ProtectionOperationResult(CreateStatus(settings, null), Changed: true, []);
@@ -289,35 +291,38 @@ public sealed class ProtectionService : IProtectionUseCase
 
             var endedAt = UtcNow();
 
-            if (active is not null && endedAt < active.LastHeartbeatAtUtc)
-                endedAt = active.LastHeartbeatAtUtc;
-
             if (active is not null)
             {
+                if (endedAt < active.LastHeartbeatAtUtc)
+                    endedAt = active.LastHeartbeatAtUtc;
+                if (endedAt < active.UpdatedAtUtc)
+                    endedAt = active.UpdatedAtUtc;
+
                 active.Complete(endedAt);
                 await _sessions.UpdateAsync(active, cancellationToken);
             }
 
             now = endedAt;
+            var settingsNow = now < settings.UpdatedAtUtc ? settings.UpdatedAtUtc : now;
 
             if (wasEnabled)
             {
-                if (overrideUntil is { } until)
+                if (overrideUntil is { } until && until > settingsNow)
                 {
-                    settings.DisableProtectionWithScheduleOverride(until, now);
+                    settings.DisableProtectionWithScheduleOverride(until, settingsNow);
                     description = $"{description} Schedule override until {until:u}.";
                 }
                 else
                 {
-                    settings.DisableProtection(now);
+                    settings.DisableProtection(settingsNow);
                 }
 
                 await _settings.UpdateAsync(settings, cancellationToken);
-                await WriteAuditAsync(actor, AuditEventType.ProtectionOff, description, now, cancellationToken);
+                await WriteAuditAsync(actor, AuditEventType.ProtectionOff, description, settingsNow, cancellationToken);
             }
             else if (overrideToClear)
             {
-                settings.ClearScheduleOverride(now);
+                settings.ClearScheduleOverride(settingsNow);
                 await _settings.UpdateAsync(settings, cancellationToken);
             }
         }

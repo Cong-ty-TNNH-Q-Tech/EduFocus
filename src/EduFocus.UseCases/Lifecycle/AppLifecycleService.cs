@@ -182,7 +182,8 @@ public sealed class AppLifecycleService : IAppLifecycleUseCase
     {
         try
         {
-            active.SetNote(SystemShutdownNote, now);
+            var noteNow = now < active.UpdatedAtUtc ? active.UpdatedAtUtc : now;
+            active.SetNote(SystemShutdownNote, noteNow);
         }
         catch (Exception ex)
         {
@@ -217,7 +218,8 @@ public sealed class AppLifecycleService : IAppLifecycleUseCase
             var settings = await _settings.GetAsync(cancellationToken)
                 ?? throw new InvalidOperationException(SettingsMissing);
 
-            settings.RecordCleanShutdown(now);
+            var settingsNow = now < settings.UpdatedAtUtc ? settings.UpdatedAtUtc : now;
+            settings.RecordCleanShutdown(settingsNow);
             await _settings.UpdateAsync(settings, cancellationToken);
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)

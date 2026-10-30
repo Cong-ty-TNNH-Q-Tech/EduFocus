@@ -96,7 +96,8 @@ public sealed class ScheduleService : IScheduleUseCase
             var settings = await RequireSettingsAsync(cancellationToken);
             if (!settings.ScheduleEnabled)
             {
-                settings.SetScheduleEnabled(true, now);
+                var settingsNow = now < settings.UpdatedAtUtc ? settings.UpdatedAtUtc : now;
+                settings.SetScheduleEnabled(true, settingsNow);
                 await _settings.UpdateAsync(settings, cancellationToken);
             }
 
@@ -141,9 +142,10 @@ public sealed class ScheduleService : IScheduleUseCase
                 existing.Where(window => window.Id != target.Id),
                 candidate);
 
-            target.Reschedule(draft.Days, draft.StartMinutes, draft.EndMinutes, draft.Label, now);
+            var targetNow = now < target.UpdatedAtUtc ? target.UpdatedAtUtc : now;
+            target.Reschedule(draft.Days, draft.StartMinutes, draft.EndMinutes, draft.Label, targetNow);
             if (target.IsEnabled != draft.IsEnabled)
-                target.SetEnabled(draft.IsEnabled, now);
+                target.SetEnabled(draft.IsEnabled, targetNow);
 
             await _windows.UpdateAsync(target, cancellationToken);
 
@@ -192,7 +194,8 @@ public sealed class ScheduleService : IScheduleUseCase
                 }
             }
 
-            target.SetEnabled(isEnabled, now);
+            var targetNow = now < target.UpdatedAtUtc ? target.UpdatedAtUtc : now;
+            target.SetEnabled(isEnabled, targetNow);
             await _windows.UpdateAsync(target, cancellationToken);
 
             await WriteAuditAsync(
@@ -253,7 +256,8 @@ public sealed class ScheduleService : IScheduleUseCase
             if (settings.ScheduleEnabled == isEnabled)
                 return await CompleteWithEvaluationAsync(cancellationToken);
 
-            settings.SetScheduleEnabled(isEnabled, now);
+            var settingsNow = now < settings.UpdatedAtUtc ? settings.UpdatedAtUtc : now;
+            settings.SetScheduleEnabled(isEnabled, settingsNow);
             await _settings.UpdateAsync(settings, cancellationToken);
 
             await WriteAuditAsync(
@@ -343,7 +347,7 @@ public sealed class ScheduleService : IScheduleUseCase
             var localNow = TimeZoneInfo.ConvertTimeFromUtc(now, zone);
             var active = ScheduleClock.FindActive(windows, localNow);
 
-            if (await ClampOverrideAsync(settings, active, localNow, zone, now, cancellationToken))
+            if (!clockJump && await ClampOverrideAsync(settings, active, localNow, zone, now, cancellationToken))
                 settings = await _settings.GetAsync(cancellationToken) ?? settings;
 
             var overridden = settings.IsScheduleOverridden(now);
@@ -423,23 +427,24 @@ public sealed class ScheduleService : IScheduleUseCase
         if (settings.ScheduleOverrideUntilUtc is not { } until)
             return false;
 
+        var settingsNow = nowUtc < settings.UpdatedAtUtc ? settings.UpdatedAtUtc : nowUtc;
         var windowEndUtc = active is null
             ? (DateTime?)null
             : ScheduleClock.GetWindowEndUtc(active, DateOnly.FromDateTime(localNow), zone);
 
         if (until <= nowUtc || windowEndUtc is null)
         {
-            settings.ClearScheduleOverride(nowUtc);
+            settings.ClearScheduleOverride(settingsNow);
             await _settings.UpdateAsync(settings, cancellationToken);
             return true;
         }
 
         if (until > windowEndUtc)
         {
-            if (windowEndUtc.Value > nowUtc)
-                settings.SetScheduleOverrideUntil(windowEndUtc.Value, nowUtc);
+            if (windowEndUtc.Value > settingsNow)
+                settings.SetScheduleOverrideUntil(windowEndUtc.Value, settingsNow);
             else
-                settings.ClearScheduleOverride(nowUtc);
+                settings.ClearScheduleOverride(settingsNow);
 
             await _settings.UpdateAsync(settings, cancellationToken);
             return true;

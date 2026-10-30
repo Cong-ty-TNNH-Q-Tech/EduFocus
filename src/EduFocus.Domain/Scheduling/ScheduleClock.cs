@@ -51,7 +51,8 @@ public static class ScheduleClock
 
         var wallClock = DateTime.SpecifyKind(local, DateTimeKind.Unspecified);
 
-        while (zone.IsInvalidTime(wallClock))
+        var maxGapMinutes = 180;
+        while (maxGapMinutes-- > 0 && zone.IsInvalidTime(wallClock))
             wallClock = wallClock.AddMinutes(1);
 
         // GetUtcOffset returns the standard offset for ambiguous times (fall-back).
