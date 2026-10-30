@@ -84,6 +84,19 @@ public partial class OnboardingViewModel : ObservableObject
         _ => string.Empty
     };
 
+    public int StepNumber => View switch
+    {
+        OnboardingStep.Welcome => 1,
+        OnboardingStep.Privacy => 2,
+        OnboardingStep.Preferences => 3,
+        OnboardingStep.Pin => 4,
+        OnboardingStep.ResumePin => 4,
+        OnboardingStep.RecoveryCode => 5,
+        _ => 0
+    };
+
+    public double StepProgress => StepNumber * 20;
+
     public event EventHandler? PasswordBoxesShouldClear;
     public event EventHandler? CloseRequested;
     public event EventHandler? Completed;
@@ -123,6 +136,8 @@ public partial class OnboardingViewModel : ObservableObject
         OnPropertyChanged(nameof(IsResumePinVisible));
         OnPropertyChanged(nameof(IsRecoveryCodeVisible));
         OnPropertyChanged(nameof(StepLabel));
+        OnPropertyChanged(nameof(StepNumber));
+        OnPropertyChanged(nameof(StepProgress));
     }
 
     [RelayCommand]

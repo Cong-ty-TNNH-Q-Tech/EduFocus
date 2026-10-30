@@ -5,32 +5,44 @@
         Height="740" Width="880"
         MinHeight="520" MinWidth="680"
         WindowStartupLocation="CenterOwner"
-        Background="#F4F5F9"
-        FontFamily="Segoe UI"
-        UseLayoutRounding="True">
-    <Grid Margin="22">
+        Background="{StaticResource AppBackgroundBrush}"
+        TextOptions.TextFormattingMode="Display"
+        UseLayoutRounding="True"
+        FontFamily="Segoe UI">
+    <Grid Margin="28,24,28,22">
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto" />
             <RowDefinition Height="*" />
             <RowDefinition Height="Auto" />
         </Grid.RowDefinitions>
 
-        <Grid Grid.Row="0" Margin="4,0,4,0">
+        <Grid Grid.Row="0" Margin="0,0,0,16">
             <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="Auto" />
                 <ColumnDefinition Width="*" />
                 <ColumnDefinition Width="Auto" />
             </Grid.ColumnDefinitions>
 
-            <StackPanel Grid.Column="0">
-                <TextBlock Text="Thông báo quyền riêng tư"
-                           FontSize="24" FontWeight="SemiBold" Foreground="#1F2430" />
+            <Border Width="44" Height="44" CornerRadius="14" VerticalAlignment="Center"
+                    Background="{StaticResource PrimarySoftBrush}">
+                <TextBlock Text="&#xE72E;" Style="{StaticResource IconGlyph}" FontSize="20"
+                           Foreground="{StaticResource PrimaryDarkBrush}" />
+            </Border>
+
+            <StackPanel Grid.Column="1" Margin="14,0,0,0" VerticalAlignment="Center">
+                <TextBlock Text="Thông báo quyền riêng tư" FontSize="22" FontWeight="SemiBold"
+                           Foreground="{StaticResource TextPrimaryBrush}" />
                 <TextBlock Text="EduFocus 2.0.0 · Bản đang áp dụng được cài kèm tại docs\privacy-notice.md"
-                           FontSize="12" Foreground="#5B6270" Margin="0,4,0,0" TextWrapping="Wrap" />
+                           Style="{StaticResource CaptionText}" Margin="0,3,0,0" />
             </StackPanel>
+
+            <Border Grid.Column="2" Style="{StaticResource PillBorder}" VerticalAlignment="Center">
+                <TextBlock Text="Dữ liệu ở lại trên máy này" FontSize="12" FontWeight="SemiBold"
+                           Foreground="{StaticResource PrimaryDarkBrush}" />
+            </Border>
         </Grid>
 
-        <Border Grid.Row="1" Margin="0,14,0,12" Background="White" CornerRadius="12"
-                BorderBrush="#E1E4EC" BorderThickness="1" Padding="8">
+        <Border Grid.Row="1" Style="{StaticResource CardBorder}" Padding="10">
             <FlowDocumentScrollViewer x:Name="NoticeViewer"
                                       VerticalScrollBarVisibility="Auto"
                                       HorizontalScrollBarVisibility="Disabled"
@@ -39,9 +51,9 @@
                                       Padding="18,14" />
         </Border>
 
-        <StackPanel Grid.Row="2" Orientation="Horizontal" HorizontalAlignment="Right">
-            <Button x:Name="CloseButton" Content="Đóng" IsDefault="True" IsCancel="True"
-                    Padding="22,9" MinWidth="110" FontSize="14" FontWeight="SemiBold"
+        <StackPanel Grid.Row="2" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,14,0,0">
+            <Button x:Name="CloseButton" Content="Đóng" Style="{StaticResource PrimaryButton}"
+                    IsDefault="True" IsCancel="True" MinWidth="120"
                     Click="Close_OnClick" />
         </StackPanel>
     </Grid>

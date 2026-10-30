@@ -406,32 +406,187 @@ public sealed class BlockPageServer : IBlockPageServer, IAsyncDisposable
         <meta name="referrer" content="no-referrer">
         <title>Trang bị chặn - EduFocus</title>
         <style>
-        :root { color-scheme: light dark; }
-        body { margin: 0; min-height: 100vh; display: grid; place-items: center;
-               font-family: "Segoe UI", system-ui, sans-serif; background: #f4f6fb; color: #1f2933; }
-        main { max-width: 34rem; padding: 2.5rem; background: #fff; border-radius: 1rem;
-               box-shadow: 0 12px 40px rgba(15, 23, 42, .12); }
-        .badge { display: inline-block; padding: .25rem .75rem; border-radius: 999px;
-                 background: #e0e7ff; color: #3730a3; font-weight: 600; font-size: .85rem; }
-        h1 { font-size: 1.5rem; margin: 1rem 0 .75rem; line-height: 1.35; }
-        p { margin: .5rem 0; line-height: 1.55; color: #475569; }
-        strong { color: #1f2933; overflow-wrap: anywhere; }
+        :root {
+          color-scheme: light dark;
+          --bg-a: #eef1ff;
+          --bg-b: #f8f9fe;
+          --card: #ffffff;
+          --text: #1b1f31;
+          --muted: #5a6174;
+          --primary: #5b5ce2;
+          --primary-soft: #eeeeff;
+          --primary-ink: #3f3fc4;
+          --border: #e4e7f2;
+          --soft: #f1f3fa;
+        }
+        * { box-sizing: border-box; }
+        body {
+          margin: 0;
+          min-height: 100vh;
+          display: grid;
+          place-items: center;
+          padding: 2rem 1.25rem;
+          font-family: "Segoe UI", system-ui, -apple-system, sans-serif;
+          background:
+            radial-gradient(circle at 15% 10%, rgba(91, 92, 226, .16), transparent 45%),
+            radial-gradient(circle at 90% 85%, rgba(255, 180, 40, .14), transparent 40%),
+            linear-gradient(160deg, var(--bg-a), var(--bg-b));
+          color: var(--text);
+        }
+        main {
+          width: min(38rem, 100%);
+          padding: clamp(1.5rem, 4vw, 2.5rem);
+          background: var(--card);
+          border: 1px solid var(--border);
+          border-radius: 1.5rem;
+          box-shadow: 0 24px 60px rgba(27, 31, 49, .14);
+        }
+        .brand { display: flex; align-items: center; gap: .7rem; }
+        .mark {
+          display: grid;
+          place-items: center;
+          width: 2.75rem;
+          height: 2.75rem;
+          border-radius: .9rem;
+          background: linear-gradient(145deg, #5b5ce2, #8b7cf8);
+          color: #fff;
+          font-size: 1.25rem;
+          font-weight: 700;
+          letter-spacing: .02em;
+        }
+        .wordmark { font-size: 1rem; font-weight: 600; letter-spacing: .01em; }
+        .badge {
+          display: inline-flex;
+          align-items: center;
+          gap: .45rem;
+          margin-top: 1.35rem;
+          padding: .32rem .8rem;
+          border-radius: 999px;
+          background: var(--primary-soft);
+          color: var(--primary-ink);
+          font-size: .82rem;
+          font-weight: 600;
+        }
+        .dot {
+          width: .5rem;
+          height: .5rem;
+          border-radius: 50%;
+          background: #12b76a;
+          box-shadow: 0 0 0 3px rgba(18, 183, 106, .18);
+        }
+        h1 {
+          margin: .85rem 0 .65rem;
+          font-size: clamp(1.35rem, 4vw, 1.7rem);
+          line-height: 1.35;
+          letter-spacing: -.01em;
+        }
+        .lead { margin: 0; color: var(--muted); font-size: .98rem; line-height: 1.6; }
+        .domain {
+          margin-top: 1.1rem;
+          padding: .7rem .9rem;
+          border-radius: .8rem;
+          background: var(--soft);
+          border: 1px dashed var(--border);
+          color: var(--muted);
+          font-size: .85rem;
+        }
+        .domain strong {
+          color: var(--text);
+          overflow-wrap: anywhere;
+        }
+        .tips {
+          list-style: none;
+          margin: 1.4rem 0 0;
+          padding: 0;
+          display: grid;
+          gap: .65rem;
+        }
+        .tips li {
+          display: flex;
+          align-items: flex-start;
+          gap: .75rem;
+          padding: .8rem .9rem;
+          border: 1px solid var(--border);
+          border-radius: .9rem;
+          background: var(--card);
+        }
+        .num {
+          flex: 0 0 auto;
+          display: grid;
+          place-items: center;
+          width: 1.65rem;
+          height: 1.65rem;
+          border-radius: 50%;
+          background: var(--primary-soft);
+          color: var(--primary-ink);
+          font-size: .8rem;
+          font-weight: 700;
+        }
+        .tips b { display: block; font-size: .92rem; }
+        .tip-text {
+          display: block;
+          margin-top: .15rem;
+          color: var(--muted);
+          font-size: .84rem;
+          line-height: 1.5;
+        }
+        .note {
+          margin: 1.3rem 0 0;
+          color: var(--muted);
+          font-size: .8rem;
+          line-height: 1.55;
+        }
+        footer {
+          width: min(38rem, 100%);
+          margin-top: 1.25rem;
+          text-align: center;
+          color: var(--muted);
+          font-size: .78rem;
+        }
         @media (prefers-color-scheme: dark) {
-          body { background: #0f172a; color: #e2e8f0; }
-          main { background: #1e293b; box-shadow: none; }
-          .badge { background: #312e81; color: #c7d2fe; }
-          p { color: #cbd5e1; }
+          :root {
+            --bg-a: #10142a;
+            --bg-b: #161b30;
+            --card: #1b2033;
+            --text: #eef0ff;
+            --muted: #aab2cc;
+            --primary: #9a9bff;
+            --primary-soft: #272c48;
+            --primary-ink: #c3c4ff;
+            --border: #2c3350;
+            --soft: #232840;
+          }
+          body {
+            background:
+              radial-gradient(circle at 15% 10%, rgba(124, 108, 246, .28), transparent 45%),
+              radial-gradient(circle at 90% 85%, rgba(255, 180, 40, .12), transparent 40%),
+              linear-gradient(160deg, var(--bg-a), var(--bg-b));
+          }
+          main { box-shadow: none; }
+          .mark { background: linear-gradient(145deg, #6d5ce7, #9a7cf9); }
+        }
+        @media (max-width: 30rem) {
+          body { padding: 1rem .75rem; }
+          main { border-radius: 1.15rem; }
         }
         </style>
         </head>
         <body>
-        <main>
         <!-- EDUFOCUS_BLOCK_PAGE -->
-        <span class="badge">EduFocus</span>
+        <main>
+        <div class="brand"><span class="mark">E</span><span class="wordmark">EduFocus</span></div>
+        <span class="badge"><span class="dot"></span>Đang bảo vệ</span>
         <h1>Trang này không nằm trong môi trường học tập.</h1>
-        <p>Tên miền: <strong>{{WebUtility.HtmlEncode(domain)}}</strong></p>
-        <p>Hãy quay lại việc học hoặc nhờ phụ huynh mở khóa nếu thật sự cần thiết.</p>
+        <p class="lead">Trang bạn vừa mở không nằm trong danh sách học tập được phép trên máy này.</p>
+        <div class="domain">Tên miền: <strong>{{WebUtility.HtmlEncode(domain)}}</strong></div>
+        <ul class="tips">
+        <li><span class="num">1</span><div><b>Hoàn thành phần đang học</b><span class="tip-text">Quay lại bài đang dở rồi mới mở trang khác.</span></div></li>
+        <li><span class="num">2</span><div><b>Hỏi phụ huynh nếu thật sự cần</b><span class="tip-text">Phụ huynh có thể kiểm tra hoặc tạm tắt bảo vệ trong Parent Mode.</span></div></li>
+        <li><span class="num">3</span><div><b>Nghỉ mắt vài phút</b><span class="tip-text">Đứng dậy, uống nước rồi quay lại khi đã sẵn sàng.</span></div></li>
+        </ul>
+        <p class="note">Nếu bạn cho rằng đây là nhầm lẫn, hãy nhờ phụ huynh kiểm tra danh sách chặn. EduFocus chỉ chặn những gì được thiết lập trên chính máy này.</p>
         </main>
+        <footer>EduFocus · Bảo vệ đang bật trên máy này</footer>
         </body>
         </html>
         """;
