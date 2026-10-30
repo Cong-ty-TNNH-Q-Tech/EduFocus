@@ -25,6 +25,8 @@ public interface IProcessController
 [SupportedOSPlatform("windows")]
 public sealed class WindowsProcessController : IProcessController
 {
+    private static readonly bool IsServiceSession = DetectServiceSession();
+
     public IReadOnlyList<ProcessSnapshot> GetProcesses()
     {
         var snapshots = new List<ProcessSnapshot>();
@@ -42,10 +44,13 @@ public sealed class WindowsProcessController : IProcessController
                     if (string.IsNullOrWhiteSpace(name))
                         continue;
 
+                    var hasMainWindow = process.MainWindowHandle != IntPtr.Zero ||
+                        (IsServiceSession && IsInteractiveUserSession(process));
+
                     snapshots.Add(new ProcessSnapshot(
                         process.Id,
                         name,
-                        process.MainWindowHandle != IntPtr.Zero));
+                        hasMainWindow));
                 }
                 catch (InvalidOperationException) { }
                 catch (Win32Exception) { }
@@ -53,6 +58,31 @@ public sealed class WindowsProcessController : IProcessController
         }
 
         return snapshots;
+    }
+
+    private static bool DetectServiceSession()
+    {
+        try
+        {
+            using var current = Process.GetCurrentProcess();
+            return current.SessionId == 0 || !Environment.UserInteractive;
+        }
+        catch
+        {
+            return !Environment.UserInteractive;
+        }
+    }
+
+    private static bool IsInteractiveUserSession(Process process)
+    {
+        try
+        {
+            return process.SessionId > 0;
+        }
+        catch
+        {
+            return false;
+        }
     }
 
     public async Task<bool> CloseMainWindowAsync(

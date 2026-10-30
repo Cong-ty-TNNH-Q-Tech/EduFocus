@@ -23,7 +23,8 @@ public sealed class ProcessWatcher : IProcessWatcher, IAsyncDisposable
             "runtimebroker", "shellexperiencehost", "startmenuexperiencehost",
             "textinputhost", "applicationframehost", "securityhealthservice",
             "securityhealthsystray", "msmpeng", "nissrv", "tiworker", "trustedinstaller",
-            "conhost", "dllhost", "wudfhost", "sppsvc", "wlanext", "edufocus"
+            "conhost", "dllhost", "wudfhost", "sppsvc", "wlanext",
+            "edufocus", "edufocus.service", "edufocus.nativehost"
         }.ToFrozenSet(StringComparer.Ordinal);
 
     private readonly ProcessWatcherOptions _options;
@@ -31,8 +32,7 @@ public sealed class ProcessWatcher : IProcessWatcher, IAsyncDisposable
     private readonly IMonotonicClockPort _clock;
     private readonly IAppLogger _logger;
     private readonly SemaphoreSlim _gate = new(1, 1);
-    private readonly ConcurrentDictionary<string, TimeSpan> _lastAttempt =
-        new(StringComparer.Ordinal);
+    private readonly ConcurrentDictionary<(string Name, int ProcessId), TimeSpan> _lastAttempt = new();
 
     private FrozenSet<string> _blocked = FrozenSet<string>.Empty;
     private FrozenSet<string> _allowed = FrozenSet<string>.Empty;
@@ -226,10 +226,11 @@ public sealed class ProcessWatcher : IProcessWatcher, IAsyncDisposable
                 continue;
 
             var ticks = _clock.GetTickCount();
-            if (_lastAttempt.TryGetValue(name, out var last) && ticks - last < _options.Debounce)
+            var attemptKey = (name, process.ProcessId);
+            if (_lastAttempt.TryGetValue(attemptKey, out var last) && ticks - last < _options.Debounce)
                 continue;
 
-            _lastAttempt[name] = ticks;
+            _lastAttempt[attemptKey] = ticks;
 
             var outcome = await StopProcessAsync(name, process.ProcessId, cancellationToken)
                 .ConfigureAwait(false);

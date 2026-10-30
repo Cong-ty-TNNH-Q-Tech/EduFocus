@@ -216,6 +216,30 @@ public sealed class ProcessWatcherTests
     }
 
     [Fact]
+    public async Task Relaunched_process_with_new_pid_is_closed_immediately_within_debounce_window()
+    {
+        _controller.SetProcesses(new ProcessSnapshot(701, "discord", HasMainWindow: true));
+        var reader = Track(out var watcher);
+
+        await using (watcher)
+        {
+            await watcher.StartAsync(["discord"], []);
+
+            var first = await NextAsync(reader);
+            first.ProcessId.Should().Be(701);
+            first.Outcome.Should().Be(ProcessBlockOutcome.ClosedGracefully);
+
+            // Student immediately relaunches the blocked app -> new PID 702 without clock advancing
+            _controller.SetProcesses(new ProcessSnapshot(702, "discord", HasMainWindow: true));
+
+            var second = await NextAsync(reader);
+            second.ProcessId.Should().Be(702);
+            second.Outcome.Should().Be(ProcessBlockOutcome.ClosedGracefully);
+            _controller.CloseCalls.Should().Equal(701, 702);
+        }
+    }
+
+    [Fact]
     public async Task Update_rules_apply_without_restarting()
     {
         _controller.SetProcesses(new ProcessSnapshot(800, "notepad", HasMainWindow: true));
