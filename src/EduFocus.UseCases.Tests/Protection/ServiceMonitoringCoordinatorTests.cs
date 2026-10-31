@@ -119,11 +119,23 @@ public sealed class ServiceMonitoringCoordinatorTests
     }
 
     [Fact]
-    public async Task A_session_without_monitoring_keeps_activity_but_not_the_camera()
+    public async Task A_status_without_monitoring_keeps_activity_but_not_the_camera()
+    {
+        AddSession();
+
+        await CreateCoordinator().SyncAsync(new ProtectionStatus(true, StartedAtUtc, false));
+
+        _monitor.Started.Should().BeEmpty();
+        _pipeline.StartCalls.Should().Be(0);
+        _activity.IsRunning.Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task Restore_keeps_a_session_without_monitoring_on_activity_only()
     {
         AddSession(monitoringEnabled: false);
 
-        await CreateCoordinator().SyncAsync(Enabled);
+        await CreateCoordinator().RestoreAsync();
 
         _monitor.Started.Should().BeEmpty();
         _pipeline.StartCalls.Should().Be(0);
