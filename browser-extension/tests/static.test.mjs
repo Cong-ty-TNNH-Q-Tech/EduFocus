@@ -24,7 +24,7 @@ function extensionIdFromKey(base64Key) {
 
 test('manifest is MV3 and requests only the permissions the feature needs', () => {
   assert.equal(manifest.manifest_version, 3);
-  assert.deepEqual(manifest.permissions, ['alarms', 'nativeMessaging', 'webNavigation']);
+  assert.deepEqual(manifest.permissions, ['alarms', 'nativeMessaging', 'storage', 'webNavigation']);
   assert.deepEqual(manifest.host_permissions, ['http://*/*', 'https://*/*']);
   assert.equal(manifest.background.service_worker, 'background.js');
   assert.equal(manifest.background.type, 'module');
@@ -66,7 +66,9 @@ test('extension code has no remote assets or unsafe DOM sinks', () => {
     'javascript:',
     'localStorage',
     'sessionStorage',
-    'chrome.storage',
+    'chrome.storage.local',
+    'chrome.storage.sync',
+    'chrome.storage.managed',
     'XMLHttpRequest',
     'fetch('
   ];
@@ -77,6 +79,12 @@ test('extension code has no remote assets or unsafe DOM sinks', () => {
       assert.ok(!source.includes(sink), `${file} must not use ${sink}`);
     }
   }
+
+  const background = read('background.js');
+  assert.ok(
+    !/chrome\.storage(?!\??\.session\b)/.test(background),
+    'background.js must only use session-scoped storage'
+  );
 
   for (const file of ['blocked.html', 'popup.html', 'blocked.css', 'popup.css']) {
     const source = read(file);
