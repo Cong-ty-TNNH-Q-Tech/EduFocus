@@ -16,7 +16,7 @@ Tham chiếu: [system_architecture.md](./system_architecture.md) §14,
 | Định dạng | MSI per-machine (WiX Toolset 4.0.6, UI + Util extension) |
 | Kiến trúc | `win-x64`, self-contained single-file |
 | .NET runtime | Đóng gói sẵn trong `EduFocus.exe`; máy đích không cần cài .NET |
-| Windows | Windows 10/11 64-bit (`VersionNT >= 1000` và `VersionNT64`) |
+| Windows | Windows 10/11 64-bit (`VersionNT64` và `CurrentBuildNumber` từ registry ≥ 10240) |
 | Nâng cấp | `MajorUpgrade` cùng `UpgradeCode`; bản cũ bị gỡ trước khi cài bản mới |
 | Thư mục cài | `%ProgramFiles%\EduFocus` |
 | Thư mục dữ liệu | `%ProgramData%\EduFocus` (ACL Administrators/SYSTEM) |
@@ -24,6 +24,11 @@ Tham chiếu: [system_architecture.md](./system_architecture.md) §14,
 | Quyền chạy app | **Administrator** trong bản này (xem §8) |
 
 Windows 8/8.1, MSIX/Microsoft Store và cloud auto-update nằm ngoài phạm vi.
+
+> Windows Installer trả về `VersionNT = 603` và `WindowsBuild = 9600` trên Windows 10/11
+> vì gói MSI không có OS manifest. Vì vậy launch condition đọc `CurrentBuildNumber`
+> thật từ registry (`>= 10240`) thay vì `VersionNT`; `Installed OR` bảo đảm việc gỡ
+> cài đặt không bị chặn.
 
 ---
 
@@ -97,6 +102,9 @@ Trình tự MSI thực hiện:
    đồng ý** (property `PRIVACY_CONSENT`). Nút Next chỉ mở `InstallDirDlg` khi đã tick; Back quay
    lại Welcome, Cancel hủy cài đặt. Bản đầy đủ nằm ở [privacy-notice.md](./privacy-notice.md).
    Silent install (`/qn`) bỏ qua UI; consent vẫn được ghi trong onboarding ở lần chạy đầu.
+   > Thông báo dùng control `Text` tự xuống dòng thay cho `ScrollableText` (control này hiển thị
+   > hộp trắng trên Windows 10/11). Không dùng dấu `\` trong nội dung: msiexec áp dụng path
+   > ellipsis và thay đoạn giữa bằng `...`.
 2. `util:CloseApplication` đóng `EduFocus.exe` (app và watchdog dùng chung file) nếu đang chạy.
 3. Copy file vào `%ProgramFiles%\EduFocus`.
 4. Chạy deferred custom action `--prepare-data-directory` **as SYSTEM**:

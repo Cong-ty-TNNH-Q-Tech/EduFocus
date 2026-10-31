@@ -7,6 +7,24 @@ và dự án tuân theo [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ---
 
+## [2.0.1] - 2026-10-31
+
+### Fixed (Installer — chặn nhầm Windows 10/11)
+
+- **Nguyên nhân:** Windows Installer báo `VersionNT = 603` và `WindowsBuild = 9600` trên Windows 10/11 với gói MSI không có OS manifest, nên launch condition `VersionNT >= 1000` luôn sai. MSI 2.0.0 dừng ngay khi chạy với hộp thoại "EduFocus requires Windows 10 or later." trên cả Windows 10 và 11 (xác nhận bằng log MSI và probe MSI).
+- **Sửa:** `RegistrySearch` đọc `CurrentBuildNumber` thật từ registry và launch condition kiểm tra `>= 10240`; thêm `Installed OR` để gỡ cài đặt không bị chặn. Điều kiện `VersionNT64` giữ nguyên.
+
+### Fixed (Installer — thông báo quyền riêng tư)
+
+- **Nội dung bị ẩn:** `ScrollableText` hiển thị hộp trắng trong msiexec trên Windows 10/11 nên toàn bộ nội dung thông báo quyền riêng tư không đọc được. Thay bằng control `Text` tự xuống dòng, tăng chiều cao dialog để đủ 7 đoạn.
+- **Đoạn giữa bị thay bằng `...`:** msiexec áp dụng path ellipsis khi nội dung chứa dấu `\`; bỏ dấu `\` khỏi văn bản trong dialog. Đã xác minh bằng MSI dựng lại: thông báo hiển thị đủ, Next bị chặn khi chưa tick, tick xong mới sang Destination Folder.
+
+### Breaking changes
+
+- Không có. Bản vá chỉ sửa launch condition và hộp thoại cài đặt; schema dữ liệu, định dạng file và API giữ nguyên.
+
+---
+
 ## [2.0.0] - 2026-10-30
 
 > **Trạng thái:** Bản phát hành đầu tiên (MVP desktop) của EduFocus 2.0; các mục Phase 1–7 dưới đây đã được triển khai.

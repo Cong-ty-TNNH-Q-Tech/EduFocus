@@ -33,7 +33,18 @@
 
     <ui:WixUI Id="WixUI_InstallDir" InstallDirectory="INSTALLFOLDER"/>
 
-    <Launch Condition="VersionNT &gt;= 1000"
+    <!-- Windows Installer reports VersionNT 603 and WindowsBuild 9600 on
+         Windows 10/11 for packages without an OS manifest, so the real build
+         number is read from the registry instead. -->
+    <Property Id="EDUFOCUS_WINDOWS_BUILD">
+      <RegistrySearch Id="WindowsBuildSearch"
+                      Root="HKLM"
+                      Key="SOFTWARE\Microsoft\Windows NT\CurrentVersion"
+                      Name="CurrentBuildNumber"
+                      Type="raw"/>
+    </Property>
+
+    <Launch Condition="Installed OR EDUFOCUS_WINDOWS_BUILD &gt;= 10240"
             Message="EduFocus requires Windows 10 or later."/>
     <Launch Condition="VersionNT64"
             Message="EduFocus requires 64-bit Windows."/>
@@ -136,31 +147,34 @@
          offline. Silent installs skip the UI; onboarding still records the
          consent timestamps before monitoring can be enabled. -->
     <UI>
-      <Dialog Id="PrivacyConsentDlg" Width="370" Height="270" Title="EduFocus privacy notice">
+      <Dialog Id="PrivacyConsentDlg" Width="370" Height="344" Title="EduFocus privacy notice">
         <Control Id="BannerBitmap" Type="Bitmap" X="0" Y="0" Width="370" Height="44"
                  TabSkip="no" Text="!(loc.MaintenanceTypeDlgBannerBitmap)"/>
         <Control Id="BannerLine" Type="Line" X="0" Y="44" Width="373" Height="0"/>
-        <Control Id="BottomLine" Type="Line" X="0" Y="234" Width="373" Height="0"/>
+        <Control Id="BottomLine" Type="Line" X="0" Y="308" Width="373" Height="0"/>
         <Control Id="Title" Type="Text" X="15" Y="6" Width="340" Height="15"
                  Transparent="yes" NoPrefix="yes" Text="Thông báo quyền riêng tư"/>
         <Control Id="Description" Type="Text" X="25" Y="23" Width="340" Height="20"
                  Transparent="yes" NoPrefix="yes"
                  Text="Đọc kỹ trước khi cài đặt. Bản đầy đủ nằm trong thư mục cài đặt EduFocus."/>
-        <Control Id="NoticeText" Type="ScrollableText" X="25" Y="52" Width="320" Height="126"
-                 Sunken="yes" TabSkip="no"
-                 Text="EduFocus xử lý dữ liệu học tập trên chính máy tính này, không có tài khoản đám mây, không telemetry, không quảng cáo và không chia sẻ dữ liệu với bên thứ ba.&#xD;&#xA;&#xD;&#xA;Dữ liệu được xử lý: cấu hình bảo vệ/giám sát, phiên học, mẫu hoạt động (tên ứng dụng, tiêu đề cửa sổ đã làm sạch, tên miền), sự kiện tập trung, lần truy cập bị chặn, audit và log kỹ thuật. Không lưu ảnh, video, âm thanh, landmark hay embedding khuôn mặt; không nhận diện danh tính.&#xD;&#xA;&#xD;&#xA;Camera chỉ mở khi phụ huynh bật giám sát và phiên học đang chạy; khung hình được xử lý trong RAM rồi bị hủy, không gửi qua mạng.&#xD;&#xA;&#xD;&#xA;Dữ liệu lưu tại %ProgramData%\EduFocus với quyền Administrators/SYSTEM; thời hạn 30/90/365 ngày; có thể xem, xuất CSV và xóa trong Parent Mode bằng PIN.&#xD;&#xA;&#xD;&#xA;Kiểm tra cập nhật mặc định tắt; khi bật, yêu cầu chỉ gửi tới GitHub Releases API và GitHub có thể thấy địa chỉ IP.&#xD;&#xA;&#xD;&#xA;Yêu cầu dữ liệu được xác nhận trong 72 giờ làm việc và hoàn tất trong 30 ngày.&#xD;&#xA;&#xD;&#xA;Bản đầy đủ: docs\privacy-notice.md trong thư mục cài đặt. Đây là công cụ hỗ trợ, không phải thiết bị y tế hay eye tracker; chặn web là best-effort."/>
-        <Control Id="ConsentCheckBox" Type="CheckBox" X="25" Y="186" Width="320" Height="30"
+        <!-- MSI ScrollableText renders blank under msiexec on Windows 10/11,
+             so the notice uses a wrapping Text control. Avoid backslashes in
+             this text: they trigger path-ellipsis and hide the middle. -->
+        <Control Id="NoticeText" Type="Text" X="25" Y="52" Width="320" Height="212"
+                 Transparent="yes" NoPrefix="yes"
+                 Text="EduFocus xử lý dữ liệu học tập trên chính máy tính này: không tài khoản đám mây, không telemetry, không quảng cáo và không chia sẻ dữ liệu với bên thứ ba.&#xD;&#xA;&#xD;&#xA;Dữ liệu được xử lý: cấu hình bảo vệ/giám sát, phiên học, mẫu hoạt động (tên ứng dụng, tiêu đề cửa sổ đã làm sạch, tên miền), sự kiện tập trung, lần truy cập bị chặn, audit và log kỹ thuật. Không lưu ảnh, video, âm thanh, landmark hay embedding khuôn mặt; không nhận diện danh tính.&#xD;&#xA;&#xD;&#xA;Camera chỉ mở khi phụ huynh bật giám sát và phiên học đang chạy; khung hình được xử lý trong RAM rồi bị hủy, không gửi qua mạng.&#xD;&#xA;&#xD;&#xA;Dữ liệu lưu trong thư mục %ProgramData% (Administrators/SYSTEM) với thời hạn 30/90/365 ngày; có thể xem, xuất CSV và xóa trong Parent Mode bằng PIN.&#xD;&#xA;&#xD;&#xA;Kiểm tra cập nhật mặc định tắt; khi bật, yêu cầu chỉ gửi tới GitHub Releases API và GitHub có thể thấy địa chỉ IP.&#xD;&#xA;&#xD;&#xA;Yêu cầu dữ liệu được xác nhận trong 72 giờ làm việc và hoàn tất trong 30 ngày.&#xD;&#xA;&#xD;&#xA;Bản đầy đủ: docs/privacy-notice.md trong thư mục cài đặt. Đây là công cụ hỗ trợ, không phải thiết bị y tế hay eye tracker; chặn web là best-effort."/>
+        <Control Id="ConsentCheckBox" Type="CheckBox" X="25" Y="270" Width="320" Height="30"
                  Property="PRIVACY_CONSENT" CheckBoxValue="1"
                  Text="Tôi đã đọc và đồng ý với thông báo quyền riêng tư của EduFocus."/>
-        <Control Id="Back" Type="PushButton" X="180" Y="243" Width="56" Height="17"
+        <Control Id="Back" Type="PushButton" X="180" Y="317" Width="56" Height="17"
                  Text="!(loc.WixUIBack)">
           <Publish Event="NewDialog" Value="WelcomeDlg"/>
         </Control>
-        <Control Id="Next" Type="PushButton" X="236" Y="243" Width="56" Height="17"
+        <Control Id="Next" Type="PushButton" X="236" Y="317" Width="56" Height="17"
                  Default="yes" Text="!(loc.WixUINext)">
           <Publish Event="NewDialog" Value="InstallDirDlg" Condition="PRIVACY_CONSENT=1"/>
         </Control>
-        <Control Id="Cancel" Type="PushButton" X="304" Y="243" Width="56" Height="17"
+        <Control Id="Cancel" Type="PushButton" X="304" Y="317" Width="56" Height="17"
                  Cancel="yes" Text="!(loc.WixUICancel)">
           <Publish Event="SpawnDialog" Value="CancelDlg"/>
         </Control>
