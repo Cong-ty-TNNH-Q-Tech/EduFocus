@@ -7,6 +7,27 @@ và dự án tuân theo [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ---
 
+## [2.0.2] - 2026-10-31
+
+### Fixed (Installer — shortcut nằm sai chỗ)
+
+- **Nguyên nhân:** `Product.wxs` khai báo shortcut qua các ID không phải thư mục chuẩn của MSI
+  (`CommonDesktopFolder`, `CommonProgramsFolder`). Windows Installer không nhận ra các ID này nên
+  resolve chúng về `TARGETDIR` với `DefaultDir = "."`, tạo `C:\EduFocus.lnk` và `C:\EduFocus` ngay
+  gốc ổ cài đặt thay vì Public Desktop và Start Menu. Người dùng cài xong không thấy shortcut ở đâu.
+- **Sửa:** dùng đúng ID chuẩn `DesktopFolder` (Public Desktop) và `ProgramMenuFolder`
+  (Start Menu all-users) với `Scope="perMachine"`; bỏ `RemoveFolder` không cần thiết trên Desktop.
+- **Đã xác minh:** build lại MSI, kiểm tra bảng Directory/Shortcut, cài nâng cấp thực tế từ 2.0.1 trên
+  Windows 10 — shortcut xuất hiện tại `C:\Users\Public\Desktop\EduFocus.lnk` và
+  `C:\ProgramData\Microsoft\Windows\Start Menu\Programs\EduFocus\EduFocus.lnk`; file rác ở gốc `C:\`
+  được dọn khi nâng cấp; service `EduFocusProtection` vẫn Running.
+
+### Breaking changes
+
+- Không có. Schema dữ liệu, định dạng file và API giữ nguyên.
+
+---
+
 ## [2.0.1] - 2026-10-31
 
 ### Fixed (Installer — chặn nhầm Windows 10/11)

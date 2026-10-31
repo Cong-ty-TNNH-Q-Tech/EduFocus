@@ -241,11 +241,15 @@
       <Directory Id="INSTALLFOLDER" Name="EduFocus"/>
     </StandardDirectory>
 
-    <Directory Id="CommonDesktopFolder"/>
+    <!-- DesktopFolder and ProgramMenuFolder are the MSI standard folder IDs;
+         with Scope=perMachine they resolve to the Public Desktop and the
+         all-users Start Menu. Custom IDs such as CommonDesktopFolder are not
+         standard and silently resolve to the install volume root. -->
+    <StandardDirectory Id="DesktopFolder"/>
 
-    <Directory Id="CommonProgramsFolder">
+    <StandardDirectory Id="ProgramMenuFolder">
       <Directory Id="CommonProgramsEduFocus" Name="EduFocus"/>
-    </Directory>
+    </StandardDirectory>
   </Fragment>
 
   <!-- Install location metadata for support and uninstall cleanup. -->
@@ -285,14 +289,13 @@
   <!-- Desktop shortcut -->
   <Fragment>
     <Component Id="AppShortcutDesktop"
-               Directory="CommonDesktopFolder"
+               Directory="DesktopFolder"
                Guid="B2C3D4E5-F6A7-8901-BCDE-F12345678901">
       <Shortcut Id="ShortcutDesktop"
                 Name="EduFocus"
                 Description="Responsible study monitoring for parents."
                 Target="[INSTALLFOLDER]EduFocus.exe"
                 WorkingDirectory="INSTALLFOLDER"/>
-      <RemoveFolder Id="RemoveDesktopShortcut" Directory="CommonDesktopFolder" On="uninstall"/>
       <RegistryValue Root="HKLM"
                      Key="Software\ThanhTrunggDEV\EduFocus"
                      Name="DesktopShortcut"

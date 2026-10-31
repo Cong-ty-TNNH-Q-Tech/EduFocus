@@ -71,7 +71,9 @@ MSI chứa:
 - `native-host\EduFocus.NativeHost.exe` (self-contained; component GUID cố định) — cầu nối native
   messaging cho extension trình duyệt. `Build-Installer.ps1` từ chối build nếu thiếu file này vì
   `Product.wxs` tham chiếu nó cho custom action đăng ký/gỡ đăng ký.
-- Shortcut **Desktop** và **Start Menu** dùng chung cho mọi người dùng (`CommonDesktopFolder`, `CommonProgramsFolder`).
+- Shortcut **Desktop** và **Start Menu** dùng chung cho mọi người dùng: `DesktopFolder`
+  (Public Desktop) và `ProgramMenuFolder\EduFocus` (Start Menu all-users). Chỉ dùng ID thư mục chuẩn
+  của MSI; ID tự đặt như `CommonDesktopFolder` sẽ bị resolve về gốc ổ cài đặt.
 - Registry `HKLM\Software\ThanhTrunggDEV\EduFocus` với `InstallLocation` và `Version` (keypath của component shortcut/registry).
 - `docs\privacy-notice.md`, `THIRD-PARTY-NOTICES.md` và `LICENSE` (bản sao chỉ đọc từ repo) trong thư mục cài.
 - Thư viện native SQLCipher (`e_sqlcipher.dll` từ `SQLitePCLRaw.lib.e_sqlcipher`) đi kèm trong bundle
