@@ -19,9 +19,20 @@ và dự án tuân theo [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 - **Nội dung bị ẩn:** `ScrollableText` hiển thị hộp trắng trong msiexec trên Windows 10/11 nên toàn bộ nội dung thông báo quyền riêng tư không đọc được. Thay bằng control `Text` tự xuống dòng, tăng chiều cao dialog để đủ 7 đoạn.
 - **Đoạn giữa bị thay bằng `...`:** msiexec áp dụng path ellipsis khi nội dung chứa dấu `\`; bỏ dấu `\` khỏi văn bản trong dialog. Đã xác minh bằng MSI dựng lại: thông báo hiển thị đủ, Next bị chặn khi chưa tick, tick xong mới sang Destination Folder.
 
+### Fixed (Các lỗi khác trong bản này)
+
+- **Installer:** chặn custom action gỡ đăng ký native host và xóa dữ liệu khi MSI đang nâng cấp; sửa ACL manifest native host; hỗ trợ ZIP extension cho bản pre-release và chạy được Measure-Soak.
+- **WPF:** sửa luồng UI `ConfigureAwait`, giải phóng Mutex, khóa `IsBusy` của Onboarding/Parent Mode và xử lý tray/retention.
+- **Watchdog & service:** tắt user-mode watchdog trong Service Mode, sửa race condition của `WatchdogHost`; ổn định pipe listener khi đạt `MaxClients` và tránh double-dispose `ServiceProvider`.
+- **Protection & blocking:** hỗ trợ `ProcessWatcher` trong Session 0, debounce theo PID; áp dụng live reload rule cho `ProtectionEngine`/Service Mode; sửa backup `BrowserDnsPolicy` 64/32-bit, quản lý leaf certificate của CA cục bộ, timeout NamedPipe/block page và `HostsFileBlocker`.
+- **Attention & camera:** khởi tạo lazy model ONNX để tránh crash lúc startup; retry đóng `AttentionEvent`, đồng bộ `CameraCheck`/pipeline, đóng camera trễ và xử lý ngắt quãng Sleep/Wake.
+- **Activity, lịch & báo cáo:** không tính nhầm thời gian đọc bài/học online dưới ngưỡng nghỉ thành `IdleSeconds`; chống crash `Touch()` khi đồng hồ hệ thống bị lùi và chặn vòng lặp DST; thêm cột `DistractedSeconds` vào CSV, `Neutral`/`OnlineClass` vào `DailyStudySummary` và giữ `BlockedAttempts` của phiên Active.
+- **Privacy & updater:** đồng bộ live `MonitoringEnabled`/thresholds, bảo toàn `CameraDeviceId`, xác thực lưu camera; updater yêu cầu Parent Mode khi đang bảo vệ, `ApproveExit` trước `Shutdown` và sửa so sánh pre-release.
+- **Browser extension:** sửa trạng thái kết nối trong popup, lọc rule allow/expired, cache session snapshot và `IsAllowedOrigin`.
+
 ### Breaking changes
 
-- Không có. Bản vá chỉ sửa launch condition và hộp thoại cài đặt; schema dữ liệu, định dạng file và API giữ nguyên.
+- Không có. Schema dữ liệu, định dạng file và API giữ nguyên.
 
 ---
 
