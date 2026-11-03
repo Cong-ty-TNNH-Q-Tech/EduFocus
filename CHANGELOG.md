@@ -7,6 +7,30 @@ và dự án tuân theo [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ---
 
+## [2.0.4] - 2026-11-03
+
+### Added (Giao diện — Trang "Về chúng tôi" & Đội ngũ Nhà phát triển)
+
+- Bổ sung mục điều hướng và trang **Về chúng tôi** đồng bộ với hệ thống thiết kế của ứng dụng.
+- Hiển thị thông tin giới thiệu dự án EduFocus, giá trị cốt lõi và hồ sơ **Đội ngũ Nhà phát triển**:
+  - **Đào Duy Hưng** — Lớp `11B5`, ngày sinh `10/03/2010` (Đồng tác giả & Nhà phát triển EduFocus).
+  - **Nguyễn Trường Giang** — Lớp `10C1`, ngày sinh `04/12/2011` (Đồng tác giả & Nhà phát triển EduFocus).
+
+### Changed (Giao diện — Tối ưu hóa trang Tổng quan cho học sinh)
+
+- Thiết kế lại khu vực Hero Banner, 3 thẻ chỉ số nhanh (Quick Stats) và khu vực **Hôm nay của bạn** với lộ trình 3 bước sẵn sàng học tập trực quan, thân thiện với học sinh.
+
+### Fixed (Giao diện — Căn chỉnh chuẩn tâm hệ thống Icon & căn lề văn bản)
+
+- **Nguyên nhân:** Các icon sử dụng font glyph `Segoe MDL2 Assets` kết hợp `TextFormattingMode="Display"` có khung độ rộng không đối xứng, làm biểu tượng cảnh báo trong vòng tròn trạng thái bảo vệ và các huy hiệu bị lệch sang trái. Ngoài ra mô tả trạng thái bảo vệ có `MaxWidth` nhưng thiếu `HorizontalAlignment="Left"` dẫn đến bị thụt lề.
+- **Sửa:** Thay thế toàn bộ icon bằng đồ họa Vector `Path` trên hệ tọa độ chuẩn `24x24` (`Viewbox`/`Canvas`) đối xứng tuyệt đối qua tâm, căn lề trái chuẩn xác cho các đoạn mô tả và loại bỏ viền nét đứt (`FocusVisualStyle`) trên khung cuộn.
+
+### Breaking changes
+
+- Không có. Schema dữ liệu, định dạng file và API giữ nguyên.
+
+---
+
 ## [2.0.3] - 2026-11-03
 
 ### Fixed (Báo cáo — phiên học kéo dài qua nửa đêm)
