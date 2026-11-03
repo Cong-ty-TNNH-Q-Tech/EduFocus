@@ -221,11 +221,21 @@ public sealed class ScheduleServiceTests
         harness.Audits.Entries.Should().Contain(x =>
             x.EventType == AuditEventType.TamperDetected && x.Actor == AuditActor.System);
 
+        // Next tick (30s later) must still hold protection because the real monotonic window duration (60m) has not elapsed!
         Advance(harness, TimeSpan.FromSeconds(30));
         var next = await harness.Service.EvaluateAsync();
 
         next.ClockJumpDetected.Should().BeFalse();
-        next.Overview.ProtectionEnabled.Should().BeFalse();
+        next.Overview.ProtectionEnabled.Should().BeTrue();
+        harness.Engine.RemoveCount.Should().Be(0);
+
+        // Once the real monotonic duration of the window has elapsed, protection is disabled.
+        Advance(harness, TimeSpan.FromMinutes(60));
+        var afterRealDuration = await harness.Service.EvaluateAsync();
+
+        afterRealDuration.ClockJumpDetected.Should().BeFalse();
+        afterRealDuration.Overview.ProtectionEnabled.Should().BeFalse();
+        harness.Engine.RemoveCount.Should().Be(1);
     }
 
     [Fact]

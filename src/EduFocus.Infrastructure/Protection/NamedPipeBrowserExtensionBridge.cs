@@ -27,6 +27,7 @@ public sealed class NamedPipeBrowserExtensionBridge : IBrowserExtensionBridge, I
     private readonly IAppLogger _logger;
     private readonly TimeProvider _timeProvider;
     private readonly SemaphoreSlim _stateGate = new(1, 1);
+    private readonly SemaphoreSlim _connectionSlots;
     private readonly ConcurrentDictionary<Guid, ClientConnection> _clients = new();
     private readonly object _snapshotLock = new();
 
@@ -51,6 +52,8 @@ public sealed class NamedPipeBrowserExtensionBridge : IBrowserExtensionBridge, I
 
         if (_options.MaxClients is < 1 or > 254)
             throw new ArgumentOutOfRangeException(nameof(options), "MaxClients must be between 1 and 254.");
+
+        _connectionSlots = new SemaphoreSlim(_options.MaxClients, _options.MaxClients);
     }
 
     public bool IsRunning => _running;
@@ -74,13 +77,12 @@ public sealed class NamedPipeBrowserExtensionBridge : IBrowserExtensionBridge, I
                 return;
             }
 
-            var listener = CreateListener();
             var cts = new CancellationTokenSource();
 
             UpdateState(rules, nowUtc);
             _cts = cts;
             _running = true;
-            _acceptLoop = AcceptLoopAsync(listener, cts.Token);
+            _acceptLoop = Task.Run(() => AcceptLoopAsync(cts.Token), CancellationToken.None);
 
             _logger.Info(LogCategories.Protection, "Browser extension bridge started.");
         }
@@ -165,42 +167,52 @@ public sealed class NamedPipeBrowserExtensionBridge : IBrowserExtensionBridge, I
     {
         await StopAsync(CancellationToken.None).ConfigureAwait(false);
         _stateGate.Dispose();
+        _connectionSlots.Dispose();
     }
 
-    private async Task AcceptLoopAsync(NamedPipeServerStream listener, CancellationToken cancellationToken)
+    private async Task AcceptLoopAsync(CancellationToken cancellationToken)
     {
-        // Ownership of the connected instance moves to ClientConnection; only
-        // dispose a listener that is still waiting for a connection.
-        NamedPipeServerStream? owned = listener;
+        NamedPipeServerStream? pending = null;
+        var slotAcquired = false;
+
         try
         {
             while (!cancellationToken.IsCancellationRequested)
             {
-                await owned.WaitForConnectionAsync(cancellationToken).ConfigureAwait(false);
+                await _connectionSlots.WaitAsync(cancellationToken).ConfigureAwait(false);
+                slotAcquired = true;
 
-                NamedPipeServerStream? next = null;
                 try
                 {
-                    next = CreateListener();
+                    pending = CreateListener();
+                    await pending.WaitForConnectionAsync(cancellationToken).ConfigureAwait(false);
                 }
-                catch (Exception ex)
+                catch (IOException ex) when (!cancellationToken.IsCancellationRequested)
                 {
-                    _logger.Error(
+                    pending?.Dispose();
+                    pending = null;
+                    _connectionSlots.Release();
+                    slotAcquired = false;
+                    _logger.Warning(
                         LogCategories.Protection,
-                        "Could not create another browser bridge listener.",
-                        ex);
+                        $"Transient browser bridge listener error ({ex.GetType().Name}); retrying.");
+                    await Task.Delay(TimeSpan.FromMilliseconds(50), cancellationToken).ConfigureAwait(false);
+                    continue;
                 }
 
-                var client = new ClientConnection(Guid.NewGuid(), owned);
-                _clients[client.Id] = client;
-                _ = HandleClientAsync(client, cancellationToken);
+                var connected = pending;
+                pending = null;
+                slotAcquired = false;
 
-                owned = next;
-                if (owned is null)
-                    return;
+                var client = new ClientConnection(Guid.NewGuid(), connected);
+                _clients[client.Id] = client;
+                _ = HandleClientWithSlotAsync(client, cancellationToken);
             }
         }
         catch (OperationCanceledException)
+        {
+        }
+        catch (ObjectDisposedException)
         {
         }
         catch (Exception ex)
@@ -212,7 +224,36 @@ public sealed class NamedPipeBrowserExtensionBridge : IBrowserExtensionBridge, I
         }
         finally
         {
-            owned?.Dispose();
+            if (slotAcquired)
+            {
+                try
+                {
+                    _connectionSlots.Release();
+                }
+                catch (ObjectDisposedException)
+                {
+                }
+            }
+
+            pending?.Dispose();
+        }
+    }
+
+    private async Task HandleClientWithSlotAsync(ClientConnection client, CancellationToken cancellationToken)
+    {
+        try
+        {
+            await HandleClientAsync(client, cancellationToken).ConfigureAwait(false);
+        }
+        finally
+        {
+            try
+            {
+                _connectionSlots.Release();
+            }
+            catch (ObjectDisposedException)
+            {
+            }
         }
     }
 
@@ -373,7 +414,7 @@ public sealed class NamedPipeBrowserExtensionBridge : IBrowserExtensionBridge, I
             return new NamedPipeServerStream(
                 _options.PipeName,
                 PipeDirection.InOut,
-                _options.MaxClients,
+                NamedPipeServerStream.MaxAllowedServerInstances,
                 PipeTransmissionMode.Byte,
                 options,
                 bufferSize,
@@ -399,7 +440,7 @@ public sealed class NamedPipeBrowserExtensionBridge : IBrowserExtensionBridge, I
         return NamedPipeServerStreamAcl.Create(
             _options.PipeName,
             PipeDirection.InOut,
-            _options.MaxClients,
+            NamedPipeServerStream.MaxAllowedServerInstances,
             PipeTransmissionMode.Byte,
             options,
             bufferSize,

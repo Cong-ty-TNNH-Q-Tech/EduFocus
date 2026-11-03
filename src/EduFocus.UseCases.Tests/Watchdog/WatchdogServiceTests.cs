@@ -325,6 +325,32 @@ public sealed class WatchdogServiceTests
     }
 
     [Fact]
+    public async Task Tick_kills_pending_process_that_hangs_before_first_heartbeat_even_if_mutex_is_held()
+    {
+        var harness = new Harness();
+        harness.Settings.Stored = Settings(protectionOn: true);
+        harness.Processes.AliveProcesses.Add(4321);
+        harness.Processes.AppInstanceRunning = true;
+        harness.States.State = new WatchdogRestartState
+        {
+            RestartCount = 1,
+            WindowStartedAtUtc = Now.AddMinutes(-2),
+            LastRestartAtUtc = Now.AddSeconds(-45),
+            NextRestartAtUtc = Now.AddSeconds(-40),
+            PendingProcessId = 4321,
+            PendingProcessStartedAtUtc = Now.AddSeconds(-45)
+        };
+
+        var result = await harness.Service.TickAsync(loginStart: false);
+
+        result.Action.Should().Be(WatchdogTickAction.KilledHang);
+        result.Reason.Should().Be(WatchdogRestartReason.Hang);
+        harness.Processes.Killed.Should().Contain(4321);
+        harness.States.State!.PendingProcessId.Should().BeNull();
+        harness.States.State.PendingReason.Should().Be(WatchdogRestartReason.Hang);
+    }
+
+    [Fact]
     public async Task Tick_preserves_pending_hang_reason_when_restart_window_expires()
     {
         var harness = new Harness();

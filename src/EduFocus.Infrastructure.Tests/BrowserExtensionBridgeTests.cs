@@ -162,6 +162,36 @@ public sealed class BrowserExtensionBridgeTests
         bridge.IsRunning.Should().BeFalse();
     }
 
+    [Fact]
+    public async Task Reaching_max_clients_does_not_terminate_the_accept_loop()
+    {
+        var options = new BrowserExtensionBridgeOptions
+        {
+            PipeName = "EduFocus.BrowserBridge.Test." + Guid.NewGuid().ToString("N"),
+            MaxClients = 2
+        };
+        await using var bridge = new NamedPipeBrowserExtensionBridge(
+            options,
+            new NullLogger(),
+            new FixedTimeProvider(Now));
+
+        await bridge.StartAsync([DomainRule("chatgpt.com")], Now.UtcDateTime);
+
+        await using (var client1 = await ConnectAsync(options.PipeName))
+        await using (var client2 = await ConnectAsync(options.PipeName))
+        {
+            using var snap1 = await ReadJsonAsync(client1);
+            using var snap2 = await ReadJsonAsync(client2);
+            snap1.RootElement.GetProperty("type").GetString().Should().Be("snapshot");
+            snap2.RootElement.GetProperty("type").GetString().Should().Be("snapshot");
+        }
+
+        // After both disconnect, a new client must still be accepted cleanly.
+        await using var client3 = await ConnectAsync(options.PipeName);
+        using var snap3 = await ReadJsonAsync(client3);
+        snap3.RootElement.GetProperty("type").GetString().Should().Be("snapshot");
+    }
+
     private static NamedPipeBrowserExtensionBridge CreateBridge(
         out BrowserExtensionBridgeOptions options)
     {

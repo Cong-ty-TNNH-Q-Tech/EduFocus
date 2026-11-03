@@ -102,9 +102,9 @@ public partial class UpdateViewModel : ObservableObject
             return;
 
         var settings = await _settings.GetAsync();
-        if (settings?.ProtectionEnabled == true && _authorizer is { IsAuthenticated: false })
+        if (_authorizer is null || !_authorizer.IsAuthenticated)
         {
-            StatusMessage = "Đang trong phiên bảo vệ. Vui lòng mở Parent Mode (nhập PIN phụ huynh) trước khi cài đặt cập nhật.";
+            StatusMessage = "Vui lòng mở Parent Mode (nhập PIN phụ huynh) trước khi tải và cài đặt bản cập nhật.";
             return;
         }
 
@@ -125,16 +125,12 @@ public partial class UpdateViewModel : ObservableObject
                 progress,
                 beforeRestartAsync: async () =>
                 {
+                    _authorizer.RecordActivity();
                     StatusMessage = "Đang cài đặt và khởi động lại...";
-                    if (settings?.ProtectionEnabled == true && _protection is not null)
+                    var latestSettings = await _settings.GetAsync();
+                    if (latestSettings?.ProtectionEnabled == true && _protection is not null)
                     {
-                        try
-                        {
-                            await _protection.DisableForExitAsync();
-                        }
-                        catch
-                        {
-                        }
+                        await _protection.DisableForExitAsync();
                     }
 
                     _exitState?.ApproveExit();

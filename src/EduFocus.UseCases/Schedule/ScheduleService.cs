@@ -40,6 +40,8 @@ public sealed class ScheduleService : IScheduleUseCase
 
     private DateTime? _lastWallUtc;
     private TimeSpan? _lastTick;
+    private TimeSpan? _activeWindowMonotonicEndTick;
+    private TimeSpan? _tamperHoldUntilMonotonicTick;
 
     public ScheduleService(
         IScheduleWindowRepository windows,
@@ -108,6 +110,8 @@ public sealed class ScheduleService : IScheduleUseCase
                 now,
                 cancellationToken);
 
+            _activeWindowMonotonicEndTick = null;
+            _tamperHoldUntilMonotonicTick = null;
             return await CompleteWithEvaluationAsync(cancellationToken);
         }
         finally
@@ -156,6 +160,8 @@ public sealed class ScheduleService : IScheduleUseCase
                 now,
                 cancellationToken);
 
+            _activeWindowMonotonicEndTick = null;
+            _tamperHoldUntilMonotonicTick = null;
             return await CompleteWithEvaluationAsync(cancellationToken);
         }
         finally
@@ -205,6 +211,8 @@ public sealed class ScheduleService : IScheduleUseCase
                 now,
                 cancellationToken);
 
+            _activeWindowMonotonicEndTick = null;
+            _tamperHoldUntilMonotonicTick = null;
             return await CompleteWithEvaluationAsync(cancellationToken);
         }
         finally
@@ -233,6 +241,8 @@ public sealed class ScheduleService : IScheduleUseCase
                 now,
                 cancellationToken);
 
+            _activeWindowMonotonicEndTick = null;
+            _tamperHoldUntilMonotonicTick = null;
             return await CompleteWithEvaluationAsync(cancellationToken);
         }
         finally
@@ -268,6 +278,9 @@ public sealed class ScheduleService : IScheduleUseCase
                     : "Parent disabled the protection schedule.",
                 now,
                 cancellationToken);
+
+            _activeWindowMonotonicEndTick = null;
+            _tamperHoldUntilMonotonicTick = null;
 
             if (isEnabled)
                 return await CompleteWithEvaluationAsync(cancellationToken);
@@ -346,8 +359,31 @@ public sealed class ScheduleService : IScheduleUseCase
             var zone = _timeProvider.LocalTimeZone;
             var localNow = TimeZoneInfo.ConvertTimeFromUtc(now, zone);
             var active = ScheduleClock.FindActive(windows, localNow);
+            var currentTick = _monotonic.GetTickCount();
 
-            if (!clockJump && await ClampOverrideAsync(settings, active, localNow, zone, now, cancellationToken))
+            if (active is not null && !clockJump)
+            {
+                var windowEndUtc = ScheduleClock.GetWindowEndUtc(active, DateOnly.FromDateTime(localNow), zone);
+                var remaining = windowEndUtc - now;
+                _activeWindowMonotonicEndTick = remaining > TimeSpan.Zero ? currentTick + remaining : null;
+                _tamperHoldUntilMonotonicTick = null;
+            }
+            else if (clockJump && _activeWindowMonotonicEndTick is { } expectedEnd && currentTick < expectedEnd)
+            {
+                _tamperHoldUntilMonotonicTick = expectedEnd;
+            }
+
+            if (_tamperHoldUntilMonotonicTick is { } expiredHold && currentTick >= expiredHold)
+            {
+                _tamperHoldUntilMonotonicTick = null;
+                _activeWindowMonotonicEndTick = null;
+            }
+
+            var heldByTamper = _tamperHoldUntilMonotonicTick is { } holdUntil && currentTick < holdUntil;
+            if (active is null && !clockJump && !heldByTamper)
+                _activeWindowMonotonicEndTick = null;
+
+            if (!clockJump && !heldByTamper && await ClampOverrideAsync(settings, active, localNow, zone, now, cancellationToken))
                 settings = await _settings.GetAsync(cancellationToken) ?? settings;
 
             var overridden = settings.IsScheduleOverridden(now);
@@ -355,6 +391,7 @@ public sealed class ScheduleService : IScheduleUseCase
             if (active is null)
             {
                 if (!clockJump
+                    && !heldByTamper
                     && settings.ProtectionEnabled
                     && settings.ProtectionSource == ProtectionSource.Schedule)
                 {
@@ -363,6 +400,8 @@ public sealed class ScheduleService : IScheduleUseCase
                         var result = await _protection.DisableForScheduleAsync(cancellationToken);
                         protectionChanged = result.Changed;
                         warnings.AddRange(result.Warnings);
+                        _activeWindowMonotonicEndTick = null;
+                        _tamperHoldUntilMonotonicTick = null;
                     }
                     catch (OperationCanceledException)
                     {

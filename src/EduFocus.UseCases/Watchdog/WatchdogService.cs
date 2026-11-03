@@ -206,18 +206,37 @@ public sealed class WatchdogService : IWatchdogUseCase
             return WatchdogTickResult.Stop(_options.PollInterval);
         }
 
-        if (_processes.IsAppInstanceRunning())
-        {
-            // A process owns the app mutex but has no usable heartbeat yet:
-            // either it is still starting or it is starting a second instance
-            // that will exit on its own. Never start a duplicate.
-            return WatchdogTickResult.Wait(_options.PollInterval);
-        }
-
         if (state.PendingProcessId is { } pendingPid)
         {
-            if (_processes.IsProcessAlive(pendingPid, state.PendingProcessStartedAtUtc ?? DateTime.MinValue))
+            var pendingStarted = state.PendingProcessStartedAtUtc ?? DateTime.MinValue;
+            if (_processes.IsProcessAlive(pendingPid, pendingStarted))
             {
+                if (!resumed &&
+                    state.PendingProcessStartedAtUtc is { } startedAt &&
+                    now - startedAt > _options.StartupGrace &&
+                    _processes.TryKill(pendingPid, startedAt))
+                {
+                    _logger.Warning(
+                        LogCategories.Watchdog,
+                        FormattableString.Invariant(
+                            $"Watchdog killed pending EduFocus pid={pendingPid} that did not publish a heartbeat within {_options.StartupGrace.TotalSeconds:0}s."));
+
+                    state = state with
+                    {
+                        PendingProcessId = null,
+                        PendingProcessStartedAtUtc = null,
+                        PendingReason = WatchdogRestartReason.Hang,
+                        NextRestartAtUtc = now + _options.HangKillDelay
+                    };
+                    await _states.WriteAsync(state, cancellationToken);
+
+                    return new WatchdogTickResult(
+                        WatchdogTickAction.KilledHang,
+                        _options.HangKillDelay,
+                        WatchdogRestartReason.Hang,
+                        pendingPid);
+                }
+
                 return WatchdogTickResult.Wait(_options.PollInterval);
             }
 
@@ -227,6 +246,14 @@ public sealed class WatchdogService : IWatchdogUseCase
                 PendingProcessStartedAtUtc = null,
                 PendingReason = WatchdogRestartReason.UnexpectedExit
             };
+        }
+
+        if (_processes.IsAppInstanceRunning())
+        {
+            // A process owns the app mutex but has no usable heartbeat yet:
+            // either it is still starting or it is starting a second instance
+            // that will exit on its own. Never start a duplicate.
+            return WatchdogTickResult.Wait(_options.PollInterval);
         }
 
         if (state.GaveUpUntilUtc is { } gaveUpUntil && now < gaveUpUntil)
