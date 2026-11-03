@@ -8,13 +8,16 @@ import {
 const HOST_NAME = 'com.edufocus.native_host';
 const RECONNECT_ALARM = 'edufocus-bridge';
 const SESSION_SNAPSHOT_KEY = 'edufocusSnapshot';
-const RETRY_WINDOW_MS = 15_000;
+const RETRY_WINDOW_MS = 2_000;
+const INITIAL_SNAPSHOT_WAIT_MS = 600;
 const DUPLICATE_WINDOW_MS = 5_000;
 const REDIRECT_WINDOW_MS = 1_000;
 
 let snapshot = null;
 let port = null;
 let lastConnectAttempt = 0;
+let initialSnapshotPromise = null;
+let resolveInitialSnapshot = null;
 const blockedTabs = new Map();
 const reportedUrls = new Map();
 
@@ -38,6 +41,15 @@ function ensureAlarm() {
   chrome.alarms.create(RECONNECT_ALARM, { periodInMinutes: 1 });
 }
 
+function settleInitialSnapshot() {
+  if (resolveInitialSnapshot) {
+    const resolve = resolveInitialSnapshot;
+    resolveInitialSnapshot = null;
+    initialSnapshotPromise = null;
+    resolve();
+  }
+}
+
 function connectBridge() {
   if (port) return;
 
@@ -49,12 +61,18 @@ function connectBridge() {
     port = chrome.runtime.connectNative(HOST_NAME);
   } catch {
     port = null;
+    settleInitialSnapshot();
     return;
   }
+
+  initialSnapshotPromise = new Promise((resolve) => {
+    resolveInitialSnapshot = resolve;
+  });
 
   port.onMessage.addListener(handleNativeMessage);
   port.onDisconnect.addListener(() => {
     port = null;
+    settleInitialSnapshot();
     setSnapshot(null);
   });
 
@@ -64,13 +82,19 @@ function connectBridge() {
 function handleNativeMessage(message) {
   if (!message || typeof message !== 'object') return;
 
+  lastConnectAttempt = 0;
+
   if (message.type === 'unavailable') {
     setSnapshot(null);
+    settleInitialSnapshot();
     return;
   }
 
   const next = normalizeSnapshot(message);
-  if (next !== null) setSnapshot(next);
+  if (next !== null) {
+    setSnapshot(next);
+    settleInitialSnapshot();
+  }
 }
 
 function setSnapshot(next) {
@@ -89,6 +113,37 @@ function setSnapshot(next) {
     // Ignore storage errors.
   }
   updateBadge();
+  if (next !== null && countActiveBlockingRules(next) > 0) {
+    enforceOpenTabs(next);
+  }
+}
+
+function enforceOpenTabs(currentSnapshot) {
+  if (!chrome.tabs?.query) return;
+  try {
+    chrome.tabs.query({}, (tabs) => {
+      if (!Array.isArray(tabs)) return;
+      for (const tab of tabs) {
+        if (!tab || typeof tab.id !== 'number' || tab.id < 0 || typeof tab.url !== 'string') {
+          continue;
+        }
+        const verdict = evaluateSnapshot(currentSnapshot, tab.url);
+        if (verdict.decision !== 'block') continue;
+
+        const now = Date.now();
+        const lastRedirect = blockedTabs.get(tab.id);
+        if (lastRedirect !== undefined && now - lastRedirect < REDIRECT_WINDOW_MS) continue;
+        blockedTabs.set(tab.id, now);
+
+        chrome.tabs
+          .update(tab.id, { url: chrome.runtime.getURL('blocked.html') })
+          .catch(() => {});
+        reportBlocked(tab.url);
+      }
+    });
+  } catch {
+    // Querying open tabs is best-effort.
+  }
 }
 
 function hasBlockingRules() {
@@ -106,11 +161,17 @@ function updateBadge() {
 }
 
 async function handleNavigation(details) {
-  if (!details || details.frameId !== 0 || details.tabId < 0) return;
+  if (!details || details.tabId < 0) return;
 
   if (snapshot === null) {
     connectBridge();
     await restoreSnapshotPromise;
+    if (snapshot === null && initialSnapshotPromise !== null) {
+      await Promise.race([
+        initialSnapshotPromise,
+        new Promise((resolve) => setTimeout(resolve, INITIAL_SNAPSHOT_WAIT_MS))
+      ]);
+    }
     if (snapshot === null) return;
   }
 

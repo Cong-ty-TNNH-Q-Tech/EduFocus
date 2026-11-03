@@ -174,8 +174,12 @@ internal static class Program
 
     private sealed class Relay(Stream inbox, Stream outbox) : IDisposable
     {
+        private const int MaxBufferedBrowserFrames = 16;
+
         private readonly Stream _inbox = inbox;
         private readonly Stream _outbox = outbox;
+        private readonly SemaphoreSlim _pipeGate = new(1, 1);
+        private readonly Queue<byte[]> _pendingBrowserFrames = new();
         private NamedPipeClientStream? _pipe;
         private bool _unavailableSent;
 
@@ -183,21 +187,36 @@ internal static class Program
         {
             while (!cancellationToken.IsCancellationRequested)
             {
-                var payload = await ReadFrameAsync(
-                        _inbox,
-                        BrowserBridgeProtocol.MaxIncomingMessageBytes,
-                        cancellationToken)
-                    .ConfigureAwait(false);
+                byte[]? payload;
+                try
+                {
+                    payload = await ReadFrameAsync(
+                            _inbox,
+                            BrowserBridgeProtocol.MaxIncomingMessageBytes,
+                            cancellationToken)
+                        .ConfigureAwait(false);
+                }
+                catch (InvalidDataException)
+                {
+                    return;
+                }
+
                 if (payload is null)
                     return;
 
-                var pipe = Volatile.Read(ref _pipe);
-                if (pipe is null)
-                    continue;
-
+                await _pipeGate.WaitAsync(cancellationToken).ConfigureAwait(false);
                 try
                 {
-                    await WriteFrameAsync(pipe, payload, cancellationToken).ConfigureAwait(false);
+                    if (_pipe is null)
+                    {
+                        if (_pendingBrowserFrames.Count >= MaxBufferedBrowserFrames)
+                            _pendingBrowserFrames.Dequeue();
+
+                        _pendingBrowserFrames.Enqueue(payload);
+                        continue;
+                    }
+
+                    await WriteFrameAsync(_pipe, payload, cancellationToken).ConfigureAwait(false);
                 }
                 catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
                 {
@@ -206,6 +225,10 @@ internal static class Program
                 catch (Exception)
                 {
                     // The pump task notices the broken pipe and reconnects.
+                }
+                finally
+                {
+                    _pipeGate.Release();
                 }
             }
         }
@@ -228,7 +251,27 @@ internal static class Program
                     continue;
                 }
 
-                Volatile.Write(ref _pipe, pipe);
+                await _pipeGate.WaitAsync(cancellationToken).ConfigureAwait(false);
+                try
+                {
+                    _pipe = pipe;
+                    while (_pendingBrowserFrames.TryDequeue(out var pending))
+                    {
+                        try
+                        {
+                            await WriteFrameAsync(pipe, pending, cancellationToken).ConfigureAwait(false);
+                        }
+                        catch (Exception)
+                        {
+                            break;
+                        }
+                    }
+                }
+                finally
+                {
+                    _pipeGate.Release();
+                }
+
                 _unavailableSent = false;
                 try
                 {
@@ -255,8 +298,18 @@ internal static class Program
                 }
                 finally
                 {
-                    Volatile.Write(ref _pipe, null);
-                    pipe.Dispose();
+                    await _pipeGate.WaitAsync(CancellationToken.None).ConfigureAwait(false);
+                    try
+                    {
+                        if (ReferenceEquals(_pipe, pipe))
+                            _pipe = null;
+
+                        pipe.Dispose();
+                    }
+                    finally
+                    {
+                        _pipeGate.Release();
+                    }
                 }
 
                 if (cancellationToken.IsCancellationRequested)
@@ -269,8 +322,18 @@ internal static class Program
 
         public void Dispose()
         {
-            var pipe = Interlocked.Exchange(ref _pipe, null);
-            pipe?.Dispose();
+            _pipeGate.Wait();
+            try
+            {
+                var pipe = _pipe;
+                _pipe = null;
+                pipe?.Dispose();
+            }
+            finally
+            {
+                _pipeGate.Release();
+                _pipeGate.Dispose();
+            }
         }
 
         private async Task SendUnavailableAsync(CancellationToken cancellationToken)

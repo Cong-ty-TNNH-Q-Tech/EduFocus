@@ -126,6 +126,12 @@ public sealed partial class BlocklistViewModel : ObservableObject
         };
 
         var effect = NewRuleEffectIndex == 1 ? BlockRuleEffect.Allow : BlockRuleEffect.Block;
+        var matchType = ruleType switch
+        {
+            RuleType.Domain => RuleMatchType.Suffix,
+            RuleType.Url => RuleMatchType.Contains,
+            _ => RuleMatchType.Exact
+        };
 
         IsBusy = true;
         try
@@ -134,7 +140,8 @@ public sealed partial class BlocklistViewModel : ObservableObject
                 ruleType,
                 rawValue,
                 BlockRuleCategory.Custom,
-                effect);
+                effect,
+                matchType);
 
             var result = await Task.Run(() => _rules.AddCustomAsync(request));
             NewRuleValue = string.Empty;

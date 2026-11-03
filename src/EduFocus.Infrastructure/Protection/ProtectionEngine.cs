@@ -548,7 +548,9 @@ public sealed class ProtectionEngine : IProtectionEnginePort, IAsyncDisposable
         var all = await _rules.ListAsync(cancellationToken).ConfigureAwait(false);
 
         var effective = all
-            .Where(rule => rule.MatchType == RuleMatchType.Exact && rule.IsEffective(nowUtc))
+            .Where(rule => (rule.MatchType == RuleMatchType.Exact
+                || (rule.RuleType == RuleType.Domain && rule.MatchType == RuleMatchType.Suffix))
+                && rule.IsEffective(nowUtc))
             .ToList();
 
         var extensionRules = all
