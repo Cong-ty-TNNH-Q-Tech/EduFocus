@@ -31,7 +31,7 @@ public sealed record SessionAttentionSummary(
         MonitoredSeconds > 0 ? FocusedSeconds * 100.0 / MonitoredSeconds : null;
 
     public double? CoveragePercent =>
-        MonitoringEligibleSeconds > 0 ? MonitoredSeconds * 100.0 / MonitoringEligibleSeconds : null;
+        MonitoringEligibleSeconds > 0 ? Math.Min(100.0, MonitoredSeconds * 100.0 / MonitoringEligibleSeconds) : null;
 
     /// <summary>True when attention percentages are based on too little usable time.</summary>
     public bool IsCoverageLow => CoveragePercent is < LowCoverageThresholdPercent;

@@ -30,6 +30,7 @@ public sealed partial class PrivacyViewModel : ObservableObject
     private readonly IAttentionMonitorUseCase? _attentionMonitor;
     private readonly IAttentionPipelineUseCase? _attentionPipeline;
     private readonly IStudySessionRepository? _sessions;
+    private readonly EduFocus.UseCases.Protection.ServiceMonitoringCoordinator? _monitoringCoordinator;
 
     private string? _cameraDeviceId;
 
@@ -70,7 +71,8 @@ public sealed partial class PrivacyViewModel : ObservableObject
         IAppLogger logger,
         IAttentionMonitorUseCase? attentionMonitor = null,
         IAttentionPipelineUseCase? attentionPipeline = null,
-        IStudySessionRepository? sessions = null)
+        IStudySessionRepository? sessions = null,
+        EduFocus.UseCases.Protection.ServiceMonitoringCoordinator? monitoringCoordinator = null)
     {
         _settings = settings ?? throw new ArgumentNullException(nameof(settings));
         _deletion = deletion ?? throw new ArgumentNullException(nameof(deletion));
@@ -80,6 +82,7 @@ public sealed partial class PrivacyViewModel : ObservableObject
         _attentionMonitor = attentionMonitor;
         _attentionPipeline = attentionPipeline;
         _sessions = sessions;
+        _monitoringCoordinator = monitoringCoordinator;
     }
 
     public bool IsNotBusy => !IsBusy;
@@ -411,6 +414,23 @@ public sealed partial class PrivacyViewModel : ObservableObject
 
     private async Task SyncLiveCameraMonitoringAsync(bool monitoringEnabled)
     {
+        if (_sessions is not null)
+        {
+            var active = await _sessions.GetActiveAsync();
+            if (active is not null && active.MonitoringEnabled != monitoringEnabled)
+            {
+                var now = DateTime.UtcNow < active.UpdatedAtUtc ? active.UpdatedAtUtc : DateTime.UtcNow;
+                active.SetMonitoringEnabled(monitoringEnabled, now);
+                await _sessions.UpdateAsync(active);
+            }
+        }
+
+        if (_monitoringCoordinator is not null)
+        {
+            await _monitoringCoordinator.RestoreAsync();
+            return;
+        }
+
         if (_attentionMonitor is null || _attentionPipeline is null)
             return;
 

@@ -21,6 +21,7 @@ public sealed class PrivacySettingsService : IPrivacySettingsUseCase
     private readonly IAuditLogRepository _auditLogs;
     private readonly ICorrelationContext _correlation;
     private readonly TimeProvider _timeProvider;
+    private readonly IStudySessionRepository? _sessions;
 
     public PrivacySettingsService(
         IAppSettingsRepository settings,
@@ -28,7 +29,8 @@ public sealed class PrivacySettingsService : IPrivacySettingsUseCase
         IParentAuthorizer authorizer,
         IAuditLogRepository auditLogs,
         ICorrelationContext correlation,
-        TimeProvider timeProvider)
+        TimeProvider timeProvider,
+        IStudySessionRepository? sessions = null)
     {
         _settings = settings ?? throw new ArgumentNullException(nameof(settings));
         _data = data ?? throw new ArgumentNullException(nameof(data));
@@ -36,6 +38,7 @@ public sealed class PrivacySettingsService : IPrivacySettingsUseCase
         _auditLogs = auditLogs ?? throw new ArgumentNullException(nameof(auditLogs));
         _correlation = correlation ?? throw new ArgumentNullException(nameof(correlation));
         _timeProvider = timeProvider ?? throw new ArgumentNullException(nameof(timeProvider));
+        _sessions = sessions;
     }
 
     public async Task<PrivacySnapshot> GetSnapshotAsync(CancellationToken cancellationToken = default)
@@ -84,6 +87,17 @@ public sealed class PrivacySettingsService : IPrivacySettingsUseCase
         if (changedFields.Count > 0)
         {
             await _settings.UpdateAsync(current, cancellationToken).ConfigureAwait(false);
+            if (_sessions is not null && before.MonitoringEnabled != after.MonitoringEnabled)
+            {
+                var active = await _sessions.GetActiveAsync(cancellationToken).ConfigureAwait(false);
+                if (active is not null && active.MonitoringEnabled != current.MonitoringEnabled)
+                {
+                    var sessionNow = now < active.UpdatedAtUtc ? active.UpdatedAtUtc : now;
+                    active.SetMonitoringEnabled(current.MonitoringEnabled, sessionNow);
+                    await _sessions.UpdateAsync(active, cancellationToken).ConfigureAwait(false);
+                }
+            }
+
             await WriteAuditAsync(now, changedFields, cancellationToken).ConfigureAwait(false);
         }
 

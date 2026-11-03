@@ -46,6 +46,9 @@ public sealed class AttentionMonitorService : IAttentionMonitorUseCase, IAsyncDi
     private double _pendingSeconds;
     private bool _writeFaultReported;
     private volatile bool _running;
+    private volatile bool _monitoringEnabled = true;
+    private volatile bool _monitorOnlyDuringClasses;
+    private volatile bool _isOnlineClass;
     private int _sessionEnded;
 
     public AttentionMonitorService(
@@ -120,7 +123,10 @@ public sealed class AttentionMonitorService : IAttentionMonitorUseCase, IAsyncDi
         {
             await StopCoreAsync().ConfigureAwait(false);
 
-            var thresholds = await LoadThresholdsAsync(cancellationToken).ConfigureAwait(false);
+            var (thresholds, monitoringEnabled, monitorOnlyDuringClasses) = await LoadPolicyAsync(cancellationToken).ConfigureAwait(false);
+            _monitoringEnabled = monitoringEnabled;
+            _monitorOnlyDuringClasses = monitorOnlyDuringClasses;
+
 
             _sessionId = sessionId;
             _activeThresholds = thresholds;
@@ -134,6 +140,7 @@ public sealed class AttentionMonitorService : IAttentionMonitorUseCase, IAsyncDi
             _lastSampleAt = null;
             _pendingSeconds = 0;
             _writeFaultReported = false;
+
             Interlocked.Exchange(ref _sessionEnded, 0);
 
             var queue = Channel.CreateUnbounded<WorkItem>(new UnboundedChannelOptions
@@ -175,9 +182,17 @@ public sealed class AttentionMonitorService : IAttentionMonitorUseCase, IAsyncDi
 
         try
         {
-            var thresholds = await LoadThresholdsAsync(cancellationToken).ConfigureAwait(false);
+            var (thresholds, monitoringEnabled, monitorOnlyDuringClasses) = await LoadPolicyAsync(cancellationToken).ConfigureAwait(false);
+            _monitoringEnabled = monitoringEnabled;
+            _monitorOnlyDuringClasses = monitorOnlyDuringClasses;
+
             _activeThresholds = thresholds;
             _machine?.UpdateThresholds(thresholds);
+            var eligible = MonitoringEligibility.IsEligible(_monitoringEnabled, _monitorOnlyDuringClasses, _isOnlineClass);
+            if (!eligible && _pipeline.IsRunning)
+                await SyncPipelineForEligibilityAsync(false).ConfigureAwait(false);
+            else if (eligible && _monitorOnlyDuringClasses && !_pipeline.IsRunning)
+                await SyncPipelineForEligibilityAsync(true).ConfigureAwait(false);
             _logger.Info(LogCategories.Attention, "Attention thresholds were refreshed for the active session.");
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
@@ -263,8 +278,10 @@ public sealed class AttentionMonitorService : IAttentionMonitorUseCase, IAsyncDi
         _lastSampleAt = null;
         _pendingSeconds = 0;
         _writeFaultReported = false;
+
         Interlocked.Exchange(ref _sessionEnded, 0);
 
+        _isOnlineClass = false;
         if (wasRunning)
             _logger.Info(LogCategories.Attention, "Attention monitoring stopped.");
     }
@@ -301,6 +318,23 @@ public sealed class AttentionMonitorService : IAttentionMonitorUseCase, IAsyncDi
             return false;
 
         var sampledAt = sample.SampledAtUtc;
+
+        if (!MonitoringEligibility.IsEligible(_monitoringEnabled, _monitorOnlyDuringClasses, _isOnlineClass))
+        {
+            if (_openEvent is not null)
+                await CloseOpenEventAsync(sampledAt).ConfigureAwait(false);
+
+            _persistedState = null;
+            _pendingSeconds = 0;
+            _lastSampleAt = sampledAt;
+            window.Reset();
+            machine.ResetCandidate();
+
+            if (_pipeline.IsRunning)
+                await SyncPipelineForEligibilityAsync(false).ConfigureAwait(false);
+
+            return false;
+        }
 
         if (_lastSampleAt is { } last && sampledAt - last > _options.MaxSampleGap)
         {
@@ -427,6 +461,7 @@ public sealed class AttentionMonitorService : IAttentionMonitorUseCase, IAsyncDi
                 .ConfigureAwait(false);
 
             _writeFaultReported = false;
+
             return counted;
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
@@ -536,6 +571,70 @@ public sealed class AttentionMonitorService : IAttentionMonitorUseCase, IAsyncDi
         _queue?.Writer.TryComplete();
 
         _logger.Warning(LogCategories.Attention, SessionEndedMessage);
+    }
+
+    public void SetOnlineClassState(bool isOnlineClass)
+    {
+        var previous = _isOnlineClass;
+        _isOnlineClass = isOnlineClass;
+
+        if (!_running || previous == isOnlineClass || !_monitorOnlyDuringClasses)
+            return;
+
+        var eligible = MonitoringEligibility.IsEligible(_monitoringEnabled, _monitorOnlyDuringClasses, isOnlineClass);
+        _ = SyncPipelineForEligibilityAsync(eligible);
+    }
+
+    private async Task SyncPipelineForEligibilityAsync(bool eligible)
+    {
+        try
+        {
+            if (eligible)
+            {
+                if (_running && !_pipeline.IsRunning)
+                    await _pipeline.StartAsync(CancellationToken.None).ConfigureAwait(false);
+            }
+            else if (_pipeline.IsRunning)
+            {
+                await _pipeline.StopAsync(CancellationToken.None).ConfigureAwait(false);
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.Warning(
+                LogCategories.Attention,
+                $"Could not synchronize attention pipeline with online-class eligibility ({ex.GetType().Name}).");
+        }
+    }
+
+    private async Task<(AttentionThresholds Thresholds, bool MonitoringEnabled, bool MonitorOnlyDuringClasses)> LoadPolicyAsync(CancellationToken cancellationToken)
+    {
+        try
+        {
+            var settings = await _settings.GetAsync(cancellationToken).ConfigureAwait(false);
+            if (settings is null)
+                return (_baseThresholds, true, false);
+
+            return (
+                _baseThresholds with
+                {
+                    DistractedAfterSeconds = settings.DistractionThresholdSeconds,
+                    AbsentAfterSeconds = settings.AbsenceThresholdSeconds
+                },
+                settings.MonitoringEnabled,
+                settings.MonitorOnlyDuringClasses);
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            _logger.Warning(
+                LogCategories.Attention,
+                $"Could not read attention thresholds; using defaults ({ex.GetType().Name}).");
+            return (_baseThresholds, true, false);
+        }
     }
 
     private async Task<AttentionThresholds> LoadThresholdsAsync(CancellationToken cancellationToken)

@@ -23,6 +23,10 @@ public interface IAttentionMonitorUseCase
     Task RefreshSettingsAsync(CancellationToken cancellationToken = default) =>
         Task.CompletedTask;
 
+    void SetOnlineClassState(bool isOnlineClass)
+    {
+    }
+
     /// <summary>
     /// Queues one sample and waits until it has been classified and persisted.
     /// Returns false when the monitor is not running or the session ended.

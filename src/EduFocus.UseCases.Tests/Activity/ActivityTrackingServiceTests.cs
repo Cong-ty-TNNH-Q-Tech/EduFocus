@@ -545,6 +545,27 @@ public sealed class ActivityTrackingServiceTests
         harness.Session.MonitoringEligibleSeconds.Should().Be(60);
     }
 
+    [Fact]
+    public async Task Idle_longer_than_max_sample_gap_does_not_write_duplicate_idle_samples()
+    {
+        await using var harness = new ActivityHarness();
+        await harness.StartAsync();
+
+        harness.Foreground = harness.Snapshot("chrome", "Docs", idleSeconds: 301);
+
+        (await harness.SampleAfterAsync(TimeSpan.FromSeconds(15))).Should().BeTrue();
+        harness.Samples.Samples.Should().ContainSingle();
+
+        for (var i = 0; i < 8; i++)
+        {
+            (await harness.SampleAfterAsync(TimeSpan.FromSeconds(15))).Should().BeFalse();
+        }
+
+        harness.Samples.Samples.Should().ContainSingle();
+        harness.Session.IdleSeconds.Should().BeGreaterThan(15);
+        harness.Session.MonitoringEligibleSeconds.Should().BeGreaterThan(15);
+    }
+
     private sealed class ActivityHarness : IAsyncDisposable
     {
         public ActivityHarness()

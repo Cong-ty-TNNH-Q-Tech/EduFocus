@@ -48,7 +48,7 @@ public sealed class StudySession
 
     public SessionTrigger Trigger { get; }
 
-    public bool MonitoringEnabled { get; }
+    public bool MonitoringEnabled { get; private set; }
 
     public int ActiveSeconds { get; private set; }
 
@@ -82,7 +82,14 @@ public sealed class StudySession
         MonitoredSeconds > 0 ? FocusedSeconds * 100.0 / MonitoredSeconds : null;
 
     public double? CoveragePercent =>
-        MonitoringEligibleSeconds > 0 ? MonitoredSeconds * 100.0 / MonitoringEligibleSeconds : null;
+        MonitoringEligibleSeconds > 0 ? Math.Min(100.0, MonitoredSeconds * 100.0 / MonitoringEligibleSeconds) : null;
+
+    public void SetMonitoringEnabled(bool monitoringEnabled, DateTime nowUtc)
+    {
+        EnsureActive();
+        MonitoringEnabled = monitoringEnabled;
+        Touch(nowUtc);
+    }
 
     public double? ConfidenceAvg { get; private set; }
 

@@ -121,10 +121,10 @@ public sealed class UiAutomationBrowserUrlProvider : IBrowserUrlProviderPort
             if (string.IsNullOrEmpty(text))
                 return null;
 
-            return Uri.TryCreate(text, UriKind.Absolute, out var uri)
-                && (uri.Scheme == Uri.UriSchemeHttp || uri.Scheme == Uri.UriSchemeHttps)
-                    ? text
-                    : null;
+            return NormalizeAddressBarUrl(text);
+
+
+
         }
         catch (ElementNotAvailableException)
         {
@@ -138,6 +138,41 @@ public sealed class UiAutomationBrowserUrlProvider : IBrowserUrlProviderPort
         {
             return null;
         }
+    }
+
+    public static string? NormalizeAddressBarUrl(string? raw)
+    {
+        var text = raw?.Trim();
+        if (string.IsNullOrEmpty(text))
+            return null;
+
+        foreach (var ch in text)
+        {
+            if (char.IsWhiteSpace(ch))
+                return null;
+        }
+
+        if (Uri.TryCreate(text, UriKind.Absolute, out var uri)
+            && (uri.Scheme == Uri.UriSchemeHttp || uri.Scheme == Uri.UriSchemeHttps)
+            && EduFocus.Domain.ValueObjects.DomainName.TryParse(uri.Host, out _))
+        {
+            return text;
+        }
+
+        if (text.Contains("://", StringComparison.Ordinal))
+            return null;
+
+        var slashIndex = text.IndexOfAny(['/', '?', '#']);
+        var authority = slashIndex >= 0 ? text[..slashIndex] : text;
+        var colonIndex = authority.IndexOf(':');
+        if (colonIndex >= 0 && !int.TryParse(authority[(colonIndex + 1)..], out _))
+            return null;
+
+        var candidate = $"https://{text}";
+        return Uri.TryCreate(candidate, UriKind.Absolute, out var httpsUri)
+            && EduFocus.Domain.ValueObjects.DomainName.TryParse(httpsUri.Host, out _)
+                ? candidate
+                : null;
     }
 
     private static bool IsBrowser(string? processName)

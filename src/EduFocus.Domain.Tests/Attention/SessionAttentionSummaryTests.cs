@@ -97,6 +97,17 @@ public class SessionAttentionSummaryTests
         act.Should().Throw<ArgumentNullException>();
     }
 
+    [Fact]
+    public void Coverage_percent_is_clamped_to_one_hundred_when_monitored_exceeds_eligible()
+    {
+        var session = StudySession.Start(Now, new DateOnly(2026, 10, 30), SessionTrigger.Manual, true);
+        session.AddMonitoringEligibleSeconds(60, Now.AddSeconds(1));
+        session.AddAttentionSeconds(AttentionState.Focused, 75, Now.AddSeconds(2));
+
+        session.CoveragePercent.Should().Be(100);
+        SessionAttentionSummary.From(session).CoveragePercent.Should().Be(100);
+    }
+
     private static SessionAttentionSummary Summary(int monitoredSeconds, int eligibleSeconds)
     {
         var session = StudySession.Start(Now, new DateOnly(2026, 10, 30), SessionTrigger.Manual, true);

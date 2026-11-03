@@ -486,6 +486,34 @@ public class AttentionMonitorServiceTests
         }
     }
 
+    [Fact]
+    public async Task Monitor_only_during_classes_ignores_samples_outside_online_classes_and_records_inside_classes()
+    {
+        var settings = AppSettings.CreateDefault(Start.UtcDateTime);
+        settings.UpdateMonitoring(monitoringEnabled: true, monitorOnlyDuringClasses: true, Start.UtcDateTime);
+
+        await using var h = new Harness(settings: settings);
+        await h.StartAsync();
+
+        (await h.SampleAsync(0, Frontal)).Should().BeFalse();
+        (await h.SampleAsync(1, Frontal)).Should().BeFalse();
+        (await h.SampleAsync(2, Frontal)).Should().BeFalse();
+        h.Events.Events.Should().BeEmpty();
+        h.Session.MonitoredSeconds.Should().Be(0);
+
+        h.Monitor.SetOnlineClassState(true);
+        (await h.SampleAsync(3, Frontal)).Should().BeFalse();
+        (await h.SampleAsync(4, Frontal)).Should().BeFalse();
+        (await h.SampleAsync(5, Frontal)).Should().BeTrue();
+        h.Events.Events.Should().ContainSingle();
+        h.Session.FocusedSeconds.Should().Be(1);
+
+        h.Monitor.SetOnlineClassState(false);
+        (await h.SampleAsync(6, Frontal)).Should().BeFalse();
+        h.Events.Events[0].IsOpen.Should().BeFalse();
+        h.Session.FocusedSeconds.Should().Be(1);
+    }
+
     private static AttentionSample SampleAt(int second, FaceObservation observation) =>
         new(Start.AddSeconds(second), CameraFailureKind.None, observation, 120, 0, 0, null);
 

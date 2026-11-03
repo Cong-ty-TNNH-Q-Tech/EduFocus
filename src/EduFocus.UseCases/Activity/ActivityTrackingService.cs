@@ -43,6 +43,7 @@ public sealed class ActivityTrackingService : IActivityUseCase, IAsyncDisposable
     private readonly IAppLogger _logger;
     private readonly TimeProvider _timeProvider;
     private readonly ActivityTrackingOptions _options;
+    private readonly IAttentionMonitorUseCase? _attentionMonitor;
     private readonly SemaphoreSlim _lifecycleGate = new(1, 1);
     private readonly SemaphoreSlim _sampleGate = new(1, 1);
 
@@ -54,6 +55,9 @@ public sealed class ActivityTrackingService : IActivityUseCase, IAsyncDisposable
     private volatile bool _monitorOnlyDuringClasses;
     private long _sampleIntervalTicks;
     private TimeSpan _lastSampleTick;
+    private TimeSpan _lastPollTick;
+    private string? _lastSampledKey;
+    private DomainName? _lastDomain;
     private DateTime _lastSampleUtc;
     private string? _candidateKey;
     private TimeSpan _candidateSince;
@@ -76,7 +80,8 @@ public sealed class ActivityTrackingService : IActivityUseCase, IAsyncDisposable
         ISystemPowerEventPort powerEvents,
         IAppLogger logger,
         TimeProvider timeProvider,
-        ActivityTrackingOptions options)
+        ActivityTrackingOptions options,
+        IAttentionMonitorUseCase? attentionMonitor = null)
     {
         _samples = samples ?? throw new ArgumentNullException(nameof(samples));
         _sessions = sessions ?? throw new ArgumentNullException(nameof(sessions));
@@ -133,6 +138,7 @@ public sealed class ActivityTrackingService : IActivityUseCase, IAsyncDisposable
         }
 
         _options = options;
+        _attentionMonitor = attentionMonitor;
         _sampleIntervalTicks = options.SampleInterval.Ticks;
     }
 
@@ -163,7 +169,14 @@ public sealed class ActivityTrackingService : IActivityUseCase, IAsyncDisposable
             _lastSampleTick = _clock.GetTickCount();
             _lastSampleUtc = now;
             _candidateKey = null;
+            _lastSampledKey = null;
+            _lastDomain = null;
+            _attentionMonitor?.SetOnlineClassState(false);
             _candidateSince = _lastSampleTick;
+            _lastPollTick = _lastSampleTick;
+            _lastSampledKey = null;
+            _lastDomain = null;
+            _attentionMonitor?.SetOnlineClassState(false);
             _idleSampleWritten = false;
             _foregroundFaultReported = false;
             _urlFaultReported = false;
@@ -286,6 +299,9 @@ public sealed class ActivityTrackingService : IActivityUseCase, IAsyncDisposable
         _monitoringEnabled = false;
         _monitorOnlyDuringClasses = false;
         Volatile.Write(ref _sampleIntervalTicks, _options.SampleInterval.Ticks);
+        _lastSampledKey = null;
+        _lastDomain = null;
+        _attentionMonitor?.SetOnlineClassState(false);
         _running = false;
     }
 
@@ -335,6 +351,8 @@ public sealed class ActivityTrackingService : IActivityUseCase, IAsyncDisposable
 
         var tick = _clock.GetTickCount();
         var elapsed = tick - _lastSampleTick;
+        var pollGap = tick - _lastPollTick;
+        _lastPollTick = tick;
         var now = ClampNow(UtcNow());
 
         if (Interlocked.Exchange(ref _powerResetRequested, 0) == 1)
@@ -344,6 +362,9 @@ public sealed class ActivityTrackingService : IActivityUseCase, IAsyncDisposable
             _lastSampleTick = tick;
             _lastSampleUtc = now;
             _candidateKey = null;
+            _lastSampledKey = null;
+            _lastDomain = null;
+            _attentionMonitor?.SetOnlineClassState(false);
             _idleSampleWritten = false;
             return false;
         }
@@ -358,7 +379,16 @@ public sealed class ActivityTrackingService : IActivityUseCase, IAsyncDisposable
 
         UpdateCandidate(tick, snapshot);
 
-        if (elapsed > _options.MaxSampleGap)
+        var knownDomain = string.Equals(_candidateKey, _lastSampledKey, StringComparison.Ordinal)
+            ? _lastDomain
+            : null;
+        var pollOnlineClass = !isIdle && OnlineClassDetector.IsOnlineClass(
+            knownDomain,
+            snapshot?.ProcessName,
+            snapshot?.WindowTitle ?? string.Empty);
+        _attentionMonitor?.SetOnlineClassState(pollOnlineClass);
+
+        if (pollGap > _options.MaxSampleGap)
         {
             // The power-event port misses events on some machines; a gap this
             // large is a suspend/stall, so no category time is attributed to it.
@@ -378,10 +408,44 @@ public sealed class ActivityTrackingService : IActivityUseCase, IAsyncDisposable
             {
                 // Suppress the cadence entirely while the same idle period
                 // lasts so a long absence cannot create duplicate rows.
+                if (elapsed >= _options.MaxSampleGap)
+                {
+                    var idleChunk = (int)Math.Min(
+                        Math.Floor(Math.Max(elapsed.TotalSeconds, 0)),
+                        Math.Floor(_options.MaxSampleGap.TotalSeconds));
+                    var eligibleIdleSeconds = MonitoringEligibility.IsEligible(
+                        _monitoringEnabled,
+                        _monitorOnlyDuringClasses,
+                        isOnlineClass: false)
+                        ? idleChunk
+                        : 0;
+                    try
+                    {
+                        await _sessions.AddActivitySecondsAsync(
+                            id,
+                            ActivityCategory.Neutral,
+                            categorySeconds: 0,
+                            idleSeconds: idleChunk,
+                            onlineClassSeconds: 0,
+                            monitoringEligibleSeconds: eligibleIdleSeconds,
+                            now,
+                            cancellationToken).ConfigureAwait(false);
+                    }
+                    catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+                    {
+                        throw;
+                    }
+                    catch
+                    {
+                    }
+
+                    _lastSampleTick = tick;
+                    _lastSampleUtc = now;
+                }
                 return false;
             }
         }
-        else if (tick - _candidateSince < _options.ForegroundDebounce)
+        else if (tick - _candidateSince < _options.ForegroundDebounce && elapsed < _options.MaxSampleGap)
         {
             return false;
         }
@@ -395,12 +459,15 @@ public sealed class ActivityTrackingService : IActivityUseCase, IAsyncDisposable
 
         var url = isIdle ? null : ReadUrl(snapshot);
         var domain = UrlSanitizer.DeriveDomain(url);
+        _lastSampledKey = _candidateKey;
+        _lastDomain = domain;
         // An idle foreground window is not an active class: the student may have
         // left Meet/Teams open, so the overlay must not claim class time.
         var isOnlineClass = !isIdle && OnlineClassDetector.IsOnlineClass(
             domain,
             snapshot?.ProcessName,
-            snapshot?.WindowTitle);
+            snapshot?.WindowTitle ?? string.Empty);
+        _attentionMonitor?.SetOnlineClassState(isOnlineClass);
         var category = ActivityClassifier.Classify(
             _ruleSnapshot,
             domain,
