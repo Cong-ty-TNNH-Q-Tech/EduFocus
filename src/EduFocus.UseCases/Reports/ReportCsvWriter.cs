@@ -54,7 +54,7 @@ internal static class ReportCsvWriter
         "Ghi chú"
     ];
 
-    private static readonly char[] QuotedCharacters = [',', '"', '\r', '\n'];
+    private static readonly char[] QuotedCharacters = [',', '"', '\r', '\n', ';', '\t'];
 
     public static string Build(
         StudyReport report,

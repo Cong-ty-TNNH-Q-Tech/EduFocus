@@ -357,6 +357,43 @@ public sealed class ReportExportServiceTests
         await act.Should().ThrowAsync<IOException>();
     }
 
+    [Fact]
+    public async Task Export_quotes_fields_containing_semicolons_and_tabs_for_excel_regional_compatibility()
+    {
+        var sessions = new FakeStudySessionRepository();
+        var samples = new FakeActivitySampleRepository();
+        var events = new FakeAttentionEventRepository();
+
+        var session = CreateSession(Start, Day, activeSeconds: 300, studySeconds: 300);
+        sessions.Sessions.Add(session);
+        samples.ReportSamples.Add(Sample(
+            session,
+            Start.AddSeconds(10),
+            300,
+            ActivityCategory.Study,
+            "App;WithSemicolon",
+            "example.com"));
+        samples.ReportSamples.Add(Sample(
+            session,
+            Start.AddSeconds(20),
+            300,
+            ActivityCategory.Study,
+            "App\tWithTab",
+            "example.com"));
+
+        var report = await CreateReportAsync(sessions, samples, events);
+        var store = new FakeCsvExportStore();
+
+        await CreateService(samples, store).ExportCsvAsync(report);
+
+        var content = store.Content!;
+        content.Should().Contain("\"App;WithSemicolon\"");
+        content.Should().Contain("\"App\tWithTab\"");
+
+        ReportCsvWriter.EscapeCell("Text;WithSemicolon").Should().Be("\"Text;WithSemicolon\"");
+        ReportCsvWriter.EscapeCell("Text\tWithTab").Should().Be("\"Text\tWithTab\"");
+    }
+
     private static ReportExportService CreateService(
         FakeActivitySampleRepository samples,
         FakeCsvExportStore store,
