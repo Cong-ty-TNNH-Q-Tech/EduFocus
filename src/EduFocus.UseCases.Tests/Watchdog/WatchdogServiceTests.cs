@@ -50,6 +50,19 @@ public sealed class WatchdogServiceTests
     }
 
     [Fact]
+    public async Task Tick_in_service_managed_mode_starts_app_at_login_and_stops_even_when_protection_is_on()
+    {
+        var harness = new Harness(serviceManaged: true);
+        harness.Settings.Stored = Settings(protectionOn: true, startWithWindows: true);
+
+        var result = await harness.Service.TickAsync(loginStart: true);
+
+        result.Action.Should().Be(WatchdogTickAction.StartedAppAtLogin);
+        result.ProcessId.Should().Be(4321);
+        harness.Processes.StartCount.Should().Be(1);
+    }
+
+    [Fact]
     public async Task Tick_does_not_start_the_app_at_login_when_start_with_windows_is_off()
     {
         var harness = new Harness();
@@ -433,7 +446,7 @@ public sealed class WatchdogServiceTests
 
     private sealed class Harness
     {
-        public Harness()
+        public Harness(bool serviceManaged = false)
         {
             Monotonic.Ticks = TimeSpan.FromMinutes(10);
             Service = new WatchdogService(
@@ -446,7 +459,8 @@ public sealed class WatchdogServiceTests
                 Logger,
                 Time,
                 Monotonic,
-                Options);
+                Options,
+                new EduFocus.UseCases.Protection.ProtectionHostModeOptions { ServiceManaged = serviceManaged });
         }
 
         public FakeAppSettingsRepository Settings { get; } = new();

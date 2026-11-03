@@ -5,6 +5,7 @@ using EduFocus.Ports.DTOs;
 using EduFocus.Ports.Inbound;
 using EduFocus.Ports.Outbound.Persistence;
 using EduFocus.Ports.Outbound.Services;
+using EduFocus.UseCases.Protection;
 
 namespace EduFocus.UseCases.Watchdog;
 
@@ -30,6 +31,7 @@ public sealed class WatchdogService : IWatchdogUseCase
     private readonly TimeProvider _timeProvider;
     private readonly IMonotonicClockPort _monotonic;
     private readonly WatchdogOptions _options;
+    private readonly ProtectionHostModeOptions _hostMode;
 
     private DateTime? _firstTickAtUtc;
     private TimeSpan? _lastMonotonic;
@@ -45,7 +47,8 @@ public sealed class WatchdogService : IWatchdogUseCase
         IAppLogger logger,
         TimeProvider timeProvider,
         IMonotonicClockPort monotonic,
-        WatchdogOptions options)
+        WatchdogOptions options,
+        ProtectionHostModeOptions? hostMode = null)
     {
         _settings = settings ?? throw new ArgumentNullException(nameof(settings));
         _heartbeats = heartbeats ?? throw new ArgumentNullException(nameof(heartbeats));
@@ -57,6 +60,7 @@ public sealed class WatchdogService : IWatchdogUseCase
         _timeProvider = timeProvider ?? throw new ArgumentNullException(nameof(timeProvider));
         _monotonic = monotonic ?? throw new ArgumentNullException(nameof(monotonic));
         _options = options ?? throw new ArgumentNullException(nameof(options));
+        _hostMode = hostMode ?? new ProtectionHostModeOptions();
     }
 
     public async Task<WatchdogTickResult> TickAsync(
@@ -85,7 +89,7 @@ public sealed class WatchdogService : IWatchdogUseCase
         var savedState = state;
         state = Normalize(state, now);
 
-        if (!settings.ProtectionEnabled)
+        if (!settings.ProtectionEnabled || _hostMode.ServiceManaged)
         {
             if (state != new WatchdogRestartState())
             {

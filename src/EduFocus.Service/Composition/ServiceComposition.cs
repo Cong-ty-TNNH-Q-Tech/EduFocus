@@ -79,7 +79,8 @@ public static class ServiceComposition
         {
             ExpectedClientImagePath = Path.Combine(
                 AppContext.BaseDirectory,
-                ServiceIdentity.UiExecutableName)
+                ServiceIdentity.UiExecutableName),
+            AllowCurrentUser = !Environment.UserInteractive ? false : true
         });
         services.AddSingleton<IPipeClientVerifier>(provider =>
         {

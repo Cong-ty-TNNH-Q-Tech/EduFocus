@@ -103,6 +103,34 @@ public sealed class WatchdogCoordinatorTests
         harness.Logger.Warnings.Should().Contain(w => w.Contains("stop", StringComparison.OrdinalIgnoreCase));
     }
 
+    [Fact]
+    public async Task Service_managed_mode_registers_logon_only_when_start_with_windows_is_enabled_even_if_protection_is_on()
+    {
+        var harness = new Harness(
+            Settings(protectionOn: true, startWithWindows: true),
+            serviceManaged: true);
+        harness.Runtime.Running = true;
+
+        await harness.Coordinator.SynchronizeAsync();
+
+        harness.AutoStart.Modes.Should().Equal(WatchdogRegistrationMode.LogonOnly);
+        harness.Runtime.EnsureStartedCount.Should().Be(0);
+        harness.Runtime.StopCount.Should().Be(1);
+    }
+
+    [Fact]
+    public async Task Service_managed_mode_registers_none_when_start_with_windows_is_disabled()
+    {
+        var harness = new Harness(
+            Settings(protectionOn: true, startWithWindows: false),
+            serviceManaged: true);
+
+        await harness.Coordinator.SynchronizeAsync();
+
+        harness.AutoStart.Modes.Should().Equal(WatchdogRegistrationMode.None);
+        harness.Runtime.EnsureStartedCount.Should().Be(0);
+    }
+
     private static AppSettings Settings(
         bool protectionOn,
         bool startWithWindows = true,
@@ -127,10 +155,16 @@ public sealed class WatchdogCoordinatorTests
 
     private sealed class Harness
     {
-        public Harness(AppSettings settings)
+        public Harness(AppSettings settings, bool serviceManaged = false)
         {
             Settings.Stored = settings;
-            Coordinator = new WatchdogCoordinator(Settings, AutoStart, Runtime, Logger, new WatchdogOptions());
+            Coordinator = new WatchdogCoordinator(
+                Settings,
+                AutoStart,
+                Runtime,
+                Logger,
+                new WatchdogOptions(),
+                new EduFocus.UseCases.Protection.ProtectionHostModeOptions { ServiceManaged = serviceManaged });
         }
 
         public FakeAppSettingsRepository Settings { get; } = new();

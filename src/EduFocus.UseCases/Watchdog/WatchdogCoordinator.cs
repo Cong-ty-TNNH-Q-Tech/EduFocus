@@ -2,14 +2,16 @@ using EduFocus.Ports.DTOs;
 using EduFocus.Ports.Inbound;
 using EduFocus.Ports.Outbound.Persistence;
 using EduFocus.Ports.Outbound.Services;
+using EduFocus.UseCases.Protection;
 
 namespace EduFocus.UseCases.Watchdog;
 
 /// <summary>
 /// Aligns the watchdog process and the two scheduled tasks with the persisted
 /// settings: tasks exist when the app should return at login, the resident
-/// watchdog only while protection is ON. Every failure is logged and ignored so
-/// a watchdog problem can never block protection or a clean exit.
+/// watchdog only while protection is ON (in standalone mode). Every failure is
+/// logged and ignored so a watchdog problem can never block protection or a
+/// clean exit.
 /// </summary>
 public sealed class WatchdogCoordinator : IWatchdogCoordinator
 {
@@ -18,6 +20,7 @@ public sealed class WatchdogCoordinator : IWatchdogCoordinator
     private readonly IWatchdogRuntimePort _runtime;
     private readonly IAppLogger _logger;
     private readonly WatchdogOptions _options;
+    private readonly ProtectionHostModeOptions _hostMode;
     private readonly SemaphoreSlim _gate = new(1, 1);
 
     private WatchdogRegistrationMode? _registeredMode;
@@ -27,13 +30,15 @@ public sealed class WatchdogCoordinator : IWatchdogCoordinator
         IWatchdogAutoStartPort autoStart,
         IWatchdogRuntimePort runtime,
         IAppLogger logger,
-        WatchdogOptions options)
+        WatchdogOptions options,
+        ProtectionHostModeOptions? hostMode = null)
     {
         _settings = settings ?? throw new ArgumentNullException(nameof(settings));
         _autoStart = autoStart ?? throw new ArgumentNullException(nameof(autoStart));
         _runtime = runtime ?? throw new ArgumentNullException(nameof(runtime));
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
         _options = options ?? throw new ArgumentNullException(nameof(options));
+        _hostMode = hostMode ?? new ProtectionHostModeOptions();
     }
 
     public async Task SynchronizeAsync(CancellationToken cancellationToken = default)
@@ -53,18 +58,23 @@ public sealed class WatchdogCoordinator : IWatchdogCoordinator
             var onboardingCompleted = settings?.OnboardingCompleted == true;
             var protectionEnabled = settings?.ProtectionEnabled == true;
             var startWithWindows = settings?.StartWithWindows == true;
+            var serviceManaged = _hostMode.ServiceManaged;
 
             var mode = !onboardingCompleted
                 ? WatchdogRegistrationMode.None
-                : protectionEnabled
-                    ? WatchdogRegistrationMode.LogonAndHealth
-                    : startWithWindows
+                : serviceManaged
+                    ? startWithWindows
                         ? WatchdogRegistrationMode.LogonOnly
-                        : WatchdogRegistrationMode.None;
+                        : WatchdogRegistrationMode.None
+                    : protectionEnabled
+                        ? WatchdogRegistrationMode.LogonAndHealth
+                        : startWithWindows
+                            ? WatchdogRegistrationMode.LogonOnly
+                            : WatchdogRegistrationMode.None;
 
             await TryRegisterAsync(mode, cancellationToken);
 
-            if (protectionEnabled)
+            if (protectionEnabled && !serviceManaged)
             {
                 if (!_runtime.IsRunning && !_runtime.EnsureStarted())
                 {

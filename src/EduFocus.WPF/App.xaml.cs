@@ -75,6 +75,9 @@ public partial class App : Application
         var logger = Services.GetRequiredService<IAppLogger>();
         logger.Info(LogCategories.App, "====== EduFocus started ======");
 
+        // Keep the app alive while OnboardingWindow closes before MainWindow is created.
+        ShutdownMode = ShutdownMode.OnExplicitShutdown;
+
         var onboardingWindow = Services.GetRequiredService<OnboardingWindow>();
         if (onboardingWindow.ShowDialog() != true)
         {
@@ -175,14 +178,14 @@ public partial class App : Application
         try
         {
             await Services
-                .GetRequiredService<IWatchdogAutoStartPort>()
-                .SynchronizeAsync(WatchdogRegistrationMode.None);
+                .GetRequiredService<IWatchdogCoordinator>()
+                .SynchronizeAsync();
         }
         catch (Exception ex)
         {
             logger.Error(
                 LogCategories.Watchdog,
-                "Could not remove legacy watchdog scheduled tasks in service mode.",
+                "Could not synchronize auto-start scheduled tasks in service mode.",
                 ex);
         }
 
@@ -268,10 +271,10 @@ public partial class App : Application
         services.AddSingleton<IParentModeUseCase, ParentModeService>();
         services.AddSingleton<IOnboardingUseCase, OnboardingService>();
         services.AddSingleton(new WatchdogOptions());
+        services.AddSingleton<IWatchdogCoordinator, WatchdogCoordinator>();
 
         if (serviceManaged)
         {
-            services.AddSingleton<IWatchdogCoordinator, NoOpWatchdogCoordinator>();
             // The service is the only protection owner. The client verifies the
             // pipe server image and requires a local Parent Mode session before
             // it sends a parent command.
@@ -291,11 +294,11 @@ public partial class App : Application
             services.AddSingleton<IProtectionUseCase>(provider =>
                 new ServiceMonitoredProtectionUseCase(
                     provider.GetRequiredService<ServiceControlClient>(),
-                    provider.GetRequiredService<ServiceMonitoringCoordinator>()));
+                    provider.GetRequiredService<ServiceMonitoringCoordinator>(),
+                    provider.GetRequiredService<IParentAuthorizer>()));
         }
         else
         {
-            services.AddSingleton<IWatchdogCoordinator, WatchdogCoordinator>();
             services.AddSingleton<ProtectionService>();
             services.AddSingleton<IProtectionUseCase>(provider =>
                 new WatchdogAwareProtectionService(
@@ -654,6 +657,10 @@ public partial class App : Application
     {
         var services = new ServiceCollection();
         services.AddInfrastructureServices();
+        services.AddSingleton(new ProtectionHostModeOptions
+        {
+            ServiceManaged = ServiceInstallationProbe.IsServiceManaged()
+        });
         services.AddSingleton(new EduFocusDatabaseOptions());
         services.AddSingleton<IDatabaseKeyStore, DatabaseKeyStore>();
         services.AddSingleton<SqliteDbContextFactory>();

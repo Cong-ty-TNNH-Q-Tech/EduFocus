@@ -101,6 +101,39 @@ public sealed class ServiceMonitoredProtectionUseCaseTests
         _logger.Errors.Should().BeEmpty();
     }
 
+    [Fact]
+    public async Task Unauthorized_disable_throws_before_stopping_monitoring()
+    {
+        var clock = new ManualTimeProvider(new DateTimeOffset(StartedAtUtc, TimeSpan.Zero), TimeZoneInfo.Utc);
+        var authorizer = new EduFocus.UseCases.Auth.ParentSessionState(clock);
+        authorizer.Authenticate();
+        var monitoring = new ServiceMonitoringCoordinator(
+            _sessions,
+            _monitor,
+            _pipeline,
+            _activity,
+            _logger);
+        var decorator = new ServiceMonitoredProtectionUseCase(_inner, monitoring, authorizer);
+
+        _inner.OnCommand = _ =>
+        {
+            AddSession();
+            return Task.FromResult(Result(Enabled));
+        };
+        await decorator.EnableAsync();
+
+        authorizer.Lock();
+
+        var act = () => decorator.DisableAsync();
+
+        await act.Should().ThrowAsync<EduFocus.Ports.Security.ParentAuthorizationException>();
+        _monitor.IsRunning.Should().BeTrue();
+        _pipeline.IsRunning.Should().BeTrue();
+        _activity.IsRunning.Should().BeTrue();
+        _monitor.Started.Should().ContainSingle();
+        _inner.Commands.Should().Equal("enable");
+    }
+
     [Theory]
     [InlineData("reconcile")]
     [InlineData("enable-for-schedule")]
