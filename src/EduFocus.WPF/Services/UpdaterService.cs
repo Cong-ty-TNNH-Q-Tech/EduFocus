@@ -30,7 +30,7 @@ public class UpdaterService
         _exitState = exitState;
         _http = new HttpClient
         {
-            Timeout = TimeSpan.FromMinutes(5)
+            Timeout = TimeSpan.FromMinutes(30)
         };
         _http.DefaultRequestHeaders.UserAgent.ParseAdd($"EduFocus/{CurrentVersion}");
     }

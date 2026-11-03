@@ -15,6 +15,7 @@ public sealed class ParentSessionState : IParentAuthorizer
     private readonly object _gate = new();
     private bool _isAuthenticated;
     private DateTime? _lastActivityAtUtc;
+    private int _activeScopeCount;
 
     public ParentSessionState(TimeProvider timeProvider)
     {
@@ -70,12 +71,41 @@ public sealed class ParentSessionState : IParentAuthorizer
         }
     }
 
+    public IDisposable? BeginActiveScope()
+    {
+        lock (_gate)
+        {
+            var now = Now();
+            ExpireIfIdle(now);
+
+            if (!_isAuthenticated)
+                return null;
+
+            _lastActivityAtUtc = now;
+            _activeScopeCount++;
+            return new ActiveScope(this);
+        }
+    }
+
     public void Lock()
     {
         lock (_gate)
         {
             _isAuthenticated = false;
             _lastActivityAtUtc = null;
+            _activeScopeCount = 0;
+        }
+    }
+
+    private void EndScope()
+    {
+        lock (_gate)
+        {
+            if (_activeScopeCount > 0)
+                _activeScopeCount--;
+
+            if (_isAuthenticated)
+                _lastActivityAtUtc = Now();
         }
     }
 
@@ -83,6 +113,12 @@ public sealed class ParentSessionState : IParentAuthorizer
     {
         if (!_isAuthenticated || _lastActivityAtUtc is not { } lastActivity)
             return;
+
+        if (_activeScopeCount > 0)
+        {
+            _lastActivityAtUtc = now;
+            return;
+        }
 
         if (now - lastActivity >= IdleTimeout)
         {
@@ -92,4 +128,20 @@ public sealed class ParentSessionState : IParentAuthorizer
     }
 
     private DateTime Now() => _timeProvider.GetUtcNow().UtcDateTime;
+
+    private sealed class ActiveScope : IDisposable
+    {
+        private readonly ParentSessionState _parent;
+        private int _disposed;
+
+        public ActiveScope(ParentSessionState parent) => _parent = parent;
+
+        public void Dispose()
+        {
+            if (Interlocked.Exchange(ref _disposed, 1) == 0)
+            {
+                _parent.EndScope();
+            }
+        }
+    }
 }

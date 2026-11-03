@@ -108,6 +108,8 @@ public partial class UpdateViewModel : ObservableObject
             return;
         }
 
+        using var sessionScope = _authorizer.BeginActiveScope();
+
         IsDownloading   = true;
         StatusMessage   = "Đang tải về...";
         DownloadProgress = 0;
@@ -116,6 +118,7 @@ public partial class UpdateViewModel : ObservableObject
         {
             DownloadProgress = p;
             StatusMessage    = $"Đang tải... {p}%";
+            _authorizer.RecordActivity();
         });
 
         try

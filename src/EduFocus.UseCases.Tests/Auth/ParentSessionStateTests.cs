@@ -103,6 +103,82 @@ public sealed class ParentSessionStateTests
         session.IsAuthenticated.Should().BeFalse();
     }
 
+    [Fact]
+    public void BeginActiveScope_returns_null_when_session_is_locked()
+    {
+        var session = CreateSession(out _);
+
+        using var scope = session.BeginActiveScope();
+
+        scope.Should().BeNull();
+    }
+
+    [Fact]
+    public void BeginActiveScope_keeps_session_alive_past_idle_timeout()
+    {
+        var session = CreateSession(out var clock);
+        session.Authenticate();
+
+        using (var scope = session.BeginActiveScope())
+        {
+            scope.Should().NotBeNull();
+
+            // Advance well past default 5-minute timeout (e.g. 15 minutes of download time)
+            clock.Advance(TimeSpan.FromMinutes(15));
+
+            session.IsAuthenticated.Should().BeTrue();
+            var act = () => session.EnsureAuthorized("exit EduFocus");
+            act.Should().NotThrow();
+        }
+
+        // After scope disposal, a full 5-minute idle window begins
+        clock.Advance(TimeSpan.FromMinutes(4) + TimeSpan.FromSeconds(59));
+        session.IsAuthenticated.Should().BeTrue();
+
+        clock.Advance(TimeSpan.FromSeconds(2));
+        session.IsAuthenticated.Should().BeFalse();
+    }
+
+    [Fact]
+    public void Lock_immediately_ends_session_even_with_active_scope()
+    {
+        var session = CreateSession(out var clock);
+        session.Authenticate();
+
+        var scope = session.BeginActiveScope();
+        scope.Should().NotBeNull();
+
+        session.Lock();
+        session.IsAuthenticated.Should().BeFalse();
+
+        // Disposing afterwards should not revive the session
+        scope!.Dispose();
+        session.IsAuthenticated.Should().BeFalse();
+    }
+
+    [Fact]
+    public void Multiple_active_scopes_maintain_session_until_all_disposed()
+    {
+        var session = CreateSession(out var clock);
+        session.Authenticate();
+
+        var scope1 = session.BeginActiveScope();
+        clock.Advance(TimeSpan.FromMinutes(10));
+        var scope2 = session.BeginActiveScope();
+
+        scope1?.Dispose();
+
+        // scope2 is still alive
+        clock.Advance(TimeSpan.FromMinutes(10));
+        session.IsAuthenticated.Should().BeTrue();
+
+        scope2?.Dispose();
+
+        // Now idle timeout applies
+        clock.Advance(TimeSpan.FromMinutes(5));
+        session.IsAuthenticated.Should().BeFalse();
+    }
+
     private static ParentSessionState CreateSession(out ManualTimeProvider clock)
     {
         clock = new ManualTimeProvider(AuthHarness.Start);
