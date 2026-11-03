@@ -135,6 +135,78 @@ public sealed class CameraCheckServiceTests
     }
 
     [Fact]
+    public async Task The_check_synchronizes_with_real_attention_pipeline_lifecycle_gate()
+    {
+        var camera = new FakeCameraSessionUseCase();
+        var analyzer = new FakeAttentionFrameAnalyzer();
+        var logger = new RecordingLogger();
+        await using var pipeline = new AttentionPipelineService(
+            camera,
+            analyzer,
+            logger,
+            TimeProvider.System,
+            new AttentionPipelineOptions(TimeSpan.FromMilliseconds(500)));
+
+        var checkService = new CameraCheckService(
+            camera,
+            analyzer,
+            pipeline,
+            logger,
+            TimeProvider.System,
+            new CameraCheckOptions
+            {
+                SampleCount = 1,
+                SampleInterval = TimeSpan.FromMilliseconds(50)
+            });
+
+        camera.CaptureResults.Enqueue(CameraCaptureResult.Success(Frame()));
+
+        var result = await checkService.RunAsync();
+
+        result.Health.Should().Be(CameraHealth.Ready);
+        camera.StartCalls.Should().Be(1);
+        camera.StopCalls.Should().Be(1);
+        pipeline.IsRunning.Should().BeFalse();
+        pipeline.LifecycleGate.CurrentCount.Should().Be(1);
+    }
+
+    [Fact]
+    public async Task The_check_refuses_when_real_attention_pipeline_is_running()
+    {
+        var camera = new FakeCameraSessionUseCase();
+        var analyzer = new FakeAttentionFrameAnalyzer();
+        var logger = new RecordingLogger();
+        await using var pipeline = new AttentionPipelineService(
+            camera,
+            analyzer,
+            logger,
+            TimeProvider.System,
+            new AttentionPipelineOptions(TimeSpan.FromMilliseconds(500)));
+
+        camera.CaptureResults.Enqueue(CameraCaptureResult.Success(Frame()));
+        await pipeline.StartAsync();
+
+        var checkService = new CameraCheckService(
+            camera,
+            analyzer,
+            pipeline,
+            logger,
+            TimeProvider.System,
+            new CameraCheckOptions
+            {
+                SampleCount = 1,
+                SampleInterval = TimeSpan.FromMilliseconds(50)
+            });
+
+        var result = await checkService.RunAsync();
+
+        result.Health.Should().Be(CameraHealth.Unavailable);
+        result.Problem.Should().Be(CameraHealthProblem.MonitoringActive);
+
+        await pipeline.StopAsync();
+    }
+
+    [Fact]
     public void Constructor_rejects_invalid_options()
     {
         var harness = new Harness();

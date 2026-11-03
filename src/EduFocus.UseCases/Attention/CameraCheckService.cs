@@ -55,76 +55,99 @@ public sealed class CameraCheckService : ICameraCheckUseCase
         await _gate.WaitAsync(cancellationToken).ConfigureAwait(false);
         try
         {
-            if (_pipeline.IsRunning)
-                return Unavailable(CameraHealthProblem.MonitoringActive);
-
-            var readings = new List<CameraCheckReading>(_options.SampleCount);
-            var attemptedFrames = 0;
-            var problem = CameraHealthProblem.None;
-            var cameraStartAttempted = false;
+            var pipelineLock = (_pipeline as AttentionPipelineService)?.LifecycleGate;
+            var lockedPipeline = false;
+            if (pipelineLock is not null)
+            {
+                try
+                {
+                    await pipelineLock.WaitAsync(cancellationToken).ConfigureAwait(false);
+                    lockedPipeline = true;
+                }
+                catch (ObjectDisposedException)
+                {
+                    pipelineLock = null;
+                }
+            }
 
             try
             {
-                cameraStartAttempted = true;
-                var open = await _camera.StartAsync(cancellationToken).ConfigureAwait(false);
+                if (_pipeline.IsRunning)
+                    return Unavailable(CameraHealthProblem.MonitoringActive);
 
-                if (!open.Success)
+                var readings = new List<CameraCheckReading>(_options.SampleCount);
+                var attemptedFrames = 0;
+                var problem = CameraHealthProblem.None;
+                var cameraStartAttempted = false;
+
+                try
                 {
-                    problem = CameraProblemMapper.FromFailure(open.Failure);
-                }
-                else
-                {
-                    for (var sample = 0; sample < _options.SampleCount; sample++)
+                    cameraStartAttempted = true;
+                    var open = await _camera.StartAsync(cancellationToken).ConfigureAwait(false);
+
+                    if (!open.Success)
                     {
-                        if (_pipeline.IsRunning)
-                            return Unavailable(CameraHealthProblem.MonitoringActive);
-
-                        if (sample > 0)
+                        problem = CameraProblemMapper.FromFailure(open.Failure);
+                    }
+                    else
+                    {
+                        for (var sample = 0; sample < _options.SampleCount; sample++)
                         {
-                            await Task.Delay(_options.SampleInterval, _timeProvider, cancellationToken)
-                                .ConfigureAwait(false);
-                        }
+                            if (_pipeline.IsRunning)
+                                return Unavailable(CameraHealthProblem.MonitoringActive);
 
-                        if (_pipeline.IsRunning)
-                            return Unavailable(CameraHealthProblem.MonitoringActive);
+                            if (sample > 0)
+                            {
+                                await Task.Delay(_options.SampleInterval, _timeProvider, cancellationToken)
+                                    .ConfigureAwait(false);
+                            }
 
-                        attemptedFrames++;
-                        var capture = await _camera.CaptureAsync(cancellationToken).ConfigureAwait(false);
-                        var frame = capture.Frame;
+                            if (_pipeline.IsRunning)
+                                return Unavailable(CameraHealthProblem.MonitoringActive);
 
-                        if (!capture.Captured || frame is null)
-                        {
-                            if (readings.Count == 0)
-                                problem = CameraProblemMapper.FromFailure(capture.Failure);
-                            break;
-                        }
+                            attemptedFrames++;
+                            var capture = await _camera.CaptureAsync(cancellationToken).ConfigureAwait(false);
+                            var frame = capture.Frame;
 
-                        using (frame)
-                        {
-                            var analysis = Analyze(frame);
+                            if (!capture.Captured || frame is null)
+                            {
+                                if (readings.Count == 0)
+                                    problem = CameraProblemMapper.FromFailure(capture.Failure);
+                                break;
+                            }
 
-                            if (analysis is { Succeeded: true })
-                                readings.Add(new CameraCheckReading(analysis.Luminance, analysis.Face.FacePresent));
+                            using (frame)
+                            {
+                                var analysis = Analyze(frame);
+
+                                if (analysis is { Succeeded: true })
+                                    readings.Add(new CameraCheckReading(analysis.Luminance, analysis.Face.FacePresent));
+                            }
                         }
                     }
                 }
-            }
-            catch (OperationCanceledException)
-            {
-                throw;
-            }
-            catch (Exception ex)
-            {
-                _logger.Error(LogCategories.Attention, "The camera check failed unexpectedly.", ex);
-                problem = CameraHealthProblem.Unknown;
+                catch (OperationCanceledException)
+                {
+                    throw;
+                }
+                catch (Exception ex)
+                {
+                    _logger.Error(LogCategories.Attention, "The camera check failed unexpectedly.", ex);
+                    problem = CameraHealthProblem.Unknown;
+                }
+                finally
+                {
+                    if (cameraStartAttempted)
+                        await StopCameraCoreAsync().ConfigureAwait(false);
+                }
+
+                return CameraHealthEvaluator.Evaluate(problem, readings, attemptedFrames, _options.Thresholds);
             }
             finally
             {
-                if (cameraStartAttempted)
-                    await StopCameraAsync().ConfigureAwait(false);
+                if (lockedPipeline)
+                    pipelineLock?.Release();
             }
-
-            return CameraHealthEvaluator.Evaluate(problem, readings, attemptedFrames, _options.Thresholds);
         }
         finally
         {
@@ -150,40 +173,6 @@ public sealed class CameraCheckService : ICameraCheckUseCase
                 $"Camera check could not analyze a frame: {ex.GetType().Name}.");
             return null;
         }
-    }
-
-    private async Task StopCameraAsync()
-    {
-        if (_pipeline is AttentionPipelineService pipelineService)
-        {
-            try
-            {
-                await pipelineService.LifecycleGate.WaitAsync(CancellationToken.None).ConfigureAwait(false);
-            }
-            catch (ObjectDisposedException)
-            {
-                pipelineService = null!;
-            }
-
-            try
-            {
-                if (_pipeline.IsRunning)
-                    return;
-
-                await StopCameraCoreAsync().ConfigureAwait(false);
-            }
-            finally
-            {
-                pipelineService?.LifecycleGate.Release();
-            }
-
-            return;
-        }
-
-        if (_pipeline.IsRunning)
-            return;
-
-        await StopCameraCoreAsync().ConfigureAwait(false);
     }
 
     private async Task StopCameraCoreAsync()
