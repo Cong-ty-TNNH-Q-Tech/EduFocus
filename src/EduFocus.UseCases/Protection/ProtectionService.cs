@@ -288,6 +288,7 @@ public sealed class ProtectionService : IProtectionUseCase
             active = await _sessions.GetActiveAsync(cancellationToken) ?? active;
 
             warnings = await RemoveEngineAsync(cancellationToken);
+            active = await _sessions.GetActiveAsync(cancellationToken) ?? active;
 
             var endedAt = UtcNow();
 
@@ -299,6 +300,22 @@ public sealed class ProtectionService : IProtectionUseCase
                     endedAt = active.UpdatedAtUtc;
 
                 active.Complete(endedAt);
+
+                try
+                {
+                    await _attentionEvents.CloseOpenAsync(active.Id, endedAt, cancellationToken);
+                }
+                catch (OperationCanceledException)
+                {
+                    throw;
+                }
+                catch (Exception ex)
+                {
+                    _logger.Error(
+                        LogCategories.Protection,
+                        "Could not close open attention events when disabling protection.",
+                        ex);
+                }
                 await _sessions.UpdateAsync(active, cancellationToken);
             }
 
@@ -587,7 +604,12 @@ public sealed class ProtectionService : IProtectionUseCase
     {
         try
         {
-            session.Abort(UtcNow());
+            var abortAt = UtcNow();
+            if (abortAt < session.LastHeartbeatAtUtc)
+                abortAt = session.LastHeartbeatAtUtc;
+            if (abortAt < session.UpdatedAtUtc)
+                abortAt = session.UpdatedAtUtc;
+            session.Abort(abortAt);
             await _sessions.UpdateAsync(session, CancellationToken.None);
         }
         catch (Exception ex)

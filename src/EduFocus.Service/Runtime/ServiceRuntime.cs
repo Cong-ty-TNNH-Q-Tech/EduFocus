@@ -27,6 +27,7 @@ public sealed class ServiceRuntime : IAsyncDisposable
     private readonly IScheduleUseCase _schedule;
     private readonly IRetentionUseCase _retention;
     private readonly IStudySessionRepository _sessions;
+    private readonly IAttentionEventRepository? _attentionEvents;
     private readonly IStudySessionHeartbeatUseCase _heartbeat;
     private readonly IAuditLogRepository _auditLogs;
     private readonly ICorrelationContext _correlation;
@@ -60,7 +61,8 @@ public sealed class ServiceRuntime : IAsyncDisposable
         TimeProvider timeProvider,
         ServiceControlServer controlServer,
         ServiceRuntimeStatus status,
-        ServiceRuntimeOptions options)
+        ServiceRuntimeOptions options,
+        IAttentionEventRepository? attentionEvents = null)
     {
         _initializer = initializer ?? throw new ArgumentNullException(nameof(initializer));
         _seed = seed ?? throw new ArgumentNullException(nameof(seed));
@@ -68,6 +70,7 @@ public sealed class ServiceRuntime : IAsyncDisposable
         _schedule = schedule ?? throw new ArgumentNullException(nameof(schedule));
         _retention = retention ?? throw new ArgumentNullException(nameof(retention));
         _sessions = sessions ?? throw new ArgumentNullException(nameof(sessions));
+        _attentionEvents = attentionEvents;
         _heartbeat = heartbeat ?? throw new ArgumentNullException(nameof(heartbeat));
         _auditLogs = auditLogs ?? throw new ArgumentNullException(nameof(auditLogs));
         _correlation = correlation ?? throw new ArgumentNullException(nameof(correlation));
@@ -372,6 +375,24 @@ public sealed class ServiceRuntime : IAsyncDisposable
             }
 
             active.Interrupt();
+
+            if (_attentionEvents is not null)
+            {
+                try
+                {
+                    await _attentionEvents.CloseOpenAsync(
+                        active.Id,
+                        active.LastHeartbeatAtUtc,
+                        CancellationToken.None).ConfigureAwait(false);
+                }
+                catch (Exception ex)
+                {
+                    _logger.Error(
+                        LogCategories.Attention,
+                        "Could not close open attention events during service stop.",
+                        ex);
+                }
+            }
             await _sessions.UpdateAsync(active, CancellationToken.None).ConfigureAwait(false);
 
             await WriteAuditAsync(

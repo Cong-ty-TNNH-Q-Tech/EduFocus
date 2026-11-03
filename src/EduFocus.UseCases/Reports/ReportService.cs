@@ -80,7 +80,7 @@ public sealed class ReportService : IReportUseCase
                 .Take(MaxDisplayedSessions)
                 .ToArray(),
             Timeline = BuildTimeline(samples, _timeProvider.LocalTimeZone, period),
-            TopActivities = BuildTopActivities(samples),
+            TopActivities = BuildTopActivities(samples, _timeProvider.LocalTimeZone, period),
             AttentionEvents = events,
             SessionCount = sessions.Count,
             ActiveSeconds = sessions.Sum(session => session.ActiveSeconds),
@@ -205,7 +205,9 @@ public sealed class ReportService : IReportUseCase
     }
 
     private static IReadOnlyList<TopActivityItem> BuildTopActivities(
-        IReadOnlyList<ReportActivitySample> samples)
+        IReadOnlyList<ReportActivitySample> samples,
+        TimeZoneInfo timeZone,
+        ReportPeriod period)
     {
         var totals = new Dictionary<(string Name, TopActivityKind Kind), int>();
 
@@ -215,6 +217,9 @@ public sealed class ReportService : IReportUseCase
                 continue;
 
             string name;
+            var local = TimeZoneInfo.ConvertTimeFromUtc(AsUtc(sample.SampledAtUtc), timeZone);
+            if (!period.Contains(DateOnly.FromDateTime(local)))
+                continue;
             TopActivityKind kind;
 
             if (sample.Domain is { } domain)

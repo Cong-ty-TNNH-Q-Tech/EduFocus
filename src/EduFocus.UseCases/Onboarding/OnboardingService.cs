@@ -60,6 +60,7 @@ public sealed class OnboardingService : IOnboardingUseCase
         if (settings.HasPrivacyConsent)
             return;
 
+        now = ClampNotBefore(now, settings.UpdatedAtUtc);
         settings.RecordPrivacyConsent(now);
         await _settings.UpdateAsync(settings, cancellationToken);
         await WriteAuditAsync(
@@ -78,6 +79,7 @@ public sealed class OnboardingService : IOnboardingUseCase
         var now = UtcNow();
         var settings = await GetOrCreateAsync(now, cancellationToken);
 
+        now = ClampNotBefore(now, settings.UpdatedAtUtc);
         settings.UpdateMonitoring(preferences.MonitoringEnabled, settings.MonitorOnlyDuringClasses, now);
         settings.UpdateStartWithWindows(preferences.StartWithWindows, now);
 
@@ -138,6 +140,7 @@ public sealed class OnboardingService : IOnboardingUseCase
         if (!await _auth.IsConfiguredAsync(cancellationToken))
             throw new InvalidOperationException(CredentialRequired);
 
+        now = ClampNotBefore(now, settings.UpdatedAtUtc);
         settings.CompleteOnboarding(now);
         await _settings.UpdateAsync(settings, cancellationToken);
         await WriteAuditAsync(
@@ -174,6 +177,9 @@ public sealed class OnboardingService : IOnboardingUseCase
 
         await _auditLogs.AddAsync(auditLog, cancellationToken);
     }
+
+    private static DateTime ClampNotBefore(DateTime value, DateTime floor) =>
+        value < floor ? floor : value;
 
     private DateTime UtcNow() => _timeProvider.GetUtcNow().UtcDateTime;
 }
