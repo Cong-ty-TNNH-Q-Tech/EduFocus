@@ -156,6 +156,7 @@ public sealed class WindowsServiceHost
         catch (Exception ex)
         {
             _logger.Error(LogCategories.App, "The protection service runtime failed to start.", ex);
+            await DisposeProviderOnceAsync().ConfigureAwait(false);
             Volatile.Write(ref _exitCode, 1);
             ReportStatus(
                 ServiceStopped,

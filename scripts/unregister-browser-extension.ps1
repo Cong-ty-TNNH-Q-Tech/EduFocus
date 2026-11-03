@@ -2,6 +2,7 @@
 
 [CmdletBinding()]
 param(
+    [string]$HostPath = (Join-Path $PSScriptRoot '..\artifacts\native-host\EduFocus.NativeHost.exe'),
     [ValidateSet('User', 'Machine')]
     [string]$Scope = 'User'
 )
@@ -11,6 +12,12 @@ $ErrorActionPreference = 'Stop'
 $hostName = 'com.edufocus.native_host'
 
 if ($Scope -eq 'Machine') {
+    $principal = New-Object Security.Principal.WindowsPrincipal(
+        [Security.Principal.WindowsIdentity]::GetCurrent())
+    if (-not $principal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)) {
+        throw 'Machine scope requires an elevated PowerShell session.'
+    }
+
     $manifestDirectory = Join-Path $env:ProgramData 'EduFocus\NativeMessaging'
     $root = 'HKEY_LOCAL_MACHINE'
     $keyRoots = @(
@@ -30,6 +37,13 @@ if ($Scope -eq 'Machine') {
 
 $manifestPaths = New-Object System.Collections.Generic.HashSet[string]([System.StringComparer]::OrdinalIgnoreCase)
 [void]$manifestPaths.Add((Join-Path $manifestDirectory "$hostName.json"))
+if (-not [string]::IsNullOrWhiteSpace($HostPath)) {
+    $hostCandidate = [System.IO.Path]::GetFullPath($HostPath)
+    $hostDir = Split-Path -Parent $hostCandidate
+    if (-not [string]::IsNullOrWhiteSpace($hostDir)) {
+        [void]$manifestPaths.Add((Join-Path $hostDir "$hostName.json"))
+    }
+}
 if ($Scope -eq 'Machine' -and $env:ProgramFiles) {
     [void]$manifestPaths.Add((Join-Path $env:ProgramFiles "EduFocus\native-host\$hostName.json"))
 }

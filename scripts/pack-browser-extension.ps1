@@ -148,7 +148,7 @@ try {
         Remove-Item -LiteralPath $packedCrx -Force -ErrorAction SilentlyContinue
         $process = Start-Process `
             -FilePath $BrowserPath `
-            -ArgumentList @("--pack-extension=$stage", "--pack-extension-key=$pemFull") `
+            -ArgumentList @("`"--pack-extension=$stage`"", "`"--pack-extension-key=$pemFull`"") `
             -Wait `
             -PassThru `
             -NoNewWindow

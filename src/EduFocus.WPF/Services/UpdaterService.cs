@@ -205,6 +205,9 @@ public class UpdaterService
 
             if (Directory.Exists(tempDir)) Directory.Delete(tempDir, recursive: true);
             ZipFile.ExtractToDirectory(tempFile, tempDir);
+            var topDirs = Directory.GetDirectories(tempDir);
+            var topFiles = Directory.GetFiles(tempDir);
+            var sourceDir = topDirs.Length == 1 && topFiles.Length == 0 ? topDirs[0] : tempDir;
 
             var pid     = Environment.ProcessId;
             var exeName = Path.GetFileName(Environment.ProcessPath ?? "EduFocus.exe");
@@ -215,8 +218,9 @@ public class UpdaterService
                 @echo off
                 timeout /t 2 /nobreak >nul
                 taskkill /PID {pid} /F >nul 2>&1
+                taskkill /IM EduFocus.NativeHost.exe /F >nul 2>&1
                 timeout /t 1 /nobreak >nul
-                xcopy /E /Y /I "{tempDir}" "{exeDir}"
+                xcopy /E /Y /I "{sourceDir}" "{exeDir}"
                 start "" "{Path.Combine(exeDir, exeName)}"
                 del "%~f0"
                 """);

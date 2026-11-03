@@ -37,6 +37,7 @@ public sealed partial class ReportViewModel : ObservableObject
     private readonly IReportExportUseCase _exports;
     private readonly IAppLogger _logger;
     private readonly TimeProvider _timeProvider;
+    private readonly IParentModeUseCase? _parentMode;
     private readonly SemaphoreSlim _gate = new(1, 1);
 
     private StudyReport? _currentReport;
@@ -80,12 +81,14 @@ public sealed partial class ReportViewModel : ObservableObject
         IReportUseCase reports,
         IReportExportUseCase exports,
         IAppLogger logger,
-        TimeProvider timeProvider)
+        TimeProvider timeProvider,
+        IParentModeUseCase? parentMode = null)
     {
         _reports = reports ?? throw new ArgumentNullException(nameof(reports));
         _exports = exports ?? throw new ArgumentNullException(nameof(exports));
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
         _timeProvider = timeProvider ?? throw new ArgumentNullException(nameof(timeProvider));
+        _parentMode = parentMode;
 
         Ranges =
         [
@@ -128,6 +131,10 @@ public sealed partial class ReportViewModel : ObservableObject
             return;
         }
 
+        if (_loaded)
+        {
+            _parentMode?.RecordActivity();
+        }
         if (_loaded)
             _ = RefreshAsync();
     }
@@ -218,7 +225,11 @@ public sealed partial class ReportViewModel : ObservableObject
     }
 
     [RelayCommand]
-    private Task ReloadAsync() => RefreshAsync();
+    private Task ReloadAsync()
+    {
+        _parentMode?.RecordActivity();
+        return RefreshAsync();
+    }
 
     [RelayCommand(CanExecute = nameof(CanExport))]
     private async Task ExportAsync()
@@ -226,6 +237,7 @@ public sealed partial class ReportViewModel : ObservableObject
         if (_currentReport is not { } report)
             return;
 
+        _parentMode?.RecordActivity();
         IsExporting = true;
         HasExportMessage = false;
         ExportMessage = string.Empty;

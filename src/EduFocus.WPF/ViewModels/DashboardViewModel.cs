@@ -18,6 +18,7 @@ public sealed partial class DashboardViewModel : ObservableObject
     private readonly IDashboardUseCase _dashboard;
     private readonly IAppLogger _logger;
     private readonly TimeProvider _timeProvider;
+    private readonly IParentModeUseCase? _parentMode;
     private readonly SemaphoreSlim _gate = new(1, 1);
 
     private bool _loaded;
@@ -46,11 +47,13 @@ public sealed partial class DashboardViewModel : ObservableObject
     public DashboardViewModel(
         IDashboardUseCase dashboard,
         IAppLogger logger,
-        TimeProvider timeProvider)
+        TimeProvider timeProvider,
+        IParentModeUseCase? parentMode = null)
     {
         _dashboard = dashboard ?? throw new ArgumentNullException(nameof(dashboard));
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
         _timeProvider = timeProvider ?? throw new ArgumentNullException(nameof(timeProvider));
+        _parentMode = parentMode;
     }
 
     public string EmptyStateText =>
@@ -102,7 +105,11 @@ public sealed partial class DashboardViewModel : ObservableObject
     }
 
     [RelayCommand]
-    private Task RetryAsync() => RefreshAsync();
+    private Task RetryAsync()
+    {
+        _parentMode?.RecordActivity();
+        return RefreshAsync();
+    }
 
     private void Apply(DailyStudySummary summary)
     {

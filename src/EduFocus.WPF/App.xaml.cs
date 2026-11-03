@@ -727,7 +727,7 @@ public partial class App : Application
             // The engine and the heartbeat only implement IAsyncDisposable, so
             // the synchronous ServiceProvider.Dispose() would throw.
             if (Services is { } services)
-                services.DisposeAsync().AsTask().GetAwaiter().GetResult();
+                Task.Run(() => services.DisposeAsync().AsTask()).Wait(TimeSpan.FromSeconds(5));
         }
         catch (Exception ex)
         {
@@ -767,6 +767,15 @@ public partial class App : Application
         }
         catch { }
         e.Handled = true;
+
+        if (MainWindow is null || !MainWindow.IsVisible)
+        {
+            try
+            {
+                Shutdown(1);
+            }
+            catch { }
+        }
     }
 
     private void TaskScheduler_UnobservedTaskException(object? sender, System.Threading.Tasks.UnobservedTaskExceptionEventArgs e)

@@ -487,6 +487,12 @@ public partial class ParentModeViewModel : ObservableObject
         }
     }
 
+    public void RecordUserActivity()
+    {
+        if (View is ParentModeView.Management or ParentModeView.ChangePin)
+            _mode.RecordActivity();
+    }
+
     public void HandleWindowClosed()
     {
         _mode.Lock();

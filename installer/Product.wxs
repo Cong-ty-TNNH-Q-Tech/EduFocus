@@ -36,6 +36,13 @@
     <!-- Windows Installer reports VersionNT 603 and WindowsBuild 9600 on
          Windows 10/11 for packages without an OS manifest, so the real build
          number is read from the registry instead. -->
+    <Property Id="EDUFOCUS_WINDOWS_MAJOR">
+      <RegistrySearch Id="WindowsMajorSearch"
+                      Root="HKLM"
+                      Key="SOFTWARE\Microsoft\Windows NT\CurrentVersion"
+                      Name="CurrentMajorVersionNumber"
+                      Type="raw"/>
+    </Property>
     <Property Id="EDUFOCUS_WINDOWS_BUILD">
       <RegistrySearch Id="WindowsBuildSearch"
                       Root="HKLM"
@@ -44,7 +51,7 @@
                       Type="raw"/>
     </Property>
 
-    <Launch Condition="Installed OR EDUFOCUS_WINDOWS_BUILD &gt;= 10240"
+    <Launch Condition="Installed OR EDUFOCUS_WINDOWS_MAJOR = &quot;#10&quot; OR VersionNT &gt; 603"
             Message="EduFocus requires Windows 10 or later."/>
     <Launch Condition="VersionNT64"
             Message="EduFocus requires 64-bit Windows."/>
@@ -132,7 +139,7 @@
               Condition='NOT REMOVE~="ALL"'/>
       <Custom Action="UnregisterNativeMessagingHost"
               Before="RemoveFiles"
-              Condition='REMOVE~="ALL" AND (NOT UPGRADINGPRODUCTCODE)'/>
+              Condition='REMOVE~="ALL"'/>
       <Custom Action="UninstallWatchdogKeepData"
               After="StopServices"
               Condition='REMOVE~="ALL" AND (NOT UPGRADINGPRODUCTCODE) AND DELETEUSERDATA&lt;&gt;"1"'/>

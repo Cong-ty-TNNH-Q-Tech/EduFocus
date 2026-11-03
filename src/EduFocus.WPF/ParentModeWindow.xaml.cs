@@ -26,6 +26,9 @@ public partial class ParentModeWindow : Window
 
         Loaded += OnLoaded;
         Closed += OnClosed;
+        PreviewMouseDown += OnPreviewUserInput;
+        PreviewKeyDown += OnPreviewUserInput;
+        Closed += OnClosed;
     }
 
     private async void OnLoaded(object sender, RoutedEventArgs e)
@@ -40,6 +43,8 @@ public partial class ParentModeWindow : Window
     private void OnClosed(object? sender, EventArgs e)
     {
         _timer.Stop();
+        PreviewMouseDown -= OnPreviewUserInput;
+        PreviewKeyDown -= OnPreviewUserInput;
         _timer.Tick -= OnTimerTick;
         _viewModel.PasswordBoxesShouldClear -= OnPasswordBoxesShouldClear;
         _viewModel.CloseRequested -= OnCloseRequested;
@@ -48,6 +53,8 @@ public partial class ParentModeWindow : Window
     }
 
     private void OnTimerTick(object? sender, EventArgs e) => _viewModel.HandleTick();
+
+    private void OnPreviewUserInput(object sender, RoutedEventArgs e) => _viewModel.RecordUserActivity();
 
     private void OpenPrivacyNotice_OnClick(object sender, RoutedEventArgs e) =>
         new PrivacyNoticeWindow { Owner = this }.ShowDialog();
