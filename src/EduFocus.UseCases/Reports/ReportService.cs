@@ -80,14 +80,6 @@ public sealed class ReportService : IReportUseCase
         if (eventsTruncated)
             events = events.Take(MaxAttentionEvents).ToArray();
 
-        var periodEvents = events
-            .Where(e =>
-            {
-                var local = TimeZoneInfo.ConvertTimeFromUtc(AsUtc(e.StartedAtUtc), _timeProvider.LocalTimeZone);
-                return period.Contains(DateOnly.FromDateTime(local));
-            })
-            .ToArray();
-
         var sampleSessionIds = samples.Select(sample => sample.SessionId).ToHashSet();
         var eventSessionIds = events.Select(attentionEvent => attentionEvent.SessionId).ToHashSet();
 
@@ -101,7 +93,7 @@ public sealed class ReportService : IReportUseCase
                 .ToArray(),
             Timeline = BuildTimeline(samples, _timeProvider.LocalTimeZone, period),
             TopActivities = BuildTopActivities(samples, _timeProvider.LocalTimeZone, period),
-            AttentionEvents = periodEvents,
+            AttentionEvents = events,
             SessionCount = sessions.Count,
             ActiveSeconds = sessions.Sum(session => session.ActiveSeconds),
             StudySeconds = sessions.Sum(session => session.StudySeconds),

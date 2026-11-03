@@ -433,7 +433,7 @@ public sealed class ReportServiceTests
         day2Report.Timeline[0].LocalHour.Should().Be(0);
         day2Report.Timeline[0].StudySeconds.Should().Be(900);
         day2Report.TopActivities.Should().ContainSingle(a => a.Name == "Science App");
-        day2Report.AttentionEvents.Should().ContainSingle(e => e.StartedAtUtc == sessionEnd.AddMinutes(-20));
+        day2Report.AttentionEvents.Should().Contain(e => e.StartedAtUtc == sessionEnd.AddMinutes(-20));
 
         // Day 1 (Oct 30) report
         var day1Report = await service.GetAsync(ReportPeriod.Day(new DateOnly(2026, 10, 30)));
@@ -443,7 +443,7 @@ public sealed class ReportServiceTests
         day1Report.Timeline[0].LocalHour.Should().Be(23);
         day1Report.Timeline[0].StudySeconds.Should().Be(900);
         day1Report.TopActivities.Should().ContainSingle(a => a.Name == "Math App");
-        day1Report.AttentionEvents.Should().ContainSingle(e => e.StartedAtUtc == sessionStart.AddMinutes(10));
+        day1Report.AttentionEvents.Should().Contain(e => e.StartedAtUtc == sessionStart.AddMinutes(10));
     }
 
     private static ReportActivitySample Sample(

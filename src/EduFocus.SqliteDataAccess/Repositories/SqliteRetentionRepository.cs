@@ -28,7 +28,6 @@ public sealed class SqliteRetentionRepository : IRetentionRepository
         WHERE "Id" IN (
             SELECT "Id" FROM "AttentionEvents"
             WHERE "StartedAtUtc" < @cutoff
-              AND "EndedAtUtc" IS NOT NULL
               AND "SessionId" NOT IN (SELECT "Id" FROM "StudySessions" WHERE "Status" = 'Active')
             LIMIT @batch);
         """;
@@ -47,8 +46,7 @@ public sealed class SqliteRetentionRepository : IRetentionRepository
         WHERE "Id" IN (
             SELECT "Id" FROM "StudySessions"
             WHERE "Status" <> 'Active'
-              AND "EndedAtUtc" IS NOT NULL
-              AND "EndedAtUtc" < @cutoff
+              AND (("EndedAtUtc" IS NOT NULL AND "EndedAtUtc" < @cutoff) OR ("EndedAtUtc" IS NULL AND "StartedAtUtc" < @cutoff))
             LIMIT @batch);
         """;
 

@@ -36,9 +36,9 @@ public sealed class RetentionRepositoryTests
         await samples.AddAsync(Sample(finished.Id, Now.AddDays(-1)));
 
         var repository = new SqliteRetentionRepository(db.ContextFactory);
-        var deleted = await repository.DeleteActivitySamplesBeforeAsync(Now.AddDays(-30), batchSize: 100);
+        var deletedSamples = await repository.DeleteActivitySamplesBeforeAsync(Now.AddDays(-30), batchSize: 100);
 
-        deleted.Should().Be(1);
+        deletedSamples.Should().Be(1);
 
         await using var read = db.CreateContext();
         var remaining = await read.ActivitySamples.AsNoTracking()
@@ -52,37 +52,41 @@ public sealed class RetentionRepositoryTests
     }
 
     [Fact]
-    public async Task Attention_events_expire_only_when_closed()
+    public async Task Attention_events_expire_including_unclosed_when_session_is_not_active()
     {
         await using var db = new TempDatabase();
         await db.CreateInitializer().InitializeAsync();
 
         var session = StudySession.Start(Now.AddDays(-100), new DateOnly(2026, 7, 22), SessionTrigger.Manual, true);
         session.Complete(Now.AddDays(-99));
+        var activeSession = StudySession.Start(Now.AddDays(-100), new DateOnly(2026, 7, 22), SessionTrigger.Manual, true);
 
         var oldClosed = AttentionEvent.Open(session.Id, AttentionState.Focused, Now.AddDays(-95));
         oldClosed.Close(Now.AddDays(-95).AddMinutes(5));
         var oldOpen = AttentionEvent.Open(session.Id, AttentionState.Distracted, Now.AddDays(-94));
+        var activeEvent = AttentionEvent.Open(activeSession.Id, AttentionState.Focused, Now.AddDays(-95));
         var recentClosed = AttentionEvent.Open(session.Id, AttentionState.Focused, Now.AddDays(-1));
         recentClosed.Close(Now.AddDays(-1).AddMinutes(5));
 
         await using (var context = db.CreateContext())
         {
-            context.StudySessions.Add(session);
-            context.AttentionEvents.AddRange(oldClosed, oldOpen, recentClosed);
+            context.StudySessions.AddRange(session, activeSession);
+            context.AttentionEvents.AddRange(oldClosed, oldOpen, activeEvent, recentClosed);
             await context.SaveChangesAsync();
         }
 
         var repository = new SqliteRetentionRepository(db.ContextFactory);
-        var deleted = await repository.DeleteAttentionEventsBeforeAsync(Now.AddDays(-90), batchSize: 100);
+        var deletedEvents = await repository.DeleteAttentionEventsBeforeAsync(Now.AddDays(-90), batchSize: 100);
 
-        deleted.Should().Be(1);
+        deletedEvents.Should().Be(2);
 
         await using var read = db.CreateContext();
         var remaining = await read.AttentionEvents.AsNoTracking().ToListAsync();
 
         remaining.Should().HaveCount(2);
-        remaining.Should().Contain(x => x.Id == oldOpen.Id);
+        remaining.Should().Contain(x => x.Id == activeEvent.Id);
+        remaining.Should().NotContain(x => x.Id == oldOpen.Id);
+        remaining.Should().NotContain(x => x.Id == oldClosed.Id);
         remaining.Should().Contain(x => x.Id == recentClosed.Id);
     }
 
@@ -105,9 +109,9 @@ public sealed class RetentionRepositoryTests
             BlockedAttemptObservedVia.BlockPage));
 
         var repository = new SqliteRetentionRepository(db.ContextFactory);
-        var deleted = await repository.DeleteBlockedAttemptsBeforeAsync(Now.AddDays(-90), batchSize: 100);
+        var deletedBlocked = await repository.DeleteBlockedAttemptsBeforeAsync(Now.AddDays(-90), batchSize: 100);
 
-        deleted.Should().Be(1);
+        deletedBlocked.Should().Be(1);
 
         await using var read = db.CreateContext();
         (await read.BlockedAttempts.CountAsync()).Should().Be(1);
@@ -133,9 +137,9 @@ public sealed class RetentionRepositoryTests
             Now.AddDays(-1)));
 
         var repository = new SqliteRetentionRepository(db.ContextFactory);
-        var deleted = await repository.DeleteAuditLogsBeforeAsync(Now.AddDays(-365), batchSize: 100);
+        var deletedAudit = await repository.DeleteAuditLogsBeforeAsync(Now.AddDays(-365), batchSize: 100);
 
-        deleted.Should().Be(1);
+        deletedAudit.Should().Be(1);
 
         await using var read = db.CreateContext();
         (await read.AuditLogs.CountAsync()).Should().Be(1);
