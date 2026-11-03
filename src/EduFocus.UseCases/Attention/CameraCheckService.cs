@@ -61,9 +61,11 @@ public sealed class CameraCheckService : ICameraCheckUseCase
             var readings = new List<CameraCheckReading>(_options.SampleCount);
             var attemptedFrames = 0;
             var problem = CameraHealthProblem.None;
+            var cameraStartAttempted = false;
 
             try
             {
+                cameraStartAttempted = true;
                 var open = await _camera.StartAsync(cancellationToken).ConfigureAwait(false);
 
                 if (!open.Success)
@@ -118,7 +120,8 @@ public sealed class CameraCheckService : ICameraCheckUseCase
             }
             finally
             {
-                await StopCameraAsync().ConfigureAwait(false);
+                if (cameraStartAttempted)
+                    await StopCameraAsync().ConfigureAwait(false);
             }
 
             return CameraHealthEvaluator.Evaluate(problem, readings, attemptedFrames, _options.Thresholds);
@@ -151,9 +154,40 @@ public sealed class CameraCheckService : ICameraCheckUseCase
 
     private async Task StopCameraAsync()
     {
+        if (_pipeline is AttentionPipelineService pipelineService)
+        {
+            try
+            {
+                await pipelineService.LifecycleGate.WaitAsync(CancellationToken.None).ConfigureAwait(false);
+            }
+            catch (ObjectDisposedException)
+            {
+                pipelineService = null!;
+            }
+
+            try
+            {
+                if (_pipeline.IsRunning)
+                    return;
+
+                await StopCameraCoreAsync().ConfigureAwait(false);
+            }
+            finally
+            {
+                pipelineService?.LifecycleGate.Release();
+            }
+
+            return;
+        }
+
         if (_pipeline.IsRunning)
             return;
 
+        await StopCameraCoreAsync().ConfigureAwait(false);
+    }
+
+    private async Task StopCameraCoreAsync()
+    {
         try
         {
             await _camera.StopAsync(CancellationToken.None).ConfigureAwait(false);

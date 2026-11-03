@@ -8,6 +8,8 @@ internal sealed class HaarCascadeDetector : IFaceDetector
 {
     private readonly CascadeClassifier _faceCascade;
     private readonly CascadeClassifier _eyeCascade;
+    private readonly object _gate = new();
+    private bool _disposed;
 
     public HaarCascadeDetector(string faceModelPath, string eyeModelPath)
     {
@@ -47,68 +49,80 @@ internal sealed class HaarCascadeDetector : IFaceDetector
 
     public FaceObservation Detect(Mat bgrFrame)
     {
-        using var gray = new Mat();
-        Cv2.CvtColor(bgrFrame, gray, ColorConversionCodes.BGR2GRAY);
-        Cv2.EqualizeHist(gray, gray);
-
-        var faces = _faceCascade.DetectMultiScale(
-            gray,
-            scaleFactor: 1.1,
-            minNeighbors: 6,
-            flags: HaarDetectionTypes.ScaleImage,
-            minSize: new Size(80, 80));
-
-        if (faces.Length == 0)
-            return FaceObservation.NoFace;
-
-        var face = faces.OrderByDescending(f => f.Width * f.Height).First();
-        var eyeCount = 0;
-
-        var eyeHeight = Math.Max(1, (int)(face.Height * 0.6));
-        var upperFace = new Rect(face.X, face.Y, face.Width, eyeHeight);
-        using (var eyeRoi = new Mat(gray, upperFace))
+        lock (_gate)
         {
-            var eyes = _eyeCascade.DetectMultiScale(
-                eyeRoi,
+            ObjectDisposedException.ThrowIf(_disposed, this);
+
+            using var gray = new Mat();
+            Cv2.CvtColor(bgrFrame, gray, ColorConversionCodes.BGR2GRAY);
+            Cv2.EqualizeHist(gray, gray);
+
+            var faces = _faceCascade.DetectMultiScale(
+                gray,
                 scaleFactor: 1.1,
-                minNeighbors: 4,
+                minNeighbors: 6,
                 flags: HaarDetectionTypes.ScaleImage,
-                minSize: new Size(20, 20));
-            eyeCount = Math.Min(2, eyes.Length);
+                minSize: new Size(80, 80));
+
+            if (faces.Length == 0)
+                return FaceObservation.NoFace;
+
+            var face = faces.OrderByDescending(f => f.Width * f.Height).First();
+            var eyeCount = 0;
+
+            var eyeHeight = Math.Max(1, (int)(face.Height * 0.6));
+            var upperFace = new Rect(face.X, face.Y, face.Width, eyeHeight);
+            using (var eyeRoi = new Mat(gray, upperFace))
+            {
+                var eyes = _eyeCascade.DetectMultiScale(
+                    eyeRoi,
+                    scaleFactor: 1.1,
+                    minNeighbors: 4,
+                    flags: HaarDetectionTypes.ScaleImage,
+                    minSize: new Size(20, 20));
+                eyeCount = Math.Min(2, eyes.Length);
+            }
+
+            var frameCenterX = bgrFrame.Width / 2.0;
+            var frameCenterY = bgrFrame.Height / 2.0;
+            var faceCenterX = face.X + face.Width / 2.0;
+            var faceCenterY = face.Y + face.Height / 2.0;
+
+            var yawRatio = Math.Abs(faceCenterX - frameCenterX) / Math.Max(1.0, bgrFrame.Width / 2.0);
+            var pitchRatio = Math.Abs(faceCenterY - frameCenterY) / Math.Max(1.0, bgrFrame.Height / 2.0);
+
+            return new FaceObservation(
+                CameraAvailable: true,
+                FacePresent: true,
+                FaceCount: faces.Length,
+                Confidence: eyeCount > 0 ? 0.75f : 0.65f,
+                X: face.X,
+                Y: face.Y,
+                Width: face.Width,
+                Height: face.Height,
+                RightEye: null,
+                LeftEye: null,
+                Nose: null,
+                RightMouth: null,
+                LeftMouth: null,
+                EyeCount: eyeCount,
+                HeadYawRatio: yawRatio,
+                HeadPitchRatio: pitchRatio,
+                LandmarksAvailable: false,
+                EyesClosed: eyeCount == 0);
         }
-
-        var frameCenterX = bgrFrame.Width / 2.0;
-        var frameCenterY = bgrFrame.Height / 2.0;
-        var faceCenterX = face.X + face.Width / 2.0;
-        var faceCenterY = face.Y + face.Height / 2.0;
-
-        var yawRatio = Math.Abs(faceCenterX - frameCenterX) / Math.Max(1.0, bgrFrame.Width / 2.0);
-        var pitchRatio = Math.Abs(faceCenterY - frameCenterY) / Math.Max(1.0, bgrFrame.Height / 2.0);
-
-        return new FaceObservation(
-            CameraAvailable: true,
-            FacePresent: true,
-            FaceCount: faces.Length,
-            Confidence: eyeCount > 0 ? 0.75f : 0.55f,
-            X: face.X,
-            Y: face.Y,
-            Width: face.Width,
-            Height: face.Height,
-            RightEye: null,
-            LeftEye: null,
-            Nose: null,
-            RightMouth: null,
-            LeftMouth: null,
-            EyeCount: eyeCount,
-            HeadYawRatio: yawRatio,
-            HeadPitchRatio: pitchRatio,
-            LandmarksAvailable: false,
-            EyesClosed: eyeCount == 0);
     }
 
     public void Dispose()
     {
-        _faceCascade.Dispose();
-        _eyeCascade.Dispose();
+        lock (_gate)
+        {
+            if (_disposed)
+                return;
+
+            _disposed = true;
+            _faceCascade.Dispose();
+            _eyeCascade.Dispose();
+        }
     }
 }

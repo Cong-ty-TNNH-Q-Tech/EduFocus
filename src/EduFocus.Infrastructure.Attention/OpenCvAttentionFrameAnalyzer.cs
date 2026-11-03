@@ -15,6 +15,8 @@ namespace EduFocus.Infrastructure.Attention;
 public sealed class OpenCvAttentionFrameAnalyzer : IAttentionFrameAnalyzer
 {
     private readonly IFaceDetector _detector;
+    private readonly object _gate = new();
+    private bool _disposed;
 
     public OpenCvAttentionFrameAnalyzer(IFaceDetector detector)
     {
@@ -33,32 +35,47 @@ public sealed class OpenCvAttentionFrameAnalyzer : IAttentionFrameAnalyzer
 
         var luminance = 0.0;
 
-        try
+        lock (_gate)
         {
-            using var mat = ToMat(frame);
-            luminance = ComputeLuminance(mat);
+            ObjectDisposedException.ThrowIf(_disposed, this);
 
-            var stopwatch = Stopwatch.StartNew();
-            var face = _detector.Detect(mat);
-            stopwatch.Stop();
+            try
+            {
+                using var mat = ToMat(frame);
+                luminance = ComputeLuminance(mat);
 
-            return new AttentionFrameResult(
-                face,
-                luminance,
-                stopwatch.Elapsed.TotalMilliseconds,
-                Error: null);
-        }
-        catch (Exception ex)
-        {
-            return new AttentionFrameResult(
-                FaceObservation.NoFace,
-                luminance,
-                DetectMs: 0,
-                Error: $"detector-error: {ex.GetType().Name}: {ex.Message}");
+                var stopwatch = Stopwatch.StartNew();
+                var face = _detector.Detect(mat);
+                stopwatch.Stop();
+
+                return new AttentionFrameResult(
+                    face,
+                    luminance,
+                    stopwatch.Elapsed.TotalMilliseconds,
+                    Error: null);
+            }
+            catch (Exception ex)
+            {
+                return new AttentionFrameResult(
+                    FaceObservation.NoFace,
+                    luminance,
+                    DetectMs: 0,
+                    Error: $"detector-error: {ex.GetType().Name}: {ex.Message}");
+            }
         }
     }
 
-    public void Dispose() => _detector.Dispose();
+    public void Dispose()
+    {
+        lock (_gate)
+        {
+            if (_disposed)
+                return;
+
+            _disposed = true;
+            _detector.Dispose();
+        }
+    }
 
     private static Mat ToMat(CameraFrame frame)
     {

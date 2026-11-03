@@ -372,8 +372,11 @@ public sealed class CameraSessionService : ICameraSessionUseCase
                         return;
                     }
 
-                    if (completed.IsCompletedSuccessfully && completed.Result.Success && _state != CameraSessionState.Active)
-                        CloseCamera();
+                    if (!completed.IsCompletedSuccessfully || !completed.Result.Success)
+                        return;
+
+                    _ = CloseAbandonedOpenAsync();
+
                 },
                 CancellationToken.None,
                 TaskContinuationOptions.ExecuteSynchronously,
@@ -399,6 +402,27 @@ public sealed class CameraSessionService : ICameraSessionUseCase
                 TaskContinuationOptions.OnlyOnFaulted | TaskContinuationOptions.ExecuteSynchronously,
                 TaskScheduler.Default);
             throw;
+        }
+    }
+
+    private async Task CloseAbandonedOpenAsync()
+    {
+        try
+        {
+            await _gate.WaitAsync(CancellationToken.None).ConfigureAwait(false);
+            try
+            {
+                if (_state != CameraSessionState.Active)
+                    CloseCamera();
+            }
+            finally
+            {
+                _gate.Release();
+            }
+        }
+        catch (ObjectDisposedException)
+        {
+            CloseCamera();
         }
     }
 

@@ -86,17 +86,43 @@ public static class AttentionAnalyzerFactory
             _modelDirectory = modelDirectory;
         }
 
-        public string BackendName => _inner?.BackendName ?? _backend;
+        public string BackendName
+        {
+            get
+            {
+                lock (_gate)
+                {
+                    return _inner?.BackendName ?? _backend;
+                }
+            }
+        }
 
-        public string ModelInfo => _inner?.ModelInfo ?? "deferred";
+        public string ModelInfo
+        {
+            get
+            {
+                lock (_gate)
+                {
+                    return _inner?.ModelInfo ?? "deferred";
+                }
+            }
+        }
 
-        public long ModelLoadMs => _inner?.ModelLoadMs ?? 0;
+        public long ModelLoadMs
+        {
+            get
+            {
+                lock (_gate)
+                {
+                    return _inner?.ModelLoadMs ?? 0;
+                }
+            }
+        }
 
         public AttentionFrameResult Analyze(CameraFrame frame)
         {
             ArgumentNullException.ThrowIfNull(frame);
 
-            IAttentionFrameAnalyzer analyzer;
             lock (_gate)
             {
                 ObjectDisposedException.ThrowIf(_disposed, this);
@@ -124,10 +150,8 @@ public static class AttentionAnalyzerFactory
                     }
                 }
 
-                analyzer = _inner;
+                return _inner.Analyze(frame);
             }
-
-            return analyzer.Analyze(frame);
         }
 
         public void Dispose()

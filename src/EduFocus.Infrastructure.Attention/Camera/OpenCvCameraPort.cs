@@ -15,6 +15,7 @@ public sealed class OpenCvCameraPort : ICameraPort
 {
     private readonly ICameraDeviceCatalog _catalog;
     private readonly CameraPortOptions _options;
+    private readonly object _gate = new();
 
     private OpenCvCameraSource? _source;
     private IReadOnlyList<CameraDeviceInfo> _devices = [];
@@ -26,89 +27,125 @@ public sealed class OpenCvCameraPort : ICameraPort
         _options = options ?? throw new ArgumentNullException(nameof(options));
     }
 
-    public bool IsOpen => _source?.IsOpen == true;
+    public bool IsOpen
+    {
+        get
+        {
+            lock (_gate)
+            {
+                return _source?.IsOpen == true;
+            }
+        }
+    }
 
-    public string? ActiveDeviceId => _activeDeviceId;
+    public string? ActiveDeviceId
+    {
+        get
+        {
+            lock (_gate)
+            {
+                return _activeDeviceId;
+            }
+        }
+    }
 
     public IReadOnlyList<CameraDeviceInfo> ListDevices()
     {
-        _devices = _catalog.ListDevices();
-        return _devices;
+        var devices = _catalog.ListDevices();
+        lock (_gate)
+        {
+            _devices = devices;
+            return _devices;
+        }
     }
 
     public CameraOpenResult Open(string? deviceId)
     {
-        Close();
-        _devices = _catalog.ListDevices();
-
-        var index = 0;
-
-        if (!string.IsNullOrWhiteSpace(deviceId))
+        lock (_gate)
         {
-            var match = _devices.FirstOrDefault(
-                device => string.Equals(device.Id, deviceId, StringComparison.OrdinalIgnoreCase));
+            CloseCore();
+            _devices = _catalog.ListDevices();
 
-            if (match is null)
-                return CameraOpenResult.Failed(
-                    CameraFailureKind.NotFound,
-                    "The selected camera is not connected.");
+            var index = 0;
 
-            index = match.Index;
+            if (!string.IsNullOrWhiteSpace(deviceId))
+            {
+                var match = _devices.FirstOrDefault(
+                    device => string.Equals(device.Id, deviceId, StringComparison.OrdinalIgnoreCase));
+
+                if (match is null)
+                    return CameraOpenResult.Failed(
+                        CameraFailureKind.NotFound,
+                        "The selected camera is not connected.");
+
+                index = match.Index;
+            }
+
+            var source = new OpenCvCameraSource(index, _options.CaptureApi, _options.Width, _options.Height);
+            var opened = source.Open();
+
+            if (!opened.Success)
+            {
+                source.Dispose();
+                return CameraOpenResult.Failed(ClassifyOpenFailure(opened.Error), opened.Error);
+            }
+
+            _source = source;
+            _activeDeviceId = deviceId ?? _devices.FirstOrDefault(device => device.Index == index)?.Id;
+
+            return CameraOpenResult.Opened(_activeDeviceId);
         }
-
-        var source = new OpenCvCameraSource(index, _options.CaptureApi, _options.Width, _options.Height);
-        var opened = source.Open();
-
-        if (!opened.Success)
-        {
-            source.Dispose();
-            return CameraOpenResult.Failed(ClassifyOpenFailure(opened.Error), opened.Error);
-        }
-
-        _source = source;
-        _activeDeviceId = deviceId ?? _devices.FirstOrDefault(device => device.Index == index)?.Id;
-
-        return CameraOpenResult.Opened(_activeDeviceId);
     }
 
     public CameraCaptureResult CaptureFrame()
     {
-        var source = _source;
-
-        if (source is null || !source.IsOpen)
-            return CameraCaptureResult.Unavailable(
-                CameraFailureKind.Disconnected,
-                "The camera is not open.");
-
-        try
+        lock (_gate)
         {
-            using var mat = new Mat();
+            var source = _source;
 
-            if (!source.TryCapture(mat, _options.FlushFrames, out _, out var error) || mat.Empty())
+            if (source is null || !source.IsOpen)
+                return CameraCaptureResult.Unavailable(
+                    CameraFailureKind.Disconnected,
+                    "The camera is not open.");
+
+            try
             {
-                var failure = string.Equals(error, "camera-not-open", StringComparison.Ordinal)
-                    ? CameraFailureKind.Disconnected
-                    : CameraFailureKind.Unknown;
+                using var mat = new Mat();
 
-                return CameraCaptureResult.Unavailable(failure, error ?? "frame-read-failed");
+                if (!source.TryCapture(mat, _options.FlushFrames, out _, out var error) || mat.Empty())
+                {
+                    var failure = string.Equals(error, "camera-not-open", StringComparison.Ordinal)
+                        ? CameraFailureKind.Disconnected
+                        : CameraFailureKind.Unknown;
+
+                    return CameraCaptureResult.Unavailable(failure, error ?? "frame-read-failed");
+                }
+
+                return CameraCaptureResult.Success(CopyToManagedFrame(mat));
             }
-
-            return CameraCaptureResult.Success(CopyToManagedFrame(mat));
-        }
-        catch (Exception ex)
-        {
-            return CameraCaptureResult.Unavailable(CameraFailureKind.Unknown, ex.Message);
+            catch (Exception ex)
+            {
+                return CameraCaptureResult.Unavailable(CameraFailureKind.Unknown, ex.Message);
+            }
         }
     }
 
     public void Close()
     {
+        lock (_gate)
+        {
+            CloseCore();
+        }
+    }
+
+    public void Dispose() => Close();
+
+    private void CloseCore()
+    {
         _source?.Dispose();
         _source = null;
         _activeDeviceId = null;
     }
-
-    public void Dispose() => Close();
 
     private CameraFailureKind ClassifyOpenFailure(string? error)
     {

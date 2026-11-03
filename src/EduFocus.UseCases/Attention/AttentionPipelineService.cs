@@ -53,6 +53,8 @@ public sealed class AttentionPipelineService : IAttentionPipelineUseCase, IAsync
 
     public bool IsRunning => _running;
 
+    internal SemaphoreSlim LifecycleGate => _lifecycleGate;
+
     public event EventHandler<AttentionSample>? SampleProduced;
 
     public async Task StartAsync(CancellationToken cancellationToken = default)
