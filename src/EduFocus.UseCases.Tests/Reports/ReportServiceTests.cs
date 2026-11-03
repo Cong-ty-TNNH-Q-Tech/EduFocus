@@ -48,7 +48,7 @@ public sealed class ReportServiceTests
         var report = await CreateService(sessions, samples, events).GetAsync(ReportPeriod.Day(Day));
 
         sessions.RangeRequests.Should().ContainSingle()
-            .Which.Should().Be((Day, Day));
+            .Which.Should().Be((Day.AddDays(-1), Day));
         report.SessionCount.Should().Be(2);
         report.StudySeconds.Should().Be(900);
         report.DistractionSeconds.Should().Be(120);
@@ -93,7 +93,7 @@ public sealed class ReportServiceTests
         var report = await CreateService(sessions, samples, events).GetAsync(period);
 
         sessions.RangeRequests.Should().ContainSingle()
-            .Which.Should().Be((new DateOnly(2026, 12, 28), new DateOnly(2027, 1, 3)));
+            .Which.Should().Be((new DateOnly(2026, 12, 27), new DateOnly(2027, 1, 3)));
         report.Days.Should().HaveCount(7);
         report.Days[0].LocalDate.Should().Be(new DateOnly(2026, 12, 28));
         report.Days[0].StudySeconds.Should().Be(600);
@@ -395,6 +395,55 @@ public sealed class ReportServiceTests
             session.Complete(stamp = stamp.AddSeconds(1));
 
         return session;
+    }
+
+    [Fact]
+    public async Task Cross_midnight_session_populates_timeline_and_top_activities_on_following_day()
+    {
+        var sessions = new FakeStudySessionRepository();
+        var samples = new FakeActivitySampleRepository();
+        var events = new FakeAttentionEventRepository();
+
+        // Session starts at 23:30 UTC on Oct 30 and ends at 00:30 UTC on Oct 31
+        var sessionStart = new DateTime(2026, 10, 30, 23, 30, 0, DateTimeKind.Utc);
+        var sessionEnd = new DateTime(2026, 10, 31, 0, 30, 0, DateTimeKind.Utc);
+        var session = StudySession.Start(sessionStart, new DateOnly(2026, 10, 30), SessionTrigger.Manual, true);
+        session.AddCategorySeconds(ActivityCategory.Study, 1800, sessionStart.AddMinutes(15));
+        session.AddCategorySeconds(ActivityCategory.Study, 1800, sessionEnd);
+        session.Complete(sessionEnd);
+        sessions.Sessions.Add(session);
+
+        // Sample 1: 23:45 UTC (Oct 30)
+        samples.ReportSamples.Add(Sample(session, sessionStart.AddMinutes(15), 900, ActivityCategory.Study, "Math App"));
+        // Sample 2: 00:15 UTC (Oct 31)
+        samples.ReportSamples.Add(Sample(session, sessionEnd.AddMinutes(-15), 900, ActivityCategory.Study, "Science App"));
+
+        // Attention event 1: 23:40 UTC (Oct 30)
+        events.Events.Add(AttentionEvent.Open(session.Id, AttentionState.Focused, sessionStart.AddMinutes(10)));
+        // Attention event 2: 00:10 UTC (Oct 31)
+        events.Events.Add(AttentionEvent.Open(session.Id, AttentionState.Focused, sessionEnd.AddMinutes(-20)));
+
+        var service = CreateService(sessions, samples, events);
+
+        // Day 2 (Oct 31) report
+        var day2Report = await service.GetAsync(ReportPeriod.Day(new DateOnly(2026, 10, 31)));
+        day2Report.Sessions.Should().ContainSingle();
+        day2Report.Timeline.Should().ContainSingle();
+        day2Report.Timeline[0].LocalDate.Should().Be(new DateOnly(2026, 10, 31));
+        day2Report.Timeline[0].LocalHour.Should().Be(0);
+        day2Report.Timeline[0].StudySeconds.Should().Be(900);
+        day2Report.TopActivities.Should().ContainSingle(a => a.Name == "Science App");
+        day2Report.AttentionEvents.Should().ContainSingle(e => e.StartedAtUtc == sessionEnd.AddMinutes(-20));
+
+        // Day 1 (Oct 30) report
+        var day1Report = await service.GetAsync(ReportPeriod.Day(new DateOnly(2026, 10, 30)));
+        day1Report.Sessions.Should().ContainSingle();
+        day1Report.Timeline.Should().ContainSingle();
+        day1Report.Timeline[0].LocalDate.Should().Be(new DateOnly(2026, 10, 30));
+        day1Report.Timeline[0].LocalHour.Should().Be(23);
+        day1Report.Timeline[0].StudySeconds.Should().Be(900);
+        day1Report.TopActivities.Should().ContainSingle(a => a.Name == "Math App");
+        day1Report.AttentionEvents.Should().ContainSingle(e => e.StartedAtUtc == sessionStart.AddMinutes(10));
     }
 
     private static ReportActivitySample Sample(

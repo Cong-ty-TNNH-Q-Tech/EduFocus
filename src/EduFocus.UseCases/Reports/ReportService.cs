@@ -44,9 +44,21 @@ public sealed class ReportService : IReportUseCase
         if (period.Start == default)
             throw new ArgumentException("A report period is required.", nameof(period));
 
-        var sessions = await _sessions
-            .ListByLocalDateRangeAsync(period.Start, period.End, cancellationToken)
+        var priorDate = period.Start.AddDays(-1);
+        var candidateSessions = await _sessions
+            .ListByLocalDateRangeAsync(priorDate, period.End, cancellationToken)
             .ConfigureAwait(false);
+
+        var periodStartLocal = period.Start.ToDateTime(TimeOnly.MinValue);
+        var periodStartUtc = TimeZoneInfo.ConvertTimeToUtc(periodStartLocal, _timeProvider.LocalTimeZone);
+
+        var sessions = candidateSessions
+            .Where(s => s.StartLocalDate >= period.Start ||
+                        s.IsActive ||
+                        (s.EndedAtUtc.HasValue && s.EndedAtUtc.Value > periodStartUtc) ||
+                        s.LastHeartbeatAtUtc > periodStartUtc)
+            .OrderBy(s => s.StartedAtUtc)
+            .ToList();
 
         if (sessions.Count == 0)
             return StudyReport.Empty(period);
@@ -68,6 +80,14 @@ public sealed class ReportService : IReportUseCase
         if (eventsTruncated)
             events = events.Take(MaxAttentionEvents).ToArray();
 
+        var periodEvents = events
+            .Where(e =>
+            {
+                var local = TimeZoneInfo.ConvertTimeFromUtc(AsUtc(e.StartedAtUtc), _timeProvider.LocalTimeZone);
+                return period.Contains(DateOnly.FromDateTime(local));
+            })
+            .ToArray();
+
         var sampleSessionIds = samples.Select(sample => sample.SessionId).ToHashSet();
         var eventSessionIds = events.Select(attentionEvent => attentionEvent.SessionId).ToHashSet();
 
@@ -81,7 +101,7 @@ public sealed class ReportService : IReportUseCase
                 .ToArray(),
             Timeline = BuildTimeline(samples, _timeProvider.LocalTimeZone, period),
             TopActivities = BuildTopActivities(samples, _timeProvider.LocalTimeZone, period),
-            AttentionEvents = events,
+            AttentionEvents = periodEvents,
             SessionCount = sessions.Count,
             ActiveSeconds = sessions.Sum(session => session.ActiveSeconds),
             StudySeconds = sessions.Sum(session => session.StudySeconds),
@@ -122,7 +142,10 @@ public sealed class ReportService : IReportUseCase
 
             if (!sessionsByDate.TryGetValue(date, out var daySessions))
             {
-                days[index] = DailyStudySummary.Empty(date);
+                var activeCrossDay = sessions.FirstOrDefault(s => s.IsActive);
+                days[index] = activeCrossDay is not null
+                    ? DailyStudySummary.Empty(date) with { ActiveSessionStartedAtUtc = activeCrossDay.StartedAtUtc }
+                    : DailyStudySummary.Empty(date);
                 continue;
             }
 
