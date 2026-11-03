@@ -218,7 +218,10 @@ public partial class App : Application
         services.AddInfrastructureServices();
         services.AddSingleton(new ProtectionHostModeOptions { ServiceManaged = serviceManaged });
 
-        services.AddSingleton(new EduFocusDatabaseOptions());
+        services.AddSingleton(new EduFocusDatabaseOptions
+        {
+            ProtectDataDirectory = Environment.IsPrivilegedProcess
+        });
         services.AddSingleton<IDatabaseKeyStore, DatabaseKeyStore>();
         services.AddSingleton<SqliteDbContextFactory>();
         services.AddSingleton<SqliteDatabaseInitializer>();
@@ -661,7 +664,10 @@ public partial class App : Application
         {
             ServiceManaged = ServiceInstallationProbe.IsServiceManaged()
         });
-        services.AddSingleton(new EduFocusDatabaseOptions());
+        services.AddSingleton(new EduFocusDatabaseOptions
+        {
+            ProtectDataDirectory = Environment.IsPrivilegedProcess
+        });
         services.AddSingleton<IDatabaseKeyStore, DatabaseKeyStore>();
         services.AddSingleton<SqliteDbContextFactory>();
         services.AddSingleton<SqliteDatabaseInitializer>();

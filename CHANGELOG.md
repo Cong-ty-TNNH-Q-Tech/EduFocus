@@ -7,6 +7,44 @@ và dự án tuân theo [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ---
 
+## [2.0.3] - 2026-11-03
+
+### Fixed (Báo cáo — phiên học kéo dài qua nửa đêm)
+
+- **Nguyên nhân:** Khi phiên học bắt đầu từ ngày hôm trước và kéo dài qua nửa đêm sang ngày hôm sau, phạm vi truy vấn phiên học ban đầu chỉ tìm các phiên có StartedAtUtc nằm trong ngày báo cáo, khiến mẫu hoạt động và sự kiện tập trung phát sinh sau nửa đêm bị bỏ sót khỏi báo cáo ngày hôm sau.
+- **Sửa:** Mở rộng phạm vi tìm kiếm phiên học ứng viên lùi về ngày hôm trước (period.Start.AddDays(-1)), giữ lại các phiên vắt qua nửa đêm và nạp đầy đủ mẫu hoạt động cùng sự kiện tập trung thuộc ngày báo cáo (issue #71).
+
+### Fixed (Retention — dọn dẹp sự kiện tập trung dang dở)
+
+- **Nguyên nhân:** Câu truy vấn dọn dẹp AttentionEvents trước đây ràng buộc điều kiện EndedAtUtc IS NOT NULL. Các sự kiện tập trung bị bỏ lửng (unclosed event) do ứng dụng bị tắt đột ngột, máy tắt ngang hoặc crash không bao giờ được xóa ngay cả sau 90 ngày.
+- **Sửa:** Bỏ điều kiện EndedAtUtc IS NOT NULL và bảo vệ sự kiện thuộc các phiên đang hoạt động (ActiveSessionsSql), cho phép dọn dẹp triệt để các sự kiện bỏ lửng của phiên cũ đã kết thúc quá hạn lưu trữ 90 ngày (issue #72).
+
+### Fixed (Báo cáo — xuất CSV đầy đủ dữ liệu mẫu hoạt động)
+
+- **Nguyên nhân:** ReportExportService trước đây nạp mẫu hoạt động thông qua eport.Sessions, vốn bị giới hạn ở tối đa 50 phiên tóm tắt hiển thị trên UI. Đối với kỳ báo cáo có nhiều hơn 50 phiên học, các mẫu hoạt động của các phiên thứ 51 trở đi bị bỏ sót khỏi file CSV xuất ra.
+- **Sửa:** Bổ sung AllSessionIds vào StudyReport và sử dụng danh sách này khi nạp dữ liệu chi tiết xuất CSV, đảm bảo 100% mẫu hoạt động của toàn bộ các phiên trong kỳ đều được xuất đầy đủ (issue #73).
+
+### Fixed (Chú ý — đồng bộ tài nguyên camera giữa kiểm tra và pipeline)
+
+- **Nguyên nhân:** CameraCheckService chỉ kiểm tra cờ _pipeline.IsRunning mà không đồng bộ qua lock vòng đời. Khi người dùng bấm kiểm tra camera cùng lúc pipeline đang khởi động hoặc chuyển trạng thái, cả hai bên cùng yêu cầu truy cập phần cứng Media Foundation, gây tranh chấp tài nguyên và lỗi camera.
+- **Sửa:** Đồng bộ hóa quá trình kiểm tra camera với AttentionPipelineService.LifecycleGate, đảm bảo an toàn truy cập phần cứng và ngăn ngừa xung đột trạng thái (issue #74).
+
+### Fixed (Cập nhật — duy trì ủy quyền Parent Mode trong suốt quá trình tải bản cập nhật)
+
+- **Nguyên nhân:** Khi phụ huynh nhập PIN xác thực để tải bản cập nhật, nếu thời gian tải qua mạng vượt quá thời gian chờ (5 phút) của Parent Mode, phiên xác thực bị hết hạn. Khi tải xong chuẩn bị khởi động lại, DisableForExitAsync() yêu cầu PIN và ném lỗi UnauthorizedAccessException, làm quá trình cài đặt bị hủy bỏ.
+- **Sửa:** Cung cấp cơ chế IParentAuthorizer.BeginActiveScope() và đếm tham chiếu scope trong ParentSessionState để duy trì quyền xác thực phụ huynh trong suốt quá trình tải và cài đặt bản cập nhật; đồng thời tăng HTTP timeout lên 30 phút (issue #75).
+
+### Fixed (Báo cáo — bọc ngoặc kép ký tự ';' và '\t' khi xuất CSV)
+
+- **Nguyên nhân:** Mảng QuotedCharacters của ReportCsvWriter thiếu ký tự ; và \t. Trên các máy tính có thiết lập vùng (Regional Settings) sử dụng dấu chấm phẩy làm ký tự phân cách danh sách (Việt Nam, Châu Âu), các ô dữ liệu chứa dấu chấm phẩy hoặc tab bị nhảy cột khi mở trực tiếp trong Excel.
+- **Sửa:** Bổ sung ; và \t vào QuotedCharacters, đảm bảo tương thích hiển thị chuẩn xác trên mọi cấu hình vùng của Microsoft Excel (issue #76).
+
+### Breaking changes
+
+- Không có. Schema dữ liệu, định dạng file và API giữ nguyên.
+
+---
+
 ## [2.0.2] - 2026-10-31
 
 ### Fixed (Installer — shortcut nằm sai chỗ)
