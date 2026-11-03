@@ -88,10 +88,12 @@ public sealed class ReportExportService : IReportExportUseCase
         List<string> warnings,
         CancellationToken cancellationToken)
     {
-        if (report.Sessions.Count == 0)
-            return [];
+        var sessionIds = report.AllSessionIds.Count > 0
+            ? report.AllSessionIds
+            : report.Sessions.Select(session => session.Id).ToArray();
 
-        var sessionIds = report.Sessions.Select(session => session.Id).ToArray();
+        if (sessionIds.Count == 0)
+            return [];
 
         // One extra row detects the cap without loading unbounded detail rows.
         var samples = await _samples

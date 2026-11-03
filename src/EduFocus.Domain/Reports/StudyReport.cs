@@ -1,5 +1,6 @@
 using EduFocus.Domain.Attention;
 using EduFocus.Domain.Entities;
+using EduFocus.Domain.ValueObjects;
 
 namespace EduFocus.Domain.Reports;
 
@@ -24,6 +25,8 @@ public sealed record StudyReport
     public IReadOnlyList<DailyStudySummary> Days { get; init; } = [];
 
     public IReadOnlyList<StudySession> Sessions { get; init; } = [];
+
+    public IReadOnlyList<StudySessionId> AllSessionIds { get; init; } = [];
 
     public IReadOnlyList<HourlyActivityBucket> Timeline { get; init; } = [];
 

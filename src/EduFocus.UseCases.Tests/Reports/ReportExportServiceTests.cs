@@ -255,6 +255,35 @@ public sealed class ReportExportServiceTests
     }
 
     [Fact]
+    public async Task Export_loads_samples_for_all_sessions_even_when_sessions_list_is_truncated()
+    {
+        var samples = new FakeActivitySampleRepository();
+        var store = new FakeCsvExportStore();
+
+        var firstSession = StudySession.Start(Start, Day, SessionTrigger.Manual, true);
+        firstSession.Complete(Start.AddHours(1));
+        var secondSessionId = StudySessionId.New();
+
+        samples.ReportSamples.Add(new ReportActivitySample(firstSession.Id, Start.AddMinutes(5), 300, ActivityCategory.Study, "App1", null));
+        samples.ReportSamples.Add(new ReportActivitySample(secondSessionId, Start.AddMinutes(10), 300, ActivityCategory.Study, "App2", null));
+
+        var report = StudyReport.Empty(ReportPeriod.Day(Day)) with
+        {
+            Sessions = [firstSession],
+            AllSessionIds = [firstSession.Id, secondSessionId],
+            SessionCount = 2,
+            SessionsTruncated = true
+        };
+
+        var result = await CreateService(samples, store).ExportCsvAsync(report);
+
+        result.ActivitySampleRowCount.Should().Be(2);
+        var rows = ParseCsv(store.Content!);
+        var sampleRows = RowsOfType(rows, "Mẫu hoạt động");
+        sampleRows.Should().HaveCount(2);
+    }
+
+    [Fact]
     public async Task Export_omits_session_and_attention_notes_and_full_urls()
     {
         var sessions = new FakeStudySessionRepository();

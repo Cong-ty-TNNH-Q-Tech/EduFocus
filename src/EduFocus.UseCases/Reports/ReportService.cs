@@ -87,6 +87,7 @@ public sealed class ReportService : IReportUseCase
         {
             Period = period,
             Days = BuildDays(period, sessions),
+            AllSessionIds = sessionIds,
             Sessions = sessions
                 .OrderByDescending(session => session.StartedAtUtc)
                 .Take(MaxDisplayedSessions)
