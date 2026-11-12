@@ -48,6 +48,21 @@ public sealed class CameraCheckServiceTests
     }
 
     [Fact]
+    public async Task A_dark_face_is_reported_as_too_dark_even_when_the_room_is_bright()
+    {
+        var harness = new Harness();
+        harness.Analyzer.DefaultResult = new AttentionFrameResult(
+            FakeAttentionFrameAnalyzer.Face(), 180, 5, Error: null, FaceLuminance: 20);
+        harness.Camera.CaptureResults.Enqueue(CameraCaptureResult.Success(Frame()));
+        harness.Camera.CaptureResults.Enqueue(CameraCaptureResult.Success(Frame()));
+
+        var result = await harness.Service.RunAsync();
+
+        result.Health.Should().Be(CameraHealth.TooDark);
+        result.MeanLuminance.Should().BeApproximately(180, 0.0001);
+    }
+
+    [Fact]
     public async Task A_busy_camera_is_reported_without_analyzing_frames()
     {
         var harness = new Harness();
@@ -156,7 +171,8 @@ public sealed class CameraCheckServiceTests
             new CameraCheckOptions
             {
                 SampleCount = 1,
-                SampleInterval = TimeSpan.FromMilliseconds(50)
+                SampleInterval = TimeSpan.FromMilliseconds(50),
+                WarmUpDelay = TimeSpan.Zero
             });
 
         camera.CaptureResults.Enqueue(CameraCaptureResult.Success(Frame()));
@@ -195,7 +211,8 @@ public sealed class CameraCheckServiceTests
             new CameraCheckOptions
             {
                 SampleCount = 1,
-                SampleInterval = TimeSpan.FromMilliseconds(50)
+                SampleInterval = TimeSpan.FromMilliseconds(50),
+                WarmUpDelay = TimeSpan.Zero
             });
 
         var result = await checkService.RunAsync();
@@ -204,6 +221,35 @@ public sealed class CameraCheckServiceTests
         result.Problem.Should().Be(CameraHealthProblem.MonitoringActive);
 
         await pipeline.StopAsync();
+    }
+
+    [Fact]
+    public async Task The_check_reports_an_in_memory_preview_for_each_captured_frame()
+    {
+        var harness = new Harness();
+        harness.Camera.CaptureResults.Enqueue(CameraCaptureResult.Success(Frame()));
+        harness.Camera.CaptureResults.Enqueue(CameraCaptureResult.Success(Frame()));
+        var previews = new RecordingProgress<CameraPreviewFrame>();
+
+        await harness.Service.RunAsync(preview: previews);
+
+        previews.Frames.Should().HaveCount(2);
+        previews.Frames.Should().OnlyContain(
+            frame => frame.Width == 1 && frame.Height == 1 && frame.Bgr24.Length == 3);
+    }
+
+    [Fact]
+    public async Task A_failing_preview_reporter_does_not_break_the_check()
+    {
+        var harness = new Harness();
+        harness.Camera.CaptureResults.Enqueue(CameraCaptureResult.Success(Frame()));
+        harness.Camera.CaptureResults.Enqueue(CameraCaptureResult.Success(Frame()));
+
+        var result = await harness.Service.RunAsync(preview: new ThrowingProgress<CameraPreviewFrame>());
+
+        result.Health.Should().Be(CameraHealth.Ready);
+        harness.Logger.Warnings.Should().Contain(
+            message => message.Contains("preview", StringComparison.OrdinalIgnoreCase));
     }
 
     [Fact]
@@ -216,9 +262,14 @@ public sealed class CameraCheckServiceTests
         {
             SampleInterval = TimeSpan.FromMilliseconds(1)
         });
+        var warmUp = () => harness.Create(new CameraCheckOptions
+        {
+            WarmUpDelay = TimeSpan.FromSeconds(6)
+        });
 
         act.Should().Throw<ArgumentOutOfRangeException>();
         interval.Should().Throw<ArgumentOutOfRangeException>();
+        warmUp.Should().Throw<ArgumentOutOfRangeException>();
     }
 
     private static CameraFrame Frame() => new(1, 1, [1, 2, 3]);
@@ -240,11 +291,24 @@ public sealed class CameraCheckServiceTests
             Service = Create(new CameraCheckOptions
             {
                 SampleCount = 2,
-                SampleInterval = TimeSpan.FromMilliseconds(50)
+                SampleInterval = TimeSpan.FromMilliseconds(50),
+                WarmUpDelay = TimeSpan.Zero
             });
         }
 
         public CameraCheckService Create(CameraCheckOptions options) =>
             new(Camera, Analyzer, Pipeline, Logger, TimeProvider.System, options);
+    }
+
+    private sealed class RecordingProgress<T> : IProgress<T>
+    {
+        public List<T> Frames { get; } = [];
+
+        public void Report(T value) => Frames.Add(value);
+    }
+
+    private sealed class ThrowingProgress<T> : IProgress<T>
+    {
+        public void Report(T value) => throw new InvalidOperationException("preview handler failed");
     }
 }

@@ -27,11 +27,12 @@ public enum CameraHealthProblem
 }
 
 /// <summary>One analyzed frame reduced to the signals calibration needs.</summary>
-public readonly record struct CameraCheckReading(double Luminance, bool FacePresent);
+public readonly record struct CameraCheckReading(double Luminance, bool FacePresent, double? FaceLuminance = null);
 
 public sealed record CameraCheckThresholds(
     double LowLightLuminance = 40,
-    double MinimumLitFrameRatio = 0.6);
+    double MinimumLitFrameRatio = 0.6,
+    double FaceLuminanceThreshold = 45);
 
 /// <summary>
 /// Aggregated calibration result. Percentages and raw frames are not retained;
@@ -65,12 +66,34 @@ public static class CameraHealthEvaluator
             throw new ArgumentOutOfRangeException(nameof(thresholds), "The low-light luminance must be between 0 and 255.");
         if (thresholds.MinimumLitFrameRatio is < 0 or > 1)
             throw new ArgumentOutOfRangeException(nameof(thresholds), "The lit-frame ratio must be between 0 and 1.");
+        if (thresholds.FaceLuminanceThreshold is < 0 or > 255)
+            throw new ArgumentOutOfRangeException(nameof(thresholds), "The face luminance threshold must be between 0 and 255.");
 
         if (problem != CameraHealthProblem.None)
             return Build(CameraHealth.Unavailable, problem, attemptedFrames, readings);
 
         if (readings.Count == 0)
             return Build(CameraHealth.NoImage, CameraHealthProblem.None, attemptedFrames, readings);
+
+        var faceLuminances = readings
+            .Where(reading => reading.FacePresent && reading.FaceLuminance.HasValue)
+            .Select(reading => reading.FaceLuminance!.Value)
+            .OrderBy(value => value)
+            .ToArray();
+
+        // When a face is visible, judge the light on the face itself; the room
+        // average is only a fallback for frames where no face was detected.
+        if (faceLuminances.Length > 0)
+        {
+            var faceLuminance = Median(faceLuminances);
+            return Build(
+                faceLuminance < thresholds.FaceLuminanceThreshold
+                    ? CameraHealth.TooDark
+                    : CameraHealth.Ready,
+                CameraHealthProblem.None,
+                attemptedFrames,
+                readings);
+        }
 
         var meanLuminance = readings.Average(reading => reading.Luminance);
         var litFrames = readings.Count(reading => reading.Luminance >= thresholds.LowLightLuminance);
@@ -85,6 +108,14 @@ public static class CameraHealthEvaluator
             return Build(CameraHealth.NoFace, CameraHealthProblem.None, attemptedFrames, readings);
 
         return Build(CameraHealth.Ready, CameraHealthProblem.None, attemptedFrames, readings);
+    }
+
+    private static double Median(double[] sorted)
+    {
+        var middle = sorted.Length / 2;
+        return sorted.Length % 2 == 0
+            ? (sorted[middle - 1] + sorted[middle]) / 2
+            : sorted[middle];
     }
 
     private static CameraHealthResult Build(

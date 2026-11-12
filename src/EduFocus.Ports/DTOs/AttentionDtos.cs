@@ -10,7 +10,8 @@ public sealed record AttentionFrameResult(
     FaceObservation Face,
     double Luminance,
     double DetectMs,
-    string? Error)
+    string? Error,
+    double? FaceLuminance = null)
 {
     public bool Succeeded => Error is null;
 }

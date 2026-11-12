@@ -557,8 +557,14 @@
 > state machine và `AttentionEvent` đã có ở #32; coverage/eligibility đã nối ở #33.
 
 > **Triển khai (issue #34):** trước khi giám sát, onboarding và Parent Mode chạy `CameraCheckService`: mở
-> camera, đọc tối đa 5 khung hình trong bộ nhớ, đánh giá `Ready`/`TooDark`/`NoFace`/`NoImage` bằng
-> `CameraHealthEvaluator` rồi luôn đóng camera — không cần quyền quản trị, không lưu ảnh hay landmark. Check
+> camera, chờ 500 ms cho auto-exposure ổn định, đọc tối đa 5 khung hình trong bộ nhớ, đánh giá
+> `Ready`/`TooDark`/`NoFace`/`NoImage` bằng `CameraHealthEvaluator` rồi luôn đóng camera — không cần quyền
+> quản trị, không lưu ảnh hay landmark. UI có thể nhận bản sao khung hình (`CameraPreviewFrame`) qua tham số
+> `IProgress` của `RunAsync` để hiển thị xem trước trong lúc check; bản sao chỉ tồn tại trong bộ nhớ, được xoá
+> khi lần check kết thúc. Khi phát hiện mặt, `OpenCvAttentionFrameAnalyzer` đo median luminance
+> trong bbox mặt (nới 15%) và evaluator chỉ báo `TooDark` khi vùng mặt tối (median < 45); nền sáng hay cửa sổ
+> chói không còn che mất mặt thiếu sáng. Không detect được mặt hoặc thiếu `FaceLuminance` mới fallback về
+> mean/tỷ lệ khung đủ sáng của cả khung. Check
 > từ chối khi pipeline đang chạy (`MonitoringActive`) để tránh tranh chấp thiết bị. `CameraGuidance` hướng
 > dẫn bật quyền Windows, đóng Meet/Teams/Zoom hoặc bật Multi-App Camera trên Windows 11 22H2+, kết nối
 > webcam, và nhắc chọn lại camera khi thiết bị đã lưu biến mất (`StoredDeviceSubstituted`). `NotFound` dừng

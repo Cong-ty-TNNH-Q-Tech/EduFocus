@@ -7,6 +7,32 @@ và dự án tuân theo [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ---
 
+## [2.0.5] - 2026-11-12
+
+### Added (Kiểm tra camera — xem trước camera)
+
+- Hiển thị khung hình xem trước trực tiếp trong lúc kiểm tra camera ở Parent Mode và onboarding. Khung
+  hình chỉ tồn tại trong bộ nhớ để hiển thị, được xoá ngay khi lần kiểm tra kết thúc và không bao giờ được
+  lưu xuống đĩa hay gửi qua mạng.
+
+### Fixed (Kiểm tra camera — đánh giá độ sáng theo vùng mặt)
+
+- **Nguyên nhân:** `CameraCheckService` lấy trung bình độ sáng (mean luminance) của toàn bộ khung hình. Với
+  phòng có nền sáng hoặc cửa sổ chói nhưng mặt học sinh thiếu sáng, mean cả khung vẫn cao nên ứng dụng báo
+  `Ready` sai; ngược lại phòng tối nhưng mặt được chiếu sáng tốt lại bị báo `TooDark`. Ngoài ra khung đầu
+  tiên được chấm ngay khi camera vừa mở, lúc auto-exposure chưa ổn định.
+- **Sửa:** `OpenCvAttentionFrameAnalyzer` đo thêm median luminance trong vùng mặt (bbox nới 15%) và trả về
+  `FaceLuminance`. `CameraHealthEvaluator` ưu tiên median vùng mặt (ngưỡng 45) khi có ít nhất một khung phát
+  hiện mặt; chỉ fallback về mean/tỷ lệ khung đủ sáng của cả khung khi không có dữ liệu vùng mặt. Dùng median
+  thay mean để một khung chói đột ngột không kéo lệch kết quả. `CameraCheckService` chờ 500 ms cho
+  auto-exposure ổn định trước khi lấy khung đầu (cấu hình qua `CameraCheckOptions.WarmUpDelay`, tối đa 5 giây).
+
+### Breaking changes
+
+- Không có. Hành vi UI và định dạng dữ liệu giữ nguyên; chỉ logic đánh giá `TooDark` thay đổi.
+
+---
+
 ## [2.0.4] - 2026-11-03
 
 ### Added (Giao diện — Trang "Về chúng tôi" & Đội ngũ Nhà phát triển)

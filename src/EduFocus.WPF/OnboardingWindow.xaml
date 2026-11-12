@@ -378,6 +378,13 @@
                                     <TextBlock Text="Kiểm tra camera" Style="{StaticResource CardTitleText}" />
                                     <TextBlock Text="{Binding CameraStatusText}" Style="{StaticResource SecondaryText}"
                                                Margin="0,4,0,0" />
+                                    <Border Height="160" CornerRadius="12" Margin="0,10,0,0"
+                                            BorderBrush="{StaticResource BorderBrush}" BorderThickness="1"
+                                            Visibility="{Binding HasCameraPreview, Converter={StaticResource BoolToVisibility}}">
+                                        <Border.Background>
+                                            <ImageBrush ImageSource="{Binding CameraPreviewImage}" Stretch="UniformToFill" />
+                                        </Border.Background>
+                                    </Border>
                                     <Button Content="Kiểm tra lại" Style="{StaticResource LinkButton}"
                                             Margin="0,8,0,0" Command="{Binding CheckCameraCommand}"
                                             IsEnabled="{Binding CanCheckCamera}" />

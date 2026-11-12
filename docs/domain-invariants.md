@@ -155,10 +155,11 @@
 | Invariant | Thực thi |
 |---|---|
 | Không có khung phân tích được → `NoImage`, không suy đoán trạng thái học tập | `CameraHealthEvaluator` |
-| Luminance trung bình < ngưỡng hoặc tỷ lệ khung đủ sáng < 60% → `TooDark` | `CameraHealthEvaluator` |
-| Đủ sáng nhưng không khung nào thấy mặt → `NoFace`; đủ sáng + có mặt → `Ready` | `CameraHealthEvaluator` |
+| Có mặt: median luminance vùng mặt (bbox nới 15%) < 45 → `TooDark`; ngược lại `Ready` — nền sáng hay cửa sổ chói không thắng được vùng mặt | `CameraHealthEvaluator` |
+| Không có `FaceLuminance`: fallback mean cả khung < ngưỡng hoặc tỷ lệ khung đủ sáng < 60% → `TooDark`; đủ sáng nhưng không khung nào thấy mặt → `NoFace` | `CameraHealthEvaluator` |
 | Problem từ lớp capture (`Busy`/`PermissionDenied`/`NotFound`/`Disconnected`/`Timeout`) thắng kết quả đọc khung | `CameraHealthEvaluator.Evaluate` |
-| Check tối đa 5 khung, không lưu frame, luôn đóng camera và từ chối khi pipeline đang chạy | `CameraCheckService` (issue #34) |
+| Check tối đa 5 khung, chờ auto-exposure 500 ms sau khi mở camera, không lưu frame, luôn đóng camera và từ chối khi pipeline đang chạy | `CameraCheckService` (issue #34) |
+| Preview chỉ là bản sao khung hình trong bộ nhớ báo qua `IProgress`, xoá ngay khi check kết thúc; không lưu đĩa, không gửi mạng | `CameraCheckService.RunAsync` |
 | Camera outage không vào monitored; `UnobservedSeconds` = eligible − monitored | `SessionAttentionSummary` (issue #34) |
 
 **Tổng quan ngày (`DailyStudySummary`, issue #35):**

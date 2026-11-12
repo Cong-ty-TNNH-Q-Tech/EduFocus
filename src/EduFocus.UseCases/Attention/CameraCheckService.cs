@@ -46,11 +46,15 @@ public sealed class CameraCheckService : ICameraCheckUseCase
         }
         if (options.Thresholds is null)
             throw new ArgumentNullException(nameof(options), "Check thresholds are required.");
+        if (options.WarmUpDelay < TimeSpan.Zero || options.WarmUpDelay > CameraCheckOptions.MaxWarmUpDelay)
+            throw new ArgumentOutOfRangeException(nameof(options), "The warm-up delay is outside the supported range.");
 
         _options = options;
     }
 
-    public async Task<CameraHealthResult> RunAsync(CancellationToken cancellationToken = default)
+    public async Task<CameraHealthResult> RunAsync(
+        CancellationToken cancellationToken = default,
+        IProgress<CameraPreviewFrame>? preview = null)
     {
         await _gate.WaitAsync(cancellationToken).ConfigureAwait(false);
         try
@@ -91,6 +95,14 @@ public sealed class CameraCheckService : ICameraCheckUseCase
                     }
                     else
                     {
+                        // Give auto-exposure time to settle so the first frames
+                        // are not judged while the image is still ramping up.
+                        if (_options.WarmUpDelay > TimeSpan.Zero)
+                        {
+                            await Task.Delay(_options.WarmUpDelay, _timeProvider, cancellationToken)
+                                .ConfigureAwait(false);
+                        }
+
                         for (var sample = 0; sample < _options.SampleCount; sample++)
                         {
                             if (_pipeline.IsRunning)
@@ -118,10 +130,15 @@ public sealed class CameraCheckService : ICameraCheckUseCase
 
                             using (frame)
                             {
+                                ReportPreview(frame, preview);
+
                                 var analysis = Analyze(frame);
 
                                 if (analysis is { Succeeded: true })
-                                    readings.Add(new CameraCheckReading(analysis.Luminance, analysis.Face.FacePresent));
+                                    readings.Add(new CameraCheckReading(
+                                        analysis.Luminance,
+                                        analysis.Face.FacePresent,
+                                        analysis.FaceLuminance));
                             }
                         }
                     }
@@ -152,6 +169,23 @@ public sealed class CameraCheckService : ICameraCheckUseCase
         finally
         {
             _gate.Release();
+        }
+    }
+
+    private void ReportPreview(CameraFrame frame, IProgress<CameraPreviewFrame>? preview)
+    {
+        if (preview is null)
+            return;
+
+        try
+        {
+            preview.Report(new CameraPreviewFrame(frame.Width, frame.Height, frame.Pixels.ToArray()));
+        }
+        catch (Exception ex)
+        {
+            _logger.Warning(
+                LogCategories.Attention,
+                $"Camera check could not report a preview frame: {ex.GetType().Name}.");
         }
     }
 

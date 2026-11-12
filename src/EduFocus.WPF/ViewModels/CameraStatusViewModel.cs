@@ -1,5 +1,6 @@
 using System.Collections.ObjectModel;
 using System.Windows.Media;
+using System.Windows.Media.Imaging;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using EduFocus.Domain.Attention;
@@ -30,6 +31,7 @@ public sealed partial class CameraStatusViewModel : ObservableObject, IDisposabl
     private readonly IParentAuthorizer? _authorizer;
     private readonly IAuditLogRepository? _auditLogs;
     private readonly ICorrelationContext? _correlation;
+    private int _previewGeneration;
 
     [ObservableProperty] private CameraSessionState _state = CameraSessionState.Off;
     [ObservableProperty] private string _statusText = "Camera đang tắt.";
@@ -40,6 +42,7 @@ public sealed partial class CameraStatusViewModel : ObservableObject, IDisposabl
     [ObservableProperty] private bool _isBusy;
     [ObservableProperty] private string _feedbackText = string.Empty;
     [ObservableProperty] private bool _feedbackIsWarning;
+    [ObservableProperty] private ImageSource? _previewImage;
 
     public CameraStatusViewModel(
         ICameraSessionUseCase camera,
@@ -72,6 +75,8 @@ public sealed partial class CameraStatusViewModel : ObservableObject, IDisposabl
 
     public bool HasFeedback => FeedbackText.Length > 0;
 
+    public bool HasPreview => PreviewImage is not null;
+
     public bool CanRunCheck => !IsBusy;
 
     public bool CanSaveDevice => !IsBusy && SelectedDevice is not null;
@@ -79,6 +84,8 @@ public sealed partial class CameraStatusViewModel : ObservableObject, IDisposabl
     partial void OnGuidanceTextChanged(string value) => OnPropertyChanged(nameof(HasGuidance));
 
     partial void OnFeedbackTextChanged(string value) => OnPropertyChanged(nameof(HasFeedback));
+
+    partial void OnPreviewImageChanged(ImageSource? value) => OnPropertyChanged(nameof(HasPreview));
 
     partial void OnIsBusyChanged(bool value)
     {
@@ -115,9 +122,13 @@ public sealed partial class CameraStatusViewModel : ObservableObject, IDisposabl
         IsBusy = true;
         SetFeedback("Đang kiểm tra camera trong vài giây...", false);
 
+        var generation = ++_previewGeneration;
+
         try
         {
-            var result = await _checkFactory().RunAsync();
+            var preview = new Progress<CameraPreviewFrame>(
+                frame => ShowPreviewFrame(frame, generation));
+            var result = await _checkFactory().RunAsync(preview: preview);
             var guidance = CameraGuidance.Describe(
                 result,
                 _platform.SupportsMultiAppCamera,
@@ -136,8 +147,37 @@ public sealed partial class CameraStatusViewModel : ObservableObject, IDisposabl
         }
         finally
         {
+            _previewGeneration++;
+            PreviewImage = null;
             IsBusy = false;
             Refresh();
+        }
+    }
+
+    private void ShowPreviewFrame(CameraPreviewFrame frame, int generation)
+    {
+        if (generation != _previewGeneration)
+            return;
+
+        try
+        {
+            var bitmap = BitmapSource.Create(
+                frame.Width,
+                frame.Height,
+                96,
+                96,
+                PixelFormats.Bgr24,
+                null,
+                frame.Bgr24,
+                frame.Width * 3);
+            bitmap.Freeze();
+            PreviewImage = bitmap;
+        }
+        catch (Exception ex)
+        {
+            _logger.Warning(
+                LogCategories.Attention,
+                $"Could not render a camera preview frame ({ex.GetType().Name}).");
         }
     }
 

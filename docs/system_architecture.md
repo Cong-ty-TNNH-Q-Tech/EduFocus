@@ -967,9 +967,13 @@ AttentionPercent =
 
 > **Triển khai issue #34:** `CameraHealthEvaluator` + `CameraGuidance` (Domain) đánh giá ảnh kiểm tra
 > (quá tối/không thấy mặt/không có ảnh/không khả dụng) và giữ một bộ câu hướng dẫn dùng chung cho status bar
-> lẫn kết quả kiểm tra. `CameraCheckService` chạy preflight tối đa 5 khung hình trong bộ nhớ, luôn đóng
+> lẫn kết quả kiểm tra. `OpenCvAttentionFrameAnalyzer` trả thêm `FaceLuminance` (median vùng mặt, bbox nới
+> 15%); evaluator ưu tiên vùng mặt khi có mặt và chỉ fallback về mean cả khung khi thiếu dữ liệu mặt, nên
+> nền sáng không đánh lừa kết quả. `CameraCheckService` chạy preflight tối đa 5 khung hình trong bộ nhớ,
+> chờ 500 ms cho auto-exposure ổn định trước khung đầu, luôn đóng
 > camera trong `finally` và từ chối khi pipeline đang chạy (`MonitoringActive`) để không tranh thiết bị;
-> kiểm tra không cần quyền quản trị. Khi mở camera thất bại nhưng thiết bị vẫn hiện diện,
+> kiểm tra không cần quyền quản trị. UI nhận bản sao khung hình qua `IProgress<CameraPreviewFrame>` để hiển
+> thị xem trước trong lúc check; bản sao chỉ nằm trong bộ nhớ và bị xoá khi check xong. Khi mở camera thất bại nhưng thiết bị vẫn hiện diện,
 > `OpenCvCameraPort` phân loại `Busy` (Meet/Teams/Zoom đang giữ camera); Windows 11 22H2+ được phát hiện
 > qua `WindowsCameraPlatformInfo` để hướng dẫn bật Multi-App Camera. Thiết bị đã lưu không còn kết nối →
 > `StoredDeviceSubstituted`, UI nhắc chọn lại; `NotFound` dừng retry cho phiên (mở lại tường minh khi phụ

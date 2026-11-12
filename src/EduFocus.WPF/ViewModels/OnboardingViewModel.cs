@@ -1,4 +1,6 @@
 using System.Windows;
+using System.Windows.Media;
+using System.Windows.Media.Imaging;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using EduFocus.Domain.Attention;
@@ -40,6 +42,7 @@ public partial class OnboardingViewModel : ObservableObject
     private readonly IAppLogger _logger;
 
     private bool _credentialConfigured;
+    private int _cameraPreviewGeneration;
 
     [ObservableProperty] private OnboardingStep _view = OnboardingStep.Loading;
     [ObservableProperty] private string _statusMessage = string.Empty;
@@ -52,6 +55,7 @@ public partial class OnboardingViewModel : ObservableObject
         "EduFocus sẽ kiểm tra nhanh camera trước khi bật giám sát.";
     [ObservableProperty] private bool _cameraStatusIsWarning;
     [ObservableProperty] private bool _isCheckingCamera;
+    [ObservableProperty] private ImageSource? _cameraPreviewImage;
     [ObservableProperty] private bool _isBusy;
     [ObservableProperty] private bool _useRecoveryCodeOnResume;
     [ObservableProperty] private string _resumeRecoveryCode = string.Empty;
@@ -75,6 +79,8 @@ public partial class OnboardingViewModel : ObservableObject
     public bool CanContinuePrivacy => !IsBusy && PrivacyAccepted && GuardianAcknowledged;
     public bool CanFinish => !IsBusy && RecoveryCodeSaved && IssuedRecoveryCode.Length > 0;
     public bool CanCheckCamera => !IsBusy && !IsCheckingCamera;
+
+    public bool HasCameraPreview => CameraPreviewImage is not null;
 
     public string StepLabel => View switch
     {
@@ -128,6 +134,8 @@ public partial class OnboardingViewModel : ObservableObject
     partial void OnIssuedRecoveryCodeChanged(string value) => OnPropertyChanged(nameof(CanFinish));
 
     partial void OnIsCheckingCameraChanged(bool value) => OnPropertyChanged(nameof(CanCheckCamera));
+
+    partial void OnCameraPreviewImageChanged(ImageSource? value) => OnPropertyChanged(nameof(HasCameraPreview));
 
     partial void OnIsBusyChanged(bool value)
     {
@@ -531,9 +539,13 @@ public partial class OnboardingViewModel : ObservableObject
         CameraStatusText = "Đang kiểm tra camera trong vài giây...";
         CameraStatusIsWarning = false;
 
+        var generation = ++_cameraPreviewGeneration;
+
         try
         {
-            var result = await _cameraCheckFactory().RunAsync();
+            var preview = new Progress<CameraPreviewFrame>(
+                frame => ShowCameraPreviewFrame(frame, generation));
+            var result = await _cameraCheckFactory().RunAsync(preview: preview);
             var guidance = CameraGuidance.Describe(result, _platform.SupportsMultiAppCamera);
 
             CameraStatusText = guidance is null
@@ -550,7 +562,36 @@ public partial class OnboardingViewModel : ObservableObject
         }
         finally
         {
+            _cameraPreviewGeneration++;
+            CameraPreviewImage = null;
             IsCheckingCamera = false;
+        }
+    }
+
+    private void ShowCameraPreviewFrame(CameraPreviewFrame frame, int generation)
+    {
+        if (generation != _cameraPreviewGeneration)
+            return;
+
+        try
+        {
+            var bitmap = BitmapSource.Create(
+                frame.Width,
+                frame.Height,
+                96,
+                96,
+                PixelFormats.Bgr24,
+                null,
+                frame.Bgr24,
+                frame.Width * 3);
+            bitmap.Freeze();
+            CameraPreviewImage = bitmap;
+        }
+        catch (Exception ex)
+        {
+            _logger.Warning(
+                LogCategories.Attention,
+                $"Could not render a camera preview frame ({ex.GetType().Name}).");
         }
     }
 

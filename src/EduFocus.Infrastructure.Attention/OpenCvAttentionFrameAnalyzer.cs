@@ -42,17 +42,22 @@ public sealed class OpenCvAttentionFrameAnalyzer : IAttentionFrameAnalyzer
             try
             {
                 using var mat = ToMat(frame);
-                luminance = ComputeLuminance(mat);
+                using var gray = new Mat();
+                Cv2.CvtColor(mat, gray, ColorConversionCodes.BGR2GRAY);
+                luminance = Cv2.Mean(gray).Val0;
 
                 var stopwatch = Stopwatch.StartNew();
                 var face = _detector.Detect(mat);
                 stopwatch.Stop();
 
+                var faceLuminance = face.FacePresent ? ComputeFaceMedian(gray, face) : null;
+
                 return new AttentionFrameResult(
                     face,
                     luminance,
                     stopwatch.Elapsed.TotalMilliseconds,
-                    Error: null);
+                    Error: null,
+                    FaceLuminance: faceLuminance);
             }
             catch (Exception ex)
             {
@@ -90,10 +95,43 @@ public sealed class OpenCvAttentionFrameAnalyzer : IAttentionFrameAnalyzer
             (long)frame.Width * 3);
     }
 
-    private static double ComputeLuminance(Mat frame)
+    // The face region is what matters for monitoring: a bright window or a dark
+    // background must not override how well the face itself is exposed.
+    private static double? ComputeFaceMedian(Mat gray, FaceObservation face)
     {
-        using var gray = new Mat();
-        Cv2.CvtColor(frame, gray, ColorConversionCodes.BGR2GRAY);
-        return Cv2.Mean(gray).Val0;
+        var region = FaceRegion(face, gray.Width, gray.Height);
+        if (region.Width <= 0 || region.Height <= 0)
+            return null;
+
+        using var roi = new Mat(gray, region).Clone();
+        roi.GetArray(out byte[] pixels);
+        if (pixels.Length == 0)
+            return null;
+
+        var histogram = new int[256];
+        foreach (var pixel in pixels)
+            histogram[pixel]++;
+
+        var middle = pixels.Length / 2;
+        var cumulative = 0;
+        for (var value = 0; value < histogram.Length; value++)
+        {
+            cumulative += histogram[value];
+            if (cumulative > middle)
+                return value;
+        }
+
+        return 255;
+    }
+
+    private static Rect FaceRegion(FaceObservation face, int frameWidth, int frameHeight)
+    {
+        const double padding = 0.15;
+        var x = Math.Max(0, (int)Math.Floor(face.X - face.Width * padding));
+        var y = Math.Max(0, (int)Math.Floor(face.Y - face.Height * padding));
+        var right = Math.Min(frameWidth, (int)Math.Ceiling(face.X + face.Width * (1 + padding)));
+        var bottom = Math.Min(frameHeight, (int)Math.Ceiling(face.Y + face.Height * (1 + padding)));
+
+        return new Rect(x, y, Math.Max(0, right - x), Math.Max(0, bottom - y));
     }
 }

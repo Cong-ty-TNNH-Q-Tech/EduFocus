@@ -17,9 +17,15 @@ public sealed class CameraCheckOptions
     public static readonly TimeSpan MinSampleInterval = TimeSpan.FromMilliseconds(50);
     public static readonly TimeSpan MaxSampleInterval = TimeSpan.FromSeconds(2);
 
+    public static readonly TimeSpan DefaultWarmUpDelay = TimeSpan.FromMilliseconds(500);
+    public static readonly TimeSpan MaxWarmUpDelay = TimeSpan.FromSeconds(5);
+
     public int SampleCount { get; init; } = DefaultSampleCount;
 
     public TimeSpan SampleInterval { get; init; } = DefaultSampleInterval;
+
+    /// <summary>Time given to the camera's auto-exposure before the first frame is judged.</summary>
+    public TimeSpan WarmUpDelay { get; init; } = DefaultWarmUpDelay;
 
     public CameraCheckThresholds Thresholds { get; init; } = new();
 }

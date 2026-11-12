@@ -863,13 +863,6 @@
                                                 HorizontalAlignment="Left" Margin="0,18,0,0"
                                                 Command="{Binding ToggleProtectionCommand}"
                                                 IsEnabled="{Binding Protection.IsNotBusy}" />
-
-                                        <Border Margin="0,18,0,0" Padding="14" CornerRadius="12"
-                                                Background="{StaticResource SurfaceAltBrush}"
-                                                BorderBrush="{StaticResource BorderBrush}" BorderThickness="1">
-                                            <TextBlock Text="EduFocus chặn tên miền bằng hosts file, theo dõi ứng dụng bị chặn và tắt Secure DNS của Chrome/Edge. VPN hoặc thay đổi hệ thống có thể vượt qua — đây là công cụ hỗ trợ, không phải tường lửa tuyệt đối."
-                                                       Style="{StaticResource SecondaryText}" />
-                                        </Border>
                                     </StackPanel>
                                 </Border>
 
@@ -890,6 +883,14 @@
                                         <TextBlock Text="{Binding Camera.GuidanceText}"
                                                    Style="{StaticResource ErrorText}" Margin="0,8,0,0"
                                                    Visibility="{Binding Camera.HasGuidance, Converter={StaticResource BoolToVisibility}}" />
+
+                                        <Border Height="200" CornerRadius="12" Margin="0,14,0,0"
+                                                BorderBrush="{StaticResource BorderBrush}" BorderThickness="1"
+                                                Visibility="{Binding Camera.HasPreview, Converter={StaticResource BoolToVisibility}}">
+                                            <Border.Background>
+                                                <ImageBrush ImageSource="{Binding Camera.PreviewImage}" Stretch="UniformToFill" />
+                                            </Border.Background>
+                                        </Border>
 
                                         <TextBlock Text="Camera EduFocus sử dụng" Style="{StaticResource FieldLabelText}" />
                                         <ComboBox ItemsSource="{Binding Camera.Devices}"

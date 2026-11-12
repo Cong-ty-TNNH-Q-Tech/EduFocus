@@ -67,6 +67,12 @@ public sealed class CameraFrame : IDisposable
     public void Dispose() => _pixels = null;
 }
 
+/// <summary>
+/// A transient in-memory copy of one frame for the camera check preview.
+/// It is never persisted, logged or sent over the network.
+/// </summary>
+public sealed record CameraPreviewFrame(int Width, int Height, byte[] Bgr24);
+
 public sealed record CameraOpenResult(
     bool Success,
     CameraFailureKind Failure,
