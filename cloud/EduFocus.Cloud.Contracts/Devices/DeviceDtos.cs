@@ -9,3 +9,5 @@ public sealed record DeviceDto(
     DateTimeOffset? LastSeenAtUtc);
 
 public sealed record DeviceListResponse(IReadOnlyList<DeviceDto> Devices);
+
+public sealed record RotateDeviceTokenResponse(string Token, DateTimeOffset CreatedAtUtc);

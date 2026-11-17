@@ -122,41 +122,47 @@ Mỗi sự kiện có `clientEventId` (UUID do desktop sinh) để ingest idempo
 
 ## 4. API v1
 
-Base path: `/v1`. Tất cả response lỗi dùng `application/problem+json` với `code`, `message`,
-`traceId`. Xác thực: `Authorization: Bearer <token>`; token desktop `efd_`, mobile `efm_`.
+Base path: `/v1`. Response lỗi dùng JSON `{"error":{"code","message","traceId?"}}` (401/403/404/429 có
+`code` ổn định). Xác thực: `Authorization: Bearer <token>`; token desktop `efd_`, mobile `efm_`.
 
 | Method | Path | Auth | Mô tả |
 |---|---|---|---|
-| `POST` | `/v1/pairing/sessions` | không | Desktop tạo phiên ghép nối (rate limit theo IP) |
+| `POST` | `/v1/pairing/sessions` | không | Desktop tạo phiên ghép nối, nhận `code` + token desktop (rate limit theo IP) |
 | `POST` | `/v1/pairing/claim` | không | Mobile claim bằng `code` (+ `sessionId` tùy chọn), trả token mobile |
-| `GET` | `/v1/pairing/sessions/{id}` | không | Desktop poll trạng thái phiên (mã một lần, hết hạn 10 phút) |
-| `GET` | `/v1/link/status` | `efd_` | Desktop kiểm tra ghép nối + thu hồi |
-| `POST` | `/v1/link/disconnect` | `efd_` | Desktop ngắt kết nối, thu hồi token của mình |
-| `POST` | `/v1/sync/events` | `efd_` | Ingest batch sự kiện |
+| `GET` | `/v1/pairing/sessions/{id}` | `efd_`+`family:admin` | Desktop poll trạng thái phiên (hết hạn 10 phút) |
+| `GET` | `/v1/link/status` | `efd_`/`efm_` | Trạng thái ghép nối, thiết bị, lần đồng bộ cuối |
+| `DELETE` | `/v1/devices/{id}` | `family:admin` | Thu hồi thiết bị, token và push registration |
+| `POST` | `/v1/devices/token/rotate` | `efd_`/`efm_` | Xoay token của chính thiết bị đang gọi |
+| `POST` | `/v1/sync/events` | `efd_`+`sync` | Ingest batch sự kiện |
 | `POST` | `/v1/push/registrations` | `efm_` | Đăng ký/cập nhật FCM token |
-| `GET` | `/v1/preferences` | `efm_` | Đọc preference thông báo |
-| `PUT` | `/v1/preferences` | `efm_` | Cập nhật quiet hours, bật/tắt loại thông báo |
-| `GET` | `/v1/reports/daily?from=&to=` | `efm_` | Báo cáo tóm tắt theo khoảng ngày |
-| `GET` | `/v1/notifications?before=&limit=` | `efm_` | Danh sách thông báo đã phát |
-| `GET` | `/v1/devices` | `efm_` | Thiết bị trong gia đình |
-| `DELETE` | `/v1/devices/{id}` | `efd_`/`efm_` | Xóa thiết bị, thu hồi token và push registration |
-| `DELETE` | `/v1/family` | `efm_` | Xóa toàn bộ dữ liệu cloud (header `X-Confirm: XÓA`) |
+| `GET` | `/v1/preferences` | `efm_`+`read` | Đọc preference thông báo |
+| `PUT` | `/v1/preferences` | `efm_`+`prefs` | Cập nhật quiet hours, bật/tắt loại thông báo |
+| `GET` | `/v1/reports/daily?from=&to=` | `efm_`+`read` | Báo cáo tóm tắt theo khoảng ngày |
+| `GET` | `/v1/notifications?before=&limit=` | `efm_`+`read` | Danh sách thông báo đã phát |
+| `GET` | `/v1/devices` | `efm_`+`read` | Thiết bị trong gia đình |
+| `DELETE` | `/v1/family` | `efm_`+`family:admin` | Xóa toàn bộ dữ liệu cloud (header `X-Confirm: XÓA`) |
 | `GET` | `/healthz` | không | Health check cho container/orchestrator |
+
+Rate limit fixed-window: tạo phiên **10/giờ/IP**, claim **20/giờ/IP**, chung **120/phút/token**;
+vượt → `429` kèm `Retry-After` và `code: rate_limited`.
 
 ### 4.1. Ghép nối
 
-1. Desktop `POST /v1/pairing/sessions` → `{ sessionId, code, expiresAtUtc }`; desktop hiển thị QR và
-   mã 8 ký tự, đồng thời poll `GET /v1/pairing/sessions/{id}` mỗi 2 giây.
+1. Desktop `POST /v1/pairing/sessions` với `{ desktopName, platform, appVersion?, timeZoneId? }` →
+   `{ sessionId, code, pairingUri, expiresAtUtc, desktopToken, cloudBaseUrl }`. Server tạo gia đình,
+   thiết bị desktop và token `efd_…` **một lần**; desktop lưu token và hiển thị QR (chứa
+   `pairingUri`) cùng mã 8 ký tự, rồi poll `GET /v1/pairing/sessions/{id}` mỗi 2 giây.
 2. Mobile quét QR hoặc nhập mã → `POST /v1/pairing/claim` với `{ code, deviceName, platform,
-   pushToken? }` (không cần `sessionId` khi nhập tay). Server tìm **phiên đang hoạt động duy nhất**
-   theo hash mã; nếu có nhiều hơn một, trả `409 ambiguous_code` và yêu cầu quét QR.
+   appVersion?, sessionId?, timeZoneId? }`. Server tìm phiên chưa claim theo hash mã; `sessionId`
+   (từ QR) phải khớp nếu có.
 3. Claim thành công: server tạo `Device` mobile, phát token `efm_…` (chỉ trả một lần), đánh dấu
-   phiên `Claimed`. Desktop poll thấy `Claimed` → lưu `familyId`, `deviceId` desktop và token `efd_…`
-   (server phát ở bước poll, cũng chỉ trả một lần).
+   phiên `Claimed`. Desktop poll thấy `Claimed` kèm tên thiết bị mobile.
 4. Cả hai bên hiển thị trạng thái "Đã ghép nối"; desktop bắt đầu outbox worker.
 
 Mã ghép nối: Crockford base32 (32 ký tự, bỏ `I/L/O/U`), 8 ký tự, CSPRNG, hết hạn 10 phút, server chỉ
-lưu `CodeHash`. Giới hạn 5 lần claim sai/10 phút/IP và 10 lần/phiên.
+lưu `CodeHash` (unique trên các phiên chưa claim). Mọi lỗi claim (mã sai, hết hạn, đã dùng, quá số
+lần) trả thống nhất `410 pairing_unavailable`; tối đa **5 lần claim sai/phiên**, sau đó phiên bị vô
+hiệu. Claim dùng cập nhật nguyên tử để hai điện thoại không thể claim cùng một mã.
 
 ### 4.2. Ingest
 
@@ -231,8 +237,8 @@ thời gian yêu cầu xóa (xử lý đồng bộ ngay khi nhận yêu cầu).
 
 - `cloud/docker-compose.yml`: `api` + `postgres` + volume; cấu hình qua biến môi trường
   (`.env.example` chỉ chứa placeholder).
-- Biến chính: `ConnectionStrings__Postgres`, `EduFocus__PublicBaseUrl`, `Fcm__ProjectId`,
-  `Fcm__ServiceAccountPath`, `EduFocus__TokenPepper` (tùy chọn), `ASPNETCORE_URLS`.
+- Biến chính: `ConnectionStrings__Postgres`, `Cloud__PublicBaseUrl`, `Fcm__ProjectId`,
+  `Fcm__ServiceAccountPath`, `ASPNETCORE_URLS`; rate limit tinh chỉnh qua `RateLimiting__…`.
 - Migration tự động khi khởi động chỉ ở môi trường Development; production chạy job/migration riêng.
 - Health check `/healthz`; log có cấu trúc, che token/FCM token.
 - Self-host: chủ máy chủ chịu trách nhiệm TLS, backup PostgreSQL, cập nhật image, và tuân thủ nghĩa

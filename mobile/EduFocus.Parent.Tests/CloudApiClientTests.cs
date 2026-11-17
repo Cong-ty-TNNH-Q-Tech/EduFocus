@@ -34,8 +34,8 @@ public sealed class CloudApiClientTests
             requestBody = request.Content?.ReadAsStringAsync().GetAwaiter().GetResult();
             return JsonResponse(HttpStatusCode.OK, """
                 {"mobileToken":"efm_token","familyId":"6f7d1a6e-2f4f-4e3b-9b8e-7c1f5c0a1b2c",
-                 "deviceId":"0b5c9a5e-8f4a-4c6f-9f0b-2d3e4f5a6b7c","timeZone":"Asia/Ho_Chi_Minh",
-                 "linkedAtUtc":"2026-11-17T08:00:00+00:00"}
+                 "deviceId":"0b5c9a5e-8f4a-4c6f-9f0b-2d3e4f5a6b7c","desktopName":"Student PC",
+                 "timeZoneId":"Asia/Ho_Chi_Minh","linkedAtUtc":"2026-11-17T08:00:00+00:00"}
                 """);
         });
         var client = CreateClient(handler);

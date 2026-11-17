@@ -64,7 +64,8 @@ EDUFOCUS_CLOUD_TEST_DB="Host=localhost;Port=5432;Database=edufocus_cloud_test;Us
 ```
 
 Test này tạo lại schema từ migration, kiểm tra unique `(FamilyId, ClientEventId)`, upsert
-`DailySummaries`, partial unique index của pairing code, cascade delete và audit ẩn danh.
+`DailySummaries`, partial unique index của pairing code, cascade delete, audit ẩn danh, luồng ghép
+nối đầy đủ qua HTTP (tạo phiên → claim → trạng thái → link → xoay/thu hồi token) và rate limit 429.
 
 ## Migration
 
@@ -81,12 +82,14 @@ tường minh trước khi deploy.
 
 | Project | Vai trò |
 |---|---|
-| `EduFocus.Cloud.Api` | Minimal API nhóm `/v1`, `/healthz`, ProblemDetails, OpenAPI (Development), Serilog JSON |
+| `EduFocus.Cloud.Api` | Minimal API nhóm `/v1`, `/healthz`, xác thực Bearer thiết bị, rate limit, Serilog JSON |
 | `EduFocus.Cloud.Contracts` | DTO/enum dùng chung cho API, desktop và mobile; JSON camelCase |
 | `EduFocus.Cloud.Data` | Entity, cấu hình EF Core 10 + Npgsql, `CloudDbContext`, migration `InitialCloudSchema` |
-| `EduFocus.Cloud.Tests` | xUnit: serialization contract, cấu hình DB, test tích hợp schema tùy chọn |
+| `EduFocus.Cloud.Tests` | xUnit: serialization contract, test tích hợp schema/pairing/rate limit tùy chọn |
 
-API nghiệp vụ (pairing, ingest, push, reports) được bổ sung ở các issue #81–#84.
+Đã có ở #81: pairing (`/v1/pairing`), xác thực token thiết bị (`efd_`/`efm_`), `/v1/link/status`,
+`/v1/devices/{id}` và `/v1/devices/token/rotate`. Ingest, push, preferences và báo cáo bổ sung ở các
+issue #82–#84.
 
 ## Biến môi trường
 
@@ -109,7 +112,10 @@ API nghiệp vụ (pairing, ingest, push, reports) được bổ sung ở các i
 - PostgreSQL không public; chỉ API trong cùng mạng Compose truy cập được.
 - API chỉ chấp nhận HTTPS khi chạy sau Caddy/reverse proxy; health check nội bộ dùng HTTP trong mạng
   Docker.
-- Token/pairing code và giới hạn rate limit sẽ được triển khai ở issue #81.
+- Token thiết bị đục 32 byte (`efd_`/`efm_`), server chỉ lưu SHA-256 hex, so sánh constant-time,
+  không log token. Pairing code chỉ lưu hash và dùng một lần.
+- Rate limit fixed-window theo IP/token: tạo phiên 10/giờ, claim 20/giờ, chung 120/phút; trả 429 kèm
+  `Retry-After`.
 
 ## CI
 

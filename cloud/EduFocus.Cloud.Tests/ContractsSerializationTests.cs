@@ -16,12 +16,16 @@ public sealed class ContractsSerializationTests
             Guid.Parse("6f1c2d3e-4a5b-4c6d-8e7f-901234567890"),
             "ABCD2345",
             "edufocus://pair?v=1&u=aHR0cHM6Ly9jbG91ZC5leGFtcGxl&s=6f1c&c=ABCD2345",
-            DateTimeOffset.Parse("2026-11-17T10:00:00Z"));
+            DateTimeOffset.Parse("2026-11-17T10:00:00Z"),
+            "efd_test-token",
+            "https://cloud.example.com");
 
         var json = JsonSerializer.Serialize(response, ApiJson.Options);
 
         Assert.Contains("\"sessionId\"", json);
         Assert.Contains("\"pairingUri\"", json);
+        Assert.Contains("\"desktopToken\"", json);
+        Assert.Contains("\"cloudBaseUrl\"", json);
         Assert.DoesNotContain("\"SessionId\"", json);
     }
 
