@@ -17,6 +17,7 @@ public sealed class SchemaTests
         "BlockedAttempts",
         "BlockRules",
         "CloudLink",
+        "CloudOutbox",
         "ParentCredentials",
         "ScheduleWindows",
         "StudySessions"
@@ -37,12 +38,15 @@ public sealed class SchemaTests
         "IX_BlockRules_Category",
         "IX_BlockRules_Effect_IsEnabled",
         "IX_BlockRules_ExpiresAtUtc",
+        "IX_CloudOutbox_CreatedAtUtc",
+        "IX_CloudOutbox_Due",
         "IX_ScheduleWindows_IsEnabled",
         "IX_StudySessions_LastHeartbeatAtUtc",
         "IX_StudySessions_StartLocalDate",
         "IX_StudySessions_StartedAtUtc",
         "IX_StudySessions_Status",
         "UX_BlockRules_RuleType_MatchType_NormalizedValue_Effect",
+        "UX_CloudOutbox_ClientEventId",
         "UX_StudySessions_Active"
     ];
 
@@ -97,12 +101,13 @@ public sealed class SchemaTests
             connection,
             "SELECT MigrationId FROM __EFMigrationsHistory ORDER BY MigrationId;");
 
-        migrations.Should().HaveCount(5)
+        migrations.Should().HaveCount(6)
             .And.Contain(migration => migration.EndsWith("_InitialEduFocusSchema"))
             .And.Contain(migration => migration.EndsWith("_AddOnboardingConsent"))
             .And.Contain(migration => migration.EndsWith("_AddProtectionSource"))
             .And.Contain(migration => migration.EndsWith("_AddUpdateCheckOptIn"))
-            .And.Contain(migration => migration.EndsWith("_AddCloudLink"));
+            .And.Contain(migration => migration.EndsWith("_AddCloudLink"))
+            .And.Contain(migration => migration.EndsWith("_AddCloudOutbox"));
     }
 
     [Fact]

@@ -101,6 +101,7 @@ public partial class App : Application
         mainWindow.Show();
 
         Services.GetRequiredService<TrayIconService>().Start();
+        Services.GetRequiredService<CloudSyncWorker>().Start();
 
         if (!serviceManaged)
         {
@@ -241,12 +242,17 @@ public partial class App : Application
         services.AddSingleton<IRetentionRepository, SqliteRetentionRepository>();
         services.AddSingleton<IPrivacyDataRepository, SqlitePrivacyDataRepository>();
         services.AddSingleton<ICloudLinkRepository, SqliteCloudLinkRepository>();
+        services.AddSingleton<ICloudOutboxRepository, SqliteCloudOutboxRepository>();
         // The optional cloud relay stays inert until the parent enables it;
         // resolving these singletons performs no network access.
         services.AddSingleton<ICloudSyncPort>(_ => new CloudSyncClient(
             new HttpClient { Timeout = CloudSyncClient.RequestTimeout },
             typeof(App).Assembly.GetName().Version?.ToString(3) ?? "1.0.0"));
+        services.AddSingleton<CloudSyncWorker>();
+        services.AddSingleton<ICloudOutboxNotifier>(provider =>
+            provider.GetRequiredService<CloudSyncWorker>());
         services.AddSingleton<ICloudLinkUseCase, CloudLinkService>();
+        services.AddSingleton<ICloudOutboxUseCase, CloudOutboxService>();
         services.AddSingleton<ISystemPowerEventPort, WindowsSystemPowerEventPort>();
         services.AddSingleton(new StudySessionHeartbeatOptions());
         services.AddSingleton<IStudySessionHeartbeatUseCase, StudySessionHeartbeatService>();

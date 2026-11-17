@@ -41,5 +41,6 @@ public enum AuditEventType
     CloudLinkEnabled,
     CloudPairingCodeCreated,
     CloudLinkRevoked,
-    CloudDataDeletionRequested
+    CloudDataDeletionRequested,
+    CloudSyncFailed
 }

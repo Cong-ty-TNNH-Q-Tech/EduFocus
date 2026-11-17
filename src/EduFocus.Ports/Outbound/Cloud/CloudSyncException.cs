@@ -11,12 +11,14 @@ public sealed class CloudSyncException : Exception
         string code,
         string message,
         bool isNetworkError = false,
-        int? statusCode = null)
+        int? statusCode = null,
+        TimeSpan? retryAfter = null)
         : base(message)
     {
         Code = code;
         IsNetworkError = isNetworkError;
         StatusCode = statusCode;
+        RetryAfter = retryAfter;
     }
 
     public string Code { get; }
@@ -24,4 +26,7 @@ public sealed class CloudSyncException : Exception
     public bool IsNetworkError { get; }
 
     public int? StatusCode { get; }
+
+    /// <summary>Server requested delay for 429 responses, when provided.</summary>
+    public TimeSpan? RetryAfter { get; }
 }

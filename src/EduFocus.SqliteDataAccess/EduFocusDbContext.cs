@@ -37,6 +37,8 @@ public sealed class EduFocusDbContext : DbContext
 
     public DbSet<CloudLink> CloudLinks => Set<CloudLink>();
 
+    public DbSet<CloudOutboxEvent> CloudOutbox => Set<CloudOutboxEvent>();
+
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         modelBuilder.ApplyConfigurationsFromAssembly(typeof(EduFocusDbContext).Assembly);

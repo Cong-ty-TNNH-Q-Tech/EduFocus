@@ -75,6 +75,34 @@ internal sealed class FakeCloudSyncPort : ICloudSyncPort
         return Task.FromResult(RemoteStatus);
     }
 
+    public Task<CloudSyncBatchResult> SendEventsAsync(
+        Uri cloudBaseUrl,
+        string desktopToken,
+        IReadOnlyList<CloudSyncEvent> events,
+        CancellationToken cancellationToken = default)
+    {
+        Calls.Add("send-events");
+        SentEvents.AddRange(events);
+
+        if (SendFailure is not null)
+            throw SendFailure;
+
+        var results = events
+            .Select(item => new CloudSyncEventResult(
+                item.ClientEventId,
+                CloudEventOutcome.Applied,
+                null,
+                null))
+            .ToList();
+        return Task.FromResult(new CloudSyncBatchResult(
+            results,
+            new DateTimeOffset(2026, 11, 17, 9, 0, 30, TimeSpan.Zero)));
+    }
+
+    public List<CloudSyncEvent> SentEvents { get; } = [];
+
+    public CloudSyncException? SendFailure { get; set; }
+
     public Task RevokeDeviceAsync(
         Uri cloudBaseUrl,
         string desktopToken,

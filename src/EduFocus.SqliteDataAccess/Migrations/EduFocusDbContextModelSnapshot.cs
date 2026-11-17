@@ -548,6 +548,59 @@ namespace EduFocus.SqliteDataAccess.Migrations
                         });
                 });
 
+            modelBuilder.Entity("EduFocus.Domain.Entities.CloudOutboxEvent", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("TEXT");
+
+                    b.Property<int>("AttemptCount")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<Guid>("ClientEventId")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("CreatedAtUtc")
+                        .IsRequired()
+                        .HasColumnType("TEXT(28)");
+
+                    b.Property<string>("FailedAtUtc")
+                        .HasColumnType("TEXT(28)");
+
+                    b.Property<string>("LastError")
+                        .HasMaxLength(512)
+                        .HasColumnType("TEXT(512)");
+
+                    b.Property<string>("NextAttemptAtUtc")
+                        .IsRequired()
+                        .HasColumnType("TEXT(28)");
+
+                    b.Property<string>("PayloadJson")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("SentAtUtc")
+                        .HasColumnType("TEXT(28)");
+
+                    b.Property<string>("Type")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("TEXT(32)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ClientEventId")
+                        .IsUnique()
+                        .HasDatabaseName("UX_CloudOutbox_ClientEventId");
+
+                    b.HasIndex("CreatedAtUtc")
+                        .HasDatabaseName("IX_CloudOutbox_CreatedAtUtc");
+
+                    b.HasIndex("SentAtUtc", "NextAttemptAtUtc")
+                        .HasDatabaseName("IX_CloudOutbox_Due");
+
+                    b.ToTable("CloudOutbox", (string)null);
+                });
+
             modelBuilder.Entity("EduFocus.Domain.Entities.ParentCredential", b =>
                 {
                     b.Property<Guid>("Id")

@@ -132,6 +132,41 @@ public sealed class CloudLinkRepositoryTests
     }
 
     [Fact]
+    public async Task Token_scoped_status_updates_cannot_resurrect_an_unlinked_link()
+    {
+        await using var db = new TempDatabase();
+        await db.CreateInitializer().InitializeAsync();
+
+        var repository = new SqliteCloudLinkRepository(db.ContextFactory);
+        var link = CloudLink.CreateDefault(Now);
+        link.RecordConsent(Now);
+        link.BeginPairing(CloudBaseUrl, SessionId, "ABCD2345", Token, Now.AddMinutes(10), Now);
+        link.CompletePairing(FamilyId, DeviceId, Now, Now);
+        await repository.AddAsync(link);
+
+        (await repository.TryRecordSyncAsync("wrong-token", Now.AddSeconds(30), Now.AddSeconds(30)))
+            .Should().BeFalse();
+        (await repository.TryRecordSyncAsync(Token, Now.AddSeconds(30), Now.AddSeconds(30)))
+            .Should().BeTrue();
+        (await repository.TryRecordErrorAsync(Token, "network", Now.AddSeconds(40)))
+            .Should().BeTrue();
+
+        link.Unlink(Now.AddMinutes(1));
+        await repository.UpdateAsync(link);
+
+        (await repository.TryRecordSyncAsync(Token, Now.AddMinutes(2), Now.AddMinutes(2)))
+            .Should().BeFalse();
+        (await repository.TryRecordErrorAsync(Token, "network", Now.AddMinutes(2)))
+            .Should().BeFalse();
+
+        var stored = await repository.GetAsync();
+        stored!.IsEnabled.Should().BeFalse();
+        stored.DesktopToken.Should().BeNull();
+        stored.LastSyncAtUtc.Should().BeNull();
+        stored.LastError.Should().BeNull();
+    }
+
+    [Fact]
     public async Task Writes_keep_a_single_link_row()
     {
         await using var db = new TempDatabase();

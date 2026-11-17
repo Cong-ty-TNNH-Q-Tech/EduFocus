@@ -1,4 +1,29 @@
+using System.Text.Json;
+
 namespace EduFocus.Ports.Outbound.Cloud;
+
+public enum CloudEventOutcome
+{
+    Applied,
+    Duplicate,
+    Rejected,
+}
+
+public sealed record CloudSyncEvent(
+    string ClientEventId,
+    string Type,
+    DateTimeOffset OccurredAtUtc,
+    JsonElement Payload);
+
+public sealed record CloudSyncEventResult(
+    string ClientEventId,
+    CloudEventOutcome Outcome,
+    string? Code,
+    string? Message);
+
+public sealed record CloudSyncBatchResult(
+    IReadOnlyList<CloudSyncEventResult> Results,
+    DateTimeOffset ServerTimeUtc);
 
 public sealed record CloudPairingRequest(
     string DesktopName,

@@ -13,5 +13,6 @@ public static class CloudErrorCodes
     public const string NotFound = "not_found";
     public const string InvalidResponse = "invalid_response";
     public const string ServerError = "server_error";
+    public const string RateLimited = "rate_limited";
     public const string RequestFailed = "request_failed";
 }

@@ -27,4 +27,32 @@ internal sealed class FakeCloudLinkRepository : ICloudLinkRepository
         Stored = link;
         return Task.CompletedTask;
     }
+
+    public Task<bool> TryRecordSyncAsync(
+        string desktopToken,
+        DateTime lastSyncAtUtc,
+        DateTime updatedAtUtc,
+        CancellationToken cancellationToken = default)
+    {
+        if (Stored is null || !Stored.IsLinked || Stored.DesktopToken != desktopToken)
+            return Task.FromResult(false);
+
+        Stored.RecordSync(lastSyncAtUtc, Max(updatedAtUtc, Stored.UpdatedAtUtc));
+        return Task.FromResult(true);
+    }
+
+    public Task<bool> TryRecordErrorAsync(
+        string desktopToken,
+        string? message,
+        DateTime updatedAtUtc,
+        CancellationToken cancellationToken = default)
+    {
+        if (Stored is null || !Stored.IsEnabled || Stored.DesktopToken != desktopToken)
+            return Task.FromResult(false);
+
+        Stored.RecordError(message, Max(updatedAtUtc, Stored.UpdatedAtUtc));
+        return Task.FromResult(true);
+    }
+
+    private static DateTime Max(DateTime left, DateTime right) => left >= right ? left : right;
 }

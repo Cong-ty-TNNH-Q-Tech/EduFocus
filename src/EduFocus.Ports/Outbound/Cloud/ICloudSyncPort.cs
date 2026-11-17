@@ -24,6 +24,12 @@ public interface ICloudSyncPort
         string desktopToken,
         CancellationToken cancellationToken = default);
 
+    Task<CloudSyncBatchResult> SendEventsAsync(
+        Uri cloudBaseUrl,
+        string desktopToken,
+        IReadOnlyList<CloudSyncEvent> events,
+        CancellationToken cancellationToken = default);
+
     Task RevokeDeviceAsync(
         Uri cloudBaseUrl,
         string desktopToken,

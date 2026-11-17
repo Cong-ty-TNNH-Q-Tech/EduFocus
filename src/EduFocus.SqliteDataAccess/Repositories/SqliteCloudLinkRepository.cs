@@ -1,4 +1,5 @@
 using EduFocus.Domain.Entities;
+using EduFocus.Domain.Privacy;
 using EduFocus.Ports.Outbound.Persistence;
 using EduFocus.SqliteDataAccess.Persistence;
 using Microsoft.EntityFrameworkCore;
@@ -43,5 +44,51 @@ public sealed class SqliteCloudLinkRepository : ICloudLinkRepository
         await using var context = _contextFactory.CreateDbContext();
         context.CloudLinks.Update(link);
         await context.SaveChangesAsync(cancellationToken);
+    }
+
+    public async Task<bool> TryRecordSyncAsync(
+        string desktopToken,
+        DateTime lastSyncAtUtc,
+        DateTime updatedAtUtc,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(desktopToken);
+
+        await using var context = _contextFactory.CreateDbContext();
+        var updated = await context.CloudLinks
+            .Where(link => link.IsEnabled
+                && link.DesktopToken == desktopToken
+                && link.UpdatedAtUtc <= updatedAtUtc)
+            .ExecuteUpdateAsync(
+                setters => setters
+                    .SetProperty(link => link.LastSyncAtUtc, lastSyncAtUtc)
+                    .SetProperty(link => link.LastError, (string?)null)
+                    .SetProperty(link => link.UpdatedAtUtc, updatedAtUtc),
+                cancellationToken);
+
+        return updated > 0;
+    }
+
+    public async Task<bool> TryRecordErrorAsync(
+        string desktopToken,
+        string? message,
+        DateTime updatedAtUtc,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(desktopToken);
+
+        var clean = TextSanitizer.Clean(message, CloudLink.MaxErrorLength);
+        await using var context = _contextFactory.CreateDbContext();
+        var updated = await context.CloudLinks
+            .Where(link => link.IsEnabled
+                && link.DesktopToken == desktopToken
+                && link.UpdatedAtUtc <= updatedAtUtc)
+            .ExecuteUpdateAsync(
+                setters => setters
+                    .SetProperty(link => link.LastError, clean)
+                    .SetProperty(link => link.UpdatedAtUtc, updatedAtUtc),
+                cancellationToken);
+
+        return updated > 0;
     }
 }

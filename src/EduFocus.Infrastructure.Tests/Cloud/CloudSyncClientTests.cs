@@ -236,6 +236,93 @@ public sealed class CloudSyncClientTests
         http.DefaultRequestHeaders.UserAgent.ToString().Should().Be("EduFocus/1.2.3");
     }
 
+    [Fact]
+    public async Task Send_events_posts_the_batch_and_maps_the_results()
+    {
+        var firstId = Guid.Parse("c2b3f0f0-0f54-4d1a-8a4f-4a1f1f2e6b11");
+        var secondId = Guid.Parse("8a6c2d1e-7f2b-4a9e-9d5c-3b1a2f4e6d22");
+        var handler = new StubHandler(_ => JsonResponse(
+            HttpStatusCode.OK,
+            new
+            {
+                results = new object[]
+                {
+                    new { clientEventId = firstId.ToString("D"), status = "applied" },
+                    new
+                    {
+                        clientEventId = secondId.ToString("D"),
+                        status = "rejected",
+                        code = "stale_summary",
+                        message = "Bản tóm tắt đã quá cũ."
+                    }
+                },
+                serverTimeUtc = "2026-11-17T09:00:30Z"
+            }));
+
+        var client = new CloudSyncClient(new HttpClient(handler));
+        var occurredAt = new DateTimeOffset(2026, 11, 17, 9, 0, 0, TimeSpan.Zero);
+
+        var result = await client.SendEventsAsync(
+            new Uri(CloudBaseUrl),
+            Token,
+            [
+                new CloudSyncEvent(
+                    firstId.ToString("D"),
+                    CloudEventTypes.DailySummary,
+                    occurredAt,
+                    JsonSerializer.SerializeToElement(new { sessionsCount = 1 })),
+                new CloudSyncEvent(
+                    secondId.ToString("D"),
+                    CloudEventTypes.AttentionAlert,
+                    occurredAt,
+                    JsonSerializer.SerializeToElement(new { kind = "distracted" }))
+            ]);
+
+        result.Results.Should().HaveCount(2);
+        result.Results[0].Outcome.Should().Be(CloudEventOutcome.Applied);
+        result.Results[1].Outcome.Should().Be(CloudEventOutcome.Rejected);
+        result.Results[1].Code.Should().Be("stale_summary");
+        result.ServerTimeUtc.Should().Be(occurredAt.AddSeconds(30));
+
+        var request = handler.Requests.Should().ContainSingle().Subject;
+        request.Method.Should().Be("POST");
+        request.Uri!.AbsolutePath.Should().Be("/v1/sync/events");
+        request.Authorization.Should().Be($"Bearer {Token}");
+
+        using var body = JsonDocument.Parse(request.Body);
+        var events = body.RootElement.GetProperty("events");
+        events.GetArrayLength().Should().Be(2);
+        events[0].GetProperty("clientEventId").GetString().Should().Be(firstId.ToString("D"));
+        events[0].GetProperty("type").GetString().Should().Be("daily_summary");
+        events[0].GetProperty("occurredAtUtc").GetString().Should().Be("2026-11-17T09:00:00+00:00");
+        events[0].GetProperty("payload").GetProperty("sessionsCount").GetInt32().Should().Be(1);
+    }
+
+    [Fact]
+    public async Task Rate_limited_errors_expose_the_retry_after_delay()
+    {
+        var handler = new StubHandler(_ =>
+        {
+            var response = new HttpResponseMessage(HttpStatusCode.TooManyRequests)
+            {
+                Content = new StringContent(string.Empty, Encoding.UTF8, "application/json")
+            };
+            response.Headers.RetryAfter =
+                new System.Net.Http.Headers.RetryConditionHeaderValue(TimeSpan.FromMinutes(3));
+            return response;
+        });
+
+        var client = new CloudSyncClient(new HttpClient(handler));
+
+        var act = async () => await client.GetLinkStatusAsync(new Uri(CloudBaseUrl), Token);
+        var exception = (await act.Should().ThrowAsync<CloudSyncException>()).Which;
+
+        exception.Code.Should().Be(CloudErrorCodes.RateLimited);
+        exception.StatusCode.Should().Be(429);
+        exception.RetryAfter.Should().Be(TimeSpan.FromMinutes(3));
+        exception.ToString().Should().NotContain(Token);
+    }
+
     private static string JsonProperty(string body, string name) =>
         JsonDocument.Parse(body).RootElement.GetProperty(name).GetString()!;
 

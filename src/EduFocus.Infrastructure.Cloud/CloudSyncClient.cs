@@ -6,6 +6,7 @@ using EduFocus.Cloud.Contracts.Common;
 using EduFocus.Cloud.Contracts.Family;
 using EduFocus.Cloud.Contracts.Json;
 using EduFocus.Cloud.Contracts.Pairing;
+using EduFocus.Cloud.Contracts.Sync;
 using EduFocus.Ports.Outbound.Cloud;
 
 namespace EduFocus.Infrastructure.Cloud;
@@ -150,6 +151,54 @@ public sealed class CloudSyncClient : ICloudSyncPort
                 .ToList());
     }
 
+    public async Task<CloudSyncBatchResult> SendEventsAsync(
+        Uri cloudBaseUrl,
+        string desktopToken,
+        IReadOnlyList<CloudSyncEvent> events,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(cloudBaseUrl);
+        ArgumentException.ThrowIfNullOrWhiteSpace(desktopToken);
+        ArgumentNullException.ThrowIfNull(events);
+        if (events.Count == 0)
+            throw new ArgumentException("At least one event is required.", nameof(events));
+
+        var batch = new SyncBatchRequest(events
+            .Select(item => new SyncEventDto(
+                item.ClientEventId,
+                MapEventType(item.Type),
+                item.OccurredAtUtc,
+                item.Payload))
+            .ToList());
+
+        using var response = await SendAsync(
+                HttpMethod.Post,
+                BuildUri(cloudBaseUrl, "v1/sync/events"),
+                batch,
+                desktopToken,
+                cancellationToken)
+            .ConfigureAwait(false);
+        var dto = await ReadAsync<SyncBatchResponse>(response, cancellationToken).ConfigureAwait(false);
+
+        var results = dto.Results
+            .Select(result => new CloudSyncEventResult(
+                result.ClientEventId,
+                result.Status switch
+                {
+                    SyncEventResultStatus.Applied => CloudEventOutcome.Applied,
+                    SyncEventResultStatus.Duplicate => CloudEventOutcome.Duplicate,
+                    SyncEventResultStatus.Rejected => CloudEventOutcome.Rejected,
+                    _ => throw new CloudSyncException(
+                        CloudErrorCodes.InvalidResponse,
+                        "Máy chủ cloud trả về kết quả đồng bộ không hợp lệ."),
+                },
+                result.Code,
+                result.Message))
+            .ToList();
+
+        return new CloudSyncBatchResult(results, dto.ServerTimeUtc);
+    }
+
     public async Task RevokeDeviceAsync(
         Uri cloudBaseUrl,
         string desktopToken,
@@ -263,6 +312,7 @@ public sealed class CloudSyncClient : ICloudSyncPort
             401 or 403 => CloudErrorCodes.Unauthorized,
             404 => CloudErrorCodes.NotFound,
             408 => CloudErrorCodes.Timeout,
+            429 => CloudErrorCodes.RateLimited,
             >= 500 => CloudErrorCodes.ServerError,
             _ => CloudErrorCodes.RequestFailed,
         };
@@ -271,9 +321,24 @@ public sealed class CloudSyncClient : ICloudSyncPort
         {
             401 or 403 => "Máy chủ cloud từ chối token của thiết bị này.",
             404 => "Máy chủ cloud không tìm thấy dữ liệu liên kết.",
+            429 => "Máy chủ cloud đang giới hạn tần suất. Sẽ tự thử lại sau.",
             >= 500 => "Máy chủ cloud đang gặp sự cố. Hãy thử lại sau.",
             _ => "Yêu cầu tới máy chủ cloud không hợp lệ.",
         };
+
+        TimeSpan? retryAfter = null;
+        if (statusCode == 429)
+        {
+            var header = response.Headers.RetryAfter;
+            if (header?.Delta is { } delta && delta > TimeSpan.Zero)
+                retryAfter = delta;
+            else if (header?.Date is { } date)
+            {
+                var until = date - DateTimeOffset.UtcNow;
+                if (until > TimeSpan.Zero)
+                    retryAfter = until;
+            }
+        }
 
         try
         {
@@ -284,20 +349,29 @@ public sealed class CloudSyncClient : ICloudSyncPort
             if (!string.IsNullOrWhiteSpace(error?.Error?.Code))
                 code = error.Error.Code.Trim();
 
-            if (statusCode < 500 && !string.IsNullOrWhiteSpace(error?.Error?.Message))
+            if (statusCode < 500 && statusCode != 429 && !string.IsNullOrWhiteSpace(error?.Error?.Message))
                 message = error.Error.Message.Trim();
         }
         catch (Exception ex) when (ex is JsonException or NotSupportedException or HttpRequestException)
         {
         }
 
-        return new CloudSyncException(code, message, isNetworkError: false, statusCode: statusCode);
+        return new CloudSyncException(code, message, isNetworkError: false, statusCode: statusCode, retryAfter);
     }
 
     private static CloudSyncException InvalidResponse() =>
         new(
             CloudErrorCodes.InvalidResponse,
             "Máy chủ cloud trả về dữ liệu không hợp lệ.");
+
+    private static SyncEventType MapEventType(string type) => type switch
+    {
+        CloudEventTypes.DailySummary => SyncEventType.DailySummary,
+        CloudEventTypes.AttentionAlert => SyncEventType.AttentionAlert,
+        CloudEventTypes.ProtectionOff => SyncEventType.ProtectionOff,
+        CloudEventTypes.SecurityAlert => SyncEventType.SecurityAlert,
+        _ => throw new ArgumentException("Unsupported cloud event type.", nameof(type)),
+    };
 
     private static Uri BuildUri(Uri cloudBaseUrl, string relativePath)
     {
