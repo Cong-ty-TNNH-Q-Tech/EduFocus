@@ -27,4 +27,6 @@ public sealed class NotificationRecord
     public DateTimeOffset? SentAtUtc { get; set; }
     public NotificationStatus Status { get; set; } = NotificationStatus.Pending;
     public string? FailureCode { get; set; }
+    public int AttemptCount { get; set; }
+    public DateTimeOffset? LastAttemptAtUtc { get; set; }
 }

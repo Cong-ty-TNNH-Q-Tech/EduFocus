@@ -70,16 +70,21 @@ public sealed class SyncIngestTests
 
             var events = await db.SyncEvents.AsNoTracking().ToListAsync();
             Assert.Equal(2, events.Count);
-            Assert.Equal(
-                EntitySyncEventStatus.Processed,
-                events.Single(e => e.ClientEventId == "summary-1").Status);
-            Assert.Equal(
-                EntitySyncEventStatus.Pending,
-                events.Single(e => e.ClientEventId == "alert-1").Status);
+            Assert.All(events, e => Assert.Equal(EntitySyncEventStatus.Processed, e.Status));
+
+            var notification = await db.Notifications.AsNoTracking().SingleAsync();
+            Assert.Equal(NotificationCategory.AttentionAlert, notification.Category);
+            Assert.Equal(NotificationStatus.Pending, notification.Status);
+            Assert.Equal(today, notification.LocalDate);
+            Assert.StartsWith("attention_alert:distracted:", notification.DedupeKey);
         }
 
         var repeat = await PostBatchAsync(desktop, summaryEvent, alertEvent);
         Assert.All(repeat, result => Assert.Equal(SyncEventResultStatus.Duplicate, result.Status));
+        await using (var db = CreateContext(connectionString))
+        {
+            Assert.Equal(1, await db.Notifications.CountAsync());
+        }
 
         var newerGeneratedAt = generatedAtUtc.AddMinutes(5);
         var newer = await PostBatchAsync(desktop, new SyncEventDto(

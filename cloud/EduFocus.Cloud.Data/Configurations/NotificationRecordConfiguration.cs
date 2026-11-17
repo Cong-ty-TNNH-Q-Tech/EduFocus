@@ -32,6 +32,7 @@ internal sealed class NotificationRecordConfiguration : IEntityTypeConfiguration
         builder.Property(x => x.DedupeKey).HasMaxLength(160).IsRequired();
         builder.Property(x => x.FailureCode).HasMaxLength(64);
         builder.Property(x => x.CreatedAtUtc).IsRequired();
+        builder.Property(x => x.AttemptCount).IsRequired();
 
         builder.HasOne<Family>()
             .WithMany()

@@ -186,21 +186,37 @@ hiệu. Claim dùng cập nhật nguyên tử để hai điện thoại không t
 - Idempotent theo `(familyId, clientEventId)`; event đã nhận trả `duplicate`, không tạo notification
   lần hai. Event bị từ chối vẫn lưu `SyncEvents.Status = Rejected` để chống retry lặp.
 - `daily_summary` upsert theo `(familyId, deviceId, localDate)`, chỉ ghi đè khi `generatedAtUtc` mới
-  hơn. Alert events giữ `Pending` cho push worker; daily summary xử lý xong ngay (`Processed`).
+  hơn. Alert events tạo `NotificationRecord` (Pending) theo dedupe rồi cả hai loại đều chuyển
+  `Processed` ngay trong cùng transaction; payload không lưu lại.
 - Lỗi DB → `503 store_unavailable` để desktop retry; rate limit desktop **60 request/phút/token**.
 - Outbox phía desktop: retry backoff 1 → 60 phút, tối đa 5.000 sự kiện/7 ngày; quá hạn thì bỏ bản
   ghi cũ nhất và ghi audit cục bộ.
 
 ### 4.3. Push
 
-- Gửi bằng FCM HTTP v1, message **data-only** `{ "type": "...", "date": "...", "notificationId":
-  "..." }`; app mobile tự dựng tiêu đề/nội dung tiếng Việt chung.
-- Token FCM được lưu theo `PushRegistration`; token invalid (`UNREGISTERED`, `INVALID_ARGUMENT`) bị
-  vô hiệu và đánh dấu cần đăng ký lại.
-- Job gửi chạy mỗi phút: chọn sự kiện chưa thông báo, áp preference + quiet hours theo múi giờ gia
-  đình, dedupe theo `(familyId, kind, windowStartUtc)`.
-- Quiet hours mặc định **22:00–06:00**; tóm tắt ngày mặc định **20:30**; ngoài quiet hours mới gửi
-  cảnh báo tức thời, còn lại gộp vào đầu khung thức.
+- `POST /v1/push/registrations` (chỉ thiết bị mobile) upsert token theo device; cùng token ở thiết bị
+  khác bị vô hiệu để không gửi trùng. Token invalid (`UNREGISTERED`, `INVALID_ARGUMENT`) bị đánh dấu
+  `InvalidatedAtUtc` và không thử lại.
+- `GET/PUT /v1/preferences`: bật/tắt 4 loại, quiet hours 22:00–06:00 mặc định, tổng kết ngày 20:30
+  theo múi giờ gia đình; phút 0–1439, `timeZoneId` IANA; đổi preference ghi audit (không chứa token).
+- Job gửi chạy mỗi phút (`Push:PollSeconds`): chọn `Notifications` Pending, áp preference + quiet
+  hours, chỉ gửi khi có ít nhất một thiết bị mobile active có token hợp lệ.
+- Dedupe khóa unique `(FamilyId, DedupeKey)`:
+
+  | Category | DedupeKey | Tần suất |
+  |---|---|---|
+  | `attention_alert` | `attention_alert:{kind}:{window15m}` | 1 lần/15 phút/loại |
+  | `daily_summary` | `daily_summary:{localDate}` | 1 lần/ngày/gia đình (job #84) |
+  | `protection_off` | `protection_off:{source}:{hourUtc}` | 1 lần/giờ/source |
+  | `security_alert` | `security_alert:{kind}:{hourUtc}` | 1 lần/giờ/kind |
+
+- Trạng thái: `Pending` → `Sent` | `Failed` | `Suppressed` (`preference_disabled`, `quiet_hours`,
+  `no_device`, `family_unavailable`). Lỗi tạm thời retry tối đa 3 lần, backoff 2 → 4 phút; hết lượt
+  hoặc toàn bộ token invalid → `Failed`. Security alert bỏ qua quiet hours khi
+  `SecurityAlertBypassQuietHours = true` (mặc định).
+- Gửi bằng FCM HTTP v1, message **data-only** đúng 3 khóa `{ "type", "date", "notificationId" }`;
+  tiêu đề/nội dung tiếng Việt chung do app tự dựng, không chứa tên học sinh, URL hay số liệu chi tiết.
+  Dùng `SendEachAsync` theo batch, xử lý lỗi từng token độc lập; token không bao giờ nằm trong log.
 
 ## 5. Mô hình dữ liệu PostgreSQL
 
@@ -214,7 +230,7 @@ hiệu. Claim dùng cập nhật nguyên tử để hai điện thoại không t
 | `NotificationPreferences` | `FamilyId`, `AttentionAlert`, `DailySummary`, `ProtectionOff`, `SecurityAlert`, `SecurityAlertBypassQuietHours`, `QuietStartMinutes`, `QuietEndMinutes`, `DailySummaryMinutes`, `TimeZoneId`, `UpdatedAtUtc` | một bản/gia đình |
 | `DailySummaries` | `Id`, `FamilyId`, `DesktopDeviceId`, `LocalDate date`, `SessionsCount`, các cột `*Seconds`, `BlockedAttempts`, `AttentionPercent double?`, `CoveragePercent double?`, `UpdatedAtUtc` | unique `(FamilyId, DesktopDeviceId, LocalDate)` cho upsert; `UpdatedAtUtc` = `generatedAtUtc` mới nhất |
 | `SyncEvents` | `Id`, `FamilyId`, `ClientEventId`, `Type`, `ReceivedAtUtc`, `ProcessedAtUtc`, `Status` | unique `(FamilyId, ClientEventId)`; payload xử lý ngay, không lưu |
-| `Notifications` | `Id`, `FamilyId`, `Category`, `DedupeKey`, `LocalDate?`, `CreatedAtUtc`, `SentAtUtc`, `Status`, `FailureCode` | unique `(FamilyId, DedupeKey)` |
+| `Notifications` | `Id`, `FamilyId`, `Category`, `DedupeKey`, `LocalDate?`, `CreatedAtUtc`, `SentAtUtc`, `Status`, `FailureCode`, `AttemptCount`, `LastAttemptAtUtc?` | unique `(FamilyId, DedupeKey)`; retry state cho push worker |
 | `CloudAuditLogs` | `Id`, `FamilyId?`, `ActorDeviceId?`, `Action`, `MetadataJson jsonb`, `CreatedAtUtc` | FK `SET NULL` để giữ bản ghi ẩn danh sau khi xóa |
 
 Quan hệ cascade từ `Families` xuống các bảng con; riêng `CloudAuditLogs` dùng `ON DELETE SET NULL` để
@@ -256,8 +272,10 @@ thời gian yêu cầu xóa (xử lý đồng bộ ngay khi nhận yêu cầu).
 
 - `cloud/docker-compose.yml`: `api` + `postgres` + volume; cấu hình qua biến môi trường
   (`.env.example` chỉ chứa placeholder).
-- Biến chính: `ConnectionStrings__Postgres`, `Cloud__PublicBaseUrl`, `Fcm__ProjectId`,
-  `Fcm__ServiceAccountPath`, `ASPNETCORE_URLS`; rate limit tinh chỉnh qua `RateLimiting__…`.
+- Biến chính: `ConnectionStrings__Postgres`, `Cloud__PublicBaseUrl`, `Push__Enabled`,
+  `Push__ProjectId`, `Push__ServiceAccountPath` hoặc `Push__ServiceAccountJson` (secret mount),
+  `ASPNETCORE_URLS`; rate limit tinh chỉnh qua `RateLimiting__…`, chu kỳ gửi qua `Push__PollSeconds`.
+  Service account JSON **không** commit, không nằm trong image.
 - Migration tự động khi khởi động chỉ ở môi trường Development; production chạy job/migration riêng.
 - Health check `/healthz`; log có cấu trúc, che token/FCM token.
 - Self-host: chủ máy chủ chịu trách nhiệm TLS, backup PostgreSQL, cập nhật image, và tuân thủ nghĩa

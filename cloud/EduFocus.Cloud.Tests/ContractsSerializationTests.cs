@@ -83,20 +83,24 @@ public sealed class ContractsSerializationTests
     }
 
     [Fact]
-    public void Preferences_round_trip_time_only()
+    public void Preferences_round_trip_uses_minute_fields()
     {
         var preferences = new NotificationPreferencesDto(
-            new TimeOnly(22, 0),
-            new TimeOnly(6, 0),
-            new TimeOnly(20, 30),
             true,
             true,
             true,
-            false);
+            true,
+            1320,
+            360,
+            1230,
+            "Asia/Ho_Chi_Minh");
 
         var json = JsonSerializer.Serialize(preferences, ApiJson.Options);
         var roundTrip = JsonSerializer.Deserialize<NotificationPreferencesDto>(json, ApiJson.Options);
 
         Assert.Equal(preferences, roundTrip);
+        Assert.Contains("\"quietStartMinutes\":1320", json);
+        Assert.Contains("\"dailySummaryMinutes\":1230", json);
+        Assert.Contains("\"securityAlertBypassQuietHours\":true", json);
     }
 }

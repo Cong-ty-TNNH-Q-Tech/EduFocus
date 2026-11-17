@@ -2,6 +2,7 @@ using System.Text.Json;
 using EduFocus.Cloud.Api.Auth;
 using EduFocus.Cloud.Api.Common;
 using EduFocus.Cloud.Api.Options;
+using EduFocus.Cloud.Api.Push;
 using EduFocus.Cloud.Api.RateLimiting;
 using EduFocus.Cloud.Contracts.Json;
 using EduFocus.Cloud.Contracts.Sync;
@@ -161,20 +162,53 @@ public static class SyncEndpoints
                 clientEventId, SyncEventResultStatus.Rejected, apply.Code, apply.Message);
         }
 
-        // Alert events stay Pending for the push worker; daily summaries are fully applied here.
-        var status = validation.Value!.Type == ContractEventType.DailySummary
-            ? SyncEventStatus.Processed
-            : SyncEventStatus.Pending;
-        if (status == SyncEventStatus.Pending)
+        // Applied events are fully handled here; alerts also queue a deduped notification for the push worker.
+        if (validation.Value!.Type != ContractEventType.DailySummary)
         {
-            await db.SaveChangesAsync(cancellationToken);
-        }
-        else
-        {
-            await CompleteEventAsync(db, entity, status, now, cancellationToken);
+            await PlanAlertNotificationAsync(
+                db, family.Id, validation.Value!, dto!.OccurredAtUtc, now, cancellationToken);
         }
 
+        await CompleteEventAsync(db, entity, SyncEventStatus.Processed, now, cancellationToken);
         return new SyncEventResult(clientEventId, SyncEventResultStatus.Applied);
+    }
+
+    private static async Task PlanAlertNotificationAsync(
+        CloudDbContext db,
+        Guid familyId,
+        ValidatedSyncEvent validated,
+        DateTimeOffset occurredAtUtc,
+        DateTimeOffset now,
+        CancellationToken cancellationToken)
+    {
+        var planned = NotificationPlanner.ForAlert(validated, occurredAtUtc);
+        if (planned is null)
+        {
+            return;
+        }
+
+        var exists = db.Notifications.Local.Any(
+                n => n.FamilyId == familyId && n.DedupeKey == planned.DedupeKey)
+            || await db.Notifications
+                .AsNoTracking()
+                .AnyAsync(
+                    n => n.FamilyId == familyId && n.DedupeKey == planned.DedupeKey,
+                    cancellationToken);
+        if (exists)
+        {
+            return;
+        }
+
+        db.Notifications.Add(new NotificationRecord
+        {
+            Id = Guid.NewGuid(),
+            FamilyId = familyId,
+            Category = planned.Category,
+            DedupeKey = planned.DedupeKey,
+            LocalDate = planned.LocalDate,
+            CreatedAtUtc = now,
+            Status = NotificationStatus.Pending,
+        });
     }
 
     private static async Task CompleteEventAsync(

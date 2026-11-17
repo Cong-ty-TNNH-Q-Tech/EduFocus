@@ -1,0 +1,176 @@
+using EduFocus.Cloud.Api.Options;
+using EduFocus.Cloud.Data;
+using EduFocus.Cloud.Data.Entities;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Options;
+
+namespace EduFocus.Cloud.Api.Push;
+
+public sealed class PushDispatchService(
+    CloudDbContext db,
+    IFcmPushSender sender,
+    IOptions<PushOptions> options,
+    TimeProvider timeProvider,
+    ILogger<PushDispatchService> logger)
+{
+    public async Task<int> DispatchPendingAsync(CancellationToken cancellationToken)
+    {
+        var now = timeProvider.GetUtcNow();
+        var settings = options.Value;
+        var candidates = await db.Notifications
+            .Where(n => n.Status == NotificationStatus.Pending)
+            .OrderBy(n => n.CreatedAtUtc)
+            .Take(settings.BatchSize)
+            .ToListAsync(cancellationToken);
+
+        var processed = 0;
+        foreach (var notification in candidates)
+        {
+            if (notification.LastAttemptAtUtc is { } lastAttempt
+                && now < lastAttempt + PushRules.RetryBackoff(notification.AttemptCount))
+            {
+                continue;
+            }
+
+            await DispatchOneAsync(notification, now, settings, cancellationToken);
+            processed++;
+        }
+
+        return processed;
+    }
+
+    private async Task DispatchOneAsync(
+        NotificationRecord notification,
+        DateTimeOffset now,
+        PushOptions settings,
+        CancellationToken cancellationToken)
+    {
+        var family = await db.Families
+            .AsNoTracking()
+            .FirstOrDefaultAsync(
+                f => f.Id == notification.FamilyId && f.DeletedAtUtc == null,
+                cancellationToken);
+        if (family is null)
+        {
+            Suppress(notification, "family_unavailable");
+            await db.SaveChangesAsync(cancellationToken);
+            return;
+        }
+
+        var preferences = await db.NotificationPreferences
+            .AsNoTracking()
+            .FirstOrDefaultAsync(p => p.FamilyId == notification.FamilyId, cancellationToken);
+
+        if (!PushRules.IsEnabled(preferences, notification.Category))
+        {
+            Suppress(notification, "preference_disabled");
+            await db.SaveChangesAsync(cancellationToken);
+            return;
+        }
+
+        var timeZoneId = preferences?.TimeZoneId ?? family.TimeZoneId;
+        var quietStart = preferences?.QuietStartMinutes ?? 22 * 60;
+        var quietEnd = preferences?.QuietEndMinutes ?? 6 * 60;
+        if (!PushRules.BypassesQuietHours(preferences, notification.Category)
+            && PushRules.IsQuietHours(now, timeZoneId, quietStart, quietEnd))
+        {
+            Suppress(notification, "quiet_hours");
+            await db.SaveChangesAsync(cancellationToken);
+            return;
+        }
+
+        var registrations = await (
+                from registration in db.PushRegistrations.AsNoTracking()
+                join device in db.Devices.AsNoTracking() on registration.DeviceId equals device.Id
+                where device.FamilyId == notification.FamilyId
+                    && device.Kind == DeviceKind.Mobile
+                    && device.RevokedAtUtc == null
+                    && registration.InvalidatedAtUtc == null
+                select new { registration.FcmToken })
+            .Distinct()
+            .ToListAsync(cancellationToken);
+
+        if (registrations.Count == 0)
+        {
+            Suppress(notification, "no_device");
+            await db.SaveChangesAsync(cancellationToken);
+            return;
+        }
+
+        notification.AttemptCount++;
+        notification.LastAttemptAtUtc = now;
+        var data = PushRules.BuildPushData(notification);
+        var messages = registrations
+            .Select(r => new PushMessage(r.FcmToken, data))
+            .ToList();
+
+        IReadOnlyList<PushSendResult> results;
+        try
+        {
+            results = await sender.SendAsync(messages, cancellationToken);
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
+        catch (Exception exception)
+        {
+            logger.LogError(
+                "Push send failed for notification {NotificationId}: {ErrorType}",
+                notification.Id,
+                exception.GetType().Name);
+            results = messages
+                .Select(m => new PushSendResult(m.Token, false, false, "fcm_unavailable"))
+                .ToList();
+        }
+
+        var invalidTokens = results
+            .Where(r => r.TokenInvalid)
+            .Select(r => r.Token)
+            .ToList();
+        if (invalidTokens.Count > 0)
+        {
+            await db.PushRegistrations
+                .Where(p => invalidTokens.Contains(p.FcmToken) && p.InvalidatedAtUtc == null)
+                .ExecuteUpdateAsync(
+                    setters => setters.SetProperty(p => p.InvalidatedAtUtc, now),
+                    cancellationToken);
+        }
+
+        if (results.Any(r => r.Success))
+        {
+            notification.Status = NotificationStatus.Sent;
+            notification.SentAtUtc = now;
+            notification.FailureCode = null;
+        }
+        else
+        {
+            var allInvalid = results.Count > 0 && results.All(r => r.TokenInvalid);
+            notification.FailureCode = allInvalid
+                ? "token_invalid"
+                : NormalizeCode(results.FirstOrDefault()?.ErrorCode);
+            notification.Status = allInvalid || notification.AttemptCount >= settings.MaxAttempts
+                ? NotificationStatus.Failed
+                : NotificationStatus.Pending;
+        }
+
+        await db.SaveChangesAsync(cancellationToken);
+    }
+
+    private static void Suppress(NotificationRecord notification, string reason)
+    {
+        notification.Status = NotificationStatus.Suppressed;
+        notification.FailureCode = reason;
+    }
+
+    private static string NormalizeCode(string? code)
+    {
+        if (string.IsNullOrWhiteSpace(code))
+        {
+            return "fcm_unavailable";
+        }
+
+        var normalized = code.Replace("_", string.Empty).Replace("-", string.Empty).ToLowerInvariant();
+        return normalized.Length <= 64 ? normalized : normalized[..64];
+    }
+}

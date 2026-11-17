@@ -295,6 +295,9 @@ namespace EduFocus.Cloud.Data.Migrations
                     b.Property<Guid>("Id")
                         .HasColumnType("uuid");
 
+                    b.Property<int>("AttemptCount")
+                        .HasColumnType("integer");
+
                     b.Property<string>("Category")
                         .IsRequired()
                         .HasMaxLength(32)
@@ -314,6 +317,9 @@ namespace EduFocus.Cloud.Data.Migrations
 
                     b.Property<Guid>("FamilyId")
                         .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset?>("LastAttemptAtUtc")
+                        .HasColumnType("timestamp with time zone");
 
                     b.Property<DateOnly?>("LocalDate")
                         .HasColumnType("date");

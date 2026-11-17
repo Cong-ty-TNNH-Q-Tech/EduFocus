@@ -8,6 +8,8 @@ using EduFocus.Cloud.Api.Link;
 using EduFocus.Cloud.Api.Logging;
 using EduFocus.Cloud.Api.Options;
 using EduFocus.Cloud.Api.Pairing;
+using EduFocus.Cloud.Api.Preferences;
+using EduFocus.Cloud.Api.Push;
 using EduFocus.Cloud.Api.RateLimiting;
 using EduFocus.Cloud.Api.Sync;
 using EduFocus.Cloud.Contracts.Common;
@@ -74,6 +76,30 @@ builder.Services.AddOptions<SyncOptions>()
         options => options.DailySummaryWindowDays is > 0 and <= 31,
         "Sync:DailySummaryWindowDays must be between 1 and 31")
     .ValidateOnStart();
+builder.Services.AddOptions<PushOptions>()
+    .Bind(builder.Configuration.GetSection(PushOptions.SectionName))
+    .Validate(
+        options => options.PollSeconds is >= 5 and <= 3600,
+        "Push:PollSeconds must be between 5 and 3600")
+    .Validate(
+        options => options.MaxAttempts is >= 1 and <= 10,
+        "Push:MaxAttempts must be between 1 and 10")
+    .Validate(
+        options => options.BatchSize is >= 1 and <= 500,
+        "Push:BatchSize must be between 1 and 500")
+    .Validate(
+        options => !options.Enabled
+            || !string.IsNullOrWhiteSpace(options.ServiceAccountJson)
+            || !string.IsNullOrWhiteSpace(options.ServiceAccountPath),
+        "Push:ServiceAccountJson or Push:ServiceAccountPath is required when push is enabled")
+    .Validate(
+        options => !options.Enabled || !string.IsNullOrWhiteSpace(options.ProjectId),
+        "Push:ProjectId is required when push is enabled")
+    .ValidateOnStart();
+builder.Services.AddSingleton(TimeProvider.System);
+builder.Services.AddSingleton<IFcmPushSender, FirebaseFcmSender>();
+builder.Services.AddScoped<PushDispatchService>();
+builder.Services.AddHostedService<PushWorker>();
 builder.Services.AddOptions<CloudApiOptions>()
     .Bind(builder.Configuration.GetSection(CloudApiOptions.SectionName))
     .PostConfigure(options =>
@@ -151,6 +177,8 @@ v1.MapPairingEndpoints();
 v1.MapDeviceEndpoints();
 v1.MapLinkEndpoints();
 v1.MapSyncEndpoints();
+v1.MapPushEndpoints();
+v1.MapPreferenceEndpoints();
 app.Run();
 
 public partial class Program;
