@@ -2,6 +2,7 @@ using CommunityToolkit.Mvvm.ComponentModel;
 using EduFocus.Parent.App.Services;
 using EduFocus.Parent.Core;
 using EduFocus.Parent.Core.Pairing;
+using EduFocus.Parent.Core.Presentation;
 using EduFocus.Parent.Core.Settings;
 
 namespace EduFocus.Parent.App.ViewModels;
@@ -11,13 +12,26 @@ public sealed partial class SettingsViewModel(
     AppState appState,
     ParentSettingsStore settings,
     PushPermissionService permission,
-    PushCoordinator coordinator) : ObservableObject
+    PushCoordinator coordinator,
+    IFamilyAdminService admin,
+    ParentDataCache cache,
+    SessionExpiryService session) : ObservableObject
 {
     [ObservableProperty] private bool _isLinked;
     [ObservableProperty] private bool _isBusy;
     [ObservableProperty] private string _desktopName = string.Empty;
     [ObservableProperty] private string _serverUrl = string.Empty;
+    [ObservableProperty] private string _serverHostText = "—";
+    [ObservableProperty] private string _deviceNameText = string.Empty;
+    [ObservableProperty] private string _platformText = string.Empty;
+    [ObservableProperty] private string _appVersionText = string.Empty;
+    [ObservableProperty] private string _connectionStatusText = string.Empty;
     [ObservableProperty] private bool _notificationsEnabled;
+    [ObservableProperty] private IReadOnlyList<SettingsDeviceItem> _devices = [];
+    [ObservableProperty] private bool _hasDevices;
+    [ObservableProperty] private string _devicesStatus = string.Empty;
+    [ObservableProperty] private bool _isLoadingDevices;
+    [ObservableProperty] private bool _isDeletingCloudData;
 
     public event EventHandler? Unlinked;
 
@@ -26,6 +40,8 @@ public sealed partial class SettingsViewModel(
     public bool ShowWelcomeHint => !IsLinked;
 
     public bool ShowEnableNotifications => IsLinked && !NotificationsEnabled;
+
+    public bool HasDevicesStatus => DevicesStatus.Length > 0;
 
     public string NotificationStatusText => NotificationsEnabled
         ? "Thông báo đang bật. Bạn sẽ nhận cảnh báo và báo cáo trên điện thoại."
@@ -45,12 +61,29 @@ public sealed partial class SettingsViewModel(
         OnPropertyChanged(nameof(NotificationStatusText));
     }
 
+    partial void OnDevicesStatusChanged(string value) =>
+        OnPropertyChanged(nameof(HasDevicesStatus));
+
     public void Refresh()
     {
         IsLinked = appState.IsLinked;
         DesktopName = appState.DesktopName ?? settings.DesktopName ?? string.Empty;
         ServerUrl = appState.CloudBaseUrl ?? settings.CloudBaseUrl ?? string.Empty;
+        ServerHostText = MaskServer(ServerUrl);
+        DeviceNameText = string.IsNullOrWhiteSpace(DeviceInfo.Current.Name)
+            ? "Điện thoại phụ huynh"
+            : DeviceInfo.Current.Name;
+        PlatformText = $"{DeviceInfo.Current.Platform} {DeviceInfo.Current.VersionString}";
+        AppVersionText = AppInfo.Current.VersionString;
+        ConnectionStatusText = IsLinked ? "Đã kết nối cloud" : "Chưa ghép nối";
         NotificationsEnabled = permission.IsGranted;
+
+        if (!IsLinked)
+        {
+            Devices = [];
+            HasDevices = false;
+            DevicesStatus = string.Empty;
+        }
     }
 
     public async Task<bool> EnableNotificationsAsync(Page page)
@@ -63,6 +96,80 @@ public sealed partial class SettingsViewModel(
         return granted;
     }
 
+    public async Task LoadDevicesAsync()
+    {
+        if (!IsLinked || IsLoadingDevices)
+            return;
+
+        IsLoadingDevices = true;
+        DevicesStatus = string.Empty;
+        try
+        {
+            var zone = FamilyCalendar.Resolve(appState.TimeZone);
+            var devices = await admin.GetDevicesAsync();
+            Devices = devices
+                .Select(device => new SettingsDeviceItem(device, appState.DeviceId, zone))
+                .ToList();
+            HasDevices = Devices.Count > 0;
+        }
+        catch (Exception exception)
+        {
+            if (CloudErrors.IsUnauthorized(exception))
+                await session.HandleUnauthorizedAsync();
+
+            Devices = [];
+            HasDevices = false;
+            DevicesStatus = CloudErrors.Describe(exception);
+        }
+        finally
+        {
+            IsLoadingDevices = false;
+        }
+    }
+
+    public async Task<bool> RevokeDeviceAsync(Guid deviceId)
+    {
+        try
+        {
+            await admin.RevokeDeviceAsync(deviceId);
+            await LoadDevicesAsync();
+            return true;
+        }
+        catch (Exception exception)
+        {
+            if (CloudErrors.IsUnauthorized(exception))
+                await session.HandleUnauthorizedAsync();
+
+            DevicesStatus = CloudErrors.Describe(exception);
+            return false;
+        }
+    }
+
+    public async Task<bool> DeleteCloudDataAsync()
+    {
+        if (IsDeletingCloudData)
+            return false;
+
+        IsDeletingCloudData = true;
+        try
+        {
+            await admin.DeleteFamilyAsync(FamilyAdminService.DeleteConfirmation);
+            Refresh();
+            return true;
+        }
+        catch (Exception exception)
+        {
+            if (CloudErrors.IsUnauthorized(exception))
+                await session.HandleUnauthorizedAsync();
+
+            return false;
+        }
+        finally
+        {
+            IsDeletingCloudData = false;
+        }
+    }
+
     public async Task<bool> UnlinkAsync()
     {
         if (IsBusy)
@@ -72,6 +179,7 @@ public sealed partial class SettingsViewModel(
         try
         {
             await pairing.UnlinkAsync();
+            cache.Clear();
             Refresh();
             Unlinked?.Invoke(this, EventArgs.Empty);
             return true;
@@ -84,5 +192,16 @@ public sealed partial class SettingsViewModel(
         {
             IsBusy = false;
         }
+    }
+
+    private static string MaskServer(string? url)
+    {
+        if (string.IsNullOrWhiteSpace(url))
+            return "—";
+
+        if (!Uri.TryCreate(url, UriKind.Absolute, out var uri))
+            return url;
+
+        return uri.IsDefaultPort ? uri.Host : $"{uri.Host}:{uri.Port}";
     }
 }

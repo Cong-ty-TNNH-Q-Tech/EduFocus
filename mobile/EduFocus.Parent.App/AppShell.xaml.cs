@@ -2,6 +2,7 @@
 using EduFocus.Parent.App.Services;
 using EduFocus.Parent.Core;
 using EduFocus.Parent.Core.Pairing;
+using EduFocus.Parent.Core.Presentation;
 
 namespace EduFocus.Parent.App;
 
@@ -29,6 +30,7 @@ public partial class AppShell : Shell
 
             PairingDeepLink.Received += OnDeepLinkReceived;
             PushTapRouter.Tapped += OnPushTapped;
+            ServiceHelper.GetService<SessionExpiryService>().Expired += OnSessionExpired;
 
             if (linked)
             {
@@ -82,6 +84,23 @@ public partial class AppShell : Shell
             catch (Exception ex)
             {
                 Debug.WriteLine($"Push routing failed: {ex.GetType().Name}");
+            }
+        });
+
+    private void OnSessionExpired() =>
+        MainThread.BeginInvokeOnMainThread(async () =>
+        {
+            try
+            {
+                await GoToAsync("//welcome", animate: false);
+                await DisplayAlertAsync(
+                    "Phiên ghép nối đã hết",
+                    "Mã truy cập cloud không còn hiệu lực. Vui lòng ghép nối lại với máy tính để tiếp tục.",
+                    "OK");
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"Session expiry routing failed: {ex.GetType().Name}");
             }
         });
 

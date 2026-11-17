@@ -2,15 +2,187 @@
 <ContentPage x:Class="EduFocus.Parent.App.Views.ReportsPage"
              xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
              xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
-             Title="Báo cáo">
-    <VerticalStackLayout Padding="24" Spacing="12" VerticalOptions="Center">
-        <Label Text="Báo cáo học tập"
-               FontSize="22"
-               FontAttributes="Bold"
-               HorizontalOptions="Center" />
-        <Label Text="Báo cáo tổng hợp theo ngày sẽ hiển thị sau khi ghép nối."
-               FontSize="14"
-               HorizontalTextAlignment="Center"
-               HorizontalOptions="Center" />
-    </VerticalStackLayout>
+             xmlns:vm="clr-namespace:EduFocus.Parent.Core.Presentation;assembly=EduFocus.Parent.Core"
+             xmlns:controls="clr-namespace:EduFocus.Parent.App.Controls"
+             x:DataType="vm:ReportsViewModel"
+             Title="Báo cáo"
+             BackgroundColor="{AppThemeBinding Light=#F8FAFC, Dark=#0B1220}">
+    <RefreshView IsRefreshing="{Binding IsRefreshing}"
+                 Command="{Binding RefreshCommand}">
+        <ScrollView>
+            <VerticalStackLayout Padding="20,16,20,32" Spacing="14">
+                <Label Text="Báo cáo 7 ngày"
+                       FontSize="24"
+                       FontAttributes="Bold"
+                       TextColor="{AppThemeBinding Light={StaticResource TextLight}, Dark={StaticResource TextDark}}" />
+                <Label Text="{Binding RangeText}"
+                       FontSize="14"
+                       TextColor="{AppThemeBinding Light=#64748B, Dark=#94A3B8}" />
+
+                <Border IsVisible="{Binding IsShowingCachedData}"
+                        Padding="12"
+                        StrokeThickness="0"
+                        StrokeShape="RoundRectangle 12"
+                        BackgroundColor="{AppThemeBinding Light=#FEF3C7, Dark=#78350F}">
+                    <Label Text="{Binding CachedBannerText}"
+                           FontSize="13"
+                           TextColor="{AppThemeBinding Light=#92400E, Dark=#FDE68A}" />
+                </Border>
+
+                <Border IsVisible="{Binding HasError}"
+                        Padding="14"
+                        StrokeThickness="0"
+                        StrokeShape="RoundRectangle 14"
+                        BackgroundColor="{AppThemeBinding Light=#FEE2E2, Dark=#7F1D1D}">
+                    <VerticalStackLayout Spacing="10">
+                        <Label Text="{Binding ErrorMessage}"
+                               FontSize="13"
+                               TextColor="{AppThemeBinding Light=#991B1B, Dark=#FECACA}" />
+                        <Button Text="Thử lại"
+                                Command="{Binding RefreshCommand}"
+                                BackgroundColor="{StaticResource Primary}"
+                                TextColor="White"
+                                CornerRadius="10"
+                                HeightRequest="40"
+                                HorizontalOptions="Start" />
+                    </VerticalStackLayout>
+                </Border>
+
+                <ActivityIndicator IsRunning="{Binding IsLoading}"
+                                   IsVisible="{Binding IsLoading}"
+                                   Color="{StaticResource Primary}"
+                                   HorizontalOptions="Center" />
+
+                <Border IsVisible="{Binding HasDays}"
+                        Padding="16"
+                        StrokeThickness="0"
+                        StrokeShape="RoundRectangle 16"
+                        BackgroundColor="{AppThemeBinding Light=#FFFFFF, Dark=#111827}">
+                    <VerticalStackLayout Spacing="10">
+                        <Label Text="Thời gian học theo ngày"
+                               FontSize="15"
+                               FontAttributes="Bold"
+                               TextColor="{AppThemeBinding Light={StaticResource TextLight}, Dark={StaticResource TextDark}}" />
+                        <controls:WeeklyBarChart Bars="{Binding ChartBars}"
+                                                 HeightRequest="150" />
+                    </VerticalStackLayout>
+                </Border>
+
+                <Border IsVisible="{Binding HasSelection}"
+                        Padding="16"
+                        StrokeThickness="0"
+                        StrokeShape="RoundRectangle 16"
+                        BackgroundColor="{AppThemeBinding Light=#FFFFFF, Dark=#111827}">
+                    <VerticalStackLayout Spacing="12">
+                        <Label Text="{Binding SelectedDateText}"
+                               FontSize="16"
+                               FontAttributes="Bold"
+                               TextColor="{AppThemeBinding Light={StaticResource TextLight}, Dark={StaticResource TextDark}}" />
+                        <Grid ColumnDefinitions="*,*"
+                              RowDefinitions="Auto,Auto"
+                              ColumnSpacing="12"
+                              RowSpacing="12">
+                            <VerticalStackLayout Spacing="2">
+                                <Label Text="Thời gian học"
+                                       FontSize="12"
+                                       TextColor="{AppThemeBinding Light=#64748B, Dark=#94A3B8}" />
+                                <Label Text="{Binding SelectedStudyText}"
+                                       FontSize="17"
+                                       FontAttributes="Bold"
+                                       TextColor="{AppThemeBinding Light={StaticResource TextLight}, Dark={StaticResource TextDark}}" />
+                            </VerticalStackLayout>
+                            <VerticalStackLayout Grid.Column="1" Spacing="2">
+                                <Label Text="Tập trung"
+                                       FontSize="12"
+                                       TextColor="{AppThemeBinding Light=#64748B, Dark=#94A3B8}" />
+                                <Label Text="{Binding SelectedAttentionText}"
+                                       FontSize="17"
+                                       FontAttributes="Bold"
+                                       TextColor="{StaticResource Primary}" />
+                            </VerticalStackLayout>
+                            <VerticalStackLayout Grid.Row="1" Spacing="2">
+                                <Label Text="Độ phủ dữ liệu"
+                                       FontSize="12"
+                                       TextColor="{AppThemeBinding Light=#64748B, Dark=#94A3B8}" />
+                                <Label Text="{Binding SelectedCoverageText}"
+                                       FontSize="17"
+                                       FontAttributes="Bold"
+                                       TextColor="{AppThemeBinding Light={StaticResource TextLight}, Dark={StaticResource TextDark}}" />
+                            </VerticalStackLayout>
+                            <VerticalStackLayout Grid.Row="1" Grid.Column="1" Spacing="2">
+                                <Label Text="Số lần bị chặn"
+                                       FontSize="12"
+                                       TextColor="{AppThemeBinding Light=#64748B, Dark=#94A3B8}" />
+                                <Label Text="{Binding SelectedBlockedText}"
+                                       FontSize="17"
+                                       FontAttributes="Bold"
+                                       TextColor="{AppThemeBinding Light={StaticResource TextLight}, Dark={StaticResource TextDark}}" />
+                            </VerticalStackLayout>
+                        </Grid>
+                        <Label Text="Dữ liệu chưa đủ tin cậy"
+                               IsVisible="{Binding SelectedShowCoverageWarning}"
+                               FontSize="13"
+                               FontAttributes="Bold"
+                               TextColor="{AppThemeBinding Light=#B45309, Dark=#FBBF24}" />
+                    </VerticalStackLayout>
+                </Border>
+
+                <VerticalStackLayout IsVisible="{Binding HasDays}" Spacing="10">
+                    <Label Text="Các ngày"
+                           FontSize="15"
+                           FontAttributes="Bold"
+                           TextColor="{AppThemeBinding Light={StaticResource TextLight}, Dark={StaticResource TextDark}}" />
+                    <VerticalStackLayout BindableLayout.ItemsSource="{Binding Days}" Spacing="8">
+                        <BindableLayout.ItemTemplate>
+                            <DataTemplate x:DataType="vm:ReportDayItem">
+                                <Border Padding="14"
+                                        StrokeThickness="0"
+                                        StrokeShape="RoundRectangle 14"
+                                        BackgroundColor="{AppThemeBinding Light=#FFFFFF, Dark=#111827}">
+                                    <Border.GestureRecognizers>
+                                        <TapGestureRecognizer Tapped="OnDayTapped" />
+                                    </Border.GestureRecognizers>
+                                    <Grid ColumnDefinitions="*,Auto">
+                                        <VerticalStackLayout Spacing="2">
+                                            <Label Text="{Binding DateText}"
+                                                   FontSize="14"
+                                                   FontAttributes="Bold"
+                                                   TextColor="{AppThemeBinding Light={StaticResource TextLight}, Dark={StaticResource TextDark}}" />
+                                            <Label Text="{Binding AttentionCoverageText}"
+                                                   FontSize="12"
+                                                   TextColor="{AppThemeBinding Light=#64748B, Dark=#94A3B8}" />
+                                        </VerticalStackLayout>
+                                        <Label Grid.Column="1"
+                                               Text="{Binding StudyText}"
+                                               FontSize="15"
+                                               FontAttributes="Bold"
+                                               VerticalOptions="Center"
+                                               TextColor="{StaticResource Primary}" />
+                                    </Grid>
+                                </Border>
+                            </DataTemplate>
+                        </BindableLayout.ItemTemplate>
+                    </VerticalStackLayout>
+                </VerticalStackLayout>
+
+                <Border IsVisible="{Binding ShowEmptyState}"
+                        Padding="20"
+                        StrokeThickness="0"
+                        StrokeShape="RoundRectangle 16"
+                        BackgroundColor="{AppThemeBinding Light=#FFFFFF, Dark=#111827}">
+                    <VerticalStackLayout Spacing="6">
+                        <Label Text="Chưa có báo cáo"
+                               FontSize="15"
+                               FontAttributes="Bold"
+                               HorizontalOptions="Center"
+                               TextColor="{AppThemeBinding Light={StaticResource TextLight}, Dark={StaticResource TextDark}}" />
+                        <Label Text="Báo cáo 7 ngày sẽ xuất hiện sau khi máy tính gửi dữ liệu tổng hợp."
+                               FontSize="13"
+                               HorizontalTextAlignment="Center"
+                               TextColor="{AppThemeBinding Light=#64748B, Dark=#94A3B8}" />
+                    </VerticalStackLayout>
+                </Border>
+            </VerticalStackLayout>
+        </ScrollView>
+    </RefreshView>
 </ContentPage>

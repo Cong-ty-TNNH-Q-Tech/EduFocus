@@ -26,8 +26,20 @@ public interface ICloudApiClient
         bool authenticated = true,
         CancellationToken cancellationToken = default);
 
+    Task<TResponse> PutAsync<TBody, TResponse>(
+        string relativePath,
+        TBody body,
+        bool authenticated = true,
+        CancellationToken cancellationToken = default);
+
     Task DeleteAsync(
         string relativePath,
+        bool authenticated = true,
+        CancellationToken cancellationToken = default);
+
+    Task DeleteAsync<TBody>(
+        string relativePath,
+        TBody body,
         bool authenticated = true,
         CancellationToken cancellationToken = default);
 }
@@ -62,12 +74,28 @@ public sealed class CloudApiClient(
         await SendAsync<object>(HttpMethod.Post, relativePath, body, authenticated, cancellationToken);
     }
 
+    public Task<TResponse> PutAsync<TBody, TResponse>(
+        string relativePath,
+        TBody body,
+        bool authenticated = true,
+        CancellationToken cancellationToken = default) =>
+        SendAsync<TResponse>(HttpMethod.Put, relativePath, body, authenticated, cancellationToken);
+
     public async Task DeleteAsync(
         string relativePath,
         bool authenticated = true,
         CancellationToken cancellationToken = default)
     {
         await SendAsync<object>(HttpMethod.Delete, relativePath, null, authenticated, cancellationToken);
+    }
+
+    public async Task DeleteAsync<TBody>(
+        string relativePath,
+        TBody body,
+        bool authenticated = true,
+        CancellationToken cancellationToken = default)
+    {
+        await SendAsync<object>(HttpMethod.Delete, relativePath, body, authenticated, cancellationToken);
     }
 
     private async Task<TResponse> SendAsync<TResponse>(

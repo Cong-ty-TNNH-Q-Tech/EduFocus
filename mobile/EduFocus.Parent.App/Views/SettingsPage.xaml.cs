@@ -1,5 +1,6 @@
 using EduFocus.Parent.App.Services;
 using EduFocus.Parent.App.ViewModels;
+using EduFocus.Parent.Core.Presentation;
 
 namespace EduFocus.Parent.App.Views;
 
@@ -19,6 +20,7 @@ public partial class SettingsPage : ContentPage
         base.OnAppearing();
         _viewModel.Refresh();
         _ = ServiceHelper.GetService<PushCoordinator>().SyncTokenAsync();
+        _ = _viewModel.LoadDevicesAsync();
     }
 
     private async void OnPairClicked(object sender, EventArgs e) =>
@@ -47,6 +49,66 @@ public partial class SettingsPage : ContentPage
 
     private async void OnPrivacyTapped(object sender, TappedEventArgs e) =>
         await Shell.Current.GoToAsync("//privacy");
+
+    private async void OnRevokeDeviceClicked(object sender, EventArgs e)
+    {
+        if (sender is not Button { BindingContext: SettingsDeviceItem device })
+            return;
+
+        var confirmed = await DisplayAlertAsync(
+            "Thu hồi thiết bị?",
+            $"{device.Name} sẽ ngừng nhận thông báo và không xem được dữ liệu cho đến khi ghép nối lại.",
+            "Thu hồi",
+            "Hủy");
+        if (!confirmed)
+            return;
+
+        if (!await _viewModel.RevokeDeviceAsync(device.Id))
+        {
+            await DisplayAlertAsync(
+                "Không thu hồi được",
+                "Vui lòng kiểm tra kết nối mạng và thử lại.",
+                "OK");
+        }
+    }
+
+    private async void OnDeleteCloudDataClicked(object sender, EventArgs e)
+    {
+        var confirmation = await DisplayPromptAsync(
+            "Xóa dữ liệu trên cloud?",
+            "Toàn bộ dữ liệu học tập và liên kết của gia đình trên cloud sẽ bị xóa vĩnh viễn. Nhập XÓA để xác nhận.",
+            "Xóa vĩnh viễn",
+            "Hủy",
+            placeholder: "XÓA",
+            maxLength: 8);
+        if (confirmation is null)
+            return;
+
+        if (confirmation.Trim() != FamilyAdminService.DeleteConfirmation)
+        {
+            await DisplayAlertAsync(
+                "Chưa xóa dữ liệu",
+                "Bạn phải nhập đúng chữ XÓA để xác nhận.",
+                "OK");
+            return;
+        }
+
+        if (await _viewModel.DeleteCloudDataAsync())
+        {
+            await DisplayAlertAsync(
+                "Đã xóa dữ liệu cloud",
+                "Ứng dụng đã ngắt kết nối. Bạn có thể ghép nối lại bằng mã mới trên máy tính.",
+                "OK");
+            await Shell.Current.GoToAsync("//welcome");
+        }
+        else
+        {
+            await DisplayAlertAsync(
+                "Không xóa được dữ liệu",
+                "Kiểm tra kết nối mạng và thử lại.",
+                "OK");
+        }
+    }
 
     private async void OnUnlinkClicked(object sender, EventArgs e)
     {

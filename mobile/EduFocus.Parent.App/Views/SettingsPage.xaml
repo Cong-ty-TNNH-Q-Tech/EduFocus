@@ -48,9 +48,12 @@
                     <Label Text="{Binding DesktopName, StringFormat='Máy tính: {0}'}"
                            FontSize="14"
                            TextColor="{AppThemeBinding Light=#334155, Dark=#CBD5E1}" />
-                    <Label Text="{Binding ServerUrl, StringFormat='Máy chủ: {0}'}"
+                    <Label Text="{Binding ServerHostText, StringFormat='Máy chủ: {0}'}"
                            FontSize="13"
                            TextColor="{AppThemeBinding Light=#64748B, Dark=#94A3B8}" />
+                    <Label Text="{Binding ConnectionStatusText}"
+                           FontSize="13"
+                           TextColor="{AppThemeBinding Light=#0F766E, Dark=#5EEAD4}" />
 
                     <Button Text="Ghép nối lại"
                             Clicked="OnPairClicked"
@@ -79,6 +82,27 @@
                                Color="{StaticResource Primary}"
                                HorizontalOptions="Center" />
 
+            <Border Padding="18"
+                    StrokeThickness="0"
+                    StrokeShape="RoundRectangle 16"
+                    BackgroundColor="{AppThemeBinding Light=#FFFFFF, Dark=#111827}">
+                <VerticalStackLayout Spacing="6">
+                    <Label Text="Điện thoại này"
+                           FontSize="17"
+                           FontAttributes="Bold"
+                           TextColor="{AppThemeBinding Light={StaticResource TextLight}, Dark={StaticResource TextDark}}" />
+                    <Label Text="{Binding DeviceNameText}"
+                           FontSize="14"
+                           TextColor="{AppThemeBinding Light=#334155, Dark=#CBD5E1}" />
+                    <Label Text="{Binding PlatformText}"
+                           FontSize="13"
+                           TextColor="{AppThemeBinding Light=#64748B, Dark=#94A3B8}" />
+                    <Label Text="{Binding AppVersionText, StringFormat='Phiên bản ứng dụng: {0}'}"
+                           FontSize="13"
+                           TextColor="{AppThemeBinding Light=#64748B, Dark=#94A3B8}" />
+                </VerticalStackLayout>
+            </Border>
+
             <Border IsVisible="{Binding IsLinked}"
                     Padding="18"
                     StrokeThickness="0"
@@ -100,6 +124,86 @@
                             TextColor="White"
                             CornerRadius="12"
                             HeightRequest="44" />
+                </VerticalStackLayout>
+            </Border>
+
+            <Border IsVisible="{Binding IsLinked}"
+                    Padding="18"
+                    StrokeThickness="0"
+                    StrokeShape="RoundRectangle 16"
+                    BackgroundColor="{AppThemeBinding Light=#FFFFFF, Dark=#111827}">
+                <VerticalStackLayout Spacing="10">
+                    <Label Text="Thiết bị trong gia đình"
+                           FontSize="17"
+                           FontAttributes="Bold"
+                           TextColor="{AppThemeBinding Light={StaticResource TextLight}, Dark={StaticResource TextDark}}" />
+                    <ActivityIndicator IsRunning="{Binding IsLoadingDevices}"
+                                       IsVisible="{Binding IsLoadingDevices}"
+                                       Color="{StaticResource Primary}"
+                                       HorizontalOptions="Start" />
+                    <Label Text="{Binding DevicesStatus}"
+                           IsVisible="{Binding HasDevicesStatus}"
+                           FontSize="13"
+                           TextColor="{AppThemeBinding Light=#B91C1C, Dark=#FCA5A5}" />
+                    <VerticalStackLayout Spacing="14"
+                                         BindableLayout.ItemsSource="{Binding Devices}">
+                        <BindableLayout.ItemTemplate>
+                            <DataTemplate x:DataType="vm:SettingsDeviceItem">
+                                <Grid ColumnDefinitions="*,Auto" ColumnSpacing="12">
+                                    <VerticalStackLayout Spacing="2">
+                                        <Label Text="{Binding Name}"
+                                               FontSize="14"
+                                               FontAttributes="Bold"
+                                               TextColor="{AppThemeBinding Light={StaticResource TextLight}, Dark={StaticResource TextDark}}" />
+                                        <Label Text="{Binding MetaText}"
+                                               FontSize="13"
+                                               TextColor="{AppThemeBinding Light=#64748B, Dark=#94A3B8}" />
+                                        <Label Text="{Binding LastSeenText}"
+                                               FontSize="12"
+                                               TextColor="{AppThemeBinding Light=#94A3B8, Dark=#64748B}" />
+                                    </VerticalStackLayout>
+                                    <Button Grid.Column="1"
+                                            Text="Thu hồi"
+                                            IsVisible="{Binding CanRevoke}"
+                                            Clicked="OnRevokeDeviceClicked"
+                                            BackgroundColor="Transparent"
+                                            TextColor="{AppThemeBinding Light=#B91C1C, Dark=#FCA5A5}"
+                                            BorderColor="{AppThemeBinding Light=#FCA5A5, Dark=#7F1D1D}"
+                                            BorderWidth="1"
+                                            CornerRadius="10"
+                                            HeightRequest="36"
+                                            Padding="12,0"
+                                            VerticalOptions="Center" />
+                                </Grid>
+                            </DataTemplate>
+                        </BindableLayout.ItemTemplate>
+                    </VerticalStackLayout>
+                </VerticalStackLayout>
+            </Border>
+
+            <Border IsVisible="{Binding IsLinked}"
+                    Padding="18"
+                    StrokeThickness="0"
+                    StrokeShape="RoundRectangle 16"
+                    BackgroundColor="{AppThemeBinding Light=#FFFFFF, Dark=#111827}">
+                <VerticalStackLayout Spacing="8">
+                    <Label Text="Dữ liệu trên cloud"
+                           FontSize="15"
+                           FontAttributes="Bold"
+                           TextColor="{AppThemeBinding Light={StaticResource TextLight}, Dark={StaticResource TextDark}}" />
+                    <Label Text="Xóa vĩnh viễn dữ liệu học tập và liên kết của gia đình trên cloud. Không thể hoàn tác."
+                           FontSize="13"
+                           TextColor="{AppThemeBinding Light=#475569, Dark=#CBD5E1}" />
+                    <Button Text="Xóa dữ liệu trên cloud"
+                            Clicked="OnDeleteCloudDataClicked"
+                            IsEnabled="{Binding IsNotBusy}"
+                            BackgroundColor="Transparent"
+                            TextColor="{AppThemeBinding Light=#B91C1C, Dark=#FCA5A5}"
+                            BorderColor="{AppThemeBinding Light=#FCA5A5, Dark=#7F1D1D}"
+                            BorderWidth="1"
+                            CornerRadius="12"
+                            HeightRequest="44"
+                            Margin="0,4,0,0" />
                 </VerticalStackLayout>
             </Border>
 

@@ -13,8 +13,8 @@ không điều khiển từ xa bảo vệ của máy học sinh trong phase này
 mobile/
 ├── EduFocus.Parent.slnx
 ├── EduFocus.Parent.App/      # .NET MAUI net10.0-android: Shell, Views, SecureStorage, ZXing, FCM
-├── EduFocus.Parent.Core/     # net10.0: AppState, pairing, push, CloudApiClient (test được)
-└── EduFocus.Parent.Tests/    # net10.0: xUnit cho parser, pairing, push, API client và state
+├── EduFocus.Parent.Core/     # net10.0: AppState, pairing, push, CloudApiClient, Presentation (test được)
+└── EduFocus.Parent.Tests/    # net10.0: xUnit cho parser, pairing, push, API client, view model và cache
 ```
 
 `EduFocus.Parent.Core` tham chiếu trực tiếp `cloud/EduFocus.Cloud.Contracts` để dùng chung DTO,
@@ -41,6 +41,30 @@ không copy model sang mobile.
 
 Camera chỉ được xin quyền khi phụ huynh bấm "Bật camera quét QR"; từ chối quyền vẫn dùng được
 nhập mã thủ công và có nút mở Cài đặt quyền của hệ thống.
+
+## Bốn màn hình chính (issue #92)
+
+View model của ba tab dữ liệu nằm trong `EduFocus.Parent.Core/Presentation` (net10.0) để unit test
+được toàn bộ luồng tải/lỗi/cache mà không cần thiết bị Android; App chỉ giữ view XAML.
+
+1. **Tổng quan** — gọi `GET /v1/reports/daily` cho hôm nay: thời gian học, thời gian máy đang dùng,
+   số phiên online class, số phiên bị chặn, cảnh báo tỷ lệ thấp (chỉ khi phụ huynh bật). Kéo để làm
+   mới. Không có dữ liệu hiển thị "—"/trạng thái trống, không giả số 0.
+2. **Báo cáo** — biểu đồ 7 ngày và danh sách từng ngày (mock theo dữ liệu thật), chạm một ngày để
+   xem chi tiết; hôm nay có nhãn "(hôm nay)". Deep link từ notification mở đúng ngày qua
+   `//reports?date=yyyy-MM-dd`. Ngày hiển thị dd/MM, giờ theo múi giờ gia đình (IANA).
+3. **Thông báo** — lịch sử `GET /v1/notifications` phân trang 50, nút "Tải thêm" theo cursor; thẻ
+   tùy chọn `GET|PUT /v1/preferences` (4 công tắc cảnh báo, giờ yên tĩnh, giờ tổng kết ngày) chỉ
+   cho phép sửa trên thiết bị mobile.
+4. **Cài đặt** — tên máy tính đã ghép nối, **host** server (không hiện URL đầy đủ), thông tin điện
+   thoại/phiên bản app; danh sách thiết bị trong gia đình `GET /v1/devices` với nút **Thu hồi**
+   (`DELETE /v1/devices/{id}`); ngắt kết nối; **Xóa dữ liệu trên cloud** (`DELETE /v1/family`, yêu
+   cầu gõ đúng "XÓA"); liên kết chính sách quyền riêng tư.
+
+Khi mất mạng, tab Tổng quan/Báo cáo/Thông báo hiển thị dữ liệu cache (Preferences, TTL 7 ngày,
+không chứa token) kèm băng "Đang xem dữ liệu lưu lúc …" và nút thử lại. Mọi lỗi 401 đều đi qua
+`SessionExpiryService`: xóa token/cache một lần duy nhất, quay về Welcome và báo "Phiên ghép nối đã
+hết"; ghép nối lại thành công sẽ reset trạng thái này.
 
 ## Thông báo đẩy FCM (issue #91)
 

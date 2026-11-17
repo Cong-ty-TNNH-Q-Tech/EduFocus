@@ -1,6 +1,7 @@
 using System.ComponentModel;
 using EduFocus.Parent.App.Services;
 using EduFocus.Parent.App.ViewModels;
+using EduFocus.Parent.Core.Presentation;
 using ZXing.Net.Maui;
 using ZXing.Net.Maui.Controls;
 
@@ -126,6 +127,8 @@ public partial class PairingPage : ContentPage, IQueryAttributable
 
     private async void OnPairingSucceeded(object? sender, EventArgs e)
     {
+        ServiceHelper.GetService<SessionExpiryService>().Reset();
+
         await DisplayAlertAsync(
             "Ghép nối thành công",
             "Từ giờ bạn sẽ nhận thông báo và báo cáo tổng hợp từ máy tính.",
