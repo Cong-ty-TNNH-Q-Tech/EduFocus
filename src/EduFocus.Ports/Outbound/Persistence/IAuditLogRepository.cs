@@ -1,4 +1,5 @@
 using EduFocus.Domain.Entities;
+using EduFocus.Domain.Enums;
 
 namespace EduFocus.Ports.Outbound.Persistence;
 
@@ -9,4 +10,15 @@ namespace EduFocus.Ports.Outbound.Persistence;
 public interface IAuditLogRepository
 {
     Task AddAsync(AuditLog auditLog, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Lists the oldest rows of one event type at or after
+    /// <paramref name="fromUtc"/>. Used by the cloud security producer, which
+    /// reads only tamper markers and never exposes audit text off the device.
+    /// </summary>
+    Task<IReadOnlyList<AuditLog>> ListByTypeSinceAsync(
+        AuditEventType eventType,
+        DateTime fromUtc,
+        int limit,
+        CancellationToken cancellationToken = default);
 }

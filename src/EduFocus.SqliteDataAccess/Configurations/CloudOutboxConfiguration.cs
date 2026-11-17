@@ -14,7 +14,10 @@ internal sealed class CloudOutboxConfiguration : IEntityTypeConfiguration<CloudO
         builder.HasKey(x => x.Id);
         builder.Property(x => x.Id).ValueGeneratedNever();
 
-        builder.Property(x => x.ClientEventId).IsRequired();
+        builder.Property(x => x.ClientEventId)
+            .HasMaxLength(CloudOutboxEvent.MaxClientEventIdLength)
+            .HasColumnType("TEXT(64)")
+            .IsRequired();
         builder.HasIndex(x => x.ClientEventId)
             .IsUnique()
             .HasDatabaseName("UX_CloudOutbox_ClientEventId");

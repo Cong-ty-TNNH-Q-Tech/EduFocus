@@ -6,16 +6,16 @@ namespace EduFocus.Domain.Tests.Domain;
 public sealed class CloudOutboxEventTests
 {
     private static readonly DateTime Now = new(2026, 11, 17, 9, 0, 0, DateTimeKind.Utc);
-    private static readonly Guid ClientEventId = Guid.Parse("0f8fad5b-d9cb-469f-a165-70867728950e");
+    private const string ClientEventId = "0f8fad5b-d9cb-469f-a165-70867728950e";
     private const string Payload = "{\"sessionsCount\":3}";
 
     [Fact]
     public void Create_starts_pending_with_a_fresh_row_id()
     {
-        var item = CloudOutboxEvent.Create(ClientEventId, " daily_summary ", Payload, Now);
+        var item = CloudOutboxEvent.Create($" {ClientEventId} ", " daily_summary ", Payload, Now);
 
         item.Id.Should().NotBe(Guid.Empty);
-        item.Id.Should().NotBe(ClientEventId);
+        item.Id.Should().NotBe(Guid.Parse(ClientEventId));
         item.ClientEventId.Should().Be(ClientEventId);
         item.Type.Should().Be("daily_summary");
         item.PayloadJson.Should().Be(Payload);
@@ -28,10 +28,22 @@ public sealed class CloudOutboxEventTests
         item.IsPending.Should().BeTrue();
     }
 
-    [Fact]
-    public void Create_rejects_an_empty_client_event_id()
+    [Theory]
+    [InlineData("")]
+    [InlineData("   ")]
+    public void Create_rejects_an_empty_client_event_id(string clientEventId)
     {
-        var act = () => CloudOutboxEvent.Create(Guid.Empty, "daily_summary", Payload, Now);
+        var act = () => CloudOutboxEvent.Create(clientEventId, "daily_summary", Payload, Now);
+
+        act.Should().Throw<ArgumentException>();
+    }
+
+    [Fact]
+    public void Create_rejects_an_oversized_client_event_id()
+    {
+        var clientEventId = new string('e', CloudOutboxEvent.MaxClientEventIdLength + 1);
+
+        var act = () => CloudOutboxEvent.Create(clientEventId, "daily_summary", Payload, Now);
 
         act.Should().Throw<ArgumentException>();
     }

@@ -4,6 +4,7 @@ using EduFocus.Domain.Entities;
 using EduFocus.Domain.ValueObjects;
 using EduFocus.Ports.DTOs;
 using EduFocus.Ports.Inbound;
+using EduFocus.Ports.Outbound.Attention;
 using EduFocus.Ports.Outbound.Persistence;
 using EduFocus.Ports.Outbound.Services;
 
@@ -30,6 +31,7 @@ public sealed class AttentionMonitorService : IAttentionMonitorUseCase, IAsyncDi
     private readonly IAppSettingsRepository _settings;
     private readonly IAppLogger _logger;
     private readonly TimeProvider _timeProvider;
+    private readonly IReadOnlyList<IAttentionStateObserver> _observers;
     private readonly AttentionMonitoringOptions _options;
     private readonly AttentionThresholds _baseThresholds;
     private AttentionThresholds _activeThresholds;
@@ -60,6 +62,25 @@ public sealed class AttentionMonitorService : IAttentionMonitorUseCase, IAsyncDi
         TimeProvider timeProvider,
         AttentionMonitoringOptions options,
         AttentionThresholds thresholds)
+        : this(events, sessions, pipeline, settings, logger, timeProvider, options, thresholds, [])
+    {
+    }
+
+    /// <summary>
+    /// Observers see the stable state after each processed sample (a null state
+    /// when monitoring pauses or stops). They are best-effort: a failing
+    /// observer never changes sampling, counting or transitions.
+    /// </summary>
+    public AttentionMonitorService(
+        IAttentionEventRepository events,
+        IStudySessionRepository sessions,
+        IAttentionPipelineUseCase pipeline,
+        IAppSettingsRepository settings,
+        IAppLogger logger,
+        TimeProvider timeProvider,
+        AttentionMonitoringOptions options,
+        AttentionThresholds thresholds,
+        IEnumerable<IAttentionStateObserver> observers)
     {
         _events = events ?? throw new ArgumentNullException(nameof(events));
         _sessions = sessions ?? throw new ArgumentNullException(nameof(sessions));
@@ -67,6 +88,7 @@ public sealed class AttentionMonitorService : IAttentionMonitorUseCase, IAsyncDi
         _settings = settings ?? throw new ArgumentNullException(nameof(settings));
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
         _timeProvider = timeProvider ?? throw new ArgumentNullException(nameof(timeProvider));
+        _observers = observers?.ToArray() ?? throw new ArgumentNullException(nameof(observers));
         _baseThresholds = thresholds ?? throw new ArgumentNullException(nameof(thresholds));
         _activeThresholds = _baseThresholds;
 
@@ -282,6 +304,8 @@ public sealed class AttentionMonitorService : IAttentionMonitorUseCase, IAsyncDi
         Interlocked.Exchange(ref _sessionEnded, 0);
 
         _isOnlineClass = false;
+        await NotifyObserversAsync(null, _timeProvider.GetUtcNow()).ConfigureAwait(false);
+
         if (wasRunning)
             _logger.Info(LogCategories.Attention, "Attention monitoring stopped.");
     }
@@ -329,6 +353,7 @@ public sealed class AttentionMonitorService : IAttentionMonitorUseCase, IAsyncDi
             _lastSampleAt = sampledAt;
             window.Reset();
             machine.ResetCandidate();
+            await NotifyObserversAsync(null, sampledAt).ConfigureAwait(false);
 
             if (_pipeline.IsRunning)
                 await SyncPipelineForEligibilityAsync(false).ConfigureAwait(false);
@@ -343,6 +368,7 @@ public sealed class AttentionMonitorService : IAttentionMonitorUseCase, IAsyncDi
             _pendingSeconds = 0;
             window.Reset();
             machine.ResetCandidate();
+            await NotifyObserversAsync(null, sampledAt).ConfigureAwait(false);
         }
 
         if (sample.CameraFailure != CameraFailureKind.None)
@@ -389,6 +415,8 @@ public sealed class AttentionMonitorService : IAttentionMonitorUseCase, IAsyncDi
 
             if (!counted)
                 await HandleSessionEndedAsync(sampledAt).ConfigureAwait(false);
+            else
+                await NotifyObserversAsync(current.Value, sampledAt).ConfigureAwait(false);
 
             return counted;
         }
@@ -429,6 +457,8 @@ public sealed class AttentionMonitorService : IAttentionMonitorUseCase, IAsyncDi
             await HandleSessionEndedAsync(sampledAt).ConfigureAwait(false);
             return false;
         }
+
+        await NotifyObserversAsync(state.Value, sampledAt).ConfigureAwait(false);
 
         if (state != _persistedState)
             return await TryTransitionAsync(sessionId, state.Value, classification, sampledAt)
@@ -564,6 +594,7 @@ public sealed class AttentionMonitorService : IAttentionMonitorUseCase, IAsyncDi
     private async Task HandleSessionEndedAsync(DateTimeOffset sampledAt)
     {
         await CloseOpenEventAsync(sampledAt).ConfigureAwait(false);
+        await NotifyObserversAsync(null, sampledAt).ConfigureAwait(false);
 
         _running = false;
         Interlocked.Exchange(ref _sessionEnded, 1);
@@ -687,6 +718,25 @@ public sealed class AttentionMonitorService : IAttentionMonitorUseCase, IAsyncDi
 
     private static double? ConfidenceFor(AttentionState state, AttentionClassification classification) =>
         state == AttentionState.CameraUnavailable ? null : classification.Confidence;
+
+    private async ValueTask NotifyObserversAsync(AttentionState? state, DateTimeOffset observedAtUtc)
+    {
+        foreach (var observer in _observers)
+        {
+            try
+            {
+                await observer
+                    .OnStateObservedAsync(state, observedAtUtc, CancellationToken.None)
+                    .ConfigureAwait(false);
+            }
+            catch (Exception ex)
+            {
+                _logger.Warning(
+                    LogCategories.Attention,
+                    $"An attention state observer failed ({ex.GetType().Name}).");
+            }
+        }
+    }
 
     private void OnSampleProduced(object? sender, AttentionSample sample)
     {

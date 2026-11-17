@@ -19,8 +19,8 @@ public sealed class CloudOutboxRepositoryTests
         await db.CreateInitializer().InitializeAsync();
 
         var repository = new SqliteCloudOutboxRepository(db.ContextFactory);
-        var first = CloudOutboxEvent.Create(Guid.NewGuid(), "daily_summary", Payload, Now);
-        var second = CloudOutboxEvent.Create(Guid.NewGuid(), "attention_alert", Payload, Now.AddSeconds(1));
+        var first = CloudOutboxEvent.Create(NewClientEventId(), "daily_summary", Payload, Now);
+        var second = CloudOutboxEvent.Create(NewClientEventId(), "attention_alert", Payload, Now.AddSeconds(1));
         await repository.AddAsync(first);
         await repository.AddAsync(second);
 
@@ -41,10 +41,10 @@ public sealed class CloudOutboxRepositoryTests
         await db.CreateInitializer().InitializeAsync();
 
         var repository = new SqliteCloudOutboxRepository(db.ContextFactory);
-        var dueNow = CloudOutboxEvent.Create(Guid.NewGuid(), "daily_summary", Payload, Now);
-        var later = CloudOutboxEvent.Create(Guid.NewGuid(), "daily_summary", Payload, Now);
-        var sent = CloudOutboxEvent.Create(Guid.NewGuid(), "daily_summary", Payload, Now);
-        var rejected = CloudOutboxEvent.Create(Guid.NewGuid(), "daily_summary", Payload, Now);
+        var dueNow = CloudOutboxEvent.Create(NewClientEventId(), "daily_summary", Payload, Now);
+        var later = CloudOutboxEvent.Create(NewClientEventId(), "daily_summary", Payload, Now);
+        var sent = CloudOutboxEvent.Create(NewClientEventId(), "daily_summary", Payload, Now);
+        var rejected = CloudOutboxEvent.Create(NewClientEventId(), "daily_summary", Payload, Now);
         await repository.AddAsync(dueNow);
         await repository.AddAsync(later);
         await repository.AddAsync(sent);
@@ -68,7 +68,7 @@ public sealed class CloudOutboxRepositoryTests
         await db.CreateInitializer().InitializeAsync();
 
         var repository = new SqliteCloudOutboxRepository(db.ContextFactory);
-        var item = CloudOutboxEvent.Create(Guid.NewGuid(), "daily_summary", Payload, Now);
+        var item = CloudOutboxEvent.Create(NewClientEventId(), "daily_summary", Payload, Now);
         await repository.AddAsync(item);
 
         await repository.ScheduleRetryAsync([item.Id], Now.AddMinutes(2), "network");
@@ -92,9 +92,9 @@ public sealed class CloudOutboxRepositoryTests
         await db.CreateInitializer().InitializeAsync();
 
         var repository = new SqliteCloudOutboxRepository(db.ContextFactory);
-        var sent = CloudOutboxEvent.Create(Guid.NewGuid(), "daily_summary", Payload, Now);
-        var rejected = CloudOutboxEvent.Create(Guid.NewGuid(), "daily_summary", Payload, Now.AddSeconds(1));
-        var pending = CloudOutboxEvent.Create(Guid.NewGuid(), "daily_summary", Payload, Now.AddSeconds(2));
+        var sent = CloudOutboxEvent.Create(NewClientEventId(), "daily_summary", Payload, Now);
+        var rejected = CloudOutboxEvent.Create(NewClientEventId(), "daily_summary", Payload, Now.AddSeconds(1));
+        var pending = CloudOutboxEvent.Create(NewClientEventId(), "daily_summary", Payload, Now.AddSeconds(2));
         await repository.AddAsync(sent);
         await repository.AddAsync(rejected);
         await repository.AddAsync(pending);
@@ -119,8 +119,8 @@ public sealed class CloudOutboxRepositoryTests
         await db.CreateInitializer().InitializeAsync();
 
         var repository = new SqliteCloudOutboxRepository(db.ContextFactory);
-        var old = CloudOutboxEvent.Create(Guid.NewGuid(), "daily_summary", Payload, Now.AddDays(-8));
-        var fresh = CloudOutboxEvent.Create(Guid.NewGuid(), "daily_summary", Payload, Now.AddHours(-1));
+        var old = CloudOutboxEvent.Create(NewClientEventId(), "daily_summary", Payload, Now.AddDays(-8));
+        var fresh = CloudOutboxEvent.Create(NewClientEventId(), "daily_summary", Payload, Now.AddHours(-1));
         await repository.AddAsync(old);
         await repository.AddAsync(fresh);
 
@@ -138,9 +138,9 @@ public sealed class CloudOutboxRepositoryTests
         await db.CreateInitializer().InitializeAsync();
 
         var repository = new SqliteCloudOutboxRepository(db.ContextFactory);
-        var oldest = CloudOutboxEvent.Create(Guid.NewGuid(), "daily_summary", Payload, Now);
-        var middle = CloudOutboxEvent.Create(Guid.NewGuid(), "daily_summary", Payload, Now.AddSeconds(1));
-        var newest = CloudOutboxEvent.Create(Guid.NewGuid(), "daily_summary", Payload, Now.AddSeconds(2));
+        var oldest = CloudOutboxEvent.Create(NewClientEventId(), "daily_summary", Payload, Now);
+        var middle = CloudOutboxEvent.Create(NewClientEventId(), "daily_summary", Payload, Now.AddSeconds(1));
+        var newest = CloudOutboxEvent.Create(NewClientEventId(), "daily_summary", Payload, Now.AddSeconds(2));
         await repository.AddAsync(oldest);
         await repository.AddAsync(middle);
         await repository.AddAsync(newest);
@@ -159,7 +159,7 @@ public sealed class CloudOutboxRepositoryTests
         await db.CreateInitializer().InitializeAsync();
 
         var repository = new SqliteCloudOutboxRepository(db.ContextFactory);
-        var clientEventId = Guid.NewGuid();
+        var clientEventId = NewClientEventId();
         await repository.AddAsync(CloudOutboxEvent.Create(clientEventId, "daily_summary", Payload, Now));
 
         var act = async () => await repository.AddAsync(
@@ -167,4 +167,20 @@ public sealed class CloudOutboxRepositoryTests
 
         await act.Should().ThrowAsync<DbUpdateException>();
     }
+
+    [Fact]
+    public async Task Exists_matches_the_stored_client_event_id_only()
+    {
+        await using var db = new TempDatabase();
+        await db.CreateInitializer().InitializeAsync();
+
+        var repository = new SqliteCloudOutboxRepository(db.ContextFactory);
+        var item = CloudOutboxEvent.Create("audit-3f2504e0-4f89-41d3-9a0c-0305e82c3301", "security_alert", Payload, Now);
+        await repository.AddAsync(item);
+
+        (await repository.ExistsAsync(item.ClientEventId)).Should().BeTrue();
+        (await repository.ExistsAsync("audit-missing")).Should().BeFalse();
+    }
+
+    private static string NewClientEventId() => Guid.NewGuid().ToString("D");
 }

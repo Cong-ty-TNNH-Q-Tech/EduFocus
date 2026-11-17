@@ -14,5 +14,16 @@ public interface ICloudOutboxUseCase
         JsonElement payload,
         CancellationToken cancellationToken = default);
 
+    /// <summary>
+    /// Enqueues with a caller-chosen client event id. Repeating the same id is
+    /// a no-op, which lets producers (security alerts) stay exactly-once
+    /// across restarts.
+    /// </summary>
+    Task EnqueueAsync(
+        string type,
+        JsonElement payload,
+        string? clientEventId,
+        CancellationToken cancellationToken = default);
+
     Task<CloudOutboxStatus> GetStatusAsync(CancellationToken cancellationToken = default);
 }

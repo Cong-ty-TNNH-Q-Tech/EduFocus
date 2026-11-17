@@ -10,13 +10,14 @@ namespace EduFocus.Domain.Entities;
 /// </summary>
 public sealed class CloudOutboxEvent
 {
+    public const int MaxClientEventIdLength = 64;
     public const int MaxTypeLength = 32;
     public const int MaxPayloadLength = 16_384;
     public const int MaxErrorLength = 512;
 
     private CloudOutboxEvent(
         Guid id,
-        Guid clientEventId,
+        string clientEventId,
         string type,
         string payloadJson,
         DateTime createdAtUtc,
@@ -40,7 +41,7 @@ public sealed class CloudOutboxEvent
 
     public Guid Id { get; }
 
-    public Guid ClientEventId { get; }
+    public string ClientEventId { get; }
 
     public string Type { get; }
 
@@ -62,16 +63,24 @@ public sealed class CloudOutboxEvent
     public bool IsPending => SentAtUtc is null && FailedAtUtc is null;
 
     public static CloudOutboxEvent Create(
-        Guid clientEventId,
+        string clientEventId,
         string type,
         string payloadJson,
         DateTime nowUtc)
     {
         Guard.Utc(nowUtc, nameof(nowUtc));
-        if (clientEventId == Guid.Empty)
-            throw new ArgumentException("Client event id is required.", nameof(clientEventId));
+        Guard.NotNullOrWhiteSpace(clientEventId, nameof(clientEventId));
         Guard.NotNullOrWhiteSpace(type, nameof(type));
         Guard.NotNullOrWhiteSpace(payloadJson, nameof(payloadJson));
+
+        var normalizedClientEventId = clientEventId.Trim();
+        if (normalizedClientEventId.Length > MaxClientEventIdLength
+            || normalizedClientEventId.Any(char.IsControl))
+        {
+            throw new ArgumentException(
+                $"Client event id must be at most {MaxClientEventIdLength} characters.",
+                nameof(clientEventId));
+        }
 
         var normalizedType = type.Trim();
         if (normalizedType.Length > MaxTypeLength || normalizedType.Any(char.IsControl))
@@ -82,7 +91,7 @@ public sealed class CloudOutboxEvent
 
         return new CloudOutboxEvent(
             Guid.NewGuid(),
-            clientEventId,
+            normalizedClientEventId,
             normalizedType,
             payloadJson,
             nowUtc,

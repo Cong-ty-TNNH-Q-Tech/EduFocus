@@ -230,7 +230,7 @@ public sealed class CloudSyncWorker : ICloudOutboxNotifier, IDisposable
 
         foreach (var item in batch)
         {
-            if (!byId.TryGetValue(item.ClientEventId.ToString("D"), out var eventResult))
+            if (!byId.TryGetValue(item.ClientEventId, out var eventResult))
             {
                 missing.Add(item);
                 continue;
@@ -390,7 +390,7 @@ public sealed class CloudSyncWorker : ICloudOutboxNotifier, IDisposable
     {
         using var document = JsonDocument.Parse(item.PayloadJson);
         return new CloudSyncEvent(
-            item.ClientEventId.ToString("D"),
+            item.ClientEventId,
             item.Type,
             new DateTimeOffset(DateTime.SpecifyKind(item.CreatedAtUtc, DateTimeKind.Utc)),
             document.RootElement.Clone());

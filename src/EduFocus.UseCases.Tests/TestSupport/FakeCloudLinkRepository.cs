@@ -11,8 +11,12 @@ internal sealed class FakeCloudLinkRepository : ICloudLinkRepository
 
     public int UpdateCount { get; private set; }
 
+    public bool ThrowOnGet { get; set; }
+
     public Task<CloudLink?> GetAsync(CancellationToken cancellationToken = default) =>
-        Task.FromResult(Stored);
+        ThrowOnGet
+            ? throw new InvalidOperationException("Storage unavailable.")
+            : Task.FromResult(Stored);
 
     public Task AddAsync(CloudLink link, CancellationToken cancellationToken = default)
     {

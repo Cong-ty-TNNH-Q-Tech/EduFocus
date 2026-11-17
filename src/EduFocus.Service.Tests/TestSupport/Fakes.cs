@@ -305,6 +305,13 @@ internal sealed class RecordingAuditLogRepository : IAuditLogRepository
         Entries.Add(auditLog);
         return Task.CompletedTask;
     }
+
+    public Task<IReadOnlyList<AuditLog>> ListByTypeSinceAsync(
+        EduFocus.Domain.Enums.AuditEventType eventType,
+        DateTime fromUtc,
+        int limit,
+        CancellationToken cancellationToken = default) =>
+        Task.FromResult<IReadOnlyList<AuditLog>>([]);
 }
 
 internal sealed class TempDatabase : IAsyncDisposable

@@ -556,8 +556,10 @@ namespace EduFocus.SqliteDataAccess.Migrations
                     b.Property<int>("AttemptCount")
                         .HasColumnType("INTEGER");
 
-                    b.Property<Guid>("ClientEventId")
-                        .HasColumnType("TEXT");
+                    b.Property<string>("ClientEventId")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("TEXT(64)");
 
                     b.Property<string>("CreatedAtUtc")
                         .IsRequired()

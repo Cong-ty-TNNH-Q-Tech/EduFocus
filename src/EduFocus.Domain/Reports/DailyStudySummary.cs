@@ -22,6 +22,9 @@ public sealed record DailyStudySummary
 
     public int NeutralSeconds { get; init; }
 
+    /// <summary>Idle overlay seconds; already included in the active total.</summary>
+    public int IdleSeconds { get; init; }
+
     public int OnlineClassSeconds { get; init; }
 
     public int BlockedAttemptCount { get; init; }

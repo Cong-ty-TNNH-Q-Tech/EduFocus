@@ -11,6 +11,8 @@ public interface ICloudOutboxRepository
 {
     Task AddAsync(CloudOutboxEvent item, CancellationToken cancellationToken = default);
 
+    Task<bool> ExistsAsync(string clientEventId, CancellationToken cancellationToken = default);
+
     Task<IReadOnlyList<CloudOutboxEvent>> GetDueAsync(
         DateTime utcNow,
         int limit,

@@ -101,13 +101,14 @@ public sealed class SchemaTests
             connection,
             "SELECT MigrationId FROM __EFMigrationsHistory ORDER BY MigrationId;");
 
-        migrations.Should().HaveCount(6)
+        migrations.Should().HaveCount(7)
             .And.Contain(migration => migration.EndsWith("_InitialEduFocusSchema"))
             .And.Contain(migration => migration.EndsWith("_AddOnboardingConsent"))
             .And.Contain(migration => migration.EndsWith("_AddProtectionSource"))
             .And.Contain(migration => migration.EndsWith("_AddUpdateCheckOptIn"))
             .And.Contain(migration => migration.EndsWith("_AddCloudLink"))
-            .And.Contain(migration => migration.EndsWith("_AddCloudOutbox"));
+            .And.Contain(migration => migration.EndsWith("_AddCloudOutbox"))
+            .And.Contain(migration => migration.EndsWith("_CloudOutboxTextClientEventId"));
     }
 
     [Fact]

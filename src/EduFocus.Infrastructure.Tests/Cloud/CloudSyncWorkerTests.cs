@@ -44,7 +44,7 @@ public sealed class CloudSyncWorkerTests
 
         harness.Sync.Batches.Should().ContainSingle()
             .Which.Select(item => item.ClientEventId)
-            .Should().BeEquivalentTo([first.ClientEventId.ToString("D"), second.ClientEventId.ToString("D")]);
+            .Should().BeEquivalentTo([first.ClientEventId, second.ClientEventId]);
         first.SentAtUtc.Should().Be(harness.Time.UtcNow.UtcDateTime);
         second.SentAtUtc.Should().Be(harness.Time.UtcNow.UtcDateTime);
         harness.Links.Stored!.LastSyncAtUtc.Should().Be(harness.Time.UtcNow.UtcDateTime);
@@ -76,10 +76,10 @@ public sealed class CloudSyncWorkerTests
         harness.Sync.ResultFactory = batch => new CloudSyncBatchResult(
             batch.Select(item => new CloudSyncEventResult(
                 item.ClientEventId,
-                item.ClientEventId == rejected.ClientEventId.ToString("D")
+                item.ClientEventId == rejected.ClientEventId
                     ? CloudEventOutcome.Rejected
                     : CloudEventOutcome.Applied,
-                item.ClientEventId == rejected.ClientEventId.ToString("D") ? "stale_summary" : null,
+                item.ClientEventId == rejected.ClientEventId ? "stale_summary" : null,
                 null)).ToList(),
             harness.Time.UtcNow);
 
@@ -237,7 +237,7 @@ public sealed class CloudSyncWorkerTests
     }
 
     private static CloudOutboxEvent NewEvent(DateTime createdAtUtc) =>
-        CloudOutboxEvent.Create(Guid.NewGuid(), "daily_summary", Payload, createdAtUtc);
+        CloudOutboxEvent.Create(Guid.NewGuid().ToString("D"), "daily_summary", Payload, createdAtUtc);
 
     private sealed class Harness
     {
@@ -358,6 +358,10 @@ public sealed class CloudSyncWorkerTests
             Items.Add(item);
             return Task.CompletedTask;
         }
+
+        public Task<bool> ExistsAsync(string clientEventId, CancellationToken cancellationToken = default) =>
+            Task.FromResult(Items.Exists(item =>
+                string.Equals(item.ClientEventId, clientEventId, StringComparison.Ordinal)));
 
         public Task<IReadOnlyList<CloudOutboxEvent>> GetDueAsync(
             DateTime utcNow,
@@ -487,6 +491,13 @@ public sealed class CloudSyncWorkerTests
             Entries.Add(auditLog);
             return Task.CompletedTask;
         }
+
+        public Task<IReadOnlyList<AuditLog>> ListByTypeSinceAsync(
+            EduFocus.Domain.Enums.AuditEventType eventType,
+            DateTime fromUtc,
+            int limit,
+            CancellationToken cancellationToken = default) =>
+            Task.FromResult<IReadOnlyList<AuditLog>>([]);
     }
 
     private sealed class StubCorrelationContext : ICorrelationContext

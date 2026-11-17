@@ -59,7 +59,7 @@ public sealed class PerformanceBudgetTests
         existing.Stop();
 
         created.WasCreated.Should().BeTrue();
-        created.AppliedMigrations.Should().HaveCount(6);
+        created.AppliedMigrations.Should().HaveCount(7);
         reopened.WasCreated.Should().BeFalse();
         reopened.AppliedMigrations.Should().BeEmpty();
 

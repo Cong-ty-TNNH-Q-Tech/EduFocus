@@ -32,10 +32,24 @@ public sealed class CloudOutboxService : ICloudOutboxUseCase
         _timeProvider = timeProvider ?? throw new ArgumentNullException(nameof(timeProvider));
     }
 
-    public async Task EnqueueAsync(
+    public Task EnqueueAsync(
         string type,
         JsonElement payload,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default) =>
+        EnqueueCoreAsync(type, payload, clientEventId: null, cancellationToken);
+
+    public Task EnqueueAsync(
+        string type,
+        JsonElement payload,
+        string? clientEventId,
+        CancellationToken cancellationToken = default) =>
+        EnqueueCoreAsync(type, payload, clientEventId, cancellationToken);
+
+    private async Task EnqueueCoreAsync(
+        string type,
+        JsonElement payload,
+        string? clientEventId,
+        CancellationToken cancellationToken)
     {
         var normalizedType = type?.Trim();
         if (!CloudEventTypes.IsKnown(normalizedType))
@@ -43,8 +57,22 @@ public sealed class CloudOutboxService : ICloudOutboxUseCase
         if (payload.ValueKind != JsonValueKind.Object)
             throw new ArgumentException("Cloud event payload must be a JSON object.", nameof(payload));
 
+        var normalizedClientEventId = string.IsNullOrWhiteSpace(clientEventId)
+            ? Guid.NewGuid().ToString("D")
+            : clientEventId.Trim();
+
+        if (clientEventId is not null
+            && await _outbox.ExistsAsync(normalizedClientEventId, cancellationToken).ConfigureAwait(false))
+        {
+            return;
+        }
+
         var now = _timeProvider.GetUtcNow().UtcDateTime;
-        var item = CloudOutboxEvent.Create(Guid.NewGuid(), normalizedType!, payload.GetRawText(), now);
+        var item = CloudOutboxEvent.Create(
+            normalizedClientEventId,
+            normalizedType!,
+            payload.GetRawText(),
+            now);
         await _outbox.AddAsync(item, cancellationToken).ConfigureAwait(false);
 
         var removed = await _outbox

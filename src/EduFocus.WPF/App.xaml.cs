@@ -12,6 +12,7 @@ using EduFocus.Infrastructure.ServiceControl;
 using EduFocus.Infrastructure.Watchdog;
 using EduFocus.Ports.DTOs;
 using EduFocus.Ports.Inbound;
+using EduFocus.Ports.Outbound.Attention;
 using EduFocus.Ports.Outbound.Cloud;
 using EduFocus.Ports.Outbound.Persistence;
 using EduFocus.Ports.Outbound.Services;
@@ -102,6 +103,8 @@ public partial class App : Application
 
         Services.GetRequiredService<TrayIconService>().Start();
         Services.GetRequiredService<CloudSyncWorker>().Start();
+        Services.GetRequiredService<CloudEventSchedulerService>().Start();
+        await Services.GetRequiredService<CloudEventSchedulerService>().PublishStartupAsync();
 
         if (!serviceManaged)
         {
@@ -253,6 +256,12 @@ public partial class App : Application
             provider.GetRequiredService<CloudSyncWorker>());
         services.AddSingleton<ICloudLinkUseCase, CloudLinkService>();
         services.AddSingleton<ICloudOutboxUseCase, CloudOutboxService>();
+        services.AddSingleton<ICloudEventSink, CloudEventSink>();
+        services.AddSingleton<CloudDailySummaryProducer>();
+        services.AddSingleton<CloudAttentionAlertProducer>();
+        services.AddSingleton<IAttentionStateObserver>(provider =>
+            provider.GetRequiredService<CloudAttentionAlertProducer>());
+        services.AddSingleton<CloudSecurityAlertProducer>();
         services.AddSingleton<ISystemPowerEventPort, WindowsSystemPowerEventPort>();
         services.AddSingleton(new StudySessionHeartbeatOptions());
         services.AddSingleton<IStudySessionHeartbeatUseCase, StudySessionHeartbeatService>();
@@ -312,18 +321,28 @@ public partial class App : Application
             services.AddSingleton<ServiceMonitoringCoordinator>();
             services.AddSingleton<ServiceStatusPoller>();
             services.AddSingleton<IProtectionUseCase>(provider =>
-                new ServiceMonitoredProtectionUseCase(
-                    provider.GetRequiredService<ServiceControlClient>(),
-                    provider.GetRequiredService<ServiceMonitoringCoordinator>(),
-                    provider.GetRequiredService<IParentAuthorizer>()));
+                new CloudEventProtectionDecorator(
+                    new ServiceMonitoredProtectionUseCase(
+                        provider.GetRequiredService<ServiceControlClient>(),
+                        provider.GetRequiredService<ServiceMonitoringCoordinator>(),
+                        provider.GetRequiredService<IParentAuthorizer>()),
+                    provider.GetRequiredService<CloudDailySummaryProducer>(),
+                    provider.GetRequiredService<ICloudEventSink>(),
+                    provider.GetRequiredService<IAppLogger>(),
+                    provider.GetRequiredService<TimeProvider>()));
         }
         else
         {
             services.AddSingleton<ProtectionService>();
             services.AddSingleton<IProtectionUseCase>(provider =>
-                new WatchdogAwareProtectionService(
-                    provider.GetRequiredService<ProtectionService>(),
-                    provider.GetRequiredService<IWatchdogCoordinator>()));
+                new CloudEventProtectionDecorator(
+                    new WatchdogAwareProtectionService(
+                        provider.GetRequiredService<ProtectionService>(),
+                        provider.GetRequiredService<IWatchdogCoordinator>()),
+                    provider.GetRequiredService<CloudDailySummaryProducer>(),
+                    provider.GetRequiredService<ICloudEventSink>(),
+                    provider.GetRequiredService<IAppLogger>(),
+                    provider.GetRequiredService<TimeProvider>()));
         }
         services.AddSingleton<IDashboardUseCase, DashboardService>();
         services.AddSingleton<IReportUseCase, ReportService>();
@@ -349,6 +368,7 @@ public partial class App : Application
         services.AddSingleton<MainWindowViewModel>();
         services.AddSingleton<TrayIconService>();
         services.AddSingleton<ScheduleSchedulerService>();
+        services.AddSingleton<CloudEventSchedulerService>();
         services.AddSingleton<RetentionSchedulerService>();
         services.AddSingleton<AppExitState>();
         services.AddSingleton<MainWindow>();

@@ -20,7 +20,7 @@ public sealed class CloudOutboxServiceTests
             JsonSerializer.SerializeToElement(new { sessionsCount = 3 }));
 
         var item = harness.Outbox.Items.Should().ContainSingle().Subject;
-        item.ClientEventId.Should().NotBe(Guid.Empty);
+        Guid.TryParse(item.ClientEventId, out _).Should().BeTrue();
         item.Type.Should().Be("daily_summary");
         item.PayloadJson.Should().Be("{\"sessionsCount\":3}");
         item.CreatedAtUtc.Should().Be(Now.UtcDateTime);

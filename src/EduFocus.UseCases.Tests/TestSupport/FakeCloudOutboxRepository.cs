@@ -20,6 +20,10 @@ internal sealed class FakeCloudOutboxRepository : ICloudOutboxRepository
         return Task.CompletedTask;
     }
 
+    public Task<bool> ExistsAsync(string clientEventId, CancellationToken cancellationToken = default) =>
+        Task.FromResult(Items.Exists(item =>
+            string.Equals(item.ClientEventId, clientEventId, StringComparison.Ordinal)));
+
     public Task<IReadOnlyList<CloudOutboxEvent>> GetDueAsync(
         DateTime utcNow,
         int limit,

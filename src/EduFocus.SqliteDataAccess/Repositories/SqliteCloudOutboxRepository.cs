@@ -29,6 +29,18 @@ public sealed class SqliteCloudOutboxRepository : ICloudOutboxRepository
         await context.SaveChangesAsync(cancellationToken);
     }
 
+    public async Task<bool> ExistsAsync(
+        string clientEventId,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(clientEventId);
+
+        await using var context = _contextFactory.CreateDbContext();
+        return await context.CloudOutbox
+            .AsNoTracking()
+            .AnyAsync(e => e.ClientEventId == clientEventId, cancellationToken);
+    }
+
     public async Task<IReadOnlyList<CloudOutboxEvent>> GetDueAsync(
         DateTime utcNow,
         int limit,
