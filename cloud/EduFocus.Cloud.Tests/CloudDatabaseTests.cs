@@ -3,6 +3,7 @@ using Microsoft.EntityFrameworkCore;
 
 namespace EduFocus.Cloud.Tests;
 
+[Collection("Postgres")]
 public sealed class CloudDatabaseTests
 {
     [Fact]

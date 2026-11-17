@@ -49,6 +49,13 @@ builder.Services.ConfigureHttpJsonOptions(options =>
 
 var app = builder.Build();
 
+if (builder.Configuration.GetValue<bool>("EDUFOCUS_CLOUD_AUTO_MIGRATE"))
+{
+    await using var scope = app.Services.CreateAsyncScope();
+    await scope.ServiceProvider.GetRequiredService<CloudDbContext>().Database.MigrateAsync();
+    app.Logger.LogInformation("Applied cloud database migrations");
+}
+
 app.UseForwardedHeaders(new ForwardedHeadersOptions
 {
     ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto,

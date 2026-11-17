@@ -181,18 +181,25 @@ lưu `CodeHash`. Giới hạn 5 lần claim sai/10 phút/IP và 10 lần/phiên.
 
 | Bảng | Cột chính | Ghi chú |
 |---|---|---|
-| `Families` | `Id`, `CreatedAtUtc`, `Timezone`, `DeletedAtUtc` | một gia đình nhiều thiết bị |
-| `Devices` | `Id`, `FamilyId`, `Kind` (desktop/mobile), `Name`, `Platform`, `TokenHash`, `Scopes`, `CreatedAtUtc`, `RevokedAtUtc` | không lưu token thô |
-| `DeviceTokens` | `Id`, `DeviceId`, `TokenHash`, `Scopes`, `ExpiresAtUtc`, `RevokedAtUtc` | hỗ trợ xoay vòng |
-| `PairingSessions` | `Id`, `FamilyId?`, `CodeHash`, `CreatedAtUtc`, `ExpiresAtUtc`, `ClaimedAtUtc`, `Status` | unique partial index trên `CodeHash` khi còn hiệu lực |
+| `Families` | `Id`, `CreatedAtUtc`, `TimeZoneId`, `DeletedAtUtc` | một gia đình nhiều thiết bị |
+| `Devices` | `Id`, `FamilyId`, `Kind` (`Desktop`/`Mobile`), `DisplayName`, `Platform`, `AppVersion`, `CreatedAtUtc`, `LastSeenAtUtc`, `RevokedAtUtc` | không lưu token thô |
+| `DeviceTokens` | `Id`, `DeviceId`, `TokenHash char(64)`, `Scopes`, `CreatedAtUtc`, `LastUsedAtUtc`, `RevokedAtUtc` | hash SHA-256, unique toàn cục |
+| `PairingSessions` | `Id`, `FamilyId`, `DesktopDeviceId`, `CodeHash char(64)`, `CreatedAtUtc`, `ExpiresAtUtc`, `ClaimedAtUtc`, `ClaimedByDeviceId`, `AttemptCount` | unique partial trên `CodeHash` khi `ClaimedAtUtc IS NULL` |
 | `PushRegistrations` | `Id`, `DeviceId`, `FcmToken`, `Platform`, `UpdatedAtUtc`, `InvalidatedAtUtc` | token FCM là dữ liệu nhạy cảm |
-| `NotificationPreferences` | `FamilyId`, `QuietStart`, `QuietEnd`, `DailySummaryTime`, `AttentionAlertsEnabled`, `ProtectionOffEnabled`, `SummaryEnabled` | một bản/gia đình |
-| `DailySummaries` | `Id`, `FamilyId`, `DeviceId`, `LocalDate`, `GeneratedAtUtc`, `StudyMinutes`, `FocusedMinutes`, `DistractionCount`, `BlockedAttempts`, `CameraCoveragePercent`, `OnlineClassMinutes` | unique `(FamilyId, DeviceId, LocalDate)` |
-| `SyncEvents` | `Id`, `FamilyId`, `DeviceId`, `ClientEventId`, `Type`, `PayloadJson`, `ReceivedAtUtc` | dedupe + xử lý nền |
-| `Notifications` | `Id`, `FamilyId`, `DeviceId`, `Kind`, `DedupeKey`, `PayloadJson`, `CreatedAtUtc`, `SentAtUtc`, `SuppressedReason` | log gửi |
-| `CloudAuditLogs` | `Id`, `FamilyId?`, `Actor`, `Action`, `OccurredAtUtc`, `MetadataJson` | không chứa token/PIN |
+| `NotificationPreferences` | `FamilyId`, `AttentionAlert`, `DailySummary`, `ProtectionOff`, `SecurityAlert`, `SecurityAlertBypassQuietHours`, `QuietStartMinutes`, `QuietEndMinutes`, `DailySummaryMinutes`, `TimeZoneId`, `UpdatedAtUtc` | một bản/gia đình |
+| `DailySummaries` | `Id`, `FamilyId`, `DesktopDeviceId`, `LocalDate date`, `SessionsCount`, các cột `*Seconds`, `BlockedAttempts`, `AttentionPercent?`, `CoveragePercent?`, `UpdatedAtUtc` | unique `(FamilyId, DesktopDeviceId, LocalDate)` cho upsert |
+| `SyncEvents` | `Id`, `FamilyId`, `ClientEventId`, `Type`, `ReceivedAtUtc`, `ProcessedAtUtc`, `Status` | unique `(FamilyId, ClientEventId)`; payload xử lý ngay, không lưu |
+| `Notifications` | `Id`, `FamilyId`, `Category`, `DedupeKey`, `LocalDate?`, `CreatedAtUtc`, `SentAtUtc`, `Status`, `FailureCode` | unique `(FamilyId, DedupeKey)` |
+| `CloudAuditLogs` | `Id`, `FamilyId?`, `ActorDeviceId?`, `Action`, `MetadataJson jsonb`, `CreatedAtUtc` | FK `SET NULL` để giữ bản ghi ẩn danh sau khi xóa |
 
-Quan hệ cascade từ `Families`; xóa gia đình xóa toàn bộ bảng con.
+Quan hệ cascade từ `Families` xuống các bảng con; riêng `CloudAuditLogs` dùng `ON DELETE SET NULL` để
+bản ghi audit còn lại nhưng không còn định danh gia đình/thiết bị. Check constraint bảo vệ dữ liệu:
+giây ≥ 0, phần trăm 0–100 hoặc NULL, quiet minutes 0–1439 và `Kind`/`Type`/`Status`/`Category` chỉ nhận
+giá trị enum đã định nghĩa.
+
+Migration `InitialCloudSchema` nằm trong `cloud/EduFocus.Cloud.Data/Migrations`. Startup chỉ tự chạy
+migration khi `EDUFOCUS_CLOUD_AUTO_MIGRATE=true`; mặc định tắt và production chạy migration tường minh
+(`dotnet ef database update`).
 
 ## 6. Thời hạn lưu trên cloud
 

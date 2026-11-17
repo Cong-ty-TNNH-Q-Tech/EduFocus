@@ -63,17 +63,30 @@ EDUFOCUS_CLOUD_TEST_DB="Host=localhost;Port=5432;Database=edufocus_cloud_test;Us
   dotnet test EduFocus.Cloud.slnx -c Release
 ```
 
+Test này tạo lại schema từ migration, kiểm tra unique `(FamilyId, ClientEventId)`, upsert
+`DailySummaries`, partial unique index của pairing code, cascade delete và audit ẩn danh.
+
+## Migration
+
+```bash
+dotnet tool restore
+dotnet ef database update --project cloud/EduFocus.Cloud.Data --startup-project cloud/EduFocus.Cloud.Data
+dotnet ef migrations add <TenMigration> --project cloud/EduFocus.Cloud.Data --startup-project cloud/EduFocus.Cloud.Data --output-dir Migrations
+```
+
+Startup chỉ tự chạy migration khi `EDUFOCUS_CLOUD_AUTO_MIGRATE=true`; production nên chạy migration
+tường minh trước khi deploy.
+
 ## Cấu trúc
 
 | Project | Vai trò |
 |---|---|
 | `EduFocus.Cloud.Api` | Minimal API nhóm `/v1`, `/healthz`, ProblemDetails, OpenAPI (Development), Serilog JSON |
 | `EduFocus.Cloud.Contracts` | DTO/enum dùng chung cho API, desktop và mobile; JSON camelCase |
-| `EduFocus.Cloud.Data` | `CloudDbContext`, design-time factory, EF Core 10 + Npgsql |
-| `EduFocus.Cloud.Tests` | xUnit: serialization contract, cấu hình DB, test tích hợp tùy chọn |
+| `EduFocus.Cloud.Data` | Entity, cấu hình EF Core 10 + Npgsql, `CloudDbContext`, migration `InitialCloudSchema` |
+| `EduFocus.Cloud.Tests` | xUnit: serialization contract, cấu hình DB, test tích hợp schema tùy chọn |
 
-Migration và entity sẽ được bổ sung ở issue #79. API nghiệp vụ (pairing, ingest, push, reports) được
-bổ sung ở các issue #81–#84.
+API nghiệp vụ (pairing, ingest, push, reports) được bổ sung ở các issue #81–#84.
 
 ## Biến môi trường
 
@@ -81,6 +94,7 @@ bổ sung ở các issue #81–#84.
 |---|---|---|
 | `ConnectionStrings__Postgres` | Production | Chuỗi kết nối PostgreSQL |
 | `EDUFOCUS_CLOUD_PUBLIC_URL` | Khuyến nghị | Base URL công khai dùng để tạo QR/pairing URI |
+| `EDUFOCUS_CLOUD_AUTO_MIGRATE` | Không | `true` để startup tự chạy migration; mặc định tắt |
 | `ASPNETCORE_ENVIRONMENT` | Không | `Development` bật OpenAPI và fallback DB |
 | `ASPNETCORE_URLS` | Không | Mặc định trong Docker là `http://+:8080` |
 | `POSTGRES_DB`, `POSTGRES_USER`, `POSTGRES_PASSWORD` | Compose | Thông tin PostgreSQL |
