@@ -34,14 +34,23 @@ public sealed class ContractsSerializationTests
     {
         var payload = JsonSerializer.SerializeToElement(
             new DailySummaryPayload(
-                DateTimeOffset.Parse("2026-11-17T13:30:00Z"),
                 new DateOnly(2026, 11, 17),
-                95,
-                71,
-                6,
+                "Asia/Ho_Chi_Minh",
+                DateTimeOffset.Parse("2026-11-17T13:30:00Z"),
+                1,
+                5700,
+                5640,
+                0,
+                2700,
+                5640,
+                5000,
+                4300,
+                600,
+                120,
+                60,
                 12,
                 88,
-                45),
+                92),
             ApiJson.Options);
 
         var syncEvent = new SyncEventDto(

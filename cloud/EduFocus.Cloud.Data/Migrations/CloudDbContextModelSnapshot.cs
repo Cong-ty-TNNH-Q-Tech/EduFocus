@@ -69,14 +69,14 @@ namespace EduFocus.Cloud.Data.Migrations
                     b.Property<long>("ActiveSeconds")
                         .HasColumnType("bigint");
 
-                    b.Property<int?>("AttentionPercent")
-                        .HasColumnType("integer");
+                    b.Property<double?>("AttentionPercent")
+                        .HasColumnType("double precision");
 
                     b.Property<int>("BlockedAttempts")
                         .HasColumnType("integer");
 
-                    b.Property<int?>("CoveragePercent")
-                        .HasColumnType("integer");
+                    b.Property<double?>("CoveragePercent")
+                        .HasColumnType("double precision");
 
                     b.Property<Guid>("DesktopDeviceId")
                         .HasColumnType("uuid");

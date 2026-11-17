@@ -29,14 +29,17 @@ public enum AttentionAlertKind
     Absent,
 }
 
-[JsonConverter(typeof(JsonStringEnumConverter<ProtectionOffReason>))]
-public enum ProtectionOffReason
+[JsonConverter(typeof(JsonStringEnumConverter<ProtectionOffSource>))]
+public enum ProtectionOffSource
 {
-    [JsonStringEnumMemberName("parent_exit")]
-    ParentExit,
+    [JsonStringEnumMemberName("parent")]
+    Parent,
 
-    [JsonStringEnumMemberName("manual")]
-    Manual,
+    [JsonStringEnumMemberName("schedule")]
+    Schedule,
+
+    [JsonStringEnumMemberName("exit")]
+    Exit,
 }
 
 [JsonConverter(typeof(JsonStringEnumConverter<SecurityAlertKind>))]
@@ -44,6 +47,19 @@ public enum SecurityAlertKind
 {
     [JsonStringEnumMemberName("clock_jump")]
     ClockJump,
+}
+
+[JsonConverter(typeof(JsonStringEnumConverter<SyncEventResultStatus>))]
+public enum SyncEventResultStatus
+{
+    [JsonStringEnumMemberName("applied")]
+    Applied,
+
+    [JsonStringEnumMemberName("duplicate")]
+    Duplicate,
+
+    [JsonStringEnumMemberName("rejected")]
+    Rejected,
 }
 
 public sealed record SyncEventDto(
@@ -54,29 +70,41 @@ public sealed record SyncEventDto(
 
 public sealed record SyncBatchRequest(IReadOnlyList<SyncEventDto> Events);
 
-public sealed record SyncRejectedEvent(string ClientEventId, string Code, string Message);
+public sealed record SyncEventResult(
+    string ClientEventId,
+    SyncEventResultStatus Status,
+    string? Code = null,
+    string? Message = null);
 
 public sealed record SyncBatchResponse(
-    int Accepted,
-    int Duplicates,
-    IReadOnlyList<SyncRejectedEvent> Rejected,
+    IReadOnlyList<SyncEventResult> Results,
     DateTimeOffset ServerTimeUtc);
 
 public sealed record DailySummaryPayload(
-    DateTimeOffset GeneratedAtUtc,
     DateOnly LocalDate,
-    int StudyMinutes,
-    int FocusedMinutes,
-    int DistractionCount,
+    string? TimeZoneId,
+    DateTimeOffset GeneratedAtUtc,
+    int SessionsCount,
+    long ActiveSeconds,
+    long StudySeconds,
+    long IdleSeconds,
+    long OnlineClassSeconds,
+    long MonitoringEligibleSeconds,
+    long MonitoredSeconds,
+    long FocusedSeconds,
+    long DistractedSeconds,
+    long AbsentSeconds,
+    long DrowsySeconds,
     int BlockedAttempts,
-    int CameraCoveragePercent,
-    int OnlineClassMinutes);
+    double? AttentionPercent,
+    double? CoveragePercent);
 
 public sealed record AttentionAlertPayload(
     AttentionAlertKind Kind,
+    DateOnly LocalDate,
     DateTimeOffset StartedAtUtc,
     int DurationSeconds);
 
-public sealed record ProtectionOffPayload(ProtectionOffReason Reason);
+public sealed record ProtectionOffPayload(ProtectionOffSource Source, DateOnly LocalDate);
 
-public sealed record SecurityAlertPayload(SecurityAlertKind Kind);
+public sealed record SecurityAlertPayload(SecurityAlertKind Kind, DateOnly LocalDate);

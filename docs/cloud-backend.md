@@ -60,60 +60,72 @@ Mỗi sự kiện có `clientEventId` (UUID do desktop sinh) để ingest idempo
 
 ```json
 {
+  "clientEventId": "uuid",
   "type": "daily_summary",
-  "clientEventId": "0f4c…",
-  "generatedAtUtc": "2026-11-17T13:30:00Z",
-  "localDate": "2026-11-17",
-  "studyMinutes": 95,
-  "focusedMinutes": 71,
-  "distractionCount": 6,
-  "blockedAttempts": 12,
-  "cameraCoveragePercent": 88,
-  "onlineClassMinutes": 45
+  "occurredAtUtc": "2026-11-17T13:30:00Z",
+  "payload": {
+    "localDate": "2026-11-17",
+    "timeZoneId": "Asia/Ho_Chi_Minh",
+    "generatedAtUtc": "2026-11-17T13:30:00Z",
+    "sessionsCount": 3,
+    "activeSeconds": 7200, "studySeconds": 6500, "idleSeconds": 700,
+    "onlineClassSeconds": 3600, "monitoringEligibleSeconds": 7000,
+    "monitoredSeconds": 6300, "focusedSeconds": 5400,
+    "distractedSeconds": 600, "absentSeconds": 240, "drowsySeconds": 60,
+    "blockedAttempts": 12,
+    "attentionPercent": 85.7, "coveragePercent": 90.0
+  }
 }
 ```
 
 - Upsert **latest-wins** theo `(familyId, deviceId, localDate)`; bản có `generatedAtUtc` lớn hơn thay
-  bản cũ. Desktop có thể gửi lại nhiều lần trong ngày.
+  bản cũ (`generatedAtUtc` được lưu ở `DailySummaries.UpdatedAtUtc`). Desktop có thể gửi lại nhiều
+  lần trong ngày.
+- Chỉ nhận cho **7 ngày gần nhất** theo múi giờ gia đình (`Sync__DailySummaryWindowDays`); cũ hơn bị
+  từ chối `stale_summary`.
 - Không chứa category chi tiết, timeline hay tên ứng dụng/domain.
 
 ### 3.2. `attention_alert`
 
 ```json
 {
-  "type": "attention_alert",
   "clientEventId": "5a19…",
-  "kind": "distracted",
-  "startedAtUtc": "2026-11-17T09:05:00Z",
-  "durationSeconds": 420
+  "type": "attention_alert",
+  "occurredAtUtc": "2026-11-17T09:12:00Z",
+  "payload": {
+    "kind": "distracted",
+    "localDate": "2026-11-17",
+    "startedAtUtc": "2026-11-17T09:05:00Z",
+    "durationSeconds": 420
+  }
 }
 ```
 
 - Chỉ sinh khi trạng thái kéo dài **≥ 5 phút** và tối đa **1 thông báo/15 phút/loại**.
-- `kind`: `distracted` | `absent`. Không gửi `drowsy` trong bản này.
+- `kind`: `distracted` | `absent`. Server từ chối `durationSeconds < 60`.
 
 ### 3.3. `protection_off`
 
 ```json
 {
-  "type": "protection_off",
   "clientEventId": "9e02…",
+  "type": "protection_off",
   "occurredAtUtc": "2026-11-17T11:02:00Z",
-  "reason": "parent_exit"
+  "payload": { "source": "parent", "localDate": "2026-11-17" }
 }
 ```
 
-- Chỉ phát khi phụ huynh chủ động tắt hoặc thoát bằng PIN (`parent_exit`/`manual`). Không phát khi
-  lịch tự tắt hoặc khi cập nhật/lỗi hệ thống.
+- `source`: `parent` (tắt qua PIN) | `exit` (thoát bằng PIN). Desktop **không** phát khi lịch tự tắt;
+  giá trị `schedule` vẫn được schema chấp nhận để tương thích nhưng không dùng trong bản này.
 
 ### 3.4. `security_alert`
 
 ```json
 {
-  "type": "security_alert",
   "clientEventId": "audit-1234",
-  "kind": "clock_jump",
-  "occurredAtUtc": "2026-11-17T02:10:00Z"
+  "type": "security_alert",
+  "occurredAtUtc": "2026-11-17T02:10:00Z",
+  "payload": { "kind": "clock_jump", "localDate": "2026-11-17" }
 }
 ```
 
@@ -166,9 +178,16 @@ hiệu. Claim dùng cập nhật nguyên tử để hai điện thoại không t
 
 ### 4.2. Ingest
 
-- Batch ≤ **50** sự kiện, body ≤ **64 KB**; vượt → `413`.
-- Mỗi sự kiện idempotent theo `(familyId, clientEventId)`; trùng thì bỏ qua và trả trạng thái đã nhận.
-- Rate limit desktop: 60 request/phút/token.
+- Batch ≤ **50** sự kiện, body ≤ **64 KB**; vượt → `400 too_many_events` hoặc `413 payload_too_large`.
+- Body: `{ "events": [ { clientEventId, type, occurredAtUtc, payload } ] }`. Mỗi event nhận kết quả
+  `applied` | `duplicate` | `rejected` kèm `code` khi bị từ chối; HTTP 200 nếu batch đọc được.
+- Payload được validate theo whitelist từng type; **field lạ bị từ chối** (`unknown_field`). Số giây
+  0–86400, phần trăm 0–100 hoặc null, `timeZoneId` IANA hợp lệ (đổi múi giờ được ghi audit).
+- Idempotent theo `(familyId, clientEventId)`; event đã nhận trả `duplicate`, không tạo notification
+  lần hai. Event bị từ chối vẫn lưu `SyncEvents.Status = Rejected` để chống retry lặp.
+- `daily_summary` upsert theo `(familyId, deviceId, localDate)`, chỉ ghi đè khi `generatedAtUtc` mới
+  hơn. Alert events giữ `Pending` cho push worker; daily summary xử lý xong ngay (`Processed`).
+- Lỗi DB → `503 store_unavailable` để desktop retry; rate limit desktop **60 request/phút/token**.
 - Outbox phía desktop: retry backoff 1 → 60 phút, tối đa 5.000 sự kiện/7 ngày; quá hạn thì bỏ bản
   ghi cũ nhất và ghi audit cục bộ.
 
@@ -193,7 +212,7 @@ hiệu. Claim dùng cập nhật nguyên tử để hai điện thoại không t
 | `PairingSessions` | `Id`, `FamilyId`, `DesktopDeviceId`, `CodeHash char(64)`, `CreatedAtUtc`, `ExpiresAtUtc`, `ClaimedAtUtc`, `ClaimedByDeviceId`, `AttemptCount` | unique partial trên `CodeHash` khi `ClaimedAtUtc IS NULL` |
 | `PushRegistrations` | `Id`, `DeviceId`, `FcmToken`, `Platform`, `UpdatedAtUtc`, `InvalidatedAtUtc` | token FCM là dữ liệu nhạy cảm |
 | `NotificationPreferences` | `FamilyId`, `AttentionAlert`, `DailySummary`, `ProtectionOff`, `SecurityAlert`, `SecurityAlertBypassQuietHours`, `QuietStartMinutes`, `QuietEndMinutes`, `DailySummaryMinutes`, `TimeZoneId`, `UpdatedAtUtc` | một bản/gia đình |
-| `DailySummaries` | `Id`, `FamilyId`, `DesktopDeviceId`, `LocalDate date`, `SessionsCount`, các cột `*Seconds`, `BlockedAttempts`, `AttentionPercent?`, `CoveragePercent?`, `UpdatedAtUtc` | unique `(FamilyId, DesktopDeviceId, LocalDate)` cho upsert |
+| `DailySummaries` | `Id`, `FamilyId`, `DesktopDeviceId`, `LocalDate date`, `SessionsCount`, các cột `*Seconds`, `BlockedAttempts`, `AttentionPercent double?`, `CoveragePercent double?`, `UpdatedAtUtc` | unique `(FamilyId, DesktopDeviceId, LocalDate)` cho upsert; `UpdatedAtUtc` = `generatedAtUtc` mới nhất |
 | `SyncEvents` | `Id`, `FamilyId`, `ClientEventId`, `Type`, `ReceivedAtUtc`, `ProcessedAtUtc`, `Status` | unique `(FamilyId, ClientEventId)`; payload xử lý ngay, không lưu |
 | `Notifications` | `Id`, `FamilyId`, `Category`, `DedupeKey`, `LocalDate?`, `CreatedAtUtc`, `SentAtUtc`, `Status`, `FailureCode` | unique `(FamilyId, DedupeKey)` |
 | `CloudAuditLogs` | `Id`, `FamilyId?`, `ActorDeviceId?`, `Action`, `MetadataJson jsonb`, `CreatedAtUtc` | FK `SET NULL` để giữ bản ghi ẩn danh sau khi xóa |

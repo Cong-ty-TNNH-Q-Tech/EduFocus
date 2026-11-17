@@ -65,7 +65,8 @@ EDUFOCUS_CLOUD_TEST_DB="Host=localhost;Port=5432;Database=edufocus_cloud_test;Us
 
 Test này tạo lại schema từ migration, kiểm tra unique `(FamilyId, ClientEventId)`, upsert
 `DailySummaries`, partial unique index của pairing code, cascade delete, audit ẩn danh, luồng ghép
-nối đầy đủ qua HTTP (tạo phiên → claim → trạng thái → link → xoay/thu hồi token) và rate limit 429.
+nối đầy đủ qua HTTP (tạo phiên → claim → trạng thái → link → xoay/thu hồi token), ingest idempotent
+(áp dụng/trùng/từ chối, latest-wins, giới hạn batch) và rate limit 429.
 
 ## Migration
 
@@ -87,9 +88,9 @@ tường minh trước khi deploy.
 | `EduFocus.Cloud.Data` | Entity, cấu hình EF Core 10 + Npgsql, `CloudDbContext`, migration `InitialCloudSchema` |
 | `EduFocus.Cloud.Tests` | xUnit: serialization contract, test tích hợp schema/pairing/rate limit tùy chọn |
 
-Đã có ở #81: pairing (`/v1/pairing`), xác thực token thiết bị (`efd_`/`efm_`), `/v1/link/status`,
-`/v1/devices/{id}` và `/v1/devices/token/rotate`. Ingest, push, preferences và báo cáo bổ sung ở các
-issue #82–#84.
+Đã có ở #81–#82: pairing (`/v1/pairing`), xác thực token thiết bị (`efd_`/`efm_`), `/v1/link/status`,
+`/v1/devices/{id}`, `/v1/devices/token/rotate` và ingest `/v1/sync/events` (batch ≤50, ≤64 KB,
+idempotent, latest-wins daily summary). Push, preferences và báo cáo bổ sung ở các issue #83–#84.
 
 ## Biến môi trường
 

@@ -14,6 +14,7 @@ public static class RateLimitPolicies
     public const string PairingCreate = "pairing-create";
     public const string PairingClaim = "pairing-claim";
     public const string Token = "token";
+    public const string Sync = "sync";
 }
 
 public static class RateLimitSetup
@@ -32,6 +33,9 @@ public static class RateLimitSetup
 
             options.AddPolicy(RateLimitPolicies.Token, context =>
                 FixedWindow(TokenKey(context), limits.RequestsPerMinute, TimeSpan.FromMinutes(1)));
+
+            options.AddPolicy(RateLimitPolicies.Sync, context =>
+                FixedWindow($"sync:{TokenKey(context)}", limits.SyncRequestsPerMinute, TimeSpan.FromMinutes(1)));
 
             options.OnRejected = async (rejectedContext, cancellationToken) =>
             {

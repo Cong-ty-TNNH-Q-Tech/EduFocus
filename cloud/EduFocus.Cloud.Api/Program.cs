@@ -9,6 +9,7 @@ using EduFocus.Cloud.Api.Logging;
 using EduFocus.Cloud.Api.Options;
 using EduFocus.Cloud.Api.Pairing;
 using EduFocus.Cloud.Api.RateLimiting;
+using EduFocus.Cloud.Api.Sync;
 using EduFocus.Cloud.Contracts.Common;
 using EduFocus.Cloud.Data;
 using Microsoft.AspNetCore.Authentication;
@@ -61,6 +62,18 @@ var rateLimits = builder.Configuration
     .Get<RateLimitOptions>() ?? new RateLimitOptions();
 builder.Services.AddCloudRateLimiting(rateLimits);
 
+builder.Services.AddOptions<SyncOptions>()
+    .Bind(builder.Configuration.GetSection(SyncOptions.SectionName))
+    .Validate(
+        options => options.MaxEventsPerBatch is > 0 and <= 500,
+        "Sync:MaxEventsPerBatch must be between 1 and 500")
+    .Validate(
+        options => options.MaxBodyBytes is >= 1024 and <= 1024 * 1024,
+        "Sync:MaxBodyBytes must be between 1 KB and 1 MB")
+    .Validate(
+        options => options.DailySummaryWindowDays is > 0 and <= 31,
+        "Sync:DailySummaryWindowDays must be between 1 and 31")
+    .ValidateOnStart();
 builder.Services.AddOptions<CloudApiOptions>()
     .Bind(builder.Configuration.GetSection(CloudApiOptions.SectionName))
     .PostConfigure(options =>
@@ -101,6 +114,7 @@ app.UseStatusCodePages(async context =>
         StatusCodes.Status403Forbidden => ("forbidden", "Thiết bị không có quyền truy cập."),
         StatusCodes.Status404NotFound => ("not_found", "Không tìm thấy dữ liệu."),
         StatusCodes.Status405MethodNotAllowed => ("method_not_allowed", "Phương thức không được hỗ trợ."),
+        StatusCodes.Status413PayloadTooLarge => ("payload_too_large", "Dữ liệu gửi lên quá lớn."),
         StatusCodes.Status415UnsupportedMediaType => ("unsupported_media_type", "Định dạng nội dung không được hỗ trợ."),
         _ => ("request_failed", "Yêu cầu không hợp lệ."),
     };
@@ -136,6 +150,7 @@ v1.MapGet("/", () => Results.Ok(new
 v1.MapPairingEndpoints();
 v1.MapDeviceEndpoints();
 v1.MapLinkEndpoints();
+v1.MapSyncEndpoints();
 app.Run();
 
 public partial class Program;

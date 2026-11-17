@@ -18,7 +18,7 @@ public sealed class DailySummary
     public long AbsentSeconds { get; set; }
     public long DrowsySeconds { get; set; }
     public int BlockedAttempts { get; set; }
-    public int? AttentionPercent { get; set; }
-    public int? CoveragePercent { get; set; }
+    public double? AttentionPercent { get; set; }
+    public double? CoveragePercent { get; set; }
     public DateTimeOffset UpdatedAtUtc { get; set; }
 }

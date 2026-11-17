@@ -9,4 +9,6 @@ public sealed class RateLimitOptions
     public int PairingClaimPerHour { get; set; } = 20;
 
     public int RequestsPerMinute { get; set; } = 120;
+
+    public int SyncRequestsPerMinute { get; set; } = 60;
 }
