@@ -16,6 +16,7 @@ public sealed class SchemaTests
         "AuditLogs",
         "BlockedAttempts",
         "BlockRules",
+        "CloudLink",
         "ParentCredentials",
         "ScheduleWindows",
         "StudySessions"
@@ -96,11 +97,12 @@ public sealed class SchemaTests
             connection,
             "SELECT MigrationId FROM __EFMigrationsHistory ORDER BY MigrationId;");
 
-        migrations.Should().HaveCount(4)
+        migrations.Should().HaveCount(5)
             .And.Contain(migration => migration.EndsWith("_InitialEduFocusSchema"))
             .And.Contain(migration => migration.EndsWith("_AddOnboardingConsent"))
             .And.Contain(migration => migration.EndsWith("_AddProtectionSource"))
-            .And.Contain(migration => migration.EndsWith("_AddUpdateCheckOptIn"));
+            .And.Contain(migration => migration.EndsWith("_AddUpdateCheckOptIn"))
+            .And.Contain(migration => migration.EndsWith("_AddCloudLink"));
     }
 
     [Fact]

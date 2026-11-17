@@ -484,6 +484,70 @@ namespace EduFocus.SqliteDataAccess.Migrations
                         });
                 });
 
+            modelBuilder.Entity("EduFocus.Domain.Entities.CloudLink", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("TEXT(36)");
+
+                    b.Property<string>("CloudBaseUrl")
+                        .HasMaxLength(512)
+                        .HasColumnType("TEXT(512)");
+
+                    b.Property<string>("ConsentAcceptedAtUtc")
+                        .HasColumnType("TEXT(28)");
+
+                    b.Property<string>("CreatedAtUtc")
+                        .IsRequired()
+                        .HasColumnType("TEXT(28)");
+
+                    b.Property<Guid?>("DesktopDeviceId")
+                        .HasColumnType("TEXT(36)");
+
+                    b.Property<string>("DesktopToken")
+                        .HasMaxLength(256)
+                        .HasColumnType("TEXT(256)");
+
+                    b.Property<Guid?>("FamilyId")
+                        .HasColumnType("TEXT(36)");
+
+                    b.Property<bool>("IsEnabled")
+                        .HasColumnType("INTEGER")
+                        .HasDefaultValue(false);
+
+                    b.Property<string>("LastError")
+                        .HasMaxLength(512)
+                        .HasColumnType("TEXT(512)");
+
+                    b.Property<string>("LastSyncAtUtc")
+                        .HasColumnType("TEXT(28)");
+
+                    b.Property<string>("LinkedAtUtc")
+                        .HasColumnType("TEXT(28)");
+
+                    b.Property<string>("PairingCode")
+                        .HasMaxLength(32)
+                        .HasColumnType("TEXT(32)");
+
+                    b.Property<string>("PairingExpiresAtUtc")
+                        .HasColumnType("TEXT(28)");
+
+                    b.Property<Guid?>("PairingSessionId")
+                        .HasColumnType("TEXT(36)");
+
+                    b.Property<string>("UpdatedAtUtc")
+                        .IsRequired()
+                        .HasColumnType("TEXT(28)");
+
+                    b.HasKey("Id");
+
+                    b.ToTable("CloudLink", null, t =>
+                        {
+                            t.HasCheckConstraint("CK_CloudLink_EnabledRequiresConsent", "\"IsEnabled\" = 0 OR \"ConsentAcceptedAtUtc\" IS NOT NULL");
+
+                            t.HasCheckConstraint("CK_CloudLink_TokenClearedWhenDisabled", "\"DesktopToken\" IS NULL OR \"IsEnabled\" = 1");
+                        });
+                });
+
             modelBuilder.Entity("EduFocus.Domain.Entities.ParentCredential", b =>
                 {
                     b.Property<Guid>("Id")

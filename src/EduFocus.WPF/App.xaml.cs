@@ -1,15 +1,18 @@
 using System.IO;
+using System.Net.Http;
 using System.Windows;
 using EduFocus.Domain.Attention;
 using EduFocus.Domain.Protection;
 using EduFocus.Infrastructure;
 using EduFocus.Infrastructure.Attention;
 using EduFocus.Infrastructure.Attention.Camera;
+using EduFocus.Infrastructure.Cloud;
 using EduFocus.Infrastructure.Protection.Certificates;
 using EduFocus.Infrastructure.ServiceControl;
 using EduFocus.Infrastructure.Watchdog;
 using EduFocus.Ports.DTOs;
 using EduFocus.Ports.Inbound;
+using EduFocus.Ports.Outbound.Cloud;
 using EduFocus.Ports.Outbound.Persistence;
 using EduFocus.Ports.Outbound.Services;
 using EduFocus.Ports.ServiceControl;
@@ -19,6 +22,7 @@ using EduFocus.UseCases.Activity;
 using EduFocus.UseCases.Attention;
 using EduFocus.UseCases.Auth;
 using EduFocus.UseCases.Blocking;
+using EduFocus.UseCases.Cloud;
 using EduFocus.UseCases.Lifecycle;
 using EduFocus.UseCases.Onboarding;
 using EduFocus.UseCases.Privacy;
@@ -236,6 +240,13 @@ public partial class App : Application
         services.AddSingleton<IActivitySampleRepository, SqliteActivitySampleRepository>();
         services.AddSingleton<IRetentionRepository, SqliteRetentionRepository>();
         services.AddSingleton<IPrivacyDataRepository, SqlitePrivacyDataRepository>();
+        services.AddSingleton<ICloudLinkRepository, SqliteCloudLinkRepository>();
+        // The optional cloud relay stays inert until the parent enables it;
+        // resolving these singletons performs no network access.
+        services.AddSingleton<ICloudSyncPort>(_ => new CloudSyncClient(
+            new HttpClient { Timeout = CloudSyncClient.RequestTimeout },
+            typeof(App).Assembly.GetName().Version?.ToString(3) ?? "1.0.0"));
+        services.AddSingleton<ICloudLinkUseCase, CloudLinkService>();
         services.AddSingleton<ISystemPowerEventPort, WindowsSystemPowerEventPort>();
         services.AddSingleton(new StudySessionHeartbeatOptions());
         services.AddSingleton<IStudySessionHeartbeatUseCase, StudySessionHeartbeatService>();

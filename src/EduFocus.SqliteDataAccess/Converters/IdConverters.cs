@@ -47,3 +47,8 @@ public sealed class AuditLogIdConverter : ValueConverter<AuditLogId, Guid>
 {
     public AuditLogIdConverter() : base(id => id.Value, value => AuditLogId.From(value)) { }
 }
+
+public sealed class CloudLinkIdConverter : ValueConverter<CloudLinkId, Guid>
+{
+    public CloudLinkIdConverter() : base(id => id.Value, value => CloudLinkId.From(value)) { }
+}

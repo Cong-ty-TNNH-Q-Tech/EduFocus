@@ -18,11 +18,12 @@ public sealed class InitializationTests
         var result = await db.CreateInitializer().InitializeAsync();
 
         result.WasCreated.Should().BeTrue();
-        result.AppliedMigrations.Should().HaveCount(4)
+        result.AppliedMigrations.Should().HaveCount(5)
             .And.Contain(migration => migration.EndsWith("_InitialEduFocusSchema"))
             .And.Contain(migration => migration.EndsWith("_AddOnboardingConsent"))
             .And.Contain(migration => migration.EndsWith("_AddProtectionSource"))
-            .And.Contain(migration => migration.EndsWith("_AddUpdateCheckOptIn"));
+            .And.Contain(migration => migration.EndsWith("_AddUpdateCheckOptIn"))
+            .And.Contain(migration => migration.EndsWith("_AddCloudLink"));
         result.BackupPath.Should().BeNull();
         File.Exists(db.DatabasePath).Should().BeTrue();
         db.Logger.Errors.Should().BeEmpty();
@@ -197,8 +198,8 @@ public sealed class InitializationTests
 
         var result = await db.CreateInitializer().InitializeAsync();
 
-        result.AppliedMigrations.Should().HaveCount(3);
-        result.AppliedMigrations.Last().Should().EndWith("_AddUpdateCheckOptIn");
+        result.AppliedMigrations.Should().HaveCount(4);
+        result.AppliedMigrations.Last().Should().EndWith("_AddCloudLink");
         result.BackupPath.Should().NotBeNullOrEmpty();
         File.Exists(result.BackupPath!).Should().BeTrue();
 

@@ -10,5 +10,6 @@ public static class LogCategories
     public const string Watchdog = "Watchdog";
     public const string Session = "Session";
     public const string Attention = "Attention";
+    public const string Cloud = "Cloud";
     public const string UI = "UI";
 }

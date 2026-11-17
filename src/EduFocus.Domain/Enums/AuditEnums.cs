@@ -35,5 +35,11 @@ public enum AuditEventType
     RetentionApplied,
     AuthenticationFailed,
     ProtectionServiceStarted,
-    ProtectionServiceStopped
+    ProtectionServiceStopped,
+    CloudConsentRecorded,
+    CloudConsentRevoked,
+    CloudLinkEnabled,
+    CloudPairingCodeCreated,
+    CloudLinkRevoked,
+    CloudDataDeletionRequested
 }

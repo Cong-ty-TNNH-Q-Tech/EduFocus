@@ -80,3 +80,12 @@ public readonly record struct AuditLogId(Guid Value)
     public bool IsEmpty => Value == Guid.Empty;
     public override string ToString() => Value.ToString();
 }
+
+public readonly record struct CloudLinkId(Guid Value)
+{
+    public static CloudLinkId New() => new(Guid.NewGuid());
+    public static CloudLinkId From(Guid value) => new(value);
+    public static readonly CloudLinkId Empty = new(Guid.Empty);
+    public bool IsEmpty => Value == Guid.Empty;
+    public override string ToString() => Value.ToString();
+}

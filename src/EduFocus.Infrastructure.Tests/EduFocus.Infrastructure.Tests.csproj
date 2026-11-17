@@ -22,6 +22,7 @@
   <ItemGroup>
     <ProjectReference Include="..\EduFocus.Infrastructure\EduFocus.Infrastructure.csproj" />
     <ProjectReference Include="..\EduFocus.Infrastructure.Attention\EduFocus.Infrastructure.Attention.csproj" />
+    <ProjectReference Include="..\EduFocus.Infrastructure.Cloud\EduFocus.Infrastructure.Cloud.csproj" />
     <ProjectReference Include="..\EduFocus.Ports\EduFocus.Ports.csproj" />
   </ItemGroup>
 

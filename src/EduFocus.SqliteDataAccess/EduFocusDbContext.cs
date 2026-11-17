@@ -35,6 +35,8 @@ public sealed class EduFocusDbContext : DbContext
 
     public DbSet<AuditLog> AuditLogs => Set<AuditLog>();
 
+    public DbSet<CloudLink> CloudLinks => Set<CloudLink>();
+
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         modelBuilder.ApplyConfigurationsFromAssembly(typeof(EduFocusDbContext).Assembly);
@@ -88,6 +90,10 @@ public sealed class EduFocusDbContext : DbContext
 
         configurationBuilder.Properties<AuditLogId>()
             .HaveConversion<AuditLogIdConverter>()
+            .HaveColumnType("TEXT(36)");
+
+        configurationBuilder.Properties<CloudLinkId>()
+            .HaveConversion<CloudLinkIdConverter>()
             .HaveColumnType("TEXT(36)");
     }
 }
