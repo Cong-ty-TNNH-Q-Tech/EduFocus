@@ -1168,7 +1168,7 @@ huynh ở ngoài nhà.
      đình. Audit `CloudUnlinked`.
 - **Xóa toàn bộ dữ liệu cloud trên app mobile:**
   1. App yêu cầu gõ `XÓA` và xác nhận lần hai.
-  2. App gọi `DELETE /v1/family` với header `X-Confirm: XÓA`.
+  2. App gọi `DELETE /v1/family` với body `{ "confirmation": "XÓA" }`.
   3. Backend xóa cascade gia đình, thiết bị, token, push registration, summary, notification và sync
      event; ghi audit tối thiểu (không chứa nội dung).
   4. App xóa token cục bộ và trở về màn hình ghép nối; desktop nhận `401` ở lần sync kế tiếp và tự

@@ -339,4 +339,7 @@ yêu cầu; retention chỉ dọn các bản ghi còn sót của gia đình đã
 - [privacy-notice.md](./privacy-notice.md) — thông báo quyền riêng tư bản 2.0.
 - [dpia.md](./dpia.md) — data map và đánh giá rủi ro bổ sung cho cloud.
 - [use_cases.md](./use_cases.md) — UC15–UC18.
+- [mobile/README.md](../mobile/README.md) — bốn màn hình, push FCM, ký APK và hướng dẫn cài.
+- [phase8-e2e-checklist.md](./phase8-e2e-checklist.md) — ma trận E2E, kiểm tra dữ liệu/quyền riêng tư
+  và demo script.
 - [system_architecture.md](./system_architecture.md) §10–§11 — vị trí cloud trong kiến trúc.

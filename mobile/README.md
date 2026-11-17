@@ -6,6 +6,7 @@ không điều khiển từ xa bảo vệ của máy học sinh trong phase này
 - Kiến trúc và API: [../docs/cloud-backend.md](../docs/cloud-backend.md)
 - Quyết định cloud: [../docs/adr/ADR-20-optional-cloud-relay.md](../docs/adr/ADR-20-optional-cloud-relay.md)
 - Luồng ghép nối: [../docs/use_cases.md](../docs/use_cases.md) (UC15–UC18)
+- Kiểm thử E2E và demo: [../docs/phase8-e2e-checklist.md](../docs/phase8-e2e-checklist.md)
 
 ## Cấu trúc
 
@@ -212,8 +213,14 @@ APK ký nằm trong `publish/` với tên `com.qtech.edufocus.parent-Signed.apk`
 | Orientation | Dọc |
 | Tab | Tổng quan, Báo cáo, Thông báo, Cài đặt |
 
-## Bảo mật
+## Giới hạn đã biết
 
+- Push phụ thuộc FCM/Google và Google Play Services; độ trễ do mạng và chính sách pin Android.
+- App chỉ xem dữ liệu desktop đã đồng bộ; mất mạng thì dùng cache 7 ngày, không có timeline chi tiết.
+- Không điều khiển từ xa: không sửa blocklist, không bật/tắt Protection, không xem màn hình.
+- Gỡ app không tự xóa dữ liệu cloud; phải dùng **Xóa dữ liệu trên cloud** trên app.
+
+## Bảo mật
 - Token mobile (`efm_`) chỉ lưu trong `SecureStorage`; không ghi log, không đưa vào crash report.
 - `CloudApiClient` không hard-code domain; base URL lấy từ QR hoặc cấu hình self-host.
 - Timeout 15 giây; lỗi API được chuyển thành `CloudApiException` có mã và thông báo tiếng Việt.

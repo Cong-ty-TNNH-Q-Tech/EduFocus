@@ -261,7 +261,9 @@ xóa dữ liệu cloud — UI phải phân biệt rõ hai thao tác.
 
 - Rà soát lại DPIA **trước mỗi bản phát hành lớn**, khi thêm nhóm dữ liệu/tính năng mới, khi đổi
   retention/chia sẻ, hoặc khi có sự cố; tối thiểu **mỗi 12 tháng**.
-- Kết quả rà soát được ghi vào [release-checklist.md](./release-checklist.md) §2.2/§2.6.
+- Kết quả rà soát được ghi vào [release-checklist.md](./release-checklist.md) §2.2/§2.7.
+- Kết quả kiểm thử E2E và kiểm tra dữ liệu/quyền riêng tư được ghi vào
+  [phase8-e2e-checklist.md](./phase8-e2e-checklist.md) trước mỗi bản phát hành cloud.
 - Hồ sơ cần được luật sư/DPO ký duyệt và lưu cùng tài liệu phát hành tối thiểu 365 ngày.
 
 | Vai trò | Tên | Ngày | Kết luận |

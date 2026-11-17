@@ -181,6 +181,8 @@ dotnet test EduFocus.slnx --configuration Release
 - [📋 Use Cases](./docs/use_cases.md) — Luồng nghiệp vụ chi tiết UC01–UC18
 - [🏛️ System Architecture](./docs/system_architecture.md) — Kiến trúc, thành phần, quyết định thiết kế
 - [☁️ Cloud Backend (Phase 8)](./docs/cloud-backend.md) — API, schema cloud, retention và vận hành
+- [📱 Mobile app & cài APK](./mobile/README.md) — bốn màn hình, push, ký số và hướng dẫn cài Android
+- [🧪 Phase 8 E2E checklist](./docs/phase8-e2e-checklist.md) — ma trận kiểm thử, dữ liệu/quyền riêng tư, demo script
 - [📱 Cloud relay ADR](./docs/adr/ADR-20-optional-cloud-relay.md) — Quyết định và đánh đổi của cloud tùy chọn
 - [🗄️ Database Schema](./docs/database_schema.md) — Schema SQLite, index, retention
 - [🧩 Domain Invariants](./docs/domain-invariants.md) — Entity invariants, ranh giới domain/DB/use case

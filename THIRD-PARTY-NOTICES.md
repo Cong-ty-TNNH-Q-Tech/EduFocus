@@ -92,13 +92,14 @@ thành phần đó chỉ được dùng qua `OpenCvSharpExtern.dll` và `opencv_
   tạo DLL này: <https://github.com/opencv/opencv/tree/4.x/3rdparty/ffmpeg>.
 - Toàn văn LGPL-2.1 nằm ở Phụ lục C.
 
-### 1.4 Thành phần Phase 8 (kế hoạch, chưa phân phối)
+### 1.4 Thành phần Phase 8 (đã triển khai)
 
-Các thành phần dưới đây sẽ được phân phối trong desktop, app Android và backend từ Phase 8. Phiên
-bản chính xác được chốt tại thời điểm phát hành và cập nhật vào tài liệu này trước khi publish.
+Các thành phần dưới đây được phân phối trong desktop, app Android và backend của Phase 8. Phiên bản
+chính xác được rà soát lại tại mỗi bản phát hành và cập nhật vào tài liệu này trước khi publish.
 
 | Thành phần | Dùng ở | Giấy phép | Bản quyền |
 | --- | --- | --- | --- |
+| Microsoft.Maui.Controls | App Android — UI | MIT | .NET Foundation and Contributors |
 | CommunityToolkit.Maui | App Android — UI/behaviors | MIT | .NET Foundation and Contributors |
 | Microsoft.Extensions.Http | Desktop — HTTP client cloud | MIT | .NET Foundation and Contributors |
 | FirebaseAdmin | Backend — gửi FCM HTTP v1 | Apache-2.0 | Google LLC |

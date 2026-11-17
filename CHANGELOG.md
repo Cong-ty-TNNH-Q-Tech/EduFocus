@@ -9,6 +9,43 @@ và dự án tuân theo [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ## [Unreleased] — Phase 8
 
+### Added (Cloud backend — #79–#85)
+
+- ASP.NET Core .NET 10 API + PostgreSQL 16: schema `Families`/`Devices`/`DeviceTokens`/
+  `PairingSessions`/`SyncEvents`/`DailySummaries`/`Notifications`/`PushRegistrations`/
+  `NotificationPreferences`, migration `InitialCloudSchema`; ghép nối thiết bị (QR hoặc mã 8 ký tự,
+  lưu hash, hết hạn) và bearer token `efd_`/`efm_` với scope tối thiểu, thu hồi/xoay vòng.
+- `POST /v1/sync/events` idempotent theo `ClientEventId`, giới hạn batch/quyền và rate limit; chỉ nhận
+  bốn loại sự kiện tổng hợp. API đọc `GET /v1/reports/daily`, `GET /v1/notifications`,
+  `GET|PUT /v1/preferences`, `GET /v1/devices`, `DELETE /v1/devices/{id}`, `DELETE /v1/family`.
+- FCM HTTP v1 **data-only**, job gửi theo preference/quiet hours/múi giờ gia đình, dedupe và xử lý
+  token invalid; retention job; Docker/Caddy deploy, backup/restore và runbook staging.
+
+### Added (Desktop — #86–#89)
+
+- CloudLink opt-in sau PIN + privacy notice, token lưu DPAPI; outbox SQLite riêng với retry backoff,
+  giới hạn 5.000 sự kiện/7 ngày và chống trùng; bốn event producer (`daily_summary`,
+  `attention_alert`, `protection_off`, `security_alert`); UI Parent Mode ghép nối QR/mã, quản lý
+  thiết bị và ngắt kết nối. Cloud tắt mặc định; Protection/camera/heartbeat không phụ thuộc cloud.
+
+### Added (Mobile — #80, #90–#92)
+
+- App .NET MAUI Android `com.qtech.edufocus.parent`: Welcome và ghép nối QR/mã thủ công, deep link chỉ
+  điền sẵn mã, xử lý mã hết hạn/rate limit; FCM receiver data-only, đăng ký token và mở đúng tab khi
+  bấm thông báo; bốn màn hình Tổng quan, Báo cáo 7 ngày, Thông báo (lịch sử + tùy chọn/quiet hours),
+  Cài đặt (thiết bị, thu hồi, xóa cloud bằng `XÓA`).
+- Cache JSON tổng hợp TTL 7 ngày khi offline; định dạng tiếng Việt (thời lượng, phần trăm, ngày, múi
+  giờ); `SessionExpiryService` xử lý 401 một lần và reset sau khi ghép nối lại.
+
+### Added (Phát hành và kiểm thử — #93–#94)
+
+- Workflow `mobile-release.yml`: `versionName`/`versionCode` từ tag, ký APK/AAB bằng keystore secret,
+  `apksigner`/`aapt2` verification, `SHA256SUMS.txt`, đính GitHub Release; tài liệu tạo keystore và
+  hướng dẫn cài APK.
+- [docs/phase8-e2e-checklist.md](./docs/phase8-e2e-checklist.md): ma trận E2E 7 nhóm, kiểm tra
+  dữ liệu/quyền riêng tư, demo script 10 phút và biên bản ký duyệt.
+- 148 unit test mobile (parser, pairing, push, API client, view model, cache, 401) và bộ test backend.
+
 ### Added (Tài liệu cloud relay và quyền riêng tư)
 
 - ADR-20 mô tả cloud relay tùy chọn (desktop outbox → ASP.NET Core + PostgreSQL → FCM), nguyên tắc
@@ -22,7 +59,8 @@ và dự án tuân theo [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ### Breaking changes
 
-- Không có. Đây là thay đổi tài liệu; cloud mặc định tắt và ứng dụng desktop giữ nguyên hành vi.
+- Không có. Cloud mặc định tắt; desktop giữ nguyên hành vi khi chưa ghép nối. App mobile và backend
+  là thành phần mới, không thay đổi định dạng dữ liệu cục bộ.
 
 ---
 

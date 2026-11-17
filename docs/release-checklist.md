@@ -6,6 +6,8 @@ chưa đạt hoặc còn issue P0/P1.
 
 Tham chiếu: [release-process.md](./release-process.md),
 [security-e2e-checklist.md](./security-e2e-checklist.md),
+[phase8-e2e-checklist.md](./phase8-e2e-checklist.md),
+[mobile/README.md](../mobile/README.md),
 [performance-report.md](./performance-report.md),
 [installer.md](./installer.md) §7, [SECURITY.md](../SECURITY.md).
 
@@ -94,7 +96,24 @@ Tham chiếu: [release-process.md](./release-process.md),
       listener, watchdog/scheduled task cũ và marker `ServiceMode` sạch.
 - [ ] Portable ZIP chạy standalone (không có service row/marker) và watchdog vẫn hoạt động.
 
-### 2.5. Migration, backup và dữ liệu
+### 2.5. Mobile Android (Phase 8)
+
+- [ ] `mobile-release.yml` xanh với tag `v...`; `versionName`/`versionCode` khớp quy tắc trong
+      [mobile/README.md](../mobile/README.md) và tag; `versionCode` không dùng lại.
+- [ ] Đủ secret `ANDROID_KEYSTORE_BASE64`, `ANDROID_KEYSTORE_PASSWORD`, `ANDROID_KEY_ALIAS`,
+      `ANDROID_KEY_PASSWORD`, `GOOGLE_SERVICES_JSON_BASE64`; không có giá trị nào trong repo/log/artifact.
+- [ ] `apksigner verify` pass; APK cài được trên thiết bị sạch Android 8/12/14; launcher hiển thị
+      "EduFocus Phụ huynh", icon adaptive và splash đúng.
+- [ ] Cài đè để nâng cấp giữ SecureStorage (còn ghép nối); gỡ app rồi cài lại không còn token cũ.
+- [ ] `SHA256SUMS.txt` khớp APK/AAB đính kèm release; hướng dẫn cài nằm trong `mobile/README.md`.
+- [ ] FCM hoạt động trên bản release: nhận đủ 4 loại push, deep link mở đúng màn hình; payload chỉ
+      có `type`, `date`, `notificationId`.
+- [ ] App release chỉ dùng HTTPS (cleartext tắt) và kết nối backend staging/production thành công.
+- [ ] Đã chạy [phase8-e2e-checklist.md](./phase8-e2e-checklist.md) trên staging + thiết bị thật và
+      đính kèm biên bản (ngày, phiên bản, thiết bị).
+- [ ] Privacy notice hiển thị trước khi bật cloud; known limitations có trong README và privacy notice.
+
+### 2.6. Migration, backup và dữ liệu
 
 - [ ] Migration chạy thành công trên DB mới và DB nâng cấp; backup trước migration được tạo
       và xác minh; backup của DB mã hóa cũng là file mã hóa.
@@ -108,7 +127,7 @@ Tham chiếu: [release-process.md](./release-process.md),
 - [ ] Xóa dữ liệu theo yêu cầu (Privacy) hoạt động và có audit `DataDeleted`; thao tác không xóa
       file khóa khi vẫn còn dữ liệu cần giải mã.
 
-### 2.6. Tài liệu
+### 2.7. Tài liệu
 
 - [ ] CHANGELOG, SECURITY (phiên bản hỗ trợ), hướng dẫn cài đặt, hướng dẫn browser extension
       và release notes đã cập nhật.

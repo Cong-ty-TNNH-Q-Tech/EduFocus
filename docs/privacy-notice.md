@@ -208,6 +208,10 @@ vệ nằm trong [dpia.md](./dpia.md).
 - Nếu phụ huynh tự host backend, dữ liệu cloud nằm trên hạ tầng do phụ huynh/tổ chức chọn; nhà phát
   triển không có quyền truy cập.
 - Phụ huynh có thể ngắt kết nối hoặc xóa dữ liệu cloud bất kỳ lúc nào (mục 9–10).
+- **Giới hạn đã biết:** push phụ thuộc FCM/Google và Google Play Services; độ trễ do mạng và chính
+  sách tiết kiệm pin của Android. App mobile chỉ xem dữ liệu desktop đã đồng bộ (không có timeline chi
+  tiết) và không điều khiển từ xa (không sửa blocklist, không bật/tắt bảo vệ). Gỡ ứng dụng không tự
+  xóa dữ liệu cloud; phụ huynh phải dùng "Xóa dữ liệu trên cloud" trên app mobile.
 
 ## 8. Thời hạn lưu
 

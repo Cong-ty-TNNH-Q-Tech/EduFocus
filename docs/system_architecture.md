@@ -1117,6 +1117,11 @@ EduFocus.WPF ──(opt-in, token efd_)──► EduFocus Cloud API ──(FCM H
   `ICloudSyncPort`/`ICloudOutboxRepository`; Domain và UseCases không phụ thuộc cloud. Backend là
   solution riêng `cloud/EduFocus.Cloud.slnx` (Api, Contracts, Data, Tests); mobile là solution riêng
   `mobile/EduFocus.Parent.slnx` (.NET MAUI Android). Không project nào nằm trong `EduFocus.slnx`.
+- **App mobile:** `EduFocus.Parent.App` (Shell + 4 tab) và `EduFocus.Parent.Core` (pairing, push,
+  `CloudApiClient`, view model `Presentation` test được). Token `efm_` trong SecureStorage; cache
+  JSON tổng hợp trong Preferences (TTL 7 ngày, không chứa token); mọi 401 đi qua
+  `SessionExpiryService` (xóa phiên một lần, về Welcome); release APK ký số theo tag, xem
+  [mobile/README.md](../mobile/README.md).
 - **Kích hoạt:** chỉ sau khi phụ huynh xác thực PIN, đọc privacy notice bản 2.0 và ghép nối thành
   công; trạng thái lưu trong `AppSettings` cùng token (bảo vệ DPAPI) và có thể ngắt bất kỳ lúc nào.
 - **Sự kiện rời máy:** `daily_summary` (tổng hợp ngày, latest-wins), `attention_alert` (distracted/
@@ -1385,8 +1390,9 @@ EduFocus/
 │   └── .env.example
 ├── mobile/                        (Phase 8, solution riêng)
 │   ├── EduFocus.Parent.slnx
-│   ├── src/EduFocus.Parent.App/   (.NET MAUI, net10.0-android)
-│   └── tests/EduFocus.Parent.Tests/
+│   ├── EduFocus.Parent.App/       (.NET MAUI, net10.0-android)
+│   ├── EduFocus.Parent.Core/      (net10.0: pairing, push, API client, presentation)
+│   └── EduFocus.Parent.Tests/     (xUnit)
 ├── installer/
 │   ├── Product.wxs
 │   ├── Build-Installer.ps1

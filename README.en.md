@@ -41,7 +41,7 @@ Students open their computers for online classes but easily get pulled into AI c
 | 📊 **Study session tracking** | Records study time, active apps/domains (best-effort), and observed blocked attempts |
 | 👁️ **Attention estimate** | Uses the webcam to detect presence, screen-facing gaze, absence, or drowsiness |
 | 🖥️ **Online class detection** | Separate tracking for Google Meet, Microsoft Teams, and Zoom |
-| 🔒 **Local-first** | No cloud, no account, data stays on the device |
+| 🔒 **Local-first** | Cloud is off by default and no account is required; data stays on the device. An optional cloud relay (Phase 8) can send only aggregate summaries to a paired parent phone |
 | 🛡️ **Basic tamper resistance** | Tray hiding, PIN-protected exit; a background Windows Service keeps protection active while the UI is closed and auto-restarts after crash/reboot (~60s via SCM) |
 | 📈 **Parent reports** | Daily/weekly dashboard, timeline, distractions, blocked attempts, CSV export |
 
@@ -53,7 +53,10 @@ EduFocus is designed **not to be spyware**:
 
 - **No photos, videos, or audio are stored.** Webcam frames are processed in memory only to derive a state.
 - **No page content, messages, or clipboard are captured.**
-- **No study data is sent to the cloud.** Everything lives in a local **SQLCipher-encrypted** SQLite database; if update checks are enabled, only version/OS is sent and the server can still see the IP.
+- **No study data is sent to the cloud by default.** Everything lives in a local **SQLCipher-encrypted**
+  SQLite database. Only when a parent explicitly pairs a phone (Phase 8) do four aggregate event types
+  leave the device over HTTPS; no URLs, domains, window titles, app names, raw samples or camera data
+  are uploaded. If update checks are enabled, only version/OS is sent and the server can still see the IP.
 - **Data is encrypted at rest:** DB, WAL and backups use SQLCipher; the 32-byte key is protected with
   DPAPI `LocalMachine` in `%ProgramData%\EduFocus\edufocus.key`, bound to the device and never logged.
   The key is not the PIN; if you back up the DB yourself, back up `edufocus.key` too and restore only
@@ -116,6 +119,7 @@ Protection turns off with PIN or when the schedule window ends
 - 🔜 macOS — not supported
 - 🌐 Chrome/Edge/Firefox for domain blocking via hosts; Chrome/Edge 116+ extension adds URL/path blocking; block page over HTTP and HTTPS (Firefox warns about the certificate)
 - 🎥 Built-in or external webcam (optional, for attention)
+- 📱 Android 8.0+ (API 26) for the optional **EduFocus Parent** app (Phase 8); FCM push requires Google Play Services
 
 ---
 
@@ -132,6 +136,8 @@ Protection turns off with PIN or when the schedule window ends
 | **Background protection** | Windows Service `EduFocusProtection` (LocalSystem) + named-pipe IPC with ACL and process-image verification |
 | **Security** | PBKDF2-SHA256; no other secrets stored |
 | **Installer** | WiX Toolset v4 (MSI, installs the service + native host) |
+| **Cloud relay (Phase 8)** | ASP.NET Core .NET 10 Web API + PostgreSQL 16, Docker; FCM HTTP v1 (data-only) |
+| **Mobile (Phase 8)** | .NET MAUI `net10.0-android` (`com.qtech.edufocus.parent`) |
 | **CI/CD** | GitHub Actions |
 
 ---
@@ -142,7 +148,7 @@ Protection turns off with PIN or when the schedule window ends
 
 > EduFocus is being migrated from the predecessor project **Don't Be Lazy**. The MVP release is planned after Phase 7; features described here are not released yet.
 
-Once released, download from [Releases](https://github.com/Cong-ty-TNNH-Q-Tech/EduFocus/releases). Each release ships an MSI, a portable ZIP, a browser extension ZIP, an install guide and `SHA256SUMS.txt`; verify SHA-256 (and the code signature when present) before installing. Requirements: Windows 10 22H2/Windows 11 x64; the MVP requires Administrator. See [docs/installer.md](./docs/installer.md) and [docs/release-process.md](./docs/release-process.md) for details.
+Once released, download from [Releases](https://github.com/Cong-ty-TNNH-Q-Tech/EduFocus/releases). Each release ships an MSI, a portable ZIP, a browser extension ZIP, an install guide and `SHA256SUMS.txt`; verify SHA-256 (and the code signature when present) before installing. Requirements: Windows 10 22H2/Windows 11 x64; the MVP requires Administrator. See [docs/installer.md](./docs/installer.md) and [docs/release-process.md](./docs/release-process.md) for details. For the Android parent app, see [mobile/README.md](./mobile/README.md) (signed APK, version rules and install steps).
 
 ### Run from source
 
@@ -172,8 +178,11 @@ dotnet test EduFocus.slnx --configuration Release
 ## 📚 Documentation
 
 - [📄 BA Document](./docs/ba_document.md) — Requirements, features, rules, NFRs (Vietnamese)
-- [📋 Use Cases](./docs/use_cases.md) — Detailed flows UC01–UC14 (Vietnamese)
+- [📋 Use Cases](./docs/use_cases.md) — Detailed flows UC01–UC18 (Vietnamese)
 - [🏛️ System Architecture](./docs/system_architecture.md) — Architecture and design decisions (Vietnamese)
+- [☁️ Cloud Backend (Phase 8)](./docs/cloud-backend.md) — API, cloud schema, retention and operations (Vietnamese)
+- [📱 Mobile app & APK install](./mobile/README.md) — four screens, push, signing and Android install guide (Vietnamese)
+- [🧪 Phase 8 E2E checklist](./docs/phase8-e2e-checklist.md) — test matrix, privacy checks and demo script (Vietnamese)
 - [🗄️ Database Schema](./docs/database_schema.md) — SQLite schema, indexes, retention (Vietnamese)
 - [🧩 Domain Invariants](./docs/domain-invariants.md) — Entity invariants and domain/DB/use-case boundaries (Vietnamese)
 - [📝 Changelog](./CHANGELOG.md)
@@ -198,6 +207,7 @@ dotnet test EduFocus.slnx --configuration Release
 - [ ] Phase 5: Attention monitoring
 - [ ] Phase 6: Dashboard, reports, settings
 - [ ] Phase 7: Hardening, installer, CI, MVP release
+- [ ] Phase 8: Optional cloud relay + Android parent app + push notifications
 
 ---
 
@@ -229,6 +239,8 @@ dotnet test EduFocus.slnx --configuration Release
 - The process watcher relies on process name/path; renamed or portable apps may evade detection.
 - The app cannot resist a user with SYSTEM/admin privileges; Windows shutdown/logoff remains a bypass.
 - Installed builds run a Windows Service: it runs as LocalSystem, keeps protection active while the UI is closed and is restarted by the SCM after a crash (~60 seconds; up to 3 times per day). An admin/SYSTEM user can still stop/disable/remove the service. The UI still requires admin in this build because it reads/writes the ACL-protected database. Portable/source builds use the resident watchdog instead: the app is restarted within ≤ 30 seconds, and a killed watchdog is restored by a scheduled task within about 60 seconds. Uninstall PIN is best-effort.
+- Cloud push depends on FCM/Google Play Services; delivery is delayed by network and Android battery policy. The mobile app only shows aggregate data already synced by the desktop and cannot change protection or the blocklist remotely.
+- Uninstalling the mobile app does not delete cloud data; use "Xóa dữ liệu trên cloud" in the app first.
 
 EduFocus aims to **support study habits**, not to enable covert surveillance or exam cheating.
 
