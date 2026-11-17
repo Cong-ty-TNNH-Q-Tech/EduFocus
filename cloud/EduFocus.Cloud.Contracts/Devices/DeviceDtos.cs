@@ -6,7 +6,8 @@ public sealed record DeviceDto(
     string Name,
     string Platform,
     DateTimeOffset CreatedAtUtc,
-    DateTimeOffset? LastSeenAtUtc);
+    DateTimeOffset? LastSeenAtUtc,
+    DateTimeOffset? RevokedAtUtc);
 
 public sealed record DeviceListResponse(IReadOnlyList<DeviceDto> Devices);
 

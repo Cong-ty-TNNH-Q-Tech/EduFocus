@@ -152,7 +152,7 @@ Base path: `/v1`. Response lỗi dùng JSON `{"error":{"code","message","traceId
 | `GET` | `/v1/reports/daily?from=&to=` | `efm_`+`read` | Báo cáo tóm tắt theo khoảng ngày |
 | `GET` | `/v1/notifications?before=&limit=` | `efm_`+`read` | Danh sách thông báo đã phát |
 | `GET` | `/v1/devices` | `efm_`+`read` | Thiết bị trong gia đình |
-| `DELETE` | `/v1/family` | `efm_`+`family:admin` | Xóa toàn bộ dữ liệu cloud (header `X-Confirm: XÓA`) |
+| `DELETE` | `/v1/family` | `efm_`+`family:admin` | Xóa toàn bộ dữ liệu cloud (body `{"confirmation":"XÓA"}`) |
 | `GET` | `/healthz` | không | Health check cho container/orchestrator |
 
 Rate limit fixed-window: tạo phiên **10/giờ/IP**, claim **20/giờ/IP**, chung **120/phút/token**;
@@ -218,6 +218,28 @@ hiệu. Claim dùng cập nhật nguyên tử để hai điện thoại không t
   tiêu đề/nội dung tiếng Việt chung do app tự dựng, không chứa tên học sinh, URL hay số liệu chi tiết.
   Dùng `SendEachAsync` theo batch, xử lý lỗi từng token độc lập; token không bao giờ nằm trong log.
 
+### 4.4. Đọc dữ liệu cho mobile
+
+Mọi endpoint đọc chỉ trả dữ liệu thuộc gia đình của token; thiết bị khác gia đình trả `404` như không
+tồn tại.
+
+- `GET /v1/reports/daily?from=&to=` (`read`): `from`/`to` bắt buộc dạng `yyyy-MM-dd`, khoảng tối đa
+  **31 ngày** (tính cả hai đầu), ngược/hợp lệ sai → `400 invalid_range`. Trả mảng
+  `DailySummaryDto` sắp xếp tăng dần theo `localDate`; mỗi ngày lấy bản ghi có `UpdatedAtUtc` mới nhất
+  (nhiều desktop cùng ngày thì bản mới nhất thắng). `timeZoneId` lấy từ `Families`.
+- `GET /v1/notifications?before=&limit=` (`read`): mặc định **50**, tối đa **100**, ngoài khoảng →
+  `400 invalid_limit`. Sắp xếp `CreatedAtUtc DESC, Id DESC`; `nextBefore` là con trỏ đục
+  (base64url của `{utcTicks}:{id:N}`) để lấy trang kế tiếp ổn định kể cả khi có bản ghi mới; con trỏ
+  sai → `400 invalid_cursor`. Mỗi item gồm `category`, `status` (`pending`/`sent`/`suppressed`/`failed`),
+  `createdAtUtc`, `sentAtUtc`; không có nội dung nhạy cảm.
+- `GET /v1/devices` (`read`): danh sách thiết bị trong gia đình kèm `revokedAtUtc`.
+- `DELETE /v1/devices/{id}` (`family:admin`): thu hồi bất kỳ thiết bị nào trong gia đình, kể cả thiết
+  bị đang gọi (token bị thu hồi có hiệu lực ngay ở request kế tiếp).
+- `DELETE /v1/family` (`family:admin`): body `{ "confirmation": "XÓA" }` (so khớp chính xác, sai →
+  `400 confirmation_required`). Xóa cứng ngay trong một transaction theo cascade (thiết bị, token,
+  push registration, preference, summary, sync event, notification, pairing session) và ghi audit ẩn
+  danh `FamilyDeleted` với `FamilyId`/`ActorDeviceId` = NULL.
+
 ## 5. Mô hình dữ liệu PostgreSQL
 
 | Bảng | Cột chính | Ghi chú |
@@ -246,15 +268,20 @@ migration khi `EDUFOCUS_CLOUD_AUTO_MIGRATE=true`; mặc định tắt và produc
 
 | Dữ liệu | Thời hạn | Cơ chế |
 |---|---|---|
-| `PairingSessions` | 24 giờ sau khi hết hạn/claim | job retention |
+| `PairingSessions` | 24 giờ sau khi hết hạn | job retention |
 | `SyncEvents` | 7 ngày | job retention |
 | `Notifications` | 30 ngày | job retention |
-| `DailySummaries` | 180 ngày | job retention |
+| `DailySummaries` | 180 ngày (theo `UpdatedAtUtc`) | job retention |
 | `CloudAuditLogs` | 365 ngày | job retention (trừ khi pháp luật yêu cầu khác) |
+| Gia đình đã xóa mềm (`DeletedAtUtc`) | 30 ngày | job retention, xóa cứng + cascade |
 | Tài khoản/token | tới khi thu hồi hoặc xóa gia đình | cascade |
 
-Retention cloud chạy mỗi ngày, batch nhỏ, ghi audit. Không xóa dữ liệu của gia đình đang trong
-thời gian yêu cầu xóa (xử lý đồng bộ ngay khi nhận yêu cầu).
+Job bảo trì `CloudMaintenanceWorker` chạy mỗi `Jobs:IntervalSeconds` (mặc định 60 giây) và dùng
+PostgreSQL advisory lock (`pg_try_advisory_lock`) để chỉ một instance xử lý tại một thời điểm; instance
+khác bỏ qua lượt đó. Mỗi lượt job tạo notification `daily_summary` khi đã tới `DailySummaryMinutes`
+theo múi giờ gia đình, preference bật, không trong quiet hours và đã có summary của ngày; dedupe
+`(FamilyId, DedupeKey)` bảo đảm mỗi ngày một lần. `DELETE /v1/family` xóa cứng đồng bộ ngay khi nhận
+yêu cầu; retention chỉ dọn các bản ghi còn sót của gia đình đã xóa mềm (nếu có).
 
 ## 7. Bảo mật
 
@@ -275,6 +302,9 @@ thời gian yêu cầu xóa (xử lý đồng bộ ngay khi nhận yêu cầu).
 - Biến chính: `ConnectionStrings__Postgres`, `Cloud__PublicBaseUrl`, `Push__Enabled`,
   `Push__ProjectId`, `Push__ServiceAccountPath` hoặc `Push__ServiceAccountJson` (secret mount),
   `ASPNETCORE_URLS`; rate limit tinh chỉnh qua `RateLimiting__…`, chu kỳ gửi qua `Push__PollSeconds`.
+  Job bảo trì: `Jobs__Enabled` (mặc định `true`), `Jobs__IntervalSeconds` (60), thời hạn retention
+  `Jobs__PairingSessionHours` (24), `Jobs__SyncEventDays` (7), `Jobs__NotificationDays` (30),
+  `Jobs__DailySummaryDays` (180), `Jobs__CloudAuditDays` (365), `Jobs__SoftDeletedFamilyDays` (30).
   Service account JSON **không** commit, không nằm trong image.
 - Migration tự động khi khởi động chỉ ở môi trường Development; production chạy job/migration riêng.
 - Health check `/healthz`; log có cấu trúc, che token/FCM token.

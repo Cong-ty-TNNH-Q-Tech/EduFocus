@@ -3,14 +3,18 @@ using System.Text.Json.Serialization;
 using EduFocus.Cloud.Api.Auth;
 using EduFocus.Cloud.Api.Common;
 using EduFocus.Cloud.Api.Devices;
+using EduFocus.Cloud.Api.Families;
 using EduFocus.Cloud.Api.Health;
+using EduFocus.Cloud.Api.Jobs;
 using EduFocus.Cloud.Api.Link;
 using EduFocus.Cloud.Api.Logging;
+using EduFocus.Cloud.Api.Notifications;
 using EduFocus.Cloud.Api.Options;
 using EduFocus.Cloud.Api.Pairing;
 using EduFocus.Cloud.Api.Preferences;
 using EduFocus.Cloud.Api.Push;
 using EduFocus.Cloud.Api.RateLimiting;
+using EduFocus.Cloud.Api.Reports;
 using EduFocus.Cloud.Api.Sync;
 using EduFocus.Cloud.Contracts.Common;
 using EduFocus.Cloud.Data;
@@ -100,6 +104,32 @@ builder.Services.AddSingleton(TimeProvider.System);
 builder.Services.AddSingleton<IFcmPushSender, FirebaseFcmSender>();
 builder.Services.AddScoped<PushDispatchService>();
 builder.Services.AddHostedService<PushWorker>();
+builder.Services.AddOptions<JobOptions>()
+    .Bind(builder.Configuration.GetSection(JobOptions.SectionName))
+    .Validate(
+        options => options.IntervalSeconds is >= 10 and <= 3600,
+        "Jobs:IntervalSeconds must be between 10 and 3600")
+    .Validate(
+        options => options.PairingSessionHours is >= 1 and <= 168,
+        "Jobs:PairingSessionHours must be between 1 and 168")
+    .Validate(
+        options => options.SyncEventDays is >= 1 and <= 30,
+        "Jobs:SyncEventDays must be between 1 and 30")
+    .Validate(
+        options => options.NotificationDays is >= 1 and <= 90,
+        "Jobs:NotificationDays must be between 1 and 90")
+    .Validate(
+        options => options.DailySummaryDays is >= 1 and <= 365,
+        "Jobs:DailySummaryDays must be between 1 and 365")
+    .Validate(
+        options => options.CloudAuditDays is >= 1 and <= 730,
+        "Jobs:CloudAuditDays must be between 1 and 730")
+    .Validate(
+        options => options.SoftDeletedFamilyDays is >= 1 and <= 365,
+        "Jobs:SoftDeletedFamilyDays must be between 1 and 365")
+    .ValidateOnStart();
+builder.Services.AddScoped<CloudMaintenanceService>();
+builder.Services.AddHostedService<CloudMaintenanceWorker>();
 builder.Services.AddOptions<CloudApiOptions>()
     .Bind(builder.Configuration.GetSection(CloudApiOptions.SectionName))
     .PostConfigure(options =>
@@ -179,6 +209,9 @@ v1.MapLinkEndpoints();
 v1.MapSyncEndpoints();
 v1.MapPushEndpoints();
 v1.MapPreferenceEndpoints();
+v1.MapReportEndpoints();
+v1.MapNotificationEndpoints();
+v1.MapFamilyEndpoints();
 app.Run();
 
 public partial class Program;

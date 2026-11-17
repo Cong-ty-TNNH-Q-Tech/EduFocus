@@ -16,6 +16,7 @@ internal sealed class CloudApiFactory(
         builder.UseEnvironment("Testing");
         builder.UseSetting("ConnectionStrings:Postgres", connectionString);
         builder.UseSetting("Cloud:PublicBaseUrl", "https://cloud.test");
+        builder.UseSetting("Jobs:Enabled", "false");
 
         if (settings is not null)
         {

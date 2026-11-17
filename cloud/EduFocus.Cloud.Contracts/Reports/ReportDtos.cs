@@ -1,18 +1,20 @@
 namespace EduFocus.Cloud.Contracts.Reports;
 
 public sealed record DailySummaryDto(
-    Guid DeviceId,
-    string DeviceName,
     DateOnly LocalDate,
+    string TimeZoneId,
     DateTimeOffset GeneratedAtUtc,
-    int StudyMinutes,
-    int FocusedMinutes,
-    int DistractionCount,
+    int SessionsCount,
+    long ActiveSeconds,
+    long StudySeconds,
+    long IdleSeconds,
+    long OnlineClassSeconds,
+    long MonitoringEligibleSeconds,
+    long MonitoredSeconds,
+    long FocusedSeconds,
+    long DistractedSeconds,
+    long AbsentSeconds,
+    long DrowsySeconds,
     int BlockedAttempts,
-    int CameraCoveragePercent,
-    int OnlineClassMinutes);
-
-public sealed record DailyReportResponse(
-    DateOnly From,
-    DateOnly To,
-    IReadOnlyList<DailySummaryDto> Days);
+    double? AttentionPercent,
+    double? CoveragePercent);

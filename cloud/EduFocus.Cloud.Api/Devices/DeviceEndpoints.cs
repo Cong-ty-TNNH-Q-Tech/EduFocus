@@ -15,6 +15,10 @@ public static class DeviceEndpoints
     {
         var group = endpoints.MapGroup("/devices");
 
+        group.MapGet("/", ListDevicesAsync)
+            .RequireAuthorization(AuthorizationPolicies.Read)
+            .RequireRateLimiting(RateLimitPolicies.Token);
+
         group.MapPost("/token/rotate", RotateTokenAsync)
             .RequireAuthorization()
             .RequireRateLimiting(RateLimitPolicies.Token);
@@ -24,6 +28,37 @@ public static class DeviceEndpoints
             .RequireRateLimiting(RateLimitPolicies.Token);
 
         return endpoints;
+    }
+
+    private static async Task<IResult> ListDevicesAsync(
+        CloudDbContext db,
+        HttpContext httpContext,
+        CancellationToken cancellationToken)
+    {
+        var familyId = httpContext.User.FamilyId();
+        var family = await db.Families
+            .AsNoTracking()
+            .FirstOrDefaultAsync(f => f.Id == familyId, cancellationToken);
+        if (family is null || family.DeletedAtUtc is not null)
+        {
+            return ApiResults.NotFound();
+        }
+
+        var devices = await db.Devices
+            .AsNoTracking()
+            .Where(d => d.FamilyId == familyId)
+            .OrderBy(d => d.CreatedAtUtc)
+            .Select(d => new DeviceDto(
+                d.Id,
+                d.Kind.ToString(),
+                d.DisplayName,
+                d.Platform,
+                d.CreatedAtUtc,
+                d.LastSeenAtUtc,
+                d.RevokedAtUtc))
+            .ToListAsync(cancellationToken);
+
+        return Results.Ok(new DeviceListResponse(devices));
     }
 
     private static async Task<IResult> RotateTokenAsync(
@@ -83,7 +118,6 @@ public static class DeviceEndpoints
         CancellationToken cancellationToken)
     {
         var currentDeviceId = httpContext.User.DeviceId();
-        var currentKind = httpContext.User.DeviceKind();
         var familyId = httpContext.User.FamilyId();
 
         var target = await db.Devices
@@ -95,11 +129,8 @@ public static class DeviceEndpoints
             return ApiResults.NotFound();
         }
 
-        if (target.Id != currentDeviceId
-            && !(currentKind == DeviceKind.Desktop && target.Kind == DeviceKind.Mobile))
-        {
-            return ApiResults.Forbidden("Thiết bị không được phép thu hồi thiết bị này.");
-        }
+        // The family:admin policy applies to callers; any family device may be revoked,
+        // including the caller itself (its token stops working after this request).
 
         if (target.RevokedAtUtc is null)
         {

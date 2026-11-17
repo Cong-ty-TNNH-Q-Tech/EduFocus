@@ -18,14 +18,29 @@ public enum NotificationKind
     SecurityAlert,
 }
 
+[JsonConverter(typeof(JsonStringEnumConverter<NotificationDeliveryStatus>))]
+public enum NotificationDeliveryStatus
+{
+    [JsonStringEnumMemberName("pending")]
+    Pending,
+
+    [JsonStringEnumMemberName("sent")]
+    Sent,
+
+    [JsonStringEnumMemberName("suppressed")]
+    Suppressed,
+
+    [JsonStringEnumMemberName("failed")]
+    Failed,
+}
+
 public sealed record NotificationDto(
     Guid Id,
-    NotificationKind Kind,
+    NotificationKind Category,
+    NotificationDeliveryStatus Status,
     DateTimeOffset CreatedAtUtc,
-    DateTimeOffset? SentAtUtc,
-    string? SuppressedReason,
-    DateOnly? LocalDate);
+    DateTimeOffset? SentAtUtc);
 
 public sealed record NotificationListResponse(
     IReadOnlyList<NotificationDto> Items,
-    DateTimeOffset? NextBefore);
+    string? NextBefore);
