@@ -208,7 +208,7 @@ dotnet test EduFocus.slnx --configuration Release
 - [ ] Phase 5: Attention monitoring
 - [ ] Phase 6: Dashboard, reports, settings
 - [ ] Phase 7: Hardening, installer, CI, release MVP
-- [ ] Phase 8: Cloud relay tùy chọn + app phụ huynh Android + thông báo đẩy (milestone #10)
+- [x] Phase 8: Cloud relay tùy chọn + app phụ huynh Android + thông báo đẩy (triển khai xong; E2E thiết bị thật là cổng phát hành, xem [checklist](./docs/phase8-e2e-checklist.md))
 
 ---
 
