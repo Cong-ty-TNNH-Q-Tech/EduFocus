@@ -1,42 +1,51 @@
 # Thông báo quyền riêng tư — EduFocus
 
-Phiên bản 1.0 · Ngày hiệu lực: 2026-10-30 · Áp dụng cho EduFocus 2.0.0
+Phiên bản 2.0 · Ngày hiệu lực: 2026-11-17 · Áp dụng cho EduFocus 2.1.0 (Phase 8) trở đi
 
 EduFocus là ứng dụng học tập chạy trên máy tính Windows, do phụ huynh thiết lập và quản lý.
 Thông báo này giải thích EduFocus xử lý dữ liệu gì, vì sao, lưu ở đâu, lưu bao lâu, ai có thể
 truy cập và phụ huynh/học sinh có những quyền gì. Thông báo được hiển thị trước khi bật giám sát
 trong lần thiết lập đầu tiên và luôn mở lại được từ Parent Mode.
 
+Từ phiên bản 2.1.0, EduFocus có thêm **cloud relay tùy chọn** để gửi thông báo đẩy tới điện thoại
+phụ huynh. Cloud **mặc định tắt**; nếu phụ huynh không ghép nối điện thoại, ứng dụng hoạt động hoàn
+toàn cục bộ như bản 2.0.0. Khi bật, chỉ bốn loại sự kiện tổng hợp rời khỏi máy (mục 6.1).
+
 ## 1. Tóm tắt
 
-- EduFocus xử lý dữ liệu **trên chính máy tính đã cài đặt**. Không có tài khoản đám mây và không
-  gửi dữ liệu học tập ra ngoài.
+- Mặc định, EduFocus xử lý dữ liệu **trên chính máy tính đã cài đặt** và không gửi dữ liệu học tập ra
+  ngoài. Phụ huynh có thể **tự bật** cloud relay để nhận thông báo trên điện thoại; khi bật, chỉ bốn
+  loại sự kiện tổng hợp được gửi tới backend (mục 6.1).
 - **Không lưu ảnh, video, âm thanh hoặc khung hình webcam.** Khung hình camera chỉ tồn tại trong
   bộ nhớ trong thời gian ngắn để ước lượng trạng thái tập trung rồi bị xóa.
 - **Không nhận diện danh tính, không phân tích cảm xúc, không tạo dữ liệu sinh trắc học.**
-- **Không telemetry, không quảng cáo, không chia sẻ dữ liệu với bên thứ ba.**
+- **Không telemetry, không quảng cáo, không bán dữ liệu.** Khi cloud bật, Firebase Cloud Messaging
+  (FCM) của Google chỉ nhận metadata giao nhận và nội dung thông báo chung (mục 7.1).
 - Kiểm tra cập nhật mặc định **tắt**; khi phụ huynh bật, ứng dụng chỉ gọi GitHub Releases API và
   GitHub có thể thấy địa chỉ IP của máy.
 - Để hiển thị trang chặn trên cả trang HTTPS, khi bảo vệ đang bật EduFocus cài một **chứng chỉ gốc
   cục bộ** (chỉ trên máy này) và tự phát hành chứng chỉ ngắn hạn cho đúng tên miền đang bị chặn;
   chứng chỉ gốc bị gỡ khi tắt bảo vệ hoặc gỡ cài đặt và khóa riêng không rời khỏi máy.
-- Dữ liệu được giữ theo thời hạn (mặc định 30/90/365 ngày) và có thể xóa toàn bộ trong Parent Mode
-  bằng PIN.
+- Dữ liệu được giữ theo thời hạn (mặc định 30/90/365 ngày; dữ liệu cloud 24 giờ–365 ngày tùy loại)
+  và có thể xóa toàn bộ trong Parent Mode bằng PIN; dữ liệu cloud xóa trên app mobile bằng xác nhận
+  `XÓA`.
 
 ## 2. Ai chịu trách nhiệm
 
 - **Nhà phát triển:** ThanhTrunggDEV (bên cung cấp phần mềm EduFocus).
 - **Phụ huynh/người giám hộ:** người trực tiếp cài đặt, cấu hình và quyết định bật giám sát trên
   thiết bị của gia đình; giữ vai trò kiểm soát dữ liệu trên thiết bị.
-- Nhà phát triển không có quyền truy cập dữ liệu học tập trên máy của gia đình. Vai trò pháp lý
-  chi tiết (bên kiểm soát/bên xử lý) được nêu trong hồ sơ DPIA và cần được tư vấn pháp lý xác
-  nhận trước khi phát hành thương mại.
+- Nhà phát triển không có quyền truy cập dữ liệu học tập trên máy của gia đình. Khi phụ huynh bật
+  cloud relay, nhà phát triển (hoặc tổ chức tự host backend) xử lý dữ liệu cloud mô tả ở mục 6.1 với
+  vai trò bên xử lý/bên kiểm soát tùy mô hình triển khai; vai trò pháp lý chi tiết được nêu trong hồ
+  sơ DPIA và cần được tư vấn pháp lý xác nhận trước khi phát hành thương mại.
 
 Kênh liên hệ được liệt kê ở mục 12.
 
 ## 3. Dữ liệu được xử lý
 
-EduFocus xử lý các nhóm dữ liệu sau, tất cả đều lưu cục bộ:
+EduFocus xử lý các nhóm dữ liệu sau; mặc định tất cả lưu cục bộ, riêng nhóm cloud (mục 6.1) chỉ tồn
+tại khi phụ huynh chủ động bật:
 
 - **Cấu hình:** bật/tắt bảo vệ và giám sát, lịch bảo vệ, ngưỡng xao nhãng/vắng mặt, chu kỳ lấy
   mẫu, thời hạn lưu, giao diện/ngôn ngữ, khởi động cùng Windows, lựa chọn kiểm tra cập nhật,
@@ -73,6 +82,12 @@ EduFocus xử lý các nhóm dữ liệu sau, tất cả đều lưu cục bộ:
 - **Khóa mã hóa DB:** 32 byte ngẫu nhiên dùng để mã hóa cơ sở dữ liệu, được Windows DPAPI bảo vệ
   trong `%ProgramData%\EduFocus\edufocus.key`. Khóa không phải PIN/mật khẩu, không nằm dạng văn bản
   thường và không dùng được trên máy khác.
+- **Dữ liệu cloud (tùy chọn, chỉ khi bật):** bốn loại sự kiện tổng hợp (`daily_summary` gồm phút học,
+  phút tập trung ước lượng, số lần xao nhãng, số lần bị chặn, độ phủ camera, phút lớp trực tuyến;
+  `attention_alert` gồm loại và thời lượng; `protection_off` gồm thời điểm/lý do; `security_alert` gồm
+  loại và thời điểm), tên thiết bị, nền tảng, token FCM, token truy cập cloud (server chỉ lưu hash),
+  preference thông báo và log thông báo đã phát. Không gửi URL, tên miền, tiêu đề cửa sổ, tên ứng
+  dụng, mẫu hoạt động thô, dữ liệu camera, PIN, mã khôi phục hay ghi chú phụ huynh.
 
 EduFocus **không** thu thập: vị trí, danh bạ, lịch, email, nội dung clipboard, nội dung trang web,
 lịch sử duyệt web đầy đủ, âm thanh micro, dữ liệu sinh trắc học, hay thông tin nhận dạng khuôn mặt.
@@ -93,7 +108,8 @@ Khi EduFocus không chạy, extension không chặn và không gửi dữ liệu
 - Mỗi khung hình được xử lý trong RAM để phát hiện khuôn mặt và ước lượng trạng thái; khung hình
   bị hủy ngay sau khi xử lý, **trước khi** bất kỳ sự kiện nào được ghi.
 - Không ghi ảnh/video/âm thanh, không lưu landmark thô, không tạo embedding, không gửi dữ liệu
-  camera qua mạng.
+  camera qua mạng. Kể cả khi cloud bật, chỉ cảnh báo tổng hợp `distracted`/`absent` kèm thời lượng
+  được gửi, không có khung hình hay dữ liệu attention thô.
 - Kết quả chỉ là ước lượng (Focused/Distracted/Absent/Drowsy/CameraUnavailable) kèm độ tin cậy và
   có thể sai. EduFocus không phải thiết bị y tế, không phải eye tracker và không dùng để chống
   gian lận thi cử.
@@ -107,6 +123,7 @@ Dữ liệu được xử lý để:
 - hiển thị cho phụ huynh thời gian học, mức độ tập trung ước lượng và hoạt động trên máy;
 - thực thi danh sách chặn web/ứng dụng và lịch bảo vệ do phụ huynh cấu hình;
 - tạo báo cáo ngày/tuần/tháng và bản xuất CSV do phụ huynh yêu cầu;
+- gửi thông báo đẩy và báo cáo tóm tắt tới điện thoại phụ huynh đã ghép nối (chỉ khi bật cloud);
 - vận hành an toàn: xác thực PIN, chống dò mã, phục hồi sau crash, lưu trữ và xóa dữ liệu.
 
 Cơ sở pháp lý: sự đồng ý của phụ huynh/người giám hộ và việc thực hiện trách nhiệm giáo dục,
@@ -115,6 +132,11 @@ giám sát con trong gia đình, tuân thủ **Luật Bảo vệ dữ liệu cá
 attention/camera của trẻ em được xem là dữ liệu cá nhân nhạy cảm; hồ sơ đánh giá tác động xử lý
 dữ liệu cá nhân (DPIA) được lập riêng và phải được tư vấn pháp lý rà soát trước khi phát hành
 thương mại.
+
+Cloud relay là **tùy chọn và dựa trên sự đồng ý riêng** của phụ huynh tại thời điểm ghép nối; phụ
+huynh có thể rút lại bất kỳ lúc nào (mục 9). Vì FCM do Google vận hành, việc bật thông báo đẩy có
+thể liên quan đến chuyển dữ liệu/xử lý ngoài lãnh thổ Việt Nam; đánh giá chi tiết và biện pháp bảo
+vệ nằm trong [dpia.md](./dpia.md).
 
 ## 6. Lưu trữ và bảo vệ
 
@@ -139,12 +161,29 @@ thương mại.
   sang service và không tạo thêm loại dữ liệu.
 - PIN/recovery code chỉ lưu hash; khóa Parent Mode tự hết hạn sau 5 phút idle và không được khôi
   phục sau khi khởi động lại.
-- Toàn bộ dữ liệu nằm trên máy, không có máy chủ của EduFocus.
+- Khi cloud tắt (mặc định), toàn bộ dữ liệu nằm trên máy, không có máy chủ của EduFocus.
+
+### 6.1. Cloud relay tùy chọn (Phase 8)
+
+- Khi phụ huynh ghép nối điện thoại, desktop gửi sự kiện tổng hợp qua HTTPS tới backend EduFocus
+  (do nhà phát triển vận hành hoặc do phụ huynh/tổ chức tự host). Dữ liệu cloud nằm trong PostgreSQL
+  của backend, không nằm trên máy tính học sinh.
+- Token truy cập cloud (`efd_` cho desktop, `efm_` cho mobile) là chuỗi ngẫu nhiên 32 byte; server chỉ
+  lưu SHA-256, có scope tối thiểu và có thể thu hồi/xoay vòng. Token lưu trên desktop được DPAPI bảo
+  vệ; trên Android lưu trong secure storage của hệ điều hành. Token không bao giờ được ghi log.
+- Token FCM của điện thoại được lưu để gửi thông báo; token này không chứa dữ liệu học tập và bị vô
+  hiệu khi phụ huynh xóa thiết bị/gia đình hoặc khi FCM báo không hợp lệ.
+- Nội dung push là **data-only** với mã loại và ngày; app mobile tự dựng câu tiếng Việt chung. Chi
+  tiết học tập chỉ được tải qua API khi phụ huynh mở app.
+- Backend ghi audit thao tác ghép nối/thu hồi/xóa nhưng không lưu PIN, mã khôi phục, token thô hay
+  nội dung học tập chi tiết.
+- Backend có thể tự host: khi đó chủ máy chủ tự chịu trách nhiệm TLS, backup, retention và nghĩa vụ
+  dữ liệu cá nhân; tài liệu vận hành ở [cloud-backend.md](./cloud-backend.md).
 
 ## 7. Chia sẻ dữ liệu
 
-- EduFocus **không bán, không chia sẻ, không tải lên** dữ liệu học tập, dữ liệu camera hay danh
-  sách hoạt động.
+- Khi cloud tắt (mặc định), EduFocus **không bán, không chia sẻ, không tải lên** dữ liệu học tập,
+  dữ liệu camera hay danh sách hoạt động.
 - Không có telemetry, phân tích từ xa hay quảng cáo.
 - **Kiểm tra cập nhật là tùy chọn và mặc định tắt.** Khi phụ huynh bật, ứng dụng gửi một yêu cầu
   GET tới GitHub Releases API với `User-Agent: EduFocus/{version}`. Nội dung yêu cầu không chứa
@@ -157,6 +196,19 @@ thương mại.
 - Browser extension chỉ trao đổi với tiến trình EduFocus qua named pipe/native messaging cục bộ;
   không gửi URL, lịch sử duyệt web hay dữ liệu học tập ra ngoài máy.
 
+### 7.1. Cloud relay và FCM (tùy chọn)
+
+- Khi phụ huynh bật cloud, dữ liệu ở mục 6.1 được gửi qua HTTPS tới backend EduFocus. Nhà phát triển
+  không dùng dữ liệu này cho quảng cáo, huấn luyện mô hình hay mục đích khác ngoài vận hành thông báo
+  và báo cáo tóm tắt cho chính gia đình.
+- Backend dùng **Firebase Cloud Messaging (FCM)** của Google làm kênh vận chuyển push. Google xử lý
+  token thiết bị, địa chỉ IP và metadata giao nhận; nội dung message chỉ gồm mã loại, ngày và mã thông
+  báo, không chứa chi tiết học tập. Việc này có thể đồng nghĩa xử lý dữ liệu ngoài Việt Nam.
+- Không có nhà cung cấp quảng cáo, analytics hay dịch vụ bên thứ ba nào khác tham gia khi cloud bật.
+- Nếu phụ huynh tự host backend, dữ liệu cloud nằm trên hạ tầng do phụ huynh/tổ chức chọn; nhà phát
+  triển không có quyền truy cập.
+- Phụ huynh có thể ngắt kết nối hoặc xóa dữ liệu cloud bất kỳ lúc nào (mục 9–10).
+
 ## 8. Thời hạn lưu
 
 - Mẫu hoạt động chi tiết: **30 ngày** (có thể chỉnh trong Parent Mode).
@@ -168,17 +220,23 @@ thương mại.
 - Bản sao `hosts`: chỉ giữ trong thời gian cần khôi phục và bị xóa sau khi khôi phục/self-heal.
 - Bản xuất CSV: giữ cho tới khi phụ huynh tự xóa; EduFocus không tự xóa tệp bên ngoài DB.
 - Dữ liệu của phiên đang hoạt động không bị retention xóa.
+- **Dữ liệu cloud (khi bật):** pairing session **24 giờ**; sync event thô để chống trùng **7 ngày**;
+  log thông báo **30 ngày**; tóm tắt ngày **180 ngày**; audit cloud **365 ngày**. Xóa gia đình trên
+  app mobile xóa ngay toàn bộ dữ liệu cloud, không chờ hết hạn.
 
-Retention chạy tự động mỗi ngày (khoảng 03:00 giờ địa phương) hoặc theo lịch của ứng dụng.
+Retention cục bộ chạy tự động mỗi ngày (khoảng 03:00 giờ địa phương) hoặc theo lịch của ứng dụng.
+Retention cloud chạy hằng ngày trên backend.
 
 ## 9. Quyền của phụ huynh và học sinh
 
 - **Xem dữ liệu:** báo cáo trong Parent Mode; xuất CSV theo khoảng ngày.
 - **Chỉnh sửa cấu hình:** phụ huynh sửa mọi thiết lập trong Parent Mode sau khi xác thực PIN.
 - **Xóa dữ liệu:** xóa toàn bộ dữ liệu quan sát trong Parent Mode (yêu cầu PIN và gõ đúng chữ
-  `XÓA`), hoặc chọn xóa dữ liệu khi gỡ cài đặt. Xóa là không thể hoàn tác.
+  `XÓA`), hoặc chọn xóa dữ liệu khi gỡ cài đặt. Xóa là không thể hoàn tác. Dữ liệu cloud được xóa
+  trên app mobile bằng xác nhận `XÓA` hoặc bằng cách ngắt kết nối và yêu cầu nhà phát triển xóa.
 - **Rút lại đồng ý:** tắt giám sát (dừng camera/attention), tắt bảo vệ, hoặc gỡ cài đặt và chọn
-  xóa dữ liệu. Việc rút lại không ảnh hưởng tính hợp pháp của xử lý đã thực hiện trước đó.
+  xóa dữ liệu. Với cloud, ngắt kết nối trên desktop (dừng gửi dữ liệu, thu hồi token) hoặc xóa gia
+  đình trên app mobile. Việc rút lại không ảnh hưởng tính hợp pháp của xử lý đã thực hiện trước đó.
 - **Phản đối/hạn chế xử lý:** tắt giám sát hoặc tắt bảo vệ trong Parent Mode; một số tính năng
   chặn sẽ ngừng hoạt động tương ứng.
 - **Khiếu nại:** liên hệ nhà phát triển theo mục 12; nếu chưa được giải quyết, có thể khiếu nại
@@ -201,13 +259,21 @@ phụ huynh xác nhận điều này trong onboarding và không hỗ trợ giá
   uninstall với `DELETEUSERDATA=1` để xóa `%ProgramData%\EduFocus`, gồm DB, backup, file khóa
   `edufocus.key` và log của service. File CSV và log của UI trong `%LocalAppData%\EduFocus` cần được
   xóa thủ công.
+- **Dữ liệu cloud:** xóa ngay khi phụ huynh chọn "Xóa dữ liệu cloud" trên app mobile và gõ `XÓA`
+  (backend cascade toàn bộ gia đình, thiết bị, token, push registration, tóm tắt và thông báo). Ngắt
+  kết nối trên desktop chỉ dừng gửi và thu hồi token desktop; để xóa toàn bộ, phụ huynh dùng app
+  mobile hoặc gửi yêu cầu qua kênh ở mục 12. Xóa cloud không thể hoàn tác.
+- **Dữ liệu cloud do bên tự host:** chủ máy chủ chịu trách nhiệm thực hiện yêu cầu xóa theo chính
+  sách của họ; nhà phát triển không truy cập được backend đó.
 
 ## 11. Sự cố dữ liệu
 
 Nếu phát hiện lộ, mất hoặc truy cập trái phép dữ liệu, hãy báo ngay qua kênh riêng tư ở mục 12.
 Nhà phát triển sẽ đánh giá phạm vi, hạn chế tác động, khắc phục và thông báo cho các bên liên quan
 theo thời hạn luật định (dự kiến trong vòng 72 giờ kể từ khi xác nhận sự cố, theo tư vấn pháp lý).
-Chi tiết quy trình nằm trong [dpia.md](./dpia.md) §8.
+Sự cố liên quan backend cloud (token, push registration, tóm tắt ngày) được xử lý theo cùng quy
+trình, gồm thu hồi token bị ảnh hưởng và thông báo cho phụ huynh. Chi tiết quy trình nằm trong
+[dpia.md](./dpia.md) §8.
 
 ## 12. Liên hệ
 
@@ -215,14 +281,15 @@ Chi tiết quy trình nằm trong [dpia.md](./dpia.md) §8.
 - Yêu cầu về dữ liệu cá nhân: mở báo cáo riêng tư qua liên kết trên, ghi rõ "Yêu cầu dữ liệu cá
   nhân" và mô tả yêu cầu. Không gửi PIN, mã khôi phục, dữ liệu học tập hoặc tệp DB trong báo cáo.
 - Tài liệu kỹ thuật: [SECURITY.md](../SECURITY.md), [dpia.md](./dpia.md),
-  [database_schema.md](./database_schema.md) §14/§16/§18.
+  [cloud-backend.md](./cloud-backend.md), [database_schema.md](./database_schema.md) §14/§16/§18.
 
 ## 13. Thay đổi thông báo
 
 Khi dữ liệu, mục đích hoặc cách chia sẻ thay đổi, EduFocus cập nhật thông báo này, tăng số phiên
-bản và hiển thị lại trong onboarding/bản phát hành tương ứng. Bản đang áp dụng được cài kèm tại
-`docs/privacy-notice.md` trong thư mục cài đặt và trong ứng dụng tại mục "Thông báo quyền riêng
-tư".
+bản và hiển thị lại trong onboarding/bản phát hành tương ứng. Bản 2.0 (2026-11-17) bổ sung cloud
+relay tùy chọn và FCM; phụ huynh phải xác nhận lại thông báo trước khi bật cloud lần đầu. Bản đang
+áp dụng được cài kèm tại `docs/privacy-notice.md` trong thư mục cài đặt và trong ứng dụng tại mục
+"Thông báo quyền riêng tư".
 
 ---
 

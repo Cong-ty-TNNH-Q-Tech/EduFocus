@@ -7,6 +7,25 @@ và dự án tuân theo [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ---
 
+## [Unreleased] — Phase 8
+
+### Added (Tài liệu cloud relay và quyền riêng tư)
+
+- ADR-20 mô tả cloud relay tùy chọn (desktop outbox → ASP.NET Core + PostgreSQL → FCM), nguyên tắc
+  least-data, ghép nối/token, retention và các đánh đổi; kèm [docs/cloud-backend.md](./docs/cloud-backend.md)
+  với API v1, schema PostgreSQL và quy trình vận hành/tự host.
+- Use cases UC15–UC18 (ghép nối điện thoại, nhận thông báo đẩy, xem báo cáo tóm tắt, ngắt/xóa dữ liệu
+  cloud) và business rules BR-31..BR-35 trong BA document.
+- Privacy notice bản 2.0 (hiệu lực 2026-11-17) bổ sung mục cloud tùy chọn, FCM/Google, retention cloud,
+  quyền rút lại/xóa; DPIA bản 2.0 bổ sung data map, rủi ro và câu hỏi pháp lý cho cloud.
+- README cập nhật tính năng, nền tảng Android, tech stack và roadmap Phase 8.
+
+### Breaking changes
+
+- Không có. Đây là thay đổi tài liệu; cloud mặc định tắt và ứng dụng desktop giữ nguyên hành vi.
+
+---
+
 ## [2.0.5] - 2026-11-12
 
 ### Added (Kiểm tra camera — xem trước camera)

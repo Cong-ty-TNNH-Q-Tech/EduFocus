@@ -41,9 +41,11 @@ Học sinh mở máy tính để học online nhưng rất dễ bị cuốn vào
 | 📊 **Theo dõi phiên học** | Ghi nhận thời gian học, ứng dụng/domain đang dùng (best-effort), số lần bị chặn quan sát được |
 | 👁️ **Ước lượng tập trung** | Dùng webcam để nhận biết có mặt, nhìn màn hình, rời màn hình hoặc buồn ngủ |
 | 🖥️ **Nhận diện lớp online** | Theo dõi riêng Google Meet, Microsoft Teams, Zoom |
-| 🔒 **Local-first** | Không cloud, không tài khoản, dữ liệu chỉ nằm trên máy |
+| 🔒 **Local-first** | Mặc định không cloud, không tài khoản, dữ liệu chỉ nằm trên máy; cloud relay là tùy chọn (Phase 8) |
 | 🛡️ **Chống tắt cơ bản** | Ẩn xuống tray, thoát cần PIN; Windows Service nền giữ bảo vệ khi UI đóng, tự khởi động lại sau crash/reboot (SCM restart khoảng 60 giây) |
 | 📈 **Báo cáo phụ huynh** | Dashboard ngày/tuần, timeline, mất tập trung, blocked attempts, xuất CSV |
+| 📱 **Thông báo cho phụ huynh** | App Android nhận thông báo đẩy khi con xao nhãng kéo dài, vắng mặt hoặc bảo vệ bị tắt; xem báo cáo tóm tắt từ xa (Phase 8, tùy chọn) |
+| ☁️ **Cloud tùy chọn** | Mặc định tắt; chỉ bật khi phụ huynh ghép nối điện thoại. Chỉ bốn loại sự kiện tổng hợp rời máy, có thể ngắt/xóa bất kỳ lúc nào |
 
 ---
 
@@ -53,7 +55,8 @@ EduFocus được thiết kế để **không trở thành phần mềm do thám
 
 - **Không lưu ảnh, video hoặc âm thanh.** Frame webcam chỉ được xử lý trong bộ nhớ để suy ra trạng thái.
 - **Không lưu nội dung trang web, tin nhắn hay clipboard.**
-- **Không gửi dữ liệu học tập lên cloud.** Mọi dữ liệu nằm trong SQLite **mã hóa SQLCipher** trên máy; kiểm tra cập nhật mặc định tắt, khi phụ huynh bật chỉ gửi số phiên bản tới GitHub và GitHub vẫn có thể thấy IP.
+- **Không gửi dữ liệu học tập lên cloud khi chưa được phụ huynh bật.** Mọi dữ liệu nằm trong SQLite **mã hóa SQLCipher** trên máy; kiểm tra cập nhật mặc định tắt, khi phụ huynh bật chỉ gửi số phiên bản tới GitHub và GitHub vẫn có thể thấy IP. Từ Phase 8, cloud relay **mặc định tắt**: khi phụ huynh chủ động ghép nối điện thoại, chỉ bốn loại sự kiện tổng hợp (tóm tắt ngày, cảnh báo xao nhãng/vắng mặt, bảo vệ bị tắt, cảnh báo đổi giờ) được gửi; không có URL, tên miền, tiêu đề cửa sổ, tên ứng dụng, dữ liệu camera hay PIN. Push đi qua FCM của Google.
+- **Cloud có thể thu hồi và xóa:** ngắt kết nối trên desktop hoặc xóa gia đình bằng `XÓA` trên app mobile; backend xóa cascade và thu hồi token. Chi tiết: [docs/cloud-backend.md](./docs/cloud-backend.md).
 - **Dữ liệu được mã hóa khi lưu:** DB, WAL và backup dùng SQLCipher; khóa 32 byte lưu bằng DPAPI
   `LocalMachine` trong `%ProgramData%\EduFocus\edufocus.key`, gắn với máy và không nằm trong log.
   Key không phải PIN; nếu tự sao lưu DB, cần sao lưu cả `edufocus.key` và chỉ khôi phục trên máy đó.
@@ -69,7 +72,9 @@ EduFocus được thiết kế để **không trở thành phần mềm do thám
 - [DPIA](./docs/dpia.md) — data map, đánh giá rủi ro, quy trình xử lý yêu cầu dữ liệu (xác nhận
   trong 72 giờ làm việc, hoàn tất trong 30 ngày) và ứng phó sự cố.
 - [Third-party notices](./THIRD-PARTY-NOTICES.md) — danh mục giấy phép của mọi thư viện được
-  phân phối trong MSI/ZIP.
+  phân phối trong MSI/ZIP/app mobile.
+- [Cloud relay (Phase 8)](./docs/cloud-backend.md) và [ADR-20](./docs/adr/ADR-20-optional-cloud-relay.md)
+  — kiến trúc, API, dữ liệu gửi đi, retention và cách tự host.
 
 **Xóa dữ liệu:** Parent Mode → "Dữ liệu & quyền riêng tư" → xóa toàn bộ dữ liệu quan sát bằng
 PIN; khi gỡ cài đặt có thể chọn xóa `%ProgramData%\EduFocus` (DB, backup và `edufocus.key`). Chi tiết
@@ -114,6 +119,7 @@ Tắt Protection bằng PIN hoặc hết khung giờ
 - 🔜 macOS — chưa hỗ trợ
 - 🌐 Chrome/Edge/Firefox chặn domain qua hosts; extension Chrome/Edge 116+ chặn thêm URL/path; block page cho cả HTTP và HTTPS (Firefox cảnh báo chứng chỉ)
 - 🎥 Webcam tích hợp hoặc webcam ngoài (tùy chọn, cho tính năng attention)
+- 📱 Android 8.0+ (API 26) cho app phụ huynh `EduFocus Parent` (Phase 8, tùy chọn); cần Google Play Services để nhận FCM
 
 ---
 
@@ -129,6 +135,8 @@ Tắt Protection bằng PIN hoặc hết khung giờ
 | **Attention** | OpenCvSharp4 + ONNX Runtime (MediaPipe Face/Iris) |
 | **Background protection** | Windows Service `EduFocusProtection` (LocalSystem) + named-pipe IPC có ACL/xác thực ảnh tiến trình |
 | **Security** | PBKDF2-SHA256; không lưu secret khác |
+| **Cloud relay (Phase 8)** | ASP.NET Core Web API .NET 10 + PostgreSQL 16, Docker; desktop outbox SQLite; FCM HTTP v1 (data-only) |
+| **Mobile (Phase 8)** | .NET MAUI `net10.0-android`, CommunityToolkit.Mvvm, package `com.qtech.edufocus.parent` |
 | **Installer** | WiX Toolset v4 (MSI, cài service + native host) |
 | **CI/CD** | GitHub Actions |
 
@@ -170,8 +178,10 @@ dotnet test EduFocus.slnx --configuration Release
 ## 📚 Tài liệu
 
 - [📄 BA Document](./docs/ba_document.md) — Phân tích nghiệp vụ, tính năng, quy tắc, NFR
-- [📋 Use Cases](./docs/use_cases.md) — Luồng nghiệp vụ chi tiết UC01–UC14
+- [📋 Use Cases](./docs/use_cases.md) — Luồng nghiệp vụ chi tiết UC01–UC18
 - [🏛️ System Architecture](./docs/system_architecture.md) — Kiến trúc, thành phần, quyết định thiết kế
+- [☁️ Cloud Backend (Phase 8)](./docs/cloud-backend.md) — API, schema cloud, retention và vận hành
+- [📱 Cloud relay ADR](./docs/adr/ADR-20-optional-cloud-relay.md) — Quyết định và đánh đổi của cloud tùy chọn
 - [🗄️ Database Schema](./docs/database_schema.md) — Schema SQLite, index, retention
 - [🧩 Domain Invariants](./docs/domain-invariants.md) — Entity invariants, ranh giới domain/DB/use case
 - [📝 Changelog](./CHANGELOG.md) — Lịch sử thay đổi
@@ -196,6 +206,7 @@ dotnet test EduFocus.slnx --configuration Release
 - [ ] Phase 5: Attention monitoring
 - [ ] Phase 6: Dashboard, reports, settings
 - [ ] Phase 7: Hardening, installer, CI, release MVP
+- [ ] Phase 8: Cloud relay tùy chọn + app phụ huynh Android + thông báo đẩy (milestone #10)
 
 ---
 
@@ -226,6 +237,8 @@ dotnet test EduFocus.slnx --configuration Release
 - Không thể phát hiện mọi chatbot mới hoặc chatbot chạy trong ứng dụng khác.
 - Process watcher dựa trên tên/đường dẫn process; app đổi tên hoặc chạy portable có thể không bị phát hiện.
 - Ứng dụng không chống được người dùng có quyền SYSTEM/admin; Windows shutdown/logoff vẫn là đường bypass.
+- Cloud relay phụ thuộc mạng và FCM/Google: máy tính mất mạng thì sự kiện nằm trong outbox tới khi gửi được; điện thoại không có Google Play Services sẽ không nhận thông báo; độ trễ push do Android có thể vài phút. App mobile chỉ xem tổng hợp ngày, không có timeline chi tiết và không sửa blocklist từ xa.
+- Khi cloud bật, dữ liệu tổng hợp và token FCM nằm trên backend (hoặc hạ tầng tự host); phụ huynh cần cân nhắc trước khi bật và có thể tắt/xóa bất kỳ lúc nào.
 - Bản cài dùng Windows Service: service chạy LocalSystem, tiếp tục bảo vệ khi UI đóng và được SCM
   restart sau crash (khoảng 60 giây; tối đa 3 lần/ngày). Admin/SYSTEM vẫn stop/disable/gỡ được service.
   UI vẫn cần quyền admin trong bản này vì đọc/ghi DB được ACL bảo vệ. Bản portable/source dùng watchdog

@@ -1,7 +1,7 @@
 # Kiến trúc Hệ thống - EduFocus
 
 > **Trạng thái:** Thiết kế đích / đang chuyển đổi từ **Don't Be Lazy**.
-> **Phiên bản:** 2.0 — 2026-10-26
+> **Phiên bản:** 2.1 — 2026-11-17 (bổ sung cloud relay tùy chọn cho Phase 8)
 >
 > Mã nguồn đã dùng tên project `EduFocus.*` từ Phase 1 (issue #5). Tài liệu này mô tả kiến trúc **đích** của EduFocus.
 
@@ -18,7 +18,8 @@ EduFocus kế thừa nền **Clean Architecture + Ports & Adapters** của dự 
 
 ### Nguyên tắc
 
-1. **Local-first:** không cloud, không telemetry mặc định.
+1. **Local-first:** cloud là tùy chọn, mặc định tắt; không telemetry. Khi phụ huynh không ghép nối
+   điện thoại, ứng dụng không gọi mạng ngoài update check (cũng mặc định tắt).
 2. **Least data:** chỉ lưu dữ liệu tổng hợp và sự kiện; không lưu ảnh/video.
 3. **Safe failure:** nếu không chặn được hoặc không mở được camera, báo đúng trạng thái; không giả vờ thành công.
 4. **Auditability:** mọi thay đổi bảo vệ, PIN, blocklist, xóa dữ liệu đều có audit log.
@@ -1097,7 +1098,43 @@ Trạng thái lưu trong `AppSettings.ProtectionEnabled`; session active lưu tr
 - Retention job chạy lúc khởi động và mỗi ngày khi local time ≥ 03:00; xóa theo batch 500 để tránh khóa DB lâu, bỏ qua session `Active`/event còn mở và chạy `PRAGMA incremental_vacuum` sau mỗi pass.
 - Backup trước migration schema; giữ 3 bản gần nhất. Không migrate dữ liệu từ 1.x.
 - Không lưu ảnh/video/audio.
-- Không network call chứa dữ liệu học tập. Update check mặc định tắt, chỉ chạy khi phụ huynh bật; request chỉ gồm `User-Agent: EduFocus/{version}` tới GitHub Releases API (GitHub thấy IP), không tự chạy lúc khởi động. Xóa toàn bộ dữ liệu theo yêu cầu dùng PIN + `XÓA` và chỉ xóa bản ghi chi tiết/session đã kết thúc, giữ settings, PIN, audit và phiên đang chạy.
+- Không network call chứa dữ liệu học tập khi cloud tắt (mặc định). Update check mặc định tắt, chỉ chạy khi phụ huynh bật; request chỉ gồm `User-Agent: EduFocus/{version}` tới GitHub Releases API (GitHub thấy IP), không tự chạy lúc khởi động. Xóa toàn bộ dữ liệu theo yêu cầu dùng PIN + `XÓA` và chỉ xóa bản ghi chi tiết/session đã kết thúc, giữ settings, PIN, audit và phiên đang chạy.
+- **Ngoại lệ duy nhất:** cloud relay tùy chọn (Phase 8) khi phụ huynh chủ động ghép nối điện thoại; chỉ
+  bốn loại sự kiện tổng hợp rời máy, xem §10.1 và [cloud-backend.md](./cloud-backend.md).
+
+### 10.1. Cloud relay tùy chọn (Phase 8)
+
+```text
+EduFocus.WPF ──(opt-in, token efd_)──► EduFocus Cloud API ──(FCM HTTP v1)──► EduFocus.Parent (Android)
+     │  outbox SQLite, batch ≤50             │ PostgreSQL 16                         │
+     └─ daily_summary / attention_alert /    └─ pairing, ingest, preferences,        └─ tổng quan ngày,
+        protection_off / security_alert         reports, notification jobs              danh sách cảnh báo
+```
+
+- **Quyết định:** [ADR-20](./adr/ADR-20-optional-cloud-relay.md). Chi tiết API, schema và vận hành:
+  [cloud-backend.md](./cloud-backend.md).
+- **Tách khỏi lõi:** desktop thêm `EduFocus.Infrastructure.Cloud` + `ICloudLinkUseCase`/
+  `ICloudSyncPort`/`ICloudOutboxRepository`; Domain và UseCases không phụ thuộc cloud. Backend là
+  solution riêng `cloud/EduFocus.Cloud.slnx` (Api, Contracts, Data, Tests); mobile là solution riêng
+  `mobile/EduFocus.Parent.slnx` (.NET MAUI Android). Không project nào nằm trong `EduFocus.slnx`.
+- **Kích hoạt:** chỉ sau khi phụ huynh xác thực PIN, đọc privacy notice bản 2.0 và ghép nối thành
+  công; trạng thái lưu trong `AppSettings` cùng token (bảo vệ DPAPI) và có thể ngắt bất kỳ lúc nào.
+- **Sự kiện rời máy:** `daily_summary` (tổng hợp ngày, latest-wins), `attention_alert` (distracted/
+  absent ≥ 5 phút), `protection_off` (chỉ khi phụ huynh chủ động tắt/thoát), `security_alert`
+  (`clock_jump` từ audit `TamperDetected`). Không gửi URL, domain, window title, app name, sample thô,
+  dữ liệu camera, PIN hay recovery code.
+- **Outbox:** bảng SQLite riêng, `ClientEventId` UUID, ingest idempotent, retry backoff 1 → 60 phút,
+  giới hạn 5.000 sự kiện/7 ngày; xóa cục bộ sau khi server xác nhận.
+- **Pairing:** mã 8 ký tự Crockford base32 hết hạn 10 phút (server lưu hash) hoặc QR; token đục
+  `efd_`/`efm_`, server chỉ lưu SHA-256, thu hồi/xoay vòng được.
+- **Push:** FCM **data-only**, app mobile tự dựng câu tiếng Việt chung; quiet hours mặc định
+  22:00–06:00, tóm tắt ngày 20:30 theo múi giờ gia đình, dedupe phía server.
+- **Xóa/thu hồi:** ngắt kết nối trên desktop thu hồi token thiết bị; app mobile xóa gia đình bằng
+  xác nhận `XÓA` (backend cascade toàn bộ dữ liệu cloud). Retention cloud: pairing 24 giờ, sync
+  event 7 ngày, notification 30 ngày, summary 180 ngày, audit 365 ngày.
+- **Giới hạn:** phụ thuộc FCM/Google (kể cả xử lý ngoài lãnh thổ), độ trễ push do Android, không có
+  timeline chi tiết trên điện thoại, không đồng bộ hai chiều blocklist, admin/SYSTEM vẫn gỡ được
+  cấu hình cloud cục bộ.
 
 ---
 
@@ -1314,6 +1351,10 @@ EduFocus/
 │   ├── EduFocus.Infrastructure.Attention/
 │   │   ├── Camera/          (OpenCvCameraPort, WindowsCameraDeviceCatalog, OpenCvCameraSource)
 │   │   └── ... (adapter OpenCvSharp/ONNX từ spike attention)
+│   ├── EduFocus.Infrastructure.Cloud/   (Phase 8, tùy chọn)
+│   │   ├── Pairing/         (pairing client, token store DPAPI)
+│   │   ├── Sync/            (outbox worker, event producers)
+│   │   └── EduFocus.Infrastructure.Cloud.csproj
 │   ├── EduFocus.SqliteDataAccess/
 │   │   ├── AppDbContext.cs
 │   │   ├── Repositories/
@@ -1334,6 +1375,18 @@ EduFocus/
 │   │   └── EduFocus.WPF.csproj
 │   ├── EduFocus.Service.Tests/
 │   └── EduFocus.Domain.Tests/
+├── cloud/                         (Phase 8, solution riêng)
+│   ├── EduFocus.Cloud.slnx
+│   ├── src/EduFocus.Cloud.Api/
+│   ├── src/EduFocus.Cloud.Contracts/
+│   ├── src/EduFocus.Cloud.Data/
+│   ├── tests/EduFocus.Cloud.Tests/
+│   ├── docker-compose.yml
+│   └── .env.example
+├── mobile/                        (Phase 8, solution riêng)
+│   ├── EduFocus.Parent.slnx
+│   ├── src/EduFocus.Parent.App/   (.NET MAUI, net10.0-android)
+│   └── tests/EduFocus.Parent.Tests/
 ├── installer/
 │   ├── Product.wxs
 │   ├── Build-Installer.ps1
@@ -1349,6 +1402,8 @@ EduFocus/
 │   ├── domain-invariants.md
 │   ├── privacy-notice.md
 │   ├── dpia.md
+│   ├── cloud-backend.md
+│   ├── adr/ADR-20-optional-cloud-relay.md
 │   ├── installer.md
 │   ├── release-process.md
 │   ├── release-checklist.md
@@ -1513,6 +1568,7 @@ EduFocus/
 | ADR-17 | (Đề xuất) OpenCV MSMF + ONNX Runtime + YuNet cho attention Phase 0; Haar chỉ baseline; Drowsy/gaze ở Phase 5 | Face 99,2%/30 phút, CPU 0,23% máy, RAM 184 MB; Haar bỏ sót nhiều; giữ local-first |
 | ADR-18 | Mã hóa DB bằng SQLCipher, khóa 32 byte DPAPI `LocalMachine` + raw key `x'…'` | Bảo vệ dữ liệu trẻ em khi file bị sao chép; raw key tránh PBKDF2 ~525 ms mỗi kết nối; giữ fail-closed khi mất khóa, chấp nhận key gắn thiết bị (issue #47) |
 | ADR-19 | Block page HTTPS bằng CA cục bộ + TLS loopback | Trang chặn nhất quán trên Chrome/Edge, không cần extension/kernel và không gửi dữ liệu ra ngoài; đánh đổi: trust anchor phạm vi máy và Firefox không dùng kho Windows (issue #149–#152) |
+| ADR-20 | (Đề xuất) Cloud relay tùy chọn: desktop outbox → ASP.NET Core + PostgreSQL → FCM; chỉ sự kiện tổng hợp, token đục/hash, tự host được | Đáp ứng thông báo từ xa mà không phá local-first; least-data, thu hồi/xóa được; đánh đổi: phụ thuộc FCM/Google và thêm bề mặt tấn công (Phase 8, issue #77) |
 
 ---
 
@@ -1530,6 +1586,11 @@ EduFocus/
 | ONNX model nặng | CPU/RAM cao | Model nhẹ, 1–2 FPS, thread limit |
 | License model ONNX/MediaPipe | Không được phân phối | Rà soát license/attribution trước release |
 | Quyền admin | Bypass toàn bộ | Giới hạn đã biết; tài khoản Windows riêng |
+| Cloud bị xâm nhập | Lộ token/push token/tóm tắt ngày | Token hash + thu hồi; không có dữ liệu thô/URL/camera; rate limit; audit; self-host được |
+| Token cloud bị lộ | Gửi dữ liệu giả hoặc đọc báo cáo | Token đục, hash phía server, scope tối thiểu, thu hồi/xoay vòng, không ghi log |
+| FCM/Google xử lý ngoài Việt Nam | Rủi ro chuyển dữ liệu xuyên biên giới | Chỉ metadata giao nhận + nội dung chung; nêu trong privacy notice/DPIA; cân nhắc kênh thay thế |
+| Lạm dụng ingest/DoS | Backend quá tải, chi phí | Giới hạn 50 event/64 KB mỗi batch, rate limit theo token/IP, cảnh báo |
+| Phụ huynh hiểu nhầm thông báo | Kết luận sai về con | Nội dung "ước lượng", kèm coverage/độ tin cậy; không dùng làm bằng chứng |
 
 ---
 
@@ -1537,6 +1598,8 @@ EduFocus/
 
 - [BA Document](./ba_document.md)
 - [Use Cases](./use_cases.md)
+- [Cloud relay (Phase 8)](./cloud-backend.md)
+- [ADR-20: Cloud relay tùy chọn](./adr/ADR-20-optional-cloud-relay.md)
 - [Database Schema](./database_schema.md)
 - [Domain Invariants](./domain-invariants.md)
 - [Security Policy](../SECURITY.md)

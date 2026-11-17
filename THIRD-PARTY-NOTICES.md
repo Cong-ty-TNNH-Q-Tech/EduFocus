@@ -1,6 +1,6 @@
 # Thông báo bên thứ ba — EduFocus
 
-Phiên bản 1.0 · Ngày hiệu lực: 2026-10-30 · Áp dụng cho EduFocus 2.0.0
+Phiên bản 1.1 · Ngày hiệu lực: 2026-11-17 · Áp dụng cho EduFocus 2.0.0 và Phase 8 (2.1.0)
 
 EduFocus được phân phối dưới giấy phép MIT (xem [`LICENSE`](./LICENSE)). Bản phát hành
 self-contained có kèm các thành phần bên thứ ba dưới đây. Tài liệu này liệt kê từng thành phần,
@@ -80,6 +80,31 @@ thành phần đó chỉ được dùng qua `OpenCvSharpExtern.dll` và `opencv_
 - Mã nguồn FFmpeg tương ứng: <https://github.com/FFmpeg/FFmpeg>. Hướng dẫn build mà OpenCV dùng để
   tạo DLL này: <https://github.com/opencv/opencv/tree/4.x/3rdparty/ffmpeg>.
 - Toàn văn LGPL-2.1 nằm ở Phụ lục C.
+
+### 1.4 Thành phần Phase 8 (kế hoạch, chưa phân phối)
+
+Các thành phần dưới đây sẽ được phân phối trong desktop, app Android và backend từ Phase 8. Phiên
+bản chính xác được chốt tại thời điểm phát hành và cập nhật vào tài liệu này trước khi publish.
+
+| Thành phần | Dùng ở | Giấy phép | Bản quyền |
+| --- | --- | --- | --- |
+| QRCoder | Desktop — sinh QR ghép nối | MIT | Raffael Herrmann |
+| ZXing.Net.Maui | App Android — quét QR | MIT | ZXing.Net.Maui contributors |
+| CommunityToolkit.Maui | App Android — UI/behaviors | MIT | .NET Foundation and Contributors |
+| Plugin.Firebase (hoặc tương đương) | App Android — nhận FCM | MIT | Plugin.Firebase contributors |
+| Microsoft.Extensions.Http | Desktop — HTTP client cloud | MIT | .NET Foundation and Contributors |
+| FirebaseAdmin | Backend — gửi FCM HTTP v1 | Apache-2.0 | Google LLC |
+| Google.Apis.Auth | Backend — xác thực service account | Apache-2.0 | Google LLC |
+| Npgsql.EntityFrameworkCore.PostgreSQL | Backend — EF Core provider PostgreSQL | PostgreSQL License | The Npgsql contributors |
+| PostgreSQL | Backend — cơ sở dữ liệu | PostgreSQL License | PostgreSQL Global Development Group |
+
+**FCM/Google:** thông báo đẩy được vận chuyển qua Firebase Cloud Messaging. Việc dùng FCM tuân theo
+điều khoản dịch vụ của Google; EduFocus chỉ gửi message data-only với mã loại/ngày, không gửi dữ liệu
+học tập chi tiết. Xem [privacy-notice.md](./docs/privacy-notice.md) §7.1 và [dpia.md](./docs/dpia.md).
+
+**PostgreSQL License:** cho phép sử dụng, sao chép, sửa đổi và phân phối với điều kiện giữ thông báo
+bản quyền; toàn văn sẽ được bổ sung vào phụ lục khi chốt phiên bản phân phối. Nguồn:
+<https://www.postgresql.org/about/licence/>.
 
 ## 2. Gói chỉ dùng khi build và kiểm thử (không phân phối)
 
@@ -929,6 +954,14 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 - xunit: <https://github.com/xunit/xunit/blob/main/LICENSE>
 - FluentAssertions: <https://github.com/fluentassertions/fluentassertions/blob/7.2.0/LICENSE>
 - YuNet / OpenCV Zoo: <https://github.com/opencv/opencv_zoo/tree/main/models/face_detection_yunet>
+- QRCoder: <https://github.com/codebude/QRCoder/blob/master/LICENSE.txt>
+- ZXing.Net.Maui: <https://github.com/Redth/ZXing.Net.Maui/blob/master/LICENSE>
+- CommunityToolkit.Maui: <https://github.com/CommunityToolkit/Maui/blob/main/LICENSE>
+- Plugin.Firebase: <https://github.com/TobiasBuchholz/Plugin.Firebase/blob/master/LICENSE>
+- Firebase Admin SDK: <https://github.com/firebase/firebase-admin-dotnet/blob/master/LICENSE>
+- Google.Apis.Auth: <https://github.com/googleapis/google-api-dotnet-client/blob/main/LICENSE>
+- Npgsql: <https://github.com/npgsql/npgsql/blob/main/LICENSE>
+- PostgreSQL: <https://www.postgresql.org/about/licence/>
 
 Các tệp thông báo gốc của Microsoft (`.NET` và `ONNX Runtime`) chứa thêm ghi công cho các thành
 phần bên thứ ba mà Microsoft phân phối kèm; chúng được dẫn chiếu thay vì sao chép toàn bộ do kích

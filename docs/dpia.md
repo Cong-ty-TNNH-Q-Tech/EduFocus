@@ -2,13 +2,13 @@
 
 | Trường | Giá trị |
 |---|---|
-| Phiên bản hồ sơ | 1.0 |
-| Ngày lập | 2026-10-30 |
-| Issue | [#44](https://github.com/Cong-ty-TNNH-Q-Tech/EduFocus/issues/44) |
+| Phiên bản hồ sơ | 2.0 |
+| Ngày lập | 2026-11-17 |
+| Issue | [#44](https://github.com/Cong-ty-TNNH-Q-Tech/EduFocus/issues/44), cập nhật Phase 8 [#77](https://github.com/Cong-ty-TNNH-Q-Tech/EduFocus/issues/77) |
 | Người chịu trách nhiệm | Nguyễn Thành Trung — Product/Release owner |
 | Tư vấn pháp lý | Luật sư/DPO bên ngoài — **cần chỉ định và ký duyệt trước phát hành thương mại** |
-| Trạng thái | Hoàn chỉnh về kỹ thuật; sẵn sàng cho rà soát pháp lý |
-| Tài liệu liên quan | [privacy-notice.md](./privacy-notice.md), [ba_document.md](./ba_document.md) §10.2, [database_schema.md](./database_schema.md) §14/§16/§18, [security-e2e-checklist.md](./security-e2e-checklist.md), [spikes/net10-ef10-dpia-evaluation.md](./spikes/net10-ef10-dpia-evaluation.md) |
+| Trạng thái | Hoàn chỉnh về kỹ thuật; sẵn sàng cho rà soát pháp lý (đã bổ sung cloud relay tùy chọn) |
+| Tài liệu liên quan | [privacy-notice.md](./privacy-notice.md), [cloud-backend.md](./cloud-backend.md), [ADR-20](./adr/ADR-20-optional-cloud-relay.md), [ba_document.md](./ba_document.md) §10.2, [database_schema.md](./database_schema.md) §14/§16/§18, [security-e2e-checklist.md](./security-e2e-checklist.md), [spikes/net10-ef10-dpia-evaluation.md](./spikes/net10-ef10-dpia-evaluation.md) |
 
 > Tài liệu này là đánh giá kỹ thuật phục vụ tuân thủ, **không phải tư vấn pháp lý** và không thay
 > thế hồ sơ nộp cơ quan có thẩm quyền. Trước khi phát hành thương mại, luật sư/DPO phải rà soát,
@@ -27,13 +27,17 @@ trên máy của con. Sản phẩm gồm:
 - **Attention (tùy chọn):** camera được mở trong phiên để ước lượng trạng thái tập trung; không lưu
   ảnh/video/landmark/embedding.
 - **Báo cáo và dữ liệu:** dashboard, báo cáo ngày/tuần/tháng, xuất CSV, retention và xóa dữ liệu.
+- **Cloud relay tùy chọn (Phase 8):** khi phụ huynh chủ động ghép nối điện thoại, desktop gửi bốn loại
+  sự kiện tổng hợp qua HTTPS tới backend ASP.NET Core/PostgreSQL; backend gửi push qua FCM tới app
+  .NET MAUI Android của phụ huynh. Cloud mặc định tắt.
 
 **Luồng dữ liệu:** camera/foreground/hệ thống → xử lý trong tiến trình trên máy → SQLite
-`%ProgramData%\EduFocus` → UI/báo cáo/CSV do phụ huynh mở. **Không có máy chủ EduFocus**, không có
-telemetry, không upload dữ liệu học tập.
+`%ProgramData%\EduFocus` → UI/báo cáo/CSV do phụ huynh mở. Khi cloud bật: outbox SQLite → HTTPS →
+PostgreSQL của backend → FCM → app mobile. Khi cloud tắt (mặc định) **không có máy chủ EduFocus**,
+không telemetry, không upload dữ liệu học tập.
 
-**Ngoài phạm vi:** dịch vụ cloud, tài khoản trực tuyến, chia sẻ dữ liệu giữa các thiết bị, nhận diện
-danh tính, chống gian lận thi cử.
+**Ngoài phạm vi:** web dashboard cho phụ huynh, analytics/quảng cáo, chia sẻ dữ liệu giữa các gia
+đình, nhận diện danh tính, chống gian lận thi cử.
 
 ---
 
@@ -43,6 +47,8 @@ danh tính, chống gian lận thi cử.
 |---|---|---|
 | Nhà phát hành / bên cung cấp công cụ | ThanhTrunggDEV | Thiết kế privacy-by-design, phát hành, xử lý sự cố sản phẩm, duy trì hồ sơ DPIA/thông báo |
 | Bên kiểm soát dữ liệu trên thiết bị | Phụ huynh/người giám hộ | Quyết định bật giám sát, cấu hình retention, xóa dữ liệu, thông báo cho trẻ |
+| Bên kiểm soát/xử lý dữ liệu cloud | Nhà phát hành (backend mặc định) hoặc tổ chức tự host | Vận hành backend, bảo mật, retention cloud, xử lý yêu cầu xóa; vai trò chính xác chờ tư vấn pháp lý |
+| Nhà cung cấp vận chuyển push | Google — Firebase Cloud Messaging | Giao message data-only tới thiết bị Android; xử lý token/IP/metadata giao nhận |
 | Người chịu trách nhiệm DPIA | Nguyễn Thành Trung (Product/Release owner) | Duy trì hồ sơ, điều phối rà soát pháp lý và sự cố |
 | Tư vấn pháp lý/DPO | Cần chỉ định | Xác nhận vai trò pháp lý, mẫu hồ sơ, thời hạn thông báo, ký duyệt |
 | Đầu mối an toàn thông tin | Kênh bảo mật GitHub của repo | Tiếp nhận báo cáo riêng tư/bảo mật, phối hợp điều tra |
@@ -55,6 +61,9 @@ danh tính, chống gian lận thi cử.
 3. Mẫu thông báo/DPIA áp dụng (tham chiếu Mẫu 02a/02b và Mẫu 10 theo hướng dẫn hiện hành) và thời
    hạn nộp 60 ngày kể từ khi bắt đầu xử lý có áp dụng cho sản phẩm cài cục bộ không?
 4. Yêu cầu đồng ý của trẻ từ đủ 7 tuổi được thực hiện trong gia đình như thế nào để đủ bằng chứng?
+5. Khi bật cloud relay, nhà phát hành là bên kiểm soát hay bên xử lý dữ liệu cloud; cơ sở chuyển dữ
+   liệu qua FCM/Google ra ngoài Việt Nam và nghĩa vụ đánh giá chuyển dữ liệu xuyên biên giới?
+6. Trách nhiệm pháp lý của phụ huynh/tổ chức khi tự host backend (họ trở thành bên kiểm soát)?
 
 Cho tới khi được xác nhận, sản phẩm áp dụng cách tiếp cận thận trọng: minh bạch đầy đủ, xin đồng ý
 của phụ huynh, nhắc phụ huynh thông báo cho trẻ, không hỗ trợ giám sát che giấu.
@@ -79,15 +88,25 @@ của phụ huynh, nhắc phụ huynh thông báo cho trẻ, không hỗ trợ g
 | Chứng chỉ cục bộ | khóa riêng CA (`EDUCA1` + DPAPI), public root, leaf ngắn hạn theo domain | App/service | Hiển thị trang chặn HTTPS | `%ProgramData%\EduFocus\certificates\block-root-ca.edufocus`; `LocalMachine\Root`; key store của tiến trình | CA theo vòng đời dữ liệu; root gỡ khi bảo vệ OFF/uninstall; leaf bị xóa khi chứng chỉ dispose | SYSTEM/Administrators (khóa CA); tiến trình EduFocus (leaf) | Không | **Cao** (khóa riêng CA) |
 | Bản xuất CSV | tổng hợp phiên, app/domain, sự kiện | Phụ huynh | Chia sẻ nội bộ do phụ huynh chọn | `%LocalAppData%\EduFocus\exports` | Đến khi phụ huynh xóa | Phụ huynh | Phụ huynh quyết định | **Cao** |
 | Yêu cầu cập nhật | IP, User-Agent | GitHub (khi bật) | Kiểm tra phiên bản | Không lưu cục bộ | Không áp dụng | GitHub | GitHub | Thấp |
+| Cloud — ghép nối và thiết bị | tên thiết bị, nền tảng, hash token `efd_`/`efm_`, scope, hash pairing code | Desktop/mobile khi phụ huynh bật | Xác thực thiết bị, thu hồi | PostgreSQL (`Families`, `Devices`, `DeviceTokens`, `PairingSessions`) | Pairing 24 giờ; token tới khi thu hồi/xóa | Backend (hash), phụ huynh qua app | Không (FCM chỉ nhận push token) | **Cao** (bảo mật) |
+| Cloud — tóm tắt ngày | localDate, phút học/tập trung, số lần xao nhãng/bị chặn, coverage camera, phút lớp trực tuyến | Desktop (tổng hợp) | Báo cáo tóm tắt trên điện thoại | PostgreSQL (`DailySummaries`) | 180 ngày | Backend, app phụ huynh đã ghép nối | Không | Trung bình (dữ liệu trẻ em, đã tổng hợp) |
+| Cloud — cảnh báo | loại `attention_alert`/`protection_off`/`security_alert`, thời điểm, thời lượng, lý do | Desktop (sự kiện) | Push và danh sách cảnh báo | PostgreSQL (`SyncEvents`, `Notifications`) | Sync event 7 ngày; notification 30 ngày | Backend, app phụ huynh | Google FCM (metadata + nội dung chung) | Trung bình |
+| Cloud — push và preference | FCM token, quiet hours, loại thông báo bật/tắt, log gửi | Mobile/desktop | Gửi đúng thông báo, tôn trọng quiet hours | PostgreSQL (`PushRegistrations`, `NotificationPreferences`, `Notifications`) | Theo thiết bị; log 30 ngày | Backend, app phụ huynh | Google FCM | Trung bình |
+| Cloud — audit | actor, action, thời điểm, metadata không chứa token/PIN | Backend | Truy vết ghép nối/thu hồi/xóa | PostgreSQL (`CloudAuditLogs`) | 365 ngày | Backend/điều tra | Không | Thấp–trung bình |
 
 **Không có trong data map:** frame/ảnh/video/audio, landmark/embedding khuôn mặt, clipboard, nội dung
-trang, lịch sử duyệt đầy đủ, vị trí, danh bạ, email, dữ liệu sinh trắc học.
+trang, lịch sử duyệt đầy đủ, vị trí, danh bạ, email, dữ liệu sinh trắc học. Cloud **không** nhận URL,
+tên miền, tiêu đề cửa sổ, tên ứng dụng, mẫu hoạt động thô, dữ liệu camera, PIN hay recovery code.
 
 **Xử lý trong service:** bản cài MSI chạy `EduFocusProtection` (LocalSystem) để giữ bảo vệ khi UI
 đóng. Service chỉ xử lý các nhóm dữ liệu đã có trong bảng trên (cấu hình, phiên học, blocked attempt,
 audit, log, backup, chứng chỉ cục bộ cho block page) và không thu thêm nhóm dữ liệu mới;
 camera/attention vẫn chạy trong phiên người dùng. IPC giữa UI và service là named pipe cục bộ có ACL,
 không gửi dữ liệu ra mạng và không có lệnh cấp chứng chỉ.
+
+**Xử lý trên cloud:** backend chỉ nhận các nhóm "Cloud —" trong bảng trên khi phụ huynh đã ghép nối;
+token truy cập lưu dạng hash, token FCM lưu để gửi push và bị vô hiệu khi xóa thiết bị/gia đình.
+Backend không có quyền truy cập DB cục bộ trên máy tính và không nhận dữ liệu thô.
 
 ---
 
@@ -101,9 +120,13 @@ không gửi dữ liệu ra mạng và không có lệnh cấp chứng chỉ.
   hoàn tất onboarding nếu thiếu consent. Không có đường bỏ qua từ UI.
 - Thông báo được cài kèm (`docs/privacy-notice.md` trong thư mục cài đặt), hiển thị trong app và
   liên kết từ README/installer.
-- Rút lại đồng ý: tắt giám sát (dừng camera), tắt bảo vệ, hoặc gỡ cài đặt và xóa dữ liệu.
+- Rút lại đồng ý: tắt giám sát (dừng camera), tắt bảo vệ, hoặc gỡ cài đặt và xóa dữ liệu. Với cloud:
+  ngắt kết nối trên desktop (dừng outbox, thu hồi token) hoặc xóa gia đình trên app mobile.
 - Kiểm tra cập nhật mặc định tắt; khi bật, UI nêu rõ GitHub thấy IP và không có dữ liệu học tập
   được gửi.
+- **Cloud là consent riêng:** màn hình ghép nối nêu rõ bốn loại dữ liệu gửi đi, FCM/Google là bên thứ
+  ba, retention cloud và cách ngắt/xóa; phụ huynh phải xác nhận đã đọc privacy notice bản 2.0 và
+  xác thực PIN. Không có đường bật cloud từ onboarding hoặc mặc định.
 
 ---
 
@@ -117,7 +140,9 @@ không gửi dữ liệu ra mạng và không có lệnh cấp chứng chỉ.
 | Minh bạch | Thông báo đầy đủ trong app/installer; nhãn camera, trạng thái giám sát; báo cáo nêu coverage thấp |
 | Bảo vệ dữ liệu | ACL Administrators/SYSTEM, **mã hóa SQLCipher cho DB/WAL/backup**, khóa DPAPI `LocalMachine` không nằm plaintext cạnh DB, hash PBKDF2, redaction log, không log domain/title, không secret trong audit; khóa CA cục bộ cũng dùng DPAPI + ACL và public root bị gỡ khi tắt bảo vệ/gỡ cài đặt |
 | Xóa được | Xóa toàn bộ trong Parent Mode (PIN + `XÓA`), uninstall `DELETEUSERDATA=1`, CSV do phụ huynh xóa |
-| Không chuyển dữ liệu | Không cloud/telemetry; update check opt-in chỉ tới GitHub khi phụ huynh bật |
+| Không chuyển dữ liệu | Mặc định không cloud/telemetry; update check opt-in chỉ tới GitHub khi phụ huynh bật. Cloud relay chỉ bật khi phụ huynh chủ động ghép nối và chỉ gửi sự kiện tổng hợp |
+| Kiểm soát cloud | Token đục 32 byte + hash SHA-256 phía server, scope tối thiểu, thu hồi/xoay vòng; pairing code 8 ký tự hash + hết hạn 10 phút; HTTPS bắt buộc; rate limit + giới hạn batch; FCM data-only, nội dung chung; audit ghép nối/thu hồi/xóa |
+| Xóa cloud | Ngắt kết nối (dừng outbox, thu hồi token) hoặc xóa gia đình bằng `XÓA` (cascade); retention cloud 24 giờ–365 ngày |
 | Kiểm soát truy cập | Parent Mode khóa sau 5 phút idle, lockout 5 lần/15 phút, PIN không lưu bản rõ |
 | An toàn camera | Frame trong RAM, dispose trước khi phát event; không ghi disk/network; camera chỉ mở trong phiên |
 
@@ -149,11 +174,17 @@ Thang điểm: Khả năng (L) và Tác động (I) 1–5; mức = L×I (1–6 t
 | R13 | Sự cố không được phát hiện/kéo dài | 2 | 5 | 10 | Kênh báo cáo riêng tư; quy trình §8; audit cục bộ | Trung bình — cần diễn tập |
 | R14 | Browser extension thu thập/lộ URL ngoài phạm vi rule | 2 | 3 | 6 | Chỉ xử lý URL trong RAM; bỏ query/fragment/credentials; chỉ URL khớp rule đi qua named pipe cục bộ; không storage/telemetry/content script; test quyền và DOM sink mỗi CI | Thấp |
 | R15 | Mất file khóa/đổi máy làm dữ liệu không thể khôi phục | 2 | 2 | 4 | Khóa DPAPI gắn máy; fail-closed, không tự tạo khóa đè DB; hướng dẫn giữ `edufocus.key` cùng backup và khôi phục trên cùng máy trong thông báo/SECURITY/schema §18 | Thấp — ảnh hưởng tính sẵn sàng, không rò dữ liệu |
+| R17 | Lộ token cloud hoặc push token | 2 | 5 | 10 | Token đục + hash phía server, so sánh constant-time, không log; scope tối thiểu; thu hồi/xoay vòng; rate limit; audit bất thường | Trung bình — cần thu hồi kịp thời |
+| R18 | Backend/VPS bị xâm nhập | 2 | 5 | 10 | Không có dữ liệu thô/URL/camera; PostgreSQL không public; TLS; secret FCM ngoài repo/image; backup/restore; audit; self-host được | Trung bình |
+| R19 | FCM/Google xử lý dữ liệu ngoài Việt Nam | 4 | 3 | 12 | Chỉ metadata giao nhận + nội dung chung; nêu rõ trong privacy notice/DPIA; đánh giá chuyển dữ liệu xuyên biên giới trước phát hành; cân nhắc kênh thay thế | Trung bình — phụ thuộc tư vấn pháp lý |
+| R20 | Lạm dụng ingest/DoS hoặc spam thông báo | 3 | 3 | 9 | Batch ≤ 50/64 KB, rate limit theo token/IP, dedupe và quiet hours, cảnh báo bất thường; tắt thông báo không ảnh hưởng bảo vệ cục bộ | Thấp–trung bình |
+| R21 | Phụ huynh hiểu nhầm thông báo là bằng chứng tuyệt đối | 3 | 3 | 9 | Nội dung "ước lượng", hiển thị coverage/độ tin cậy, không kết luận thay phụ huynh | Trung bình |
 | R16 | Lạm dụng root CA cục bộ để mạo danh website trên máy | 1 | 4 | 4 | Khóa riêng CA bảo vệ bằng DPAPI `LocalMachine` + ACL Administrators/SYSTEM; chỉ cài public root khi bảo vệ ON; gỡ trust khi OFF/uninstall; leaf chỉ phát cho domain đang bị chặn, không có IPC ký tùy ý; ghi rõ giới hạn admin/SYSTEM trong SECURITY | Thấp — cần quyền admin/SYSTEM hoặc đọc được file khóa |
 
-Rủi ro cao nhất còn lại là R1/R2/R5 (truy cập gia đình, CSV, đồng thuận). Các biện pháp bổ sung:
-khuyến nghị BitLocker, hướng dẫn phụ huynh dùng tài khoản Windows riêng cho trẻ, nhắc không gửi CSV
-qua kênh công khai, và duy trì thông báo rõ ràng trong mọi bản phát hành.
+Rủi ro cao nhất còn lại là R1/R2/R5 (truy cập gia đình, CSV, đồng thuận) và R19 (FCM xuyên biên
+giới). Các biện pháp bổ sung: khuyến nghị BitLocker, hướng dẫn phụ huynh dùng tài khoản Windows riêng
+cho trẻ, nhắc không gửi CSV qua kênh công khai, duy trì thông báo rõ ràng trong mọi bản phát hành và
+hoàn tất đánh giá chuyển dữ liệu xuyên biên giới trước khi bật cloud cho bản thương mại.
 
 ---
 
@@ -167,6 +198,9 @@ qua kênh công khai, và duy trì thông báo rõ ràng trong mọi bản phát
    gỡ cài đặt; nhà phát triển không truy cập dữ liệu trên máy nên không thể xóa thay và không thể
    giải mã DB hộ (khóa gắn máy). Nếu người dùng mất `edufocus.key`, hướng dẫn khôi phục bản sao khóa
    trên cùng máy; nếu không còn, dữ liệu 2.0 không thể khôi phục và người dùng có thể xóa/khởi tạo lại.
+   Với dữ liệu cloud, hướng dẫn xóa gia đình trong app mobile hoặc thực hiện xóa qua backend (nếu
+   nhà phát triển vận hành backend đó) sau khi xác minh chủ gia đình; nêu rõ dữ liệu đã xóa không
+   thể khôi phục.
 4. **Thời hạn:** xác nhận tiếp nhận trong **72 giờ làm việc**; hướng dẫn/hoàn tất trong **30 ngày**
    kể từ khi xác minh, trừ khi pháp luật yêu cầu khác.
 5. **Ghi nhận:** lưu biên nhận tối thiểu (thời điểm, loại yêu cầu, kết quả) **không kèm** dữ liệu
@@ -181,7 +215,7 @@ qua kênh công khai, và duy trì thông báo rõ ràng trong mọi bản phát
 |---|---|---|
 | Phát hiện | Nhận báo cáo qua kênh riêng tư, log/audit cục bộ, hoặc rà soát phát hành | Ngay khi nhận |
 | Phân loại | Xác định loại dữ liệu, số người ảnh hưởng, nguyên nhân, mức rủi ro | ≤ 24 giờ |
-| Ngăn chặn | Vô hiệu hóa bản phát hành/tính năng lỗi, hướng dẫn người dùng tắt giám sát/xóa dữ liệu, thu hồi artifact | ≤ 72 giờ |
+| Ngăn chặn | Vô hiệu hóa bản phát hành/tính năng lỗi, hướng dẫn người dùng tắt giám sát/xóa dữ liệu, thu hồi artifact; với cloud: thu hồi token bị ảnh hưởng, vô hiệu push registration, tạm dừng job thông báo nếu cần | ≤ 72 giờ |
 | Khắc phục | Vá lỗi, phát hành bản sửa, kiểm thử hồi quy và test bảo mật | Theo mức độ |
 | Thông báo | Thông báo cho người bị ảnh hưởng và cơ quan có thẩm quyền theo thời hạn luật định (dự kiến 72 giờ kể từ khi xác nhận; luật sư xác nhận mẫu và thời hạn) | ≤ 72 giờ |
 | Hậu kiểm | Ghi biên bản, cập nhật DPIA/risk register, bổ sung test/checklist | ≤ 30 ngày |
@@ -205,11 +239,21 @@ trong báo cáo công khai.
 | Backup DB | `SqliteBackupStore` | 3 bản | Mã hóa cùng khóa SQLCipher; tạo trước migration; không chứa file khóa |
 | Khóa mã hóa DB | `DatabaseKeyStore` (DPAPI `LocalMachine`) | Theo dữ liệu | `%ProgramData%\EduFocus\edufocus.key`; không plaintext; xóa cùng dữ liệu khi uninstall `DELETEUSERDATA=1` |
 | Hosts backup | `HostsFileBlocker` | Xóa sau restore/self-heal | Chỉ trong thư mục backup |
+| Cloud pairing | Job retention backend | 24 giờ | `PairingSessions` hết hạn/bị claim |
+| Cloud sync event | Job retention backend | 7 ngày | Chỉ để chống trùng `ClientEventId` |
+| Cloud notification | Job retention backend | 30 ngày | Log gửi, gồm suppressed |
+| Cloud daily summary | Job retention backend | 180 ngày | Upsert latest-wins theo ngày |
+| Cloud audit | Job retention backend | 365 ngày | Không chứa token/PIN |
 | CSV | Người dùng | Không tự xóa | Nằm ngoài DB; UI nhắc bảo vệ tệp |
 
 Xóa toàn bộ dữ liệu trong Parent Mode xóa sample → event → blocked attempt → session không `Active`
 theo batch 500, giữ settings/PIN/audit và dữ liệu phiên đang chạy, chạy `VACUUM` best-effort và ghi
 audit `DataDeleted`. Lỗi từng bảng được báo rõ, không báo thành công giả.
+
+**Xóa dữ liệu cloud:** `DELETE /v1/family` với `X-Confirm: XÓA` xóa cascade gia đình, thiết bị, token,
+push registration, tóm tắt, notification và sync event, sau đó thu hồi mọi token còn lại; desktop
+nhận `401` ở lần sync kế tiếp và tự tắt cloud. Ngắt kết nối chỉ dừng gửi/thu hồi token desktop, không
+xóa dữ liệu cloud — UI phải phân biệt rõ hai thao tác.
 
 ---
 
@@ -222,7 +266,7 @@ audit `DataDeleted`. Lỗi từng bảng được báo rõ, không báo thành c
 
 | Vai trò | Tên | Ngày | Kết luận |
 |---|---|---|---|
-| Product/Release owner | Nguyễn Thành Trung | 2026-10-30 | Hoàn chỉnh về kỹ thuật, chờ rà soát pháp lý |
+| Product/Release owner | Nguyễn Thành Trung | 2026-11-17 | Hoàn chỉnh về kỹ thuật cho Phase 8, chờ rà soát pháp lý (gồm chuyển dữ liệu qua FCM) |
 | Kỹ thuật bảo mật | | | |
 | Tư vấn pháp lý/DPO | | | |
 | Quản lý phát hành | | | |
@@ -232,9 +276,12 @@ audit `DataDeleted`. Lỗi từng bảng được báo rõ, không báo thành c
 ## 11. Kết luận
 
 EduFocus xử lý dữ liệu nhạy cảm của trẻ nhưng áp dụng kiến trúc local-first, không lưu frame/video,
-không nhận diện danh tính, không upload mặc định, có retention/xóa và ACL. Các rủi ro chính còn
-lại liên quan tới môi trường gia đình (tài khoản Windows dùng chung, CSV do phụ huynh chia sẻ) và
-đồng thuận trong gia đình; các biện pháp giảm thiểu đã được ghi trong thông báo và hướng dẫn.
+không nhận diện danh tính, không upload mặc định, có retention/xóa và ACL. Cloud relay tùy chọn chỉ
+gửi sự kiện tổng hợp, có token hash/thu hồi và xóa cascade, nhưng thêm phụ thuộc FCM/Google và bề mặt
+tấn công backend — hai điểm này cần được tư vấn pháp lý và kiểm thử bảo mật xác nhận trước phát hành.
+Các rủi ro chính còn lại liên quan tới môi trường gia đình (tài khoản Windows dùng chung, CSV do phụ
+huynh chia sẻ), đồng thuận trong gia đình và xử lý xuyên biên giới qua FCM; các biện pháp giảm thiểu
+đã được ghi trong thông báo và hướng dẫn.
 
 Hồ sơ đã đủ để chuyển tư vấn pháp lý. **Không phát hành thương mại** cho tới khi:
 luật sư/DPO xác nhận vai trò pháp lý và mẫu hồ sơ; thông báo quyền riêng tư được duyệt; danh sách

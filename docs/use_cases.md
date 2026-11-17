@@ -1,7 +1,7 @@
 # Tài liệu Use Case - EduFocus
 
 > **Trạng thái:** Thiết kế / đang chuyển đổi từ **Don't Be Lazy**.
-> **Phiên bản:** 2.0 — 2026-10-26
+> **Phiên bản:** 2.1 — 2026-11-17 (bổ sung UC15–UC18 cho cloud relay tùy chọn, Phase 8)
 
 ---
 
@@ -13,6 +13,8 @@
 | **Học sinh (Student)** | Người sử dụng máy trong chế độ được bảo vệ; xem trạng thái và trang chặn |
 | **Hệ thống (System)** | Scheduler, protection engine, activity tracker, attention monitor, retention job |
 | **Windows OS** | Nguồn sự kiện khởi động, sleep/resume, camera, foreground window |
+| **Ứng dụng phụ huynh (mobile)** | App Android của phụ huynh: ghép nối, nhận thông báo đẩy, xem báo cáo tóm tắt từ xa |
+| **Cloud backend (tùy chọn)** | Relay do phụ huynh bật: ghép nối, nhận sự kiện tổng hợp, gửi push qua FCM, lưu dữ liệu cloud |
 
 ---
 
@@ -34,6 +36,10 @@
 | UC12 | Vòng đời ứng dụng & chống tắt | Phụ huynh, Học sinh, Hệ thống |
 | UC13 | Đổi PIN / khôi phục PIN | Phụ huynh, Hệ thống |
 | UC14 | Tự phục hồi sau crash/restart | Hệ thống |
+| UC15 | Ghép nối điện thoại phụ huynh với cloud | Phụ huynh, Ứng dụng phụ huynh, Cloud backend |
+| UC16 | Nhận thông báo đẩy trên điện thoại | Phụ huynh, Ứng dụng phụ huynh, Cloud backend |
+| UC17 | Xem báo cáo tóm tắt từ xa | Phụ huynh, Ứng dụng phụ huynh, Cloud backend |
+| UC18 | Ngắt kết nối / xóa dữ liệu cloud | Phụ huynh, Cloud backend |
 
 ---
 
@@ -51,6 +57,10 @@
 | Đổi PIN / recovery code | ❌ | ❌ | ✅ |
 | Xóa dữ liệu | ❌ | ❌ | ✅ |
 | Thoát ứng dụng | ❌ | ❌ | ✅ |
+| Ghép nối điện thoại phụ huynh (cloud) | ❌ | ❌ | ✅ |
+| Xem báo cáo tóm tắt từ xa (app mobile) | ❌ | ❌ | ✅ (trên điện thoại đã ghép nối) |
+| Chỉnh preference thông báo (quiet hours, loại cảnh báo) | ❌ | ❌ | ✅ (trên app mobile) |
+| Ngắt kết nối / xóa dữ liệu cloud | ❌ | ❌ | ✅ |
 | Tắt máy / đăng xuất Windows | ✅ | ✅ | ✅ |
 
 ---
@@ -1008,6 +1018,177 @@ số row hiện có của từng bảng và số ngày retention đang áp dụn
 > nhận `Resumed`, bỏ khoảng sleep và tiếp tục trên session `Active` hiện tại. Thời gian sleep không vào
 > `ActiveSeconds` và không sinh sample; nếu app bị tắt trong lúc sleep thì lần khởi động sau đi theo luồng
 > crash/recovery ở trên, đóng session tại `LastHeartbeatAtUtc`.
+
+---
+
+### UC15 — Ghép nối điện thoại phụ huynh với cloud
+
+**Tác nhân:** Phụ huynh, Ứng dụng phụ huynh (mobile), Cloud backend
+**Mô tả:** Phụ huynh bật cloud tùy chọn và ghép nối điện thoại để nhận thông báo từ xa. Đây là bước duy
+nhất khiến dữ liệu rời khỏi máy tính.
+
+**Tiền điều kiện**
+- Đã hoàn tất onboarding, có PIN phụ huynh.
+- Cloud đang tắt (mặc định) hoặc chưa có thiết bị di động nào được ghép nối.
+- Thiết bị Android có kết nối mạng và đã cài app `EduFocus Parent`.
+
+**Trigger**
+- Phụ huynh chọn "Thông báo cho điện thoại" trong Parent Mode.
+
+**Luồng chính**
+1. Desktop hiển thị giải thích ngắn: dữ liệu nào sẽ được gửi (bốn loại sự kiện tổng hợp), dữ liệu nào
+   không gửi, FCM/Google là bên thứ ba, thời hạn lưu cloud và cách ngắt/xóa; yêu cầu xác nhận đã đọc
+   privacy notice bản 2.0.
+2. Hệ thống kiểm tra phiên Parent Mode còn hiệu lực; nếu không, yêu cầu PIN lại.
+3. Desktop gọi `POST /v1/pairing/sessions` tới cloud đã cấu hình, nhận `sessionId`, mã 8 ký tự và
+   `expiresAtUtc` (10 phút). Desktop hiển thị QR `edufocus://pair?v=1&u=…&s=…&c=…` và mã nhập tay.
+4. Phụ huynh quét QR hoặc nhập mã trên app mobile.
+5. App mobile gọi `POST /v1/pairing/claim` kèm tên thiết bị, nền tảng và FCM token; backend kiểm tra
+   hash mã, giới hạn thử, tạo thiết bị mobile và phát token `efm_` (chỉ trả một lần).
+6. Desktop poll `GET /v1/pairing/sessions/{id}` thấy `Claimed`, nhận token `efd_` (chỉ trả một lần),
+   lưu `familyId`, `deviceId`, token (DPAPI) và bật `CloudSyncEnabled = true`.
+7. Desktop bắt đầu outbox worker, gửi `daily_summary` hiện tại và các cảnh báo còn hiệu lực; UI hiển
+   thị "Đã ghép nối · <tên điện thoại>".
+8. Hai bên ghi audit: desktop `CloudLinked`; backend `PairingClaimed` (không chứa token/mã).
+
+**Luồng thay thế**
+- **Mã hết hạn hoặc sai:** mobile hiển thị lỗi, cho nhập lại; desktop tạo phiên mới nếu cần.
+- **Nhiều phiên cùng mã hash (hiếm):** backend trả `409 ambiguous_code`; mobile yêu cầu quét QR.
+- **Desktop mất mạng:** hiển thị lỗi kết nối, giữ trạng thái cloud tắt cho tới khi poll thành công.
+- **Phụ huynh hủy giữa chừng:** phiên bị bỏ; không token nào được cấp.
+
+**Ngoại lệ**
+- Cloud trả lỗi 5xx/timeout: hiển thị thông báo, cho thử lại; không bật outbox.
+- Token không lưu được: tắt cloud, yêu cầu ghép nối lại.
+- Phát hiện token cũ còn hiệu lực: thu hồi trước khi cấp mới.
+
+**Hậu điều kiện**
+- Desktop có liên kết cloud hợp lệ, outbox hoạt động; mobile có token `efm_`.
+- Chỉ sự kiện tổng hợp được gửi; không có URL/domain/window title/camera trong payload.
+
+**Business rules:** BR-31, BR-33.
+
+---
+
+### UC16 — Nhận thông báo đẩy trên điện thoại
+
+**Tác nhân:** Phụ huynh, Ứng dụng phụ huynh, Cloud backend
+**Mô tả:** Phụ huynh nhận thông báo khi có cảnh báo quan trọng, kể cả khi máy tính đang khóa hoặc phụ
+huynh ở ngoài nhà.
+
+**Tiền điều kiện**
+- Đã ghép nối (UC15); app mobile đã đăng ký FCM token.
+- Preference thông báo cho phép loại cảnh báo tương ứng.
+
+**Trigger**
+- Desktop gửi `attention_alert`, `protection_off` hoặc `security_alert` qua outbox.
+
+**Luồng chính**
+1. Backend ingest sự kiện (idempotent theo `clientEventId`).
+2. Job thông báo kiểm tra preference, quiet hours theo múi giờ gia đình và dedupe
+   (`1/15 phút/loại` cho attention) rồi tạo bản ghi `Notification`.
+3. Nếu ngoài quiet hours, backend gửi FCM **data-only** `{type, date, notificationId}`.
+4. App nhận message, tải chi tiết cần thiết từ API (nếu đang mở) rồi dựng nội dung tiếng Việt chung,
+   ví dụ "EduFocus: có cập nhật mới cho hôm nay" hoặc "EduFocus: bảo vệ vừa được tắt".
+5. Phụ huynh chạm thông báo → mở màn hình chi tiết (UC17).
+6. Nếu FCM trả token invalid, backend vô hiệu registration và app đăng ký lại ở lần mở kế tiếp.
+
+**Luồng thay thế**
+- **Trong quiet hours:** cảnh báo được giữ lại và gộp vào đầu khung thức; riêng `security_alert` mức
+  cao có thể gửi ngay nếu phụ huynh bật "cảnh báo an toàn xuyên quiet hours".
+- **Thiếu quyền thông báo Android:** app hiển thị hướng dẫn bật quyền; backend vẫn lưu thông báo vào
+  danh sách.
+- **Mất mạng khi nhận:** FCM giao lại khi có mạng; nội dung chung không chứa dữ liệu nhạy cảm.
+
+**Ngoại lệ**
+- FCM lỗi tạm thời: retry có backoff; ghi audit lỗi, không chặn ingest.
+- Token FCM hết hạn: vô hiệu hóa, yêu cầu đăng ký lại; không gửi lặp vô hạn.
+
+**Hậu điều kiện**
+- Thông báo được ghi log 30 ngày; phụ huynh thấy cảnh báo trên điện thoại hoặc trong danh sách.
+- Không có chi tiết học tập nào nằm trong payload FCM.
+
+**Business rules:** BR-34.
+
+---
+
+### UC17 — Xem báo cáo tóm tắt từ xa
+
+**Tác nhân:** Phụ huynh, Ứng dụng phụ huynh, Cloud backend
+**Mô tả:** Phụ huynh xem tổng hợp ngày và danh sách cảnh báo trên điện thoại mà không cần mở máy tính.
+
+**Tiền điều kiện**
+- Đã ghép nối; token mobile còn hiệu lực; desktop đã gửi ít nhất một `daily_summary`.
+
+**Trigger**
+- Phụ huynh mở app hoặc kéo để làm mới.
+
+**Luồng chính**
+1. App gọi `GET /v1/reports/daily?from=&to=` (mặc định 7 ngày gần nhất).
+2. Backend trả tổng hợp theo ngày/thiết bị: phút học, phút tập trung ước lượng, số lần xao nhãng,
+   số lần bị chặn, coverage camera, phút lớp trực tuyến.
+3. App hiển thị kèm ghi chú "ước lượng" và độ phủ camera; ngày không có dữ liệu hiển thị "không có
+   dữ liệu" thay vì số 0 gây hiểu nhầm.
+4. Phụ huynh mở tab cảnh báo: `GET /v1/notifications` (tối đa 30 ngày gần nhất).
+5. Phụ huynh chỉnh preference tại `PUT /v1/preferences` (quiet hours, loại cảnh báo, giờ tóm tắt).
+
+**Luồng thay thế**
+- **Chưa có dữ liệu hôm nay:** hiển thị trạng thái chờ; không suy đoán.
+- **Token hết hạn/thu hồi:** app yêu cầu ghép nối lại bằng QR trên máy tính.
+- **Mất mạng:** hiển thị dữ liệu cache gần nhất kèm nhãn thời điểm.
+
+**Ngoại lệ**
+- Backend lỗi: app hiển thị lỗi và cho thử lại; không hiển thị số liệu cũ như số liệu mới.
+
+**Hậu điều kiện**
+- Phụ huynh thấy tổng hợp ngày và cảnh báo; dữ liệu chi tiết vẫn chỉ có trên máy tính.
+- Không có URL, tên ứng dụng, tiêu đề cửa sổ hay dữ liệu camera nào được trả về.
+
+**Business rules:** BR-32, BR-34.
+
+---
+
+### UC18 — Ngắt kết nối / xóa dữ liệu cloud
+
+**Tác nhân:** Phụ huynh, Cloud backend
+**Mô tả:** Phụ huynh dừng chia sẻ dữ liệu hoặc xóa toàn bộ dữ liệu cloud bất kỳ lúc nào.
+
+**Tiền điều kiện**
+- Đã ghép nối (UC15).
+
+**Trigger**
+- Phụ huynh chọn "Ngắt kết nối điện thoại" trên desktop, hoặc "Xóa dữ liệu cloud" trên app mobile.
+
+**Luồng chính**
+- **Ngắt kết nối trên desktop:**
+  1. Desktop xác nhận bằng PIN và hiển thị hậu quả (điện thoại ngừng nhận thông báo).
+  2. Desktop gọi `POST /v1/link/disconnect`, xóa token cục bộ, đặt `CloudSyncEnabled = false`, dừng
+     outbox và xóa các event chưa gửi.
+  3. Backend thu hồi token desktop; token mobile vẫn hiệu lực cho tới khi phụ huynh xóa thiết bị/gia
+     đình. Audit `CloudUnlinked`.
+- **Xóa toàn bộ dữ liệu cloud trên app mobile:**
+  1. App yêu cầu gõ `XÓA` và xác nhận lần hai.
+  2. App gọi `DELETE /v1/family` với header `X-Confirm: XÓA`.
+  3. Backend xóa cascade gia đình, thiết bị, token, push registration, summary, notification và sync
+     event; ghi audit tối thiểu (không chứa nội dung).
+  4. App xóa token cục bộ và trở về màn hình ghép nối; desktop nhận `401` ở lần sync kế tiếp và tự
+     tắt cloud, hiển thị thông báo cho phụ huynh.
+
+**Luồng thay thế**
+- **Xóa một thiết bị:** `DELETE /v1/devices/{id}` thu hồi token và push registration của thiết bị đó,
+  giữ dữ liệu tổng hợp.
+- **Desktop mất mạng khi ngắt:** đánh dấu cục bộ là đã ngắt, dừng outbox ngay; gửi thu hồi lại khi có
+  mạng.
+
+**Ngoại lệ**
+- Backend không phản hồi: hiển thị trạng thái "đang chờ xóa", không tuyên bố đã xóa; thử lại.
+- Xóa thành công là không thể hoàn tác; UI phải nói rõ trước khi xác nhận.
+
+**Hậu điều kiện**
+- Không còn token nào của gia đình hoạt động sau khi xóa gia đình.
+- Desktop không còn gửi dữ liệu; audit hai phía ghi nhận thao tác.
+
+**Business rules:** BR-33, BR-35.
 
 ---
 

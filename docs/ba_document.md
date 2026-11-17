@@ -1,8 +1,8 @@
 # Tài liệu Phân tích Nghiệp vụ (BA) - EduFocus
 
 > **Trạng thái:** Thiết kế sản phẩm / đang chuyển đổi từ dự án tiền nhiệm **Don't Be Lazy**.
-> **Phiên bản tài liệu:** 2.0
-> **Cập nhật:** 2026-10-26
+> **Phiên bản tài liệu:** 2.1
+> **Cập nhật:** 2026-11-17 (bổ sung cloud relay tùy chọn, app phụ huynh và BR-31..BR-35)
 
 ---
 
@@ -15,7 +15,9 @@
 - Phụ huynh tạo PIN và là người duy nhất có quyền bật/tắt chế độ bảo vệ, sửa danh sách chặn, xem báo cáo chi tiết và thoát ứng dụng.
 - Học sinh sử dụng máy trong môi trường đã được giới hạn: các trang chatbot/AI bị chặn khi chế độ bảo vệ đang bật.
 - Ứng dụng ghi nhận phiên học, ứng dụng/trang web đang dùng và ước lượng mức độ tập trung bằng webcam.
-- Toàn bộ dữ liệu được xử lý và lưu cục bộ trên máy. Không có cloud, không có tài khoản trực tuyến.
+- Toàn bộ dữ liệu được xử lý và lưu cục bộ trên máy. Không có tài khoản trực tuyến và cloud mặc định tắt;
+  từ Phase 8 có cloud relay **tùy chọn** chỉ gửi sự kiện tổng hợp khi phụ huynh chủ động ghép nối điện
+  thoại (ADR-20).
 
 **Định vị:** Công cụ đồng hành học tập có sự đồng thuận của gia đình — **không phải** phần mềm do thám, keylogger hay hệ thống chống gian lận thi cử.
 
@@ -61,7 +63,8 @@ EduFocus cung cấp một lớp bảo vệ và quan sát **tối thiểu, minh b
 ### 3.2. Phi mục tiêu (MVP)
 
 - Không ghi màn hình, không chụp ảnh, không keylogger, không đọc nội dung chat.
-- Không gửi dữ liệu lên cloud hoặc server của nhà phát triển.
+- Không gửi dữ liệu thô lên cloud hoặc server của nhà phát triển. Ngoại lệ duy nhất là cloud relay tùy
+  chọn (Phase 8): chỉ bốn loại sự kiện tổng hợp, không có URL/domain/window title/app name/camera.
 - Không theo dõi vị trí, GPS, micro hay lịch sử duyệt web ngoài phạm vi phiên học.
 - Không phải hệ thống chống gian lận thi cử hoặc giám sát tập trung (MDM).
 - Không hỗ trợ macOS/Linux trong MVP.
@@ -206,7 +209,9 @@ EduFocus cung cấp một lớp bảo vệ và quan sát **tối thiểu, minh b
   - Session summary: 365 ngày.
   - Audit log: 365 ngày.
 - Phụ huynh có thể xóa toàn bộ dữ liệu báo cáo bằng PIN + gõ `XÓA`; thao tác không thể hoàn tác nhưng giữ PIN/credential, settings, audit và dữ liệu phiên đang chạy.
-- Không gửi dữ liệu học tập ra ngoài. Kiểm tra cập nhật mặc định tắt; khi bật, chỉ gửi số phiên bản tới GitHub Releases và GitHub vẫn có thể thấy IP.
+- Không gửi dữ liệu học tập ra ngoài khi cloud tắt (mặc định). Kiểm tra cập nhật mặc định tắt; khi bật,
+  chỉ gửi số phiên bản tới GitHub Releases và GitHub vẫn có thể thấy IP. Khi phụ huynh chủ động ghép nối
+  điện thoại, cloud relay tùy chọn chỉ nhận sự kiện tổng hợp theo BR-31..BR-35.
 
 ### 6.2. Tính năng mở rộng (Post-MVP)
 
@@ -219,7 +224,8 @@ EduFocus cung cấp một lớp bảo vệ và quan sát **tối thiểu, minh b
 | F15 | Nhiều hồ sơ học sinh | Mỗi con có lịch, blocklist, báo cáo riêng |
 | F16 | Báo cáo PDF | Xuất báo cáo tuần cho gia đình/gia sư |
 | F17 | Gợi ý cải thiện | Phân tích xu hướng, gợi ý thời gian học |
-| F18 | Đồng bộ tùy chọn | Chỉ khi có thiết kế bảo mật rõ ràng; không thuộc MVP |
+| F18 | Cloud relay tùy chọn (Phase 8) | Đã thiết kế ở ADR-20 và [cloud-backend.md](./cloud-backend.md): desktop outbox → ASP.NET Core + PostgreSQL → FCM; chỉ sự kiện tổng hợp, mặc định tắt |
+| F19 | Ứng dụng phụ huynh mobile (Phase 8) | .NET MAUI Android: ghép nối QR/mã, nhận thông báo đẩy, xem báo cáo tóm tắt và chỉnh preference |
 
 ### 6.3. Tính năng sẽ loại bỏ khỏi sản phẩm cũ
 
@@ -269,6 +275,11 @@ EduFocus cung cấp một lớp bảo vệ và quan sát **tối thiểu, minh b
 | BR-28 | Watchdog chỉ restart app khi Protection ON và lần thoát trước không phải clean exit; exit hợp lệ có PIN phải dừng watchdog/đánh dấu clean shutdown. |
 | BR-29 | Chặn app: ưu tiên gửi `WM_CLOSE`, chờ tối đa 2 giây rồi kill process tree nếu vẫn chạy; không kill process hệ thống/EduFocus/Allow; ghi `BlockedAttempt` với `ObservedVia = ProcessWatcher`; chấp nhận rủi ro mất dữ liệu chưa lưu và phải thông báo. |
 | BR-30 | Thoát app hợp lệ bằng PIN sẽ đặt `ProtectionEnabled = false` và ghi clean exit; Windows shutdown/logoff giữ nguyên `ProtectionEnabled` để lần đăng nhập sau phục hồi và không ghi clean exit. |
+| BR-31 | Cloud relay mặc định tắt; chỉ bật sau khi phụ huynh xác thực PIN, xác nhận đã đọc privacy notice bản 2.0 và ghép nối điện thoại thành công. Tắt cloud/ngắt kết nối không ảnh hưởng bảo vệ cục bộ. |
+| BR-32 | Chỉ bốn loại sự kiện tổng hợp được rời máy: `daily_summary`, `attention_alert`, `protection_off`, `security_alert`. Không gửi URL, domain, window title, tên ứng dụng, sample thô, dữ liệu camera, PIN, recovery code hay ghi chú phụ huynh. |
+| BR-33 | Pairing code 8 ký tự hết hạn sau 10 phút và chỉ lưu hash; token cloud là chuỗi đục 32 byte (`efd_`/`efm_`), server chỉ lưu SHA-256, có scope tối thiểu, thu hồi/xoay vòng được và không bao giờ ghi log. |
+| BR-34 | Thông báo attention chỉ phát khi trạng thái kéo dài ≥ 5 phút, tối đa 1 lần/15 phút/loại; tôn trọng quiet hours (mặc định 22:00–06:00) và preference; FCM là data-only, nội dung chung, app mobile tự dựng câu tiếng Việt. |
+| BR-35 | Phụ huynh có thể ngắt kết nối (desktop dừng outbox, thu hồi token) hoặc xóa toàn bộ dữ liệu cloud bằng xác nhận `XÓA` (backend cascade). Retention cloud: pairing 24 giờ, sync event 7 ngày, notification 30 ngày, summary 180 ngày, audit 365 ngày. |
 
 ---
 
