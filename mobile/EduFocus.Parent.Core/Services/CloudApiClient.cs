@@ -148,7 +148,8 @@ public sealed class CloudApiClient(
                 if (envelope?.Error is { } error && !string.IsNullOrWhiteSpace(error.Code))
                 {
                     code = error.Code;
-                    message = error.Message;
+                    if (!string.IsNullOrWhiteSpace(error.Message))
+                        message = error.Message;
                     traceId = error.TraceId;
                 }
                 else

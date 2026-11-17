@@ -130,6 +130,18 @@ public partial class PairingPage : ContentPage, IQueryAttributable
             "Ghép nối thành công",
             "Từ giờ bạn sẽ nhận thông báo và báo cáo tổng hợp từ máy tính.",
             "Xem tổng quan");
+
+        try
+        {
+            var coordinator = ServiceHelper.GetService<PushCoordinator>();
+            await coordinator.RequestPermissionAsync(this);
+            _ = coordinator.SyncTokenAsync(force: true);
+        }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Debug.WriteLine($"Push setup skipped: {ex.GetType().Name}");
+        }
+
         await Shell.Current.GoToAsync("//overview");
     }
 }

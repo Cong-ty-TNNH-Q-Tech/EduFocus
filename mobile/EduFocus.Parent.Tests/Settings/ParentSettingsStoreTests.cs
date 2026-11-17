@@ -35,6 +35,8 @@ public sealed class ParentSettingsStoreTests
             DeviceId = Guid.NewGuid(),
             DesktopName = "Student PC",
             TimeZoneId = "Asia/Ho_Chi_Minh",
+            PushToken = "fcm-token",
+            PushAppVersion = "0.1.0",
         };
 
         store.ClearLink();
@@ -44,6 +46,8 @@ public sealed class ParentSettingsStoreTests
         Assert.Null(store.DeviceId);
         Assert.Null(store.DesktopName);
         Assert.Null(store.TimeZoneId);
+        Assert.Null(store.PushToken);
+        Assert.Null(store.PushAppVersion);
     }
 
     [Fact]

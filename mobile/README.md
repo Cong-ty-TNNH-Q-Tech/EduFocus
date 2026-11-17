@@ -12,9 +12,9 @@ không điều khiển từ xa bảo vệ của máy học sinh trong phase này
 ```text
 mobile/
 ├── EduFocus.Parent.slnx
-├── EduFocus.Parent.App/      # .NET MAUI net10.0-android: Shell, Views, SecureStorage, ZXing
-├── EduFocus.Parent.Core/     # net10.0: AppState, pairing, CloudApiClient, ITokenStore (test được)
-└── EduFocus.Parent.Tests/    # net10.0: xUnit cho parser, pairing service, API client và state
+├── EduFocus.Parent.App/      # .NET MAUI net10.0-android: Shell, Views, SecureStorage, ZXing, FCM
+├── EduFocus.Parent.Core/     # net10.0: AppState, pairing, push, CloudApiClient (test được)
+└── EduFocus.Parent.Tests/    # net10.0: xUnit cho parser, pairing, push, API client và state
 ```
 
 `EduFocus.Parent.Core` tham chiếu trực tiếp `cloud/EduFocus.Cloud.Contracts` để dùng chung DTO,
@@ -42,6 +42,31 @@ không copy model sang mobile.
 Camera chỉ được xin quyền khi phụ huynh bấm "Bật camera quét QR"; từ chối quyền vẫn dùng được
 nhập mã thủ công và có nút mở Cài đặt quyền của hệ thống.
 
+## Thông báo đẩy FCM (issue #91)
+
+1. Tạo Firebase project, thêm Android app `com.qtech.edufocus.parent`, tải `google-services.json`
+   đặt tại `mobile/EduFocus.Parent.App/google-services.json` — **không commit** (đã nằm trong
+   `.gitignore`). Không có tệp này, app vẫn build/chạy bình thường nhưng toàn bộ mã FCM bị loại
+   khỏi build (`FCM_ENABLED`).
+2. CI release giải mã secret `GOOGLE_SERVICES_JSON_BASE64` vào đúng đường dẫn trên trước khi build
+   (issue #93). Không đưa khóa/keystore thật vào repo.
+3. Sau khi ghép nối thành công, app giải thích và xin quyền `POST_NOTIFICATIONS` (Android 13+).
+   Từ chối quyền không chặn tính năng báo cáo; nút **Bật thông báo** trong Cài đặt xin lại quyền
+   hoặc mở Cài đặt hệ thống. Android 8–12 chỉ cần channel và công tắc thông báo của hệ thống.
+4. Token FCM đăng ký bằng `POST /v1/push/registrations` với token mobile. Token refresh được đăng
+   ký lại; lỗi mạng/5xx retry backoff 2s/5s (tối đa 3 lần), 429 tôn trọng `Retry-After`; 400/401/
+   403/404 dừng ngay. Token chỉ gửi trong body và lưu trong Preferences, không ghi log.
+5. Backend gửi **data-only** `{ type, date, notificationId }`. App tự dựng notification channel
+   `edufocus_alerts` (importance high), nội dung chung theo loại (không số liệu, không tên học
+   sinh/app/URL) và dedupe theo `notificationId` (tối đa 64 mã, hết hạn sau 7 ngày).
+6. Foreground: banner Toast trong app, không thêm notification hệ thống. Background/killed:
+   notification hệ thống, bấm vào mở đúng tab:
+   `attention_alert`/`daily_summary` → Báo cáo ngày `date`; `protection_off`/`security_alert` →
+   Thông báo.
+7. Ngắt kết nối thu hồi device phía server (xóa push registration) và xóa token FCM cục bộ; không
+   dùng lại token cũ.
+8. Kiểm thử E2E cần Firebase project thật và thiết bị Android 8/12/14 — thực hiện ở issue #94.
+
 ## Yêu cầu
 
 - .NET SDK 10.0.200+
@@ -60,6 +85,11 @@ dotnet restore mobile/EduFocus.Parent.slnx
 dotnet test mobile/EduFocus.Parent.Tests/EduFocus.Parent.Tests.csproj -c Release
 dotnet build mobile/EduFocus.Parent.App/EduFocus.Parent.App.csproj -c Debug -f net10.0-android
 ```
+
+Nếu có `google-services.json` trong thư mục app (hoặc truyền
+`-p:GoogleServicesJsonFile=<đường dẫn>`), build tự bật FCM và tham chiếu
+`Plugin.Firebase.CloudMessaging`; ngược lại app build không có push nhưng vẫn đầy đủ tính năng
+ghép nối/báo cáo.
 
 APK Debug nằm trong `mobile/EduFocus.Parent.App/bin/Debug/net10.0-android/`. Cài lên thiết bị:
 
@@ -87,7 +117,10 @@ adb install -r mobile/EduFocus.Parent.App/bin/Debug/net10.0-android/com.qtech.ed
 - Parser QR là hàm thuần trong `EduFocus.Parent.Core` và có unit test cho scheme/version/URL/code.
 - Camera chỉ dùng khi người dùng bật quét QR; app không lưu ảnh. Deep link chỉ điền sẵn mã và cần
   người dùng xác nhận ghép nối.
-- Không commit `google-services.json`, keystore hay secret; FCM bổ sung ở issue #91.
+- Không commit `google-services.json`, keystore hay secret. FCM token chỉ nằm trong request đăng
+  ký và Preferences; không log, không hiển thị, không đưa vào thông báo/exception.
+- Notification chỉ chứa nội dung chung theo loại; mã loại/ngày/notificationId là dữ liệu duy nhất
+  đi qua FCM, không có dữ liệu học tập chi tiết.
 
 ## CI
 

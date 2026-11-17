@@ -79,6 +79,30 @@
                                Color="{StaticResource Primary}"
                                HorizontalOptions="Center" />
 
+            <Border IsVisible="{Binding IsLinked}"
+                    Padding="18"
+                    StrokeThickness="0"
+                    StrokeShape="RoundRectangle 16"
+                    BackgroundColor="{AppThemeBinding Light=#FFFFFF, Dark=#111827}">
+                <VerticalStackLayout Spacing="10">
+                    <Label Text="Thông báo đẩy"
+                           FontSize="17"
+                           FontAttributes="Bold"
+                           TextColor="{AppThemeBinding Light={StaticResource TextLight}, Dark={StaticResource TextDark}}" />
+                    <Label Text="{Binding NotificationStatusText}"
+                           FontSize="14"
+                           TextColor="{AppThemeBinding Light=#475569, Dark=#CBD5E1}" />
+
+                    <Button Text="Bật thông báo"
+                            IsVisible="{Binding ShowEnableNotifications}"
+                            Clicked="OnEnableNotificationsClicked"
+                            BackgroundColor="{StaticResource Primary}"
+                            TextColor="White"
+                            CornerRadius="12"
+                            HeightRequest="44" />
+                </VerticalStackLayout>
+            </Border>
+
             <Border Padding="18"
                     StrokeThickness="0"
                     StrokeShape="RoundRectangle 16"

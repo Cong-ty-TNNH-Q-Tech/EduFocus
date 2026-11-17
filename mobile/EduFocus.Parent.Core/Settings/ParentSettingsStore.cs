@@ -21,6 +21,8 @@ public sealed class ParentSettingsStore(IKeyValueStore store)
     public const string DeviceIdKey = "edufocus.parent.device_id";
     public const string DesktopNameKey = "edufocus.parent.desktop_name";
     public const string TimeZoneIdKey = "edufocus.parent.time_zone";
+    public const string PushTokenKey = "edufocus.parent.push_token";
+    public const string PushAppVersionKey = "edufocus.parent.push_app_version";
 
     public string? CloudBaseUrl
     {
@@ -52,13 +54,30 @@ public sealed class ParentSettingsStore(IKeyValueStore store)
         set => SetOptional(TimeZoneIdKey, value?.Trim());
     }
 
-    /// <summary>Forgets the link identifiers but keeps the server URL.</summary>
+    public string? PushToken
+    {
+        get => store.Get(PushTokenKey);
+        set => SetOptional(PushTokenKey, value?.Trim());
+    }
+
+    public string? PushAppVersion
+    {
+        get => store.Get(PushAppVersionKey);
+        set => SetOptional(PushAppVersionKey, value?.Trim());
+    }
+
+    /// <summary>
+    /// Forgets the link identifiers and the FCM token but keeps the server URL
+    /// so re-pairing is quick and an old token is never reused.
+    /// </summary>
     public void ClearLink()
     {
         store.Remove(FamilyIdKey);
         store.Remove(DeviceIdKey);
         store.Remove(DesktopNameKey);
         store.Remove(TimeZoneIdKey);
+        store.Remove(PushTokenKey);
+        store.Remove(PushAppVersionKey);
     }
 
     private Guid? GetGuid(string key) =>

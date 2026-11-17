@@ -3,6 +3,7 @@ using EduFocus.Parent.App.Services;
 using EduFocus.Parent.App.ViewModels;
 using EduFocus.Parent.Core;
 using EduFocus.Parent.Core.Pairing;
+using EduFocus.Parent.Core.Push;
 using EduFocus.Parent.Core.Services;
 using EduFocus.Parent.Core.Settings;
 using ZXing.Net.Maui.Controls;
@@ -39,7 +40,25 @@ public static class MauiProgram
         builder.Services.AddSingleton<PairingViewModel>();
         builder.Services.AddSingleton<SettingsViewModel>();
 
-        return builder.Build();
+        builder.Services.AddSingleton<PushNotificationDedupe>();
+        builder.Services.AddSingleton<IPushRegistrationService, PushRegistrationService>();
+        builder.Services.AddSingleton<PushNotificationPresenter>();
+        builder.Services.AddSingleton<PushPermissionService>();
+        builder.Services.AddSingleton<PushCoordinator>();
+#if FCM_ENABLED
+        builder.Services.AddSingleton<IPushTokenProvider, FirebasePushTokenProvider>();
+        builder.Services.AddSingleton<PushMessageHandler>();
+#else
+        builder.Services.AddSingleton<IPushTokenProvider, DisabledPushTokenProvider>();
+#endif
+
+        var app = builder.Build();
+
+#if FCM_ENABLED
+        FirebasePushBootstrap.Initialize(app.Services);
+#endif
+
+        return app;
     }
 }
 

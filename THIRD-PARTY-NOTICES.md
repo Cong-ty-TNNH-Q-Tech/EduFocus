@@ -54,12 +54,20 @@ thành phần đó có thêm thông báo bên thứ ba của Microsoft tại
 | System.Management | 10.0.14 | MIT | .NET Foundation and Contributors |
 | System.Numerics.Tensors | 9.0.0 | MIT | .NET Foundation and Contributors |
 | System.Security.Cryptography.ProtectedData | 10.0.0 | MIT | .NET Foundation and Contributors |
+| Plugin.Firebase.Core | 4.1.0 | MIT | Plugin.Firebase contributors |
+| Plugin.Firebase.CloudMessaging | 4.0.1 | MIT | Plugin.Firebase contributors |
+| Xamarin.Firebase.Messaging | 124.0.0.2 | MIT | Microsoft Corporation |
 | ZXing.Net | 0.16.11 | Apache-2.0 | Michael Jahn |
 | ZXing.Net.Maui | 0.10.4 | MIT | ZXing.Net.Maui contributors |
 
 ONNX Runtime kèm theo các thành phần bên thứ ba khác của Microsoft; danh sách đầy đủ nằm trong
 `ThirdPartyNotices.txt` của gói `Microsoft.ML.OnnxRuntime` 1.31.0 và tại
 <https://github.com/microsoft/onnxruntime/blob/main/ThirdPartyNotices.txt>.
+
+**Firebase trên Android:** `Plugin.Firebase` và các gói `Xamarin.*` là binding .NET mã nguồn mở
+(MIT); thư viện runtime Firebase Android SDK và Google Play services đi kèm được Google phân phối
+theo Google APIs Terms of Service, không phải giấy phép mã nguồn mở. App chỉ đăng ký FCM token và
+nhận message data-only như mô tả trong `mobile/README.md`.
 
 ### 1.3 Thư viện native
 
@@ -92,7 +100,6 @@ bản chính xác được chốt tại thời điểm phát hành và cập nh�
 | Thành phần | Dùng ở | Giấy phép | Bản quyền |
 | --- | --- | --- | --- |
 | CommunityToolkit.Maui | App Android — UI/behaviors | MIT | .NET Foundation and Contributors |
-| Plugin.Firebase (hoặc tương đương) | App Android — nhận FCM | MIT | Plugin.Firebase contributors |
 | Microsoft.Extensions.Http | Desktop — HTTP client cloud | MIT | .NET Foundation and Contributors |
 | FirebaseAdmin | Backend — gửi FCM HTTP v1 | Apache-2.0 | Google LLC |
 | Google.Apis.Auth | Backend — xác thực service account | Apache-2.0 | Google LLC |
@@ -164,8 +171,8 @@ Liên hệ về giấy phép: mở báo cáo riêng tư tại
 Áp dụng cho: Microsoft .NET Runtime, Windows Desktop Runtime, CommunityToolkit.Mvvm,
 Microsoft.Data.Sqlite, Microsoft.EntityFrameworkCore, Microsoft.Extensions.*,
 Microsoft.ML.OnnxRuntime, QRCoder, System.Management, System.Numerics.Tensors,
-System.Security.Cryptography.ProtectedData, Microsoft.NET.Test.Sdk, coverlet.collector, ZXing.Net.Maui và YuNet
-(khi được phân phối).
+System.Security.Cryptography.ProtectedData, Microsoft.NET.Test.Sdk, coverlet.collector,
+Plugin.Firebase, Xamarin.Firebase.Messaging, ZXing.Net.Maui và YuNet (khi được phân phối).
 
 ```text
 MIT License

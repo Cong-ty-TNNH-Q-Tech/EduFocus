@@ -1,5 +1,6 @@
 ﻿using System.Diagnostics;
 using EduFocus.Parent.App.Services;
+using EduFocus.Parent.Core;
 using EduFocus.Parent.Core.Pairing;
 
 namespace EduFocus.Parent.App;
@@ -27,6 +28,19 @@ public partial class AppShell : Shell
                 await GoToAsync("//welcome", animate: false);
 
             PairingDeepLink.Received += OnDeepLinkReceived;
+            PushTapRouter.Tapped += OnPushTapped;
+
+            if (linked)
+            {
+                _ = ServiceHelper.GetService<PushCoordinator>().SyncTokenAsync();
+
+                if (PushTapRouter.ConsumePending() is { } route)
+                    await GoToAsync(route, animate: false);
+            }
+            else
+            {
+                PushTapRouter.ConsumePending();
+            }
 
             if (PairingDeepLink.ConsumePending() is { } pending)
                 await OpenPairingAsync(pending);
@@ -51,6 +65,23 @@ public partial class AppShell : Shell
             catch (Exception ex)
             {
                 Debug.WriteLine($"Deep link routing failed: {ex.GetType().Name}");
+            }
+        });
+
+    private void OnPushTapped(string route) =>
+        MainThread.BeginInvokeOnMainThread(async () =>
+        {
+            try
+            {
+                var state = ServiceHelper.GetService<AppState>();
+                if (!state.IsLinked)
+                    return;
+
+                await GoToAsync(route, animate: false);
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"Push routing failed: {ex.GetType().Name}");
             }
         });
 

@@ -18,10 +18,32 @@ public partial class SettingsPage : ContentPage
     {
         base.OnAppearing();
         _viewModel.Refresh();
+        _ = ServiceHelper.GetService<PushCoordinator>().SyncTokenAsync();
     }
 
     private async void OnPairClicked(object sender, EventArgs e) =>
         await Shell.Current.GoToAsync("//pairing");
+
+    private async void OnEnableNotificationsClicked(object sender, EventArgs e)
+    {
+        try
+        {
+            if (await _viewModel.EnableNotificationsAsync(this))
+                return;
+
+            var open = await DisplayAlertAsync(
+                "Thông báo đang tắt",
+                "Mở Cài đặt hệ thống để bật quyền thông báo cho ứng dụng?",
+                "Mở Cài đặt",
+                "Để sau");
+            if (open)
+                AppInfo.Current.ShowSettingsUI();
+        }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Debug.WriteLine($"Notification permission failed: {ex.GetType().Name}");
+        }
+    }
 
     private async void OnPrivacyTapped(object sender, TappedEventArgs e) =>
         await Shell.Current.GoToAsync("//privacy");

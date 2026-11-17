@@ -6,6 +6,9 @@
 # dotenv files
 .env
 
+# Firebase config (never commit; supplied locally or via CI secret)
+google-services.json
+
 # SQLite databases (runtime data — never commit)
 *.db
 *.db-shm
