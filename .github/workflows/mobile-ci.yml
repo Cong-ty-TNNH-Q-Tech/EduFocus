@@ -1,0 +1,62 @@
+name: Mobile CI
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - "mobile/**"
+      - "cloud/EduFocus.Cloud.Contracts/**"
+      - ".github/workflows/mobile-ci.yml"
+  pull_request:
+    paths:
+      - "mobile/**"
+      - "cloud/EduFocus.Cloud.Contracts/**"
+      - ".github/workflows/mobile-ci.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  DOTNET_VERSION: "10.0.x"
+  DOTNET_NOLOGO: "true"
+
+jobs:
+  build-test:
+    name: Build APK and run tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: ${{ env.DOTNET_VERSION }}
+
+      - name: Cache NuGet packages
+        uses: actions/cache@v4
+        with:
+          path: ~/.nuget/packages
+          key: ${{ runner.os }}-nuget-${{ hashFiles('mobile/**/*.csproj', 'cloud/EduFocus.Cloud.Contracts/*.csproj') }}
+          restore-keys: ${{ runner.os }}-nuget-
+
+      - name: Install MAUI Android workload
+        run: dotnet workload install maui-android
+
+      - name: Run unit tests
+        run: dotnet test mobile/EduFocus.Parent.Tests/EduFocus.Parent.Tests.csproj --configuration Release
+
+      - name: Build Debug APK
+        run: >-
+          dotnet build mobile/EduFocus.Parent.App/EduFocus.Parent.App.csproj
+          --configuration Debug
+          --framework net10.0-android
+          -p:AndroidPackageFormats=apk
+
+      - name: Upload APK artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: edufocus-parent-debug-apk
+          path: mobile/EduFocus.Parent.App/bin/Debug/net10.0-android/**/*.apk
+          if-no-files-found: error
+          retention-days: 14

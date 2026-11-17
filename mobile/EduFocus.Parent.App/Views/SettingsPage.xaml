@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<ContentPage x:Class="EduFocus.Parent.App.Views.SettingsPage"
+             xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+             Title="Cài đặt">
+    <VerticalStackLayout Padding="24" Spacing="12" VerticalOptions="Center">
+        <Label Text="Ghép nối với máy học sinh"
+               FontSize="22"
+               FontAttributes="Bold"
+               HorizontalOptions="Center" />
+        <Label Text="Tính năng nhập mã ghép nối và quản lý thiết bị sẽ được bổ sung ở bước tiếp theo."
+               FontSize="14"
+               HorizontalTextAlignment="Center"
+               HorizontalOptions="Center" />
+    </VerticalStackLayout>
+</ContentPage>

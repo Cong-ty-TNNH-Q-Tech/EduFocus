@@ -1,0 +1,5 @@
+<Solution>
+  <Project Path="EduFocus.Parent.App/EduFocus.Parent.App.csproj" />
+  <Project Path="EduFocus.Parent.Core/EduFocus.Parent.Core.csproj" />
+  <Project Path="EduFocus.Parent.Tests/EduFocus.Parent.Tests.csproj" />
+</Solution>

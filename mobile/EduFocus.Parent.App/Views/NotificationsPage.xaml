@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<ContentPage x:Class="EduFocus.Parent.App.Views.NotificationsPage"
+             xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+             Title="Thông báo">
+    <VerticalStackLayout Padding="24" Spacing="12" VerticalOptions="Center">
+        <Label Text="Thông báo từ cloud"
+               FontSize="22"
+               FontAttributes="Bold"
+               HorizontalOptions="Center" />
+        <Label Text="Cảnh báo và tóm tắt ngày sẽ xuất hiện ở đây."
+               FontSize="14"
+               HorizontalTextAlignment="Center"
+               HorizontalOptions="Center" />
+    </VerticalStackLayout>
+</ContentPage>
