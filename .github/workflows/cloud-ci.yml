@@ -1,0 +1,106 @@
+name: Cloud CI
+
+on:
+  push:
+    branches: [master]
+    tags: ["v*"]
+    paths:
+      - "cloud/**"
+      - ".github/workflows/cloud-ci.yml"
+  pull_request:
+    paths:
+      - "cloud/**"
+      - ".github/workflows/cloud-ci.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  DOTNET_VERSION: "10.0.x"
+  DOTNET_NOLOGO: "true"
+
+jobs:
+  build-test:
+    name: Build and test
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_DB: edufocus_cloud
+          POSTGRES_USER: edufocus
+          POSTGRES_PASSWORD: edufocus_ci
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U edufocus -d edufocus_cloud"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: ${{ env.DOTNET_VERSION }}
+
+      - name: Restore
+        run: dotnet restore cloud/EduFocus.Cloud.slnx
+
+      - name: Build
+        run: dotnet build cloud/EduFocus.Cloud.slnx --configuration Release --no-restore
+
+      - name: Test
+        env:
+          EDUFOCUS_CLOUD_TEST_DB: "Host=localhost;Port=5432;Database=edufocus_cloud;Username=edufocus;Password=edufocus_ci"
+        run: dotnet test cloud/EduFocus.Cloud.slnx --configuration Release --no-build
+
+  docker:
+    name: Build Docker image
+    runs-on: ubuntu-latest
+    needs: build-test
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: docker/setup-buildx-action@v3
+
+      - name: Build image (no push)
+        uses: docker/build-push-action@v6
+        with:
+          context: cloud
+          file: cloud/Dockerfile
+          push: false
+          tags: edufocus-cloud-api:ci
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  publish:
+    name: Publish image to GHCR
+    if: github.event_name == 'workflow_dispatch' || startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    needs: build-test
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push image
+        uses: docker/build-push-action@v6
+        with:
+          context: cloud
+          file: cloud/Dockerfile
+          push: true
+          tags: |
+            ghcr.io/cong-ty-tnnh-q-tech/edufocus-cloud-api:${{ github.sha }}
+            ghcr.io/cong-ty-tnnh-q-tech/edufocus-cloud-api:latest

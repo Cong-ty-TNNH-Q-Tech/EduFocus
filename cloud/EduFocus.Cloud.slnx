@@ -1,0 +1,6 @@
+<Solution>
+  <Project Path="EduFocus.Cloud.Api/EduFocus.Cloud.Api.csproj" />
+  <Project Path="EduFocus.Cloud.Contracts/EduFocus.Cloud.Contracts.csproj" />
+  <Project Path="EduFocus.Cloud.Data/EduFocus.Cloud.Data.csproj" />
+  <Project Path="EduFocus.Cloud.Tests/EduFocus.Cloud.Tests.csproj" />
+</Solution>
