@@ -25,6 +25,12 @@ services:
       ASPNETCORE_URLS: http://+:8080
       ConnectionStrings__Postgres: Host=postgres;Port=5432;Database=${POSTGRES_DB:-edufocus_cloud};Username=${POSTGRES_USER:-edufocus};Password=${POSTGRES_PASSWORD:-edufocus_dev}
       EDUFOCUS_CLOUD_PUBLIC_URL: ${EDUFOCUS_CLOUD_PUBLIC_URL:-http://localhost:8080}
+      EDUFOCUS_CLOUD_AUTO_MIGRATE: ${EDUFOCUS_CLOUD_AUTO_MIGRATE:-false}
+      Push__Enabled: ${PUSH_ENABLED:-false}
+      Push__ProjectId: ${FIREBASE_PROJECT_ID:-}
+      Push__ServiceAccountPath: /run/secrets/firebase-service-account.json
+    volumes:
+      - ./secrets:/run/secrets:ro
     ports:
       - "${API_PORT:-8080}:8080"
     depends_on:

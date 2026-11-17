@@ -297,19 +297,32 @@ yêu cầu; retention chỉ dọn các bản ghi còn sót của gia đình đã
 
 ## 8. Triển khai và vận hành
 
-- `cloud/docker-compose.yml`: `api` + `postgres` + volume; cấu hình qua biến môi trường
-  (`.env.example` chỉ chứa placeholder).
-- Biến chính: `ConnectionStrings__Postgres`, `Cloud__PublicBaseUrl`, `Push__Enabled`,
-  `Push__ProjectId`, `Push__ServiceAccountPath` hoặc `Push__ServiceAccountJson` (secret mount),
-  `ASPNETCORE_URLS`; rate limit tinh chỉnh qua `RateLimiting__…`, chu kỳ gửi qua `Push__PollSeconds`.
+- `cloud/docker-compose.prod.yml`: `caddy` (TLS tự động, chỉ service này mở 80/443) + `api` +
+  `postgres:16-alpine`; API/Postgres chỉ nằm trong mạng Docker nội bộ. `cloud/docker-compose.yml` chỉ
+  dùng cho dev/demo LAN.
+- `Dockerfile` multi-stage, chạy user không phải root, healthcheck `/healthz`; `.dockerignore` loại
+  `.env`, `secrets/`, service account và backup khỏi build context. CI build image và kiểm tra image
+  không chứa file bí mật.
+- Biến chính: `ConnectionStrings__Postgres`, `EDUFOCUS_CLOUD_PUBLIC_URL` (hoặc `Cloud__PublicBaseUrl`),
+  `Push__Enabled`, `Push__ProjectId`, `Push__ServiceAccountPath` hoặc `Push__ServiceAccountJson`
+  (secret mount), `ASPNETCORE_URLS`; rate limit tinh chỉnh qua `RateLimiting__…`, chu kỳ gửi qua
+  `Push__PollSeconds`.
   Job bảo trì: `Jobs__Enabled` (mặc định `true`), `Jobs__IntervalSeconds` (60), thời hạn retention
   `Jobs__PairingSessionHours` (24), `Jobs__SyncEventDays` (7), `Jobs__NotificationDays` (30),
   `Jobs__DailySummaryDays` (180), `Jobs__CloudAuditDays` (365), `Jobs__SoftDeletedFamilyDays` (30).
   Service account JSON **không** commit, không nằm trong image.
-- Migration tự động khi khởi động chỉ ở môi trường Development; production chạy job/migration riêng.
-- Health check `/healthz`; log có cấu trúc, che token/FCM token.
-- Self-host: chủ máy chủ chịu trách nhiệm TLS, backup PostgreSQL, cập nhật image, và tuân thủ nghĩa
-  vụ dữ liệu cá nhân tương ứng.
+- Migration: production **không** tự migrate khi start; chạy tường minh
+  `docker compose -f docker-compose.prod.yml run --rm api --migrate` trước khi đưa API mới lên.
+  `EDUFOCUS_CLOUD_AUTO_MIGRATE=true` chỉ dành cho dev.
+- HTTPS/HSTS tại Caddy + API; chỉ tin `X-Forwarded-For/Proto` khi `Cloud__TrustForwardedHeaders=true`
+  và API không publish port. Body request giới hạn 1 MB toàn cục, sync 64 KB; CORS không bật.
+- Log JSON ra stdout (rotation ở Docker), redaction `token`/`authorization`/FCM token; không log body.
+- Backup: `cloud/scripts/backup.sh` (pg_dump hằng ngày, giữ 7 bản, tùy chọn mã hóa gpg) và
+  `cloud/scripts/restore.sh`; quy trình chi tiết và biên bản diễn tập restore trong
+  [cloud-deploy.md](./cloud-deploy.md).
+- Health check `/healthz`; self-host: chủ máy chủ chịu trách nhiệm TLS, backup PostgreSQL, cập nhật
+  image, và tuân thủ nghĩa vụ dữ liệu cá nhân tương ứng. Runbook đầy đủ:
+  [cloud-deploy.md](./cloud-deploy.md).
 
 ## 9. Giới hạn đã biết
 
@@ -322,6 +335,7 @@ yêu cầu; retention chỉ dọn các bản ghi còn sót của gia đình đã
 ## 10. Tài liệu liên quan
 
 - [ADR-20](./adr/ADR-20-optional-cloud-relay.md) — quyết định và đánh đổi.
+- [cloud-deploy.md](./cloud-deploy.md) — runbook triển khai, backup/restore, rollback, demo LAN.
 - [privacy-notice.md](./privacy-notice.md) — thông báo quyền riêng tư bản 2.0.
 - [dpia.md](./dpia.md) — data map và đánh giá rủi ro bổ sung cho cloud.
 - [use_cases.md](./use_cases.md) — UC15–UC18.

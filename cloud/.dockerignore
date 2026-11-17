@@ -1,9 +1,18 @@
+# Deployment context for the cloud image. Secrets never enter the build context.
 bin/
 obj/
 **/bin/
 **/obj/
 tests/
 .env
+.env.*
+!.env.example
+.env.example
 *.user
 .vs/
 TestResults/
+secrets/
+backups/
+**/service-account*.json
+**/firebase-service-account*.json
+**/google-services.json

@@ -5,6 +5,7 @@ FCM và trả báo cáo tóm tắt cho app phụ huynh. Cloud **mặc định t�
 chứa secret và không chứa dữ liệu học tập.
 
 - Kiến trúc và API: [../docs/cloud-backend.md](../docs/cloud-backend.md)
+- Triển khai production (TLS, backup/restore, rollback, demo LAN): [../docs/cloud-deploy.md](../docs/cloud-deploy.md)
 - Quyết định: [../docs/adr/ADR-20-optional-cloud-relay.md](../docs/adr/ADR-20-optional-cloud-relay.md)
 
 ## Yêu cầu
@@ -76,8 +77,12 @@ dotnet ef database update --project cloud/EduFocus.Cloud.Data --startup-project 
 dotnet ef migrations add <TenMigration> --project cloud/EduFocus.Cloud.Data --startup-project cloud/EduFocus.Cloud.Data --output-dir Migrations
 ```
 
-Startup chỉ tự chạy migration khi `EDUFOCUS_CLOUD_AUTO_MIGRATE=true`; production nên chạy migration
-tường minh trước khi deploy.
+Startup chỉ tự chạy migration khi `EDUFOCUS_CLOUD_AUTO_MIGRATE=true`. Production dùng compose
+`docker-compose.prod.yml` và chạy migration tường minh trước khi deploy:
+
+```bash
+docker compose -f docker-compose.prod.yml run --rm api --migrate
+```
 
 ## Cấu trúc
 
@@ -88,9 +93,10 @@ tường minh trước khi deploy.
 | `EduFocus.Cloud.Data` | Entity, cấu hình EF Core 10 + Npgsql, `CloudDbContext`, migration `InitialCloudSchema` |
 | `EduFocus.Cloud.Tests` | xUnit: serialization contract, test tích hợp schema/pairing/rate limit tùy chọn |
 
-Đã có ở #81–#82: pairing (`/v1/pairing`), xác thực token thiết bị (`efd_`/`efm_`), `/v1/link/status`,
-`/v1/devices/{id}`, `/v1/devices/token/rotate` và ingest `/v1/sync/events` (batch ≤50, ≤64 KB,
-idempotent, latest-wins daily summary). Push, preferences và báo cáo bổ sung ở các issue #83–#84.
+Đã có: pairing (`/v1/pairing`), xác thực token thiết bị (`efd_`/`efm_`), `/v1/link/status`,
+`/v1/devices`, `/v1/devices/token/rotate`, ingest `/v1/sync/events` (batch ≤50, ≤64 KB, idempotent,
+latest-wins), push FCM + preferences (#83) và các API đọc cho mobile (#84: báo cáo ngày, notifications
+có cursor, xóa thiết bị/gia đình).
 
 ## Biến môi trường
 
@@ -101,6 +107,9 @@ idempotent, latest-wins daily summary). Push, preferences và báo cáo bổ sun
 | `EDUFOCUS_CLOUD_AUTO_MIGRATE` | Không | `true` để startup tự chạy migration; mặc định tắt |
 | `ASPNETCORE_ENVIRONMENT` | Không | `Development` bật OpenAPI và fallback DB |
 | `ASPNETCORE_URLS` | Không | Mặc định trong Docker là `http://+:8080` |
+| `Cloud__TrustForwardedHeaders` | Không | `true` khi chạy sau Caddy nội bộ; mặc định `false` |
+| `Push__Enabled`, `Push__ProjectId`, `Push__ServiceAccountPath` | Khi bật push | Cấu hình FCM |
+| `Jobs__*`, `RateLimiting__*` | Không | Chu kỳ retention và giới hạn request |
 | `POSTGRES_DB`, `POSTGRES_USER`, `POSTGRES_PASSWORD` | Compose | Thông tin PostgreSQL |
 | `EDUFOCUS_DOMAIN` | Profile `tls` | Domain cho Caddy |
 

@@ -65,15 +65,33 @@ jobs:
 
       - uses: docker/setup-buildx-action@v3
 
+      - name: Validate production compose file
+        working-directory: cloud
+        env:
+          POSTGRES_DB: edufocus_cloud
+          POSTGRES_USER: edufocus
+          POSTGRES_PASSWORD: ci-placeholder
+          EDUFOCUS_CLOUD_PUBLIC_URL: https://cloud.example.test
+          EDUFOCUS_DOMAIN: cloud.example.test
+        run: docker compose -f docker-compose.prod.yml config --quiet
+
       - name: Build image (no push)
         uses: docker/build-push-action@v6
         with:
           context: cloud
           file: cloud/Dockerfile
           push: false
+          load: true
           tags: edufocus-cloud-api:ci
           cache-from: type=gha
           cache-to: type=gha,mode=max
+
+      - name: Verify image contains no secrets
+        run: |
+          if docker run --rm --entrypoint sh edufocus-cloud-api:ci -c 'find /app \( -name ".env" -o -name "*service-account*.json" -o -name "google-services.json" \)' | grep -q .; then
+            echo "Secret-like file found inside the image." >&2
+            exit 1
+          fi
 
   publish:
     name: Publish image to GHCR

@@ -491,3 +491,12 @@ tools/AttentionPipelineSpike/models/
 p u b l i s h - t e s t /  
  
 publish-test/
+
+# Cloud deploy secrets and local backups (never commit)
+cloud/secrets/
+cloud/backups/
+backups/
+*.dump
+*.dump.gpg
+**/service-account*.json
+**/firebase-service-account*.json

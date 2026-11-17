@@ -18,4 +18,6 @@ ENV ASPNETCORE_URLS=http://+:8080
 EXPOSE 8080
 COPY --from=build /app/publish .
 USER $APP_UID
+HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \
+    CMD ["dotnet", "EduFocus.Cloud.Api.dll", "--healthcheck"]
 ENTRYPOINT ["dotnet", "EduFocus.Cloud.Api.dll"]

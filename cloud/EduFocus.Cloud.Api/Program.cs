@@ -26,11 +26,30 @@ using Serilog;
 using Serilog.Events;
 using Serilog.Formatting.Compact;
 
+if (args.Contains("--healthcheck", StringComparer.OrdinalIgnoreCase))
+{
+    var healthUrl = Environment.GetEnvironmentVariable("HEALTHCHECK_URL")
+        ?? "http://127.0.0.1:8080/healthz";
+    using var probe = new HttpClient { Timeout = TimeSpan.FromSeconds(3) };
+    try
+    {
+        using var response = await probe.GetAsync(healthUrl);
+        Environment.Exit(response.IsSuccessStatusCode ? 0 : 1);
+    }
+    catch
+    {
+        Environment.Exit(1);
+    }
+}
+
 var builder = WebApplication.CreateBuilder(args);
+
+builder.WebHost.ConfigureKestrel(options => options.Limits.MaxRequestBodySize = 1024 * 1024);
 
 builder.Host.UseSerilog((_, _, configuration) => configuration
     .MinimumLevel.Information()
     .MinimumLevel.Override("Microsoft.AspNetCore", LogEventLevel.Warning)
+    .MinimumLevel.Override("Microsoft.EntityFrameworkCore.Database.Command", LogEventLevel.Warning)
     .Enrich.FromLogContext()
     .Enrich.With<RedactingEnricher>()
     .WriteTo.Console(new CompactJsonFormatter()));
@@ -132,6 +151,9 @@ builder.Services.AddScoped<CloudMaintenanceService>();
 builder.Services.AddHostedService<CloudMaintenanceWorker>();
 builder.Services.AddOptions<CloudApiOptions>()
     .Bind(builder.Configuration.GetSection(CloudApiOptions.SectionName))
+    .Validate(
+        options => Uri.TryCreate(options.PublicBaseUrl, UriKind.Absolute, out _),
+        "Cloud:PublicBaseUrl must be an absolute URL")
     .PostConfigure(options =>
     {
         var publicUrl = builder.Configuration["EDUFOCUS_CLOUD_PUBLIC_URL"];
@@ -139,7 +161,8 @@ builder.Services.AddOptions<CloudApiOptions>()
         {
             options.PublicBaseUrl = publicUrl.TrimEnd('/');
         }
-    });
+    })
+    .ValidateOnStart();
 
 builder.Services.ConfigureHttpJsonOptions(options =>
 {
@@ -150,6 +173,15 @@ builder.Services.ConfigureHttpJsonOptions(options =>
 
 var app = builder.Build();
 
+if (args.Contains("--migrate", StringComparer.OrdinalIgnoreCase))
+{
+    await using var migrationScope = app.Services.CreateAsyncScope();
+    await migrationScope.ServiceProvider.GetRequiredService<CloudDbContext>().Database.MigrateAsync();
+    app.Logger.LogInformation("Applied cloud database migrations and exited");
+    await app.DisposeAsync();
+    return;
+}
+
 if (builder.Configuration.GetValue<bool>("EDUFOCUS_CLOUD_AUTO_MIGRATE"))
 {
     await using var scope = app.Services.CreateAsyncScope();
@@ -157,10 +189,26 @@ if (builder.Configuration.GetValue<bool>("EDUFOCUS_CLOUD_AUTO_MIGRATE"))
     app.Logger.LogInformation("Applied cloud database migrations");
 }
 
-app.UseForwardedHeaders(new ForwardedHeadersOptions
+var cloudOptions = builder.Configuration
+    .GetSection(CloudApiOptions.SectionName)
+    .Get<CloudApiOptions>() ?? new CloudApiOptions();
+var forwardedHeaders = new ForwardedHeadersOptions
 {
     ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto,
-});
+};
+if (cloudOptions.TrustForwardedHeaders)
+{
+    // Only enable behind the bundled internal reverse proxy; the API port is not published.
+    forwardedHeaders.KnownIPNetworks.Clear();
+    forwardedHeaders.KnownProxies.Clear();
+}
+
+app.UseForwardedHeaders(forwardedHeaders);
+if (!app.Environment.IsDevelopment())
+{
+    app.UseHsts();
+}
+
 app.UseExceptionHandler();
 app.UseStatusCodePages(async context =>
 {
