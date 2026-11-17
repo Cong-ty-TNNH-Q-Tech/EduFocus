@@ -11,11 +11,15 @@
 
     <ApplicationTitle>EduFocus Phụ huynh</ApplicationTitle>
     <ApplicationId>com.qtech.edufocus.parent</ApplicationId>
+
+    <!-- Release workflow overrides both values from the git tag.
+         versionCode = major*10000 + minor*100 + patch; see mobile/README.md. -->
     <ApplicationDisplayVersion>0.1.0</ApplicationDisplayVersion>
     <ApplicationVersion>1</ApplicationVersion>
     <SupportedOSPlatformVersion>26.0</SupportedOSPlatformVersion>
     <MauiVersion>10.0.30</MauiVersion>
     <AndroidPackageFormats Condition="'$(Configuration)' == 'Debug'">apk</AndroidPackageFormats>
+    <AndroidPackageFormats Condition="'$(Configuration)' != 'Debug'">apk;aab</AndroidPackageFormats>
     <AndroidManifestPlaceholders Condition="'$(Configuration)' == 'Debug'">usesCleartextTraffic=true</AndroidManifestPlaceholders>
     <AndroidManifestPlaceholders Condition="'$(Configuration)' != 'Debug'">usesCleartextTraffic=false</AndroidManifestPlaceholders>
 

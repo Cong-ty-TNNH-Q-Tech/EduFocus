@@ -121,6 +121,87 @@ APK Debug nằm trong `mobile/EduFocus.Parent.App/bin/Debug/net10.0-android/`. C
 adb install -r mobile/EduFocus.Parent.App/bin/Debug/net10.0-android/com.qtech.edufocus.parent-Signed.apk
 ```
 
+## Phát hành APK ký số (issue #93)
+
+Phase 8 phát hành nội bộ (chưa lên Google Play). **APK Debug không dùng để phát hành** vì
+debuggable, ký bằng key debug và cho phép HTTP LAN.
+
+### Khóa ký và secret
+
+Tạo keystore một lần và lưu **ngoài repo**:
+
+```bash
+keytool -genkeypair -v -keystore edufocus-release.keystore \
+  -alias edufocus -keyalg RSA -keysize 4096 -validity 10000
+```
+
+Sau đó thêm vào GitHub Secrets của repo:
+
+| Secret | Nội dung |
+|---|---|
+| `ANDROID_KEYSTORE_BASE64` | keystore mã hóa Base64 (`[Convert]::ToBase64String([IO.File]::ReadAllBytes("..."))` trên PowerShell) |
+| `ANDROID_KEYSTORE_PASSWORD` | mật khẩu keystore |
+| `ANDROID_KEY_ALIAS` | alias, ví dụ `edufocus` |
+| `ANDROID_KEY_PASSWORD` | mật khẩu key |
+| `GOOGLE_SERVICES_JSON_BASE64` | `google-services.json` thật, mã hóa Base64, để bản release có FCM |
+
+Workflow dừng ngay nếu thiếu bất kỳ secret nào và chỉ in **tên** secret, không in giá trị. Không
+commit keystore/mật khẩu; `*.jks`, `*.keystore` và `google-services.json` đã nằm trong `.gitignore`.
+
+### Quy tắc version
+
+- `versionName` lấy từ tag `vMAJOR.MINOR.PATCH` (bỏ `v`); hậu tố prerelease giữ nguyên nếu có.
+- `versionCode = MAJOR*10000 + MINOR*100 + PATCH` (ví dụ `v2.1.0` → `20100`).
+- Mỗi thành phần 0–9999 và `versionCode` ≤ 2.100.000.000. Mỗi lần phát hành phải tăng phần số;
+  Android từ chối cài đè nếu `versionCode` không lớn hơn bản đang cài.
+
+### Workflow
+
+`.github/workflows/mobile-release.yml` chạy khi push tag `v*.*.*` hoặc `workflow_dispatch` (nhập
+version; mặc định dry-run, không đụng GitHub Release):
+
+1. Chạy unit test.
+2. Giải mã keystore và `google-services.json` vào thư mục tạm của runner.
+3. `dotnet publish -f net10.0-android -c Release` với `AndroidKeyStore=true`,
+   `ApplicationDisplayVersion`/`ApplicationVersion` lấy từ tag; xuất cả APK và AAB.
+4. `apksigner verify` và `aapt2 dump badging` kiểm tra package id, `versionName`, `versionCode`.
+5. Tạo `SHA256SUMS.txt`.
+6. Upload artifact `edufocus-parent-android-<version>` và đính
+   `EduFocus-Parent-Android-<version>.apk` (+ `.aab`) vào GitHub Release cùng tag (tạo release mới
+   nếu chưa có).
+7. Xóa keystore và `google-services.json` khỏi runner trong bước `always()`.
+
+Build local tương đương:
+
+```bash
+dotnet publish mobile/EduFocus.Parent.App/EduFocus.Parent.App.csproj \
+  --configuration Release --framework net10.0-android \
+  -p:ApplicationDisplayVersion=2.1.0 -p:ApplicationVersion=20100 \
+  -p:AndroidKeyStore=true \
+  -p:AndroidSigningKeyStore=/duong/dan/edufocus-release.keystore \
+  -p:AndroidSigningKeyAlias=edufocus \
+  -p:AndroidSigningStorePass=<mat-khau-keystore> \
+  -p:AndroidSigningKeyPass=<mat-khau-key> \
+  --output publish
+```
+
+APK ký nằm trong `publish/` với tên `com.qtech.edufocus.parent-Signed.apk`.
+
+### Cài đặt trên điện thoại
+
+- Android 8.0 (API 26) trở lên. Bật "Cài đặt ứng dụng từ nguồn không xác định" cho trình quản lý
+  tệp hoặc trình duyệt đang mở APK.
+- Đối chiếu SHA-256 trước khi cài:
+  - Windows: `Get-FileHash .\EduFocus-Parent-Android-2.1.0.apk -Algorithm SHA256`
+  - Linux/macOS: `sha256sum EduFocus-Parent-Android-2.1.0.apk`
+  - So với dòng tương ứng trong `SHA256SUMS.txt` đính kèm release.
+- Cài đè để nâng cấp: giữ nguyên package id và keystore nên token ghép nối trong SecureStorage vẫn
+  còn. **Không gỡ ứng dụng** nếu muốn giữ liên kết.
+- Trước khi gỡ hẳn, vào **Cài đặt → Ngắt kết nối** hoặc **Xóa dữ liệu trên cloud** (gõ `XÓA`) để
+  thu hồi thiết bị và xóa dữ liệu gia đình trên cloud, sau đó mới gỡ app.
+- Bản Release chỉ dùng HTTPS; cần `google-services.json` thật để nhận push. Kiểm tra push trên
+  thiết bị sạch trước khi công bố (issue #94).
+
 ## Thông số app
 
 | Mục | Giá trị |
@@ -151,3 +232,6 @@ adb install -r mobile/EduFocus.Parent.App/bin/Debug/net10.0-android/com.qtech.ed
 `.github/workflows/mobile-ci.yml` cài workload `maui-android`, chạy unit test, build APK Debug và
 upload artifact. Workflow độc lập với CI desktop và cloud; thay đổi trong
 `cloud/EduFocus.Cloud.Contracts` cũng kích hoạt build mobile.
+
+`.github/workflows/mobile-release.yml` build APK/AAB ký số khi push tag `v*.*.*` — xem mục
+"Phát hành APK ký số" ở trên.

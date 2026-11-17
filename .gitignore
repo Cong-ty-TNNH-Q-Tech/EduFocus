@@ -9,6 +9,11 @@
 # Firebase config (never commit; supplied locally or via CI secret)
 google-services.json
 
+# Android signing material (kept outside the repo; supplied via CI secrets)
+*.jks
+*.keystore
+key.properties
+
 # SQLite databases (runtime data — never commit)
 *.db
 *.db-shm
