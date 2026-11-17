@@ -16,5 +16,6 @@
     <Project Path="src/EduFocus.UseCases/EduFocus.UseCases.csproj" />
     <Project Path="src/EduFocus.UseCases.Tests/EduFocus.UseCases.Tests.csproj" />
     <Project Path="src/EduFocus.WPF/EduFocus.WPF.csproj" />
+    <Project Path="src/EduFocus.WPF.Tests/EduFocus.WPF.Tests.csproj" />
   </Folder>
 </Solution>

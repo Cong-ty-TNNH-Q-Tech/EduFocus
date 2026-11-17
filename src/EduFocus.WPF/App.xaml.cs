@@ -365,6 +365,8 @@ public partial class App : Application
         services.AddSingleton<ScheduleViewModel>();
         services.AddSingleton<BlocklistViewModel>();
         services.AddSingleton<PrivacyViewModel>();
+        services.AddSingleton<CloudLinkViewModel>();
+        services.AddSingleton<IClipboardService, WindowsClipboardService>();
         services.AddSingleton<MainWindowViewModel>();
         services.AddSingleton<TrayIconService>();
         services.AddSingleton<ScheduleSchedulerService>();

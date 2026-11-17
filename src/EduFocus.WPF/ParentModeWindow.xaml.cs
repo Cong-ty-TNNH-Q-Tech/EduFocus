@@ -20,6 +20,7 @@ public partial class ParentModeWindow : Window
         _viewModel.PasswordBoxesShouldClear += OnPasswordBoxesShouldClear;
         _viewModel.CloseRequested += OnCloseRequested;
         _viewModel.Privacy.DeleteSecretShouldClear += OnPasswordBoxesShouldClear;
+        _viewModel.CloudLink.PrivacyNoticeRequested += OnPrivacyNoticeRequested;
 
         _timer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(1) };
         _timer.Tick += OnTimerTick;
@@ -34,6 +35,7 @@ public partial class ParentModeWindow : Window
     private async void OnLoaded(object sender, RoutedEventArgs e)
     {
         _timer.Start();
+        _viewModel.HandleWindowOpened();
         await _viewModel.LoadCommand.ExecuteAsync(null);
 
         if (_viewModel.IsLoginVisible)
@@ -49,6 +51,7 @@ public partial class ParentModeWindow : Window
         _viewModel.PasswordBoxesShouldClear -= OnPasswordBoxesShouldClear;
         _viewModel.CloseRequested -= OnCloseRequested;
         _viewModel.Privacy.DeleteSecretShouldClear -= OnPasswordBoxesShouldClear;
+        _viewModel.CloudLink.PrivacyNoticeRequested -= OnPrivacyNoticeRequested;
         _viewModel.HandleWindowClosed();
     }
 
@@ -57,6 +60,9 @@ public partial class ParentModeWindow : Window
     private void OnPreviewUserInput(object sender, RoutedEventArgs e) => _viewModel.RecordUserActivity();
 
     private void OpenPrivacyNotice_OnClick(object sender, RoutedEventArgs e) =>
+        new PrivacyNoticeWindow { Owner = this }.ShowDialog();
+
+    private void OnPrivacyNoticeRequested(object? sender, EventArgs e) =>
         new PrivacyNoticeWindow { Owner = this }.ShowDialog();
 
     private void OnPasswordBoxesShouldClear(object? sender, EventArgs e)

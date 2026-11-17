@@ -29,6 +29,8 @@ public enum ParentModeView
 /// </summary>
 public partial class ParentModeViewModel : ObservableObject
 {
+    public const int CloudLinkSectionIndex = 6;
+
     private const string PinPolicyMessage =
         "PIN phải có 6–8 chữ số, không lặp lại một chữ số và không tăng/giảm liên tiếp.";
 
@@ -40,6 +42,7 @@ public partial class ParentModeViewModel : ObservableObject
     private readonly DashboardViewModel _dashboard;
     private readonly ReportViewModel _report;
     private readonly PrivacyViewModel _privacy;
+    private readonly CloudLinkViewModel _cloudLink;
     private readonly DatabaseBootstrapper _database;
     private readonly IAppLogger _logger;
     private readonly TimeProvider _timeProvider;
@@ -54,6 +57,7 @@ public partial class ParentModeViewModel : ObservableObject
     [ObservableProperty] private string _statusMessage = string.Empty;
     [ObservableProperty] private bool _statusIsError;
     [ObservableProperty] private string _issuedRecoveryCode = string.Empty;
+    [ObservableProperty] private int _selectedSectionIndex;
 
     public string LoginPin { get; set; } = string.Empty;
     public string CurrentPin { get; set; } = string.Empty;
@@ -86,6 +90,8 @@ public partial class ParentModeViewModel : ObservableObject
 
     public PrivacyViewModel Privacy => _privacy;
 
+    public CloudLinkViewModel CloudLink => _cloudLink;
+
     public event EventHandler? PasswordBoxesShouldClear;
     public event EventHandler? CloseRequested;
 
@@ -98,6 +104,7 @@ public partial class ParentModeViewModel : ObservableObject
         DashboardViewModel dashboard,
         ReportViewModel report,
         PrivacyViewModel privacy,
+        CloudLinkViewModel cloudLink,
         DatabaseBootstrapper database,
         IAppLogger logger,
         TimeProvider timeProvider)
@@ -110,6 +117,7 @@ public partial class ParentModeViewModel : ObservableObject
         _dashboard = dashboard ?? throw new ArgumentNullException(nameof(dashboard));
         _report = report ?? throw new ArgumentNullException(nameof(report));
         _privacy = privacy ?? throw new ArgumentNullException(nameof(privacy));
+        _cloudLink = cloudLink ?? throw new ArgumentNullException(nameof(cloudLink));
         _database = database ?? throw new ArgumentNullException(nameof(database));
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
         _timeProvider = timeProvider ?? throw new ArgumentNullException(nameof(timeProvider));
@@ -125,7 +133,10 @@ public partial class ParentModeViewModel : ObservableObject
         OnPropertyChanged(nameof(IsChangePinVisible));
         OnPropertyChanged(nameof(IsRecoveryResetVisible));
         OnPropertyChanged(nameof(IsRecoveryCodeVisible));
+        UpdateCloudLinkVisibility();
     }
+
+    partial void OnSelectedSectionIndexChanged(int value) => UpdateCloudLinkVisibility();
 
     [RelayCommand]
     private async Task LoadAsync()
@@ -155,6 +166,7 @@ public partial class ParentModeViewModel : ObservableObject
                 await _dashboard.RefreshAsync();
                 await _report.RefreshAsync();
                 await _privacy.RefreshAsync();
+                await _cloudLink.RefreshAsync();
                 _ticksSinceDashboardRefresh = 0;
                 View = ParentModeView.Management;
                 SetStatus("Parent Mode đang mở. Phiên tự khóa sau 5 phút không hoạt động.", false);
@@ -485,6 +497,8 @@ public partial class ParentModeViewModel : ObservableObject
             _ticksSinceDashboardRefresh = 0;
             _ = RefreshLiveAsync();
         }
+
+        _cloudLink.HandleTick();
     }
 
     public void RecordUserActivity()
@@ -493,11 +507,18 @@ public partial class ParentModeViewModel : ObservableObject
             _mode.RecordActivity();
     }
 
+    public void HandleWindowOpened()
+    {
+        _cloudLink.HandleWindowOpened();
+        UpdateCloudLinkVisibility();
+    }
+
     public void HandleWindowClosed()
     {
         _mode.Lock();
         IssuedRecoveryCode = string.Empty;
         ClearInputs();
+        _cloudLink.HandleWindowClosed();
     }
 
     private async Task ApplyLoginResultAsync(ParentAuthResult result)
@@ -513,6 +534,7 @@ public partial class ParentModeViewModel : ObservableObject
                 await _dashboard.RefreshAsync();
                 await _report.RefreshAsync();
                 await _privacy.RefreshAsync();
+                await _cloudLink.RefreshAsync();
                 _ticksSinceDashboardRefresh = 0;
                 View = ParentModeView.Management;
                 SetStatus("Đã mở Parent Mode. Phiên tự khóa sau 5 phút không hoạt động.", false);
@@ -535,6 +557,10 @@ public partial class ParentModeViewModel : ObservableObject
         _camera.Refresh();
         await _camera.LoadDevicesAsync();
     }
+
+    private void UpdateCloudLinkVisibility() =>
+        _cloudLink.SetSectionVisible(
+            IsManagementVisible && SelectedSectionIndex == CloudLinkSectionIndex);
 
     private async Task RefreshLiveAsync()
     {

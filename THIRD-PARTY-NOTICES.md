@@ -46,6 +46,7 @@ thành phần đó có thêm thông báo bên thứ ba của Microsoft tại
 | Microsoft.ML.OnnxRuntime | 1.31.0 | MIT | Microsoft Corporation |
 | Microsoft.ML.OnnxRuntime.Managed | 1.31.0 | MIT | Microsoft Corporation |
 | OpenCvSharp4 | 4.13.0.20260627 | Apache-2.0 | shimat và những người đóng góp |
+| QRCoder | 1.8.1 | MIT | Raffael Herrmann |
 | SQLitePCLRaw.bundle_e_sqlcipher | 2.1.11 | Apache-2.0 | Eric Sink, SourceGear LLC và những người đóng góp |
 | SQLitePCLRaw.core | 2.1.13 | Apache-2.0 | Eric Sink, SourceGear LLC và những người đóng góp |
 | SQLitePCLRaw.lib.e_sqlcipher | 2.1.11 | Apache-2.0 | Eric Sink, SourceGear LLC và những người đóng góp |
@@ -88,7 +89,6 @@ bản chính xác được chốt tại thời điểm phát hành và cập nh�
 
 | Thành phần | Dùng ở | Giấy phép | Bản quyền |
 | --- | --- | --- | --- |
-| QRCoder | Desktop — sinh QR ghép nối | MIT | Raffael Herrmann |
 | ZXing.Net.Maui | App Android — quét QR | MIT | ZXing.Net.Maui contributors |
 | CommunityToolkit.Maui | App Android — UI/behaviors | MIT | .NET Foundation and Contributors |
 | Plugin.Firebase (hoặc tương đương) | App Android — nhận FCM | MIT | Plugin.Firebase contributors |
@@ -162,7 +162,7 @@ Liên hệ về giấy phép: mở báo cáo riêng tư tại
 
 Áp dụng cho: Microsoft .NET Runtime, Windows Desktop Runtime, CommunityToolkit.Mvvm,
 Microsoft.Data.Sqlite, Microsoft.EntityFrameworkCore, Microsoft.Extensions.*,
-Microsoft.ML.OnnxRuntime, System.Management, System.Numerics.Tensors,
+Microsoft.ML.OnnxRuntime, QRCoder, System.Management, System.Numerics.Tensors,
 System.Security.Cryptography.ProtectedData, Microsoft.NET.Test.Sdk, coverlet.collector và YuNet
 (khi được phân phối).
 

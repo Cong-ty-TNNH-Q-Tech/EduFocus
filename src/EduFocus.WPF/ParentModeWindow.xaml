@@ -262,7 +262,8 @@
                     <TextBlock Text="QUẢN LÝ" FontSize="10.5" FontWeight="SemiBold"
                                Foreground="{StaticResource TextMutedBrush}" Margin="13,0,0,8" />
                     <ListBox x:Name="ParentNav" Style="{StaticResource SidebarNavList}"
-                             SelectedIndex="0" IsEnabled="{Binding IsManagementVisible}">
+                             SelectedIndex="{Binding SelectedSectionIndex, Mode=TwoWay}"
+                             IsEnabled="{Binding IsManagementVisible}">
                         <ListBoxItem>
                             <StackPanel Orientation="Horizontal">
                                 <TextBlock Text="&#xE80F;" Style="{StaticResource IconGlyph}" FontSize="16"
@@ -303,6 +304,13 @@
                                 <TextBlock Text="&#xE713;" Style="{StaticResource IconGlyph}" FontSize="16"
                                            Margin="0,0,10,0" />
                                 <TextBlock Text="Cài đặt" VerticalAlignment="Center" />
+                            </StackPanel>
+                        </ListBoxItem>
+                        <ListBoxItem>
+                            <StackPanel Orientation="Horizontal">
+                                <TextBlock Text="&#xE8EA;" Style="{StaticResource IconGlyph}" FontSize="16"
+                                           Margin="0,0,10,0" />
+                                <TextBlock Text="Điện thoại" VerticalAlignment="Center" />
                             </StackPanel>
                         </ListBoxItem>
                     </ListBox>
@@ -500,7 +508,7 @@
                 <TabControl x:Name="ManagementPages"
                             Style="{StaticResource ContentOnlyTabControl}"
                             Visibility="{Binding IsManagementVisible, Converter={StaticResource BoolToVisibility}}"
-                            SelectedIndex="{Binding SelectedIndex, ElementName=ParentNav, Mode=TwoWay}">
+                            SelectedIndex="{Binding SelectedSectionIndex, Mode=TwoWay}">
                     <!-- Overview -->
                     <TabItem>
                         <ScrollViewer VerticalScrollBarVisibility="Auto" Padding="0,0,4,4">
@@ -1393,6 +1401,302 @@
                                                     </TextBlock>
                                                 </StackPanel>
                                             </Border>
+                                        </StackPanel>
+                                    </Border>
+                                </StackPanel>
+                            </Grid>
+                        </ScrollViewer>
+                    </TabItem>
+
+                    <!-- Phone link -->
+                    <TabItem>
+                        <ScrollViewer VerticalScrollBarVisibility="Auto" Padding="0,0,4,4">
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="3*" />
+                                    <ColumnDefinition Width="2*" />
+                                </Grid.ColumnDefinitions>
+
+                                <Border Grid.Column="0" Style="{StaticResource CardBorder}" Margin="0,0,8,0"
+                                        VerticalAlignment="Top">
+                                    <StackPanel>
+                                        <Grid>
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="*" />
+                                                <ColumnDefinition Width="Auto" />
+                                            </Grid.ColumnDefinitions>
+                                            <StackPanel Grid.Column="0">
+                                                <TextBlock Text="Kết nối điện thoại"
+                                                           Style="{StaticResource CardTitleText}" />
+                                                <TextBlock Text="Gửi thông báo và báo cáo tổng hợp cho điện thoại của phụ huynh qua cloud (tùy chọn)."
+                                                           Style="{StaticResource CaptionText}" Margin="0,4,0,0" />
+                                            </StackPanel>
+                                            <Border Grid.Column="1" Style="{StaticResource PillBorder}"
+                                                    VerticalAlignment="Top">
+                                                <TextBlock Text="{Binding CloudLink.ConnectionStateText}" FontSize="12"
+                                                           FontWeight="SemiBold"
+                                                           Foreground="{StaticResource PrimaryDarkBrush}" />
+                                            </Border>
+                                        </Grid>
+
+                                        <TextBlock Text="{Binding CloudLink.LastErrorText}"
+                                                   Style="{StaticResource ErrorText}" Margin="0,10,0,0"
+                                                   TextWrapping="Wrap"
+                                                   Visibility="{Binding CloudLink.HasLastError, Converter={StaticResource BoolToVisibility}}" />
+
+                                        <!-- Not enabled yet -->
+                                        <StackPanel
+                                            Visibility="{Binding CloudLink.ShowEnablePanel, Converter={StaticResource BoolToVisibility}}">
+                                            <Border Height="1" Background="{StaticResource BorderBrush}" Margin="0,16,0,0" />
+                                            <TextBlock Text="Dữ liệu sẽ được gửi lên cloud"
+                                                       Style="{StaticResource SectionHeaderText}" />
+                                            <TextBlock Style="{StaticResource SecondaryText}"
+                                                       Text="• Tổng hợp thời gian học, tập trung, xao nhãng và vắng mặt theo ngày.&#x0a;• Cảnh báo khi mất tập trung kéo dài, khi bảo vệ bị tắt hoặc khi phát hiện thay đổi giờ hệ thống." />
+                                            <TextBlock Style="{StaticResource CaptionText}" Margin="0,6,0,0"
+                                                       Text="Không gửi URL, tên ứng dụng, tiêu đề cửa sổ, ảnh camera, mẫu dữ liệu thô hay mã PIN." />
+
+                                            <CheckBox Content="Tôi đã đọc và đồng ý gửi dữ liệu tổng hợp qua cloud"
+                                                      IsChecked="{Binding CloudLink.ConsentAccepted}"
+                                                      Margin="0,14,0,0" />
+                                            <Button Content="Xem thông báo quyền riêng tư đầy đủ"
+                                                    Style="{StaticResource LinkButton}" Margin="0,4,0,0"
+                                                    HorizontalAlignment="Left"
+                                                    Command="{Binding CloudLink.OpenPrivacyNoticeCommand}" />
+
+                                            <TextBlock Text="Máy chủ cloud (self-host)"
+                                                       Style="{StaticResource SectionHeaderText}" />
+                                            <TextBox Text="{Binding CloudLink.CloudBaseUrl, UpdateSourceTrigger=PropertyChanged}" />
+                                            <TextBlock Text="Cảnh báo: địa chỉ http không được mã hóa. Chỉ dùng cho demo trên mạng LAN nội bộ."
+                                                       Style="{StaticResource ErrorText}" Margin="0,6,0,0"
+                                                       TextWrapping="Wrap"
+                                                       Visibility="{Binding CloudLink.IsInsecureUrl, Converter={StaticResource BoolToVisibility}}" />
+                                            <TextBlock Style="{StaticResource CaptionText}" Margin="0,6,0,0"
+                                                       Text="Bản phát hành bắt buộc HTTPS. Bản phát triển cho phép http với localhost hoặc địa chỉ IP mạng LAN." />
+
+                                            <TextBlock Text="Tên máy này khi ghép nối"
+                                                       Style="{StaticResource FieldLabelText}" />
+                                            <TextBox Text="{Binding CloudLink.DesktopName, UpdateSourceTrigger=PropertyChanged}"
+                                                     MaxLength="128" />
+
+                                            <Button Content="Bật kết nối" Style="{StaticResource PrimaryButton}"
+                                                    HorizontalAlignment="Left" Margin="0,16,0,0"
+                                                    Command="{Binding CloudLink.EnableCommand}"
+                                                    IsEnabled="{Binding CloudLink.CanEnable}" />
+                                        </StackPanel>
+
+                                        <!-- Waiting for the phone -->
+                                        <StackPanel
+                                            Visibility="{Binding CloudLink.ShowPairingPanel, Converter={StaticResource BoolToVisibility}}">
+                                            <Border Height="1" Background="{StaticResource BorderBrush}" Margin="0,16,0,0" />
+
+                                            <StackPanel
+                                                Visibility="{Binding CloudLink.ShowPairingMaterial, Converter={StaticResource BoolToVisibility}}">
+                                                <Grid Margin="0,16,0,0">
+                                                    <Grid.ColumnDefinitions>
+                                                        <ColumnDefinition Width="Auto" />
+                                                        <ColumnDefinition Width="*" />
+                                                    </Grid.ColumnDefinitions>
+                                                    <Border Grid.Column="0" Background="White" CornerRadius="12"
+                                                            Padding="10" BorderBrush="{StaticResource BorderBrush}"
+                                                            BorderThickness="1" VerticalAlignment="Top">
+                                                        <Grid Width="190" Height="190">
+                                                            <Image Source="{Binding CloudLink.QrImage}" Width="190"
+                                                                   Height="190"
+                                                                   RenderOptions.BitmapScalingMode="NearestNeighbor" />
+                                                            <Border Background="#CC1B1F2A" CornerRadius="8"
+                                                                    Visibility="{Binding CloudLink.IsPairingExpired, Converter={StaticResource BoolToVisibility}}">
+                                                                <TextBlock Text="Mã đã hết hạn" Foreground="White"
+                                                                           FontSize="14" FontWeight="SemiBold"
+                                                                           HorizontalAlignment="Center"
+                                                                           VerticalAlignment="Center"
+                                                                           TextWrapping="Wrap" TextAlignment="Center" />
+                                                            </Border>
+                                                        </Grid>
+                                                    </Border>
+                                                    <StackPanel Grid.Column="1" Margin="18,0,0,0">
+                                                        <TextBlock Text="Mở ứng dụng “EduFocus Phụ huynh” trên điện thoại và chọn quét mã QR bên cạnh."
+                                                                   Style="{StaticResource BodyText}" TextWrapping="Wrap" />
+                                                        <TextBlock Text="Hoặc nhập mã ghép nối"
+                                                                   Style="{StaticResource SectionHeaderText}" Margin="0,12,0,6" />
+                                                        <TextBox Text="{Binding CloudLink.PairingCode, Mode=OneWay}"
+                                                                 IsReadOnly="True" FontFamily="Consolas" FontSize="26"
+                                                                 FontWeight="SemiBold" TextAlignment="Center" />
+                                                        <TextBlock Text="{Binding CloudLink.PairingCountdown}"
+                                                                   FontSize="12.5"
+                                                                   Foreground="{StaticResource TextSecondaryBrush}"
+                                                                   Margin="0,8,0,0" />
+                                                        <WrapPanel Margin="0,10,0,0">
+                                                            <Button Content="Sao chép mã"
+                                                                    Style="{StaticResource SecondaryButton}"
+                                                                    Margin="0,0,8,0"
+                                                                    Command="{Binding CloudLink.CopyPairingCodeCommand}"
+                                                                    IsEnabled="{Binding CloudLink.HasActivePairing}" />
+                                                            <Button Content="Tạo mã mới"
+                                                                    Style="{StaticResource SoftButton}"
+                                                                    Command="{Binding CloudLink.CreateNewPairingCommand}"
+                                                                    IsEnabled="{Binding CloudLink.CanCreateNewPairing}" />
+                                                        </WrapPanel>
+                                                    </StackPanel>
+                                                </Grid>
+                                            </StackPanel>
+
+                                            <StackPanel
+                                                Visibility="{Binding CloudLink.ShowPairingPrompt, Converter={StaticResource BoolToVisibility}}">
+                                                <TextBlock Text="Chưa có mã ghép nối còn hiệu lực."
+                                                           Style="{StaticResource SectionHeaderText}" />
+                                                <TextBlock Text="Tạo mã mới rồi quét bằng ứng dụng EduFocus Phụ huynh trên điện thoại."
+                                                           Style="{StaticResource SecondaryText}" />
+                                                <Button Content="Tạo mã ghép nối"
+                                                        Style="{StaticResource PrimaryButton}"
+                                                        HorizontalAlignment="Left" Margin="0,14,0,0"
+                                                        Command="{Binding CloudLink.CreateNewPairingCommand}"
+                                                        IsEnabled="{Binding CloudLink.CanCreateNewPairing}" />
+                                            </StackPanel>
+
+                                            <TextBlock Text="Đang chờ điện thoại xác nhận. Thẻ tự cập nhật khi ghép nối thành công. Mã chỉ dùng một lần và hết hạn sau 10 phút."
+                                                       Style="{StaticResource CaptionText}" Margin="0,12,0,0" />
+                                        </StackPanel>
+
+                                        <!-- Linked -->
+                                        <StackPanel
+                                            Visibility="{Binding CloudLink.ShowLinkedPanel, Converter={StaticResource BoolToVisibility}}">
+                                            <Border Height="1" Background="{StaticResource BorderBrush}" Margin="0,16,0,0" />
+                                            <Grid Margin="0,16,0,0">
+                                                <Grid.ColumnDefinitions>
+                                                    <ColumnDefinition Width="*" />
+                                                    <ColumnDefinition Width="12" />
+                                                    <ColumnDefinition Width="*" />
+                                                </Grid.ColumnDefinitions>
+                                                <StackPanel Grid.Column="0">
+                                                    <TextBlock Text="Thiết bị đã ghép nối"
+                                                               Style="{StaticResource SectionHeaderText}" Margin="0,0,0,4" />
+                                                    <TextBlock Text="{Binding CloudLink.LinkedDeviceText}"
+                                                               Style="{StaticResource BodyText}" TextWrapping="Wrap" />
+                                                    <TextBlock Text="{Binding CloudLink.LinkedSinceText}"
+                                                               Style="{StaticResource CaptionText}" Margin="0,4,0,0" />
+                                                </StackPanel>
+                                                <StackPanel Grid.Column="2">
+                                                    <TextBlock Text="Đồng bộ"
+                                                               Style="{StaticResource SectionHeaderText}" Margin="0,0,0,4" />
+                                                    <TextBlock Text="{Binding CloudLink.PendingEventsText}"
+                                                               Style="{StaticResource BodyText}" TextWrapping="Wrap" />
+                                                    <TextBlock Text="{Binding CloudLink.LastSyncText}"
+                                                               Style="{StaticResource CaptionText}" Margin="0,4,0,0" />
+                                                </StackPanel>
+                                            </Grid>
+
+                                            <WrapPanel Margin="0,14,0,0">
+                                                <Button Content="Đồng bộ ngay"
+                                                        Style="{StaticResource PrimaryButton}" Margin="0,0,8,0"
+                                                        Command="{Binding CloudLink.SyncNowCommand}"
+                                                        IsEnabled="{Binding CloudLink.IsLinked}" />
+                                                <Button Content="Làm mới trạng thái"
+                                                        Style="{StaticResource SecondaryButton}"
+                                                        Command="{Binding CloudLink.RefreshStatusCommand}"
+                                                        IsEnabled="{Binding CloudLink.IsNotBusy}" />
+                                            </WrapPanel>
+
+                                            <Border Height="1" Background="{StaticResource BorderBrush}" Margin="0,18,0,0" />
+                                            <TextBlock Text="Ngắt kết nối"
+                                                       Style="{StaticResource SectionHeaderText}" />
+                                            <TextBlock Text="Xóa token ghép nối trên máy này và thu hồi quyền trên máy chủ cloud. Dữ liệu học tập trên desktop không bị ảnh hưởng."
+                                                       Style="{StaticResource SecondaryText}" />
+                                            <Button Content="Ngắt kết nối..." Margin="0,12,0,0"
+                                                    HorizontalAlignment="Left"
+                                                    Command="{Binding CloudLink.OpenUnlinkConfirmCommand}">
+                                                <Button.Style>
+                                                    <Style TargetType="Button"
+                                                           BasedOn="{StaticResource SecondaryButton}">
+                                                        <Style.Triggers>
+                                                            <DataTrigger Binding="{Binding CloudLink.ShowUnlinkConfirm}"
+                                                                         Value="True">
+                                                                <Setter Property="Visibility" Value="Collapsed" />
+                                                            </DataTrigger>
+                                                        </Style.Triggers>
+                                                    </Style>
+                                                </Button.Style>
+                                            </Button>
+
+                                            <Border Margin="0,12,0,0" Padding="14" CornerRadius="12"
+                                                    Background="{StaticResource DangerSoftBrush}"
+                                                    BorderBrush="{StaticResource DangerBrush}"
+                                                    BorderThickness="1"
+                                                    Visibility="{Binding CloudLink.ShowUnlinkConfirm, Converter={StaticResource BoolToVisibility}}">
+                                                <StackPanel>
+                                                    <CheckBox Content="Xóa toàn bộ dữ liệu trên cloud"
+                                                              IsChecked="{Binding CloudLink.DeleteCloudData}" />
+                                                    <TextBlock Text="Dữ liệu học tập trên desktop vẫn được giữ nguyên. Xóa dữ liệu cloud không thể hoàn tác."
+                                                               Style="{StaticResource CaptionText}" Margin="0,6,0,0" />
+                                                    <TextBlock Text="Gõ XÓA để xác nhận xóa dữ liệu cloud"
+                                                               Style="{StaticResource FieldLabelText}"
+                                                               Visibility="{Binding CloudLink.DeleteCloudData, Converter={StaticResource BoolToVisibility}}" />
+                                                    <TextBox Text="{Binding CloudLink.DeleteConfirmation, UpdateSourceTrigger=PropertyChanged}"
+                                                             MaxLength="8"
+                                                             IsEnabled="{Binding CloudLink.DeleteCloudData}"
+                                                             Visibility="{Binding CloudLink.DeleteCloudData, Converter={StaticResource BoolToVisibility}}" />
+                                                    <WrapPanel Margin="0,12,0,0">
+                                                        <Button Content="Xác nhận ngắt kết nối"
+                                                                Style="{StaticResource DangerButton}" Margin="0,0,8,0"
+                                                                Command="{Binding CloudLink.UnlinkCommand}"
+                                                                IsEnabled="{Binding CloudLink.IsNotBusy}" />
+                                                        <Button Content="Hủy"
+                                                                Style="{StaticResource SecondaryButton}"
+                                                                Command="{Binding CloudLink.CancelUnlinkCommand}" />
+                                                    </WrapPanel>
+                                                </StackPanel>
+                                            </Border>
+                                        </StackPanel>
+
+                                        <ProgressBar IsIndeterminate="True" Margin="0,12,0,0"
+                                                     Visibility="{Binding CloudLink.IsBusy, Converter={StaticResource BoolToVisibility}}" />
+
+                                        <TextBlock Text="{Binding CloudLink.StatusMessage}" Margin="0,10,0,0"
+                                                   FontSize="12.5" TextWrapping="Wrap"
+                                                   Visibility="{Binding CloudLink.HasStatusMessage, Converter={StaticResource BoolToVisibility}}">
+                                            <TextBlock.Style>
+                                                <Style TargetType="TextBlock">
+                                                    <Setter Property="Foreground"
+                                                            Value="{StaticResource TextSecondaryBrush}" />
+                                                    <Style.Triggers>
+                                                        <DataTrigger Binding="{Binding CloudLink.StatusIsError}"
+                                                                     Value="True">
+                                                            <Setter Property="Foreground"
+                                                                    Value="{StaticResource DangerBrush}" />
+                                                        </DataTrigger>
+                                                    </Style.Triggers>
+                                                </Style>
+                                            </TextBlock.Style>
+                                        </TextBlock>
+                                    </StackPanel>
+                                </Border>
+
+                                <StackPanel Grid.Column="1" Margin="8,0,0,0">
+                                    <Border Style="{StaticResource CardBorder}" VerticalAlignment="Top">
+                                        <StackPanel>
+                                            <TextBlock Text="Cloud hoạt động thế nào"
+                                                       Style="{StaticResource CardTitleText}" />
+                                            <TextBlock Text="EduFocus gửi dữ liệu tổng hợp lên máy chủ cloud để chuyển thông báo và báo cáo cho điện thoại đã ghép nối."
+                                                       Style="{StaticResource SecondaryText}" Margin="0,8,0,0" />
+                                            <TextBlock Text="Chỉ dữ liệu tổng hợp"
+                                                       Style="{StaticResource SectionHeaderText}" />
+                                            <TextBlock Style="{StaticResource SecondaryText}"
+                                                       Text="• Tổng số phút học, tập trung, xao nhãng, vắng mặt.&#x0a;• Cảnh báo mất tập trung và thay đổi bảo vệ/giờ hệ thống.&#x0a;• Ngày học và múi giờ để đúng lịch." />
+                                            <TextBlock Text="Không bao giờ gửi"
+                                                       Style="{StaticResource SectionHeaderText}" />
+                                            <TextBlock Style="{StaticResource SecondaryText}"
+                                                       Text="• URL, tên ứng dụng, tiêu đề cửa sổ.&#x0a;• Ảnh camera, mẫu dữ liệu thô.&#x0a;• PIN, mã khôi phục, token ghép nối." />
+                                            <Button Content="Xem thông báo quyền riêng tư đầy đủ"
+                                                    Style="{StaticResource LinkButton}" Margin="0,10,0,0"
+                                                    HorizontalAlignment="Left"
+                                                    Command="{Binding CloudLink.OpenPrivacyNoticeCommand}" />
+                                        </StackPanel>
+                                    </Border>
+                                    <Border Style="{StaticResource SoftCardBorder}" Margin="0,16,0,0">
+                                        <StackPanel>
+                                            <TextBlock Text="Lưu ý"
+                                                       Style="{StaticResource CardTitleText}" />
+                                            <TextBlock Text="Phụ huynh có thể ngắt kết nối bất cứ lúc nào tại thẻ này. Dữ liệu cloud được máy chủ tự xóa theo thời hạn lưu trữ đã cấu hình."
+                                                       Style="{StaticResource SecondaryText}" Margin="0,8,0,0" />
                                         </StackPanel>
                                     </Border>
                                 </StackPanel>
