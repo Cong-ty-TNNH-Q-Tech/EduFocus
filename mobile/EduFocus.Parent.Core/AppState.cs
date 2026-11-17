@@ -18,4 +18,7 @@ public sealed partial class AppState : ObservableObject
 
     [ObservableProperty]
     private string? timeZone;
+
+    [ObservableProperty]
+    private string? desktopName;
 }

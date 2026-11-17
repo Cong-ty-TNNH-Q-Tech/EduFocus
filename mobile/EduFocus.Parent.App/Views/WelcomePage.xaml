@@ -1,0 +1,65 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<ContentPage x:Class="EduFocus.Parent.App.Views.WelcomePage"
+             xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+             Title="EduFocus Phụ huynh"
+             Shell.TabBarIsVisible="False"
+             BackgroundColor="{AppThemeBinding Light=#F8FAFC, Dark=#0B1220}">
+    <ScrollView>
+        <VerticalStackLayout Padding="28,56,28,32" Spacing="18">
+            <Label Text="EduFocus Phụ huynh"
+                   FontSize="30"
+                   FontAttributes="Bold"
+                   TextColor="{AppThemeBinding Light={StaticResource TextLight}, Dark={StaticResource TextDark}}" />
+            <Label Text="Nhận thông báo và xem báo cáo tổng hợp về việc học của con trên điện thoại."
+                   FontSize="16"
+                   TextColor="{AppThemeBinding Light=#475569, Dark=#CBD5E1}" />
+
+            <Border Margin="0,8,0,0"
+                    Padding="18"
+                    StrokeThickness="0"
+                    StrokeShape="RoundRectangle 16"
+                    BackgroundColor="{AppThemeBinding Light=#FFFFFF, Dark=#111827}">
+                <VerticalStackLayout Spacing="10">
+                    <Label Text="Chỉ dữ liệu tổng hợp được gửi lên cloud"
+                           FontSize="16"
+                           FontAttributes="Bold"
+                           TextColor="{AppThemeBinding Light={StaticResource TextLight}, Dark={StaticResource TextDark}}" />
+                    <Label Text="• Thời lượng tập trung, xao nhãng, vắng mặt theo ngày"
+                           FontSize="14"
+                           TextColor="{AppThemeBinding Light=#475569, Dark=#CBD5E1}" />
+                    <Label Text="• Số lần cố truy cập bị chặn và tóm tắt báo cáo"
+                           FontSize="14"
+                           TextColor="{AppThemeBinding Light=#475569, Dark=#CBD5E1}" />
+                    <Label Text="• Không gửi URL, tiêu đề cửa sổ, tên ứng dụng hay dữ liệu camera"
+                           FontSize="14"
+                           TextColor="{AppThemeBinding Light=#475569, Dark=#CBD5E1}" />
+                </VerticalStackLayout>
+            </Border>
+
+            <Button Text="Ghép nối với máy tính"
+                    Clicked="OnPairClicked"
+                    HeightRequest="50"
+                    CornerRadius="14"
+                    FontSize="16"
+                    FontAttributes="Bold"
+                    BackgroundColor="{StaticResource Primary}"
+                    TextColor="White" />
+
+            <Label Text="Bạn cần máy tính đang chạy EduFocus và đã tạo mã trong Parent Mode → Điện thoại."
+                   FontSize="13"
+                   TextColor="{AppThemeBinding Light=#64748B, Dark=#94A3B8}" />
+
+            <Label Text="Chính sách quyền riêng tư"
+                   FontSize="14"
+                   TextDecorations="Underline"
+                   TextColor="{StaticResource Primary}"
+                   HorizontalOptions="Center"
+                   Margin="0,12,0,0">
+                <Label.GestureRecognizers>
+                    <TapGestureRecognizer Tapped="OnPrivacyTapped" />
+                </Label.GestureRecognizers>
+            </Label>
+        </VerticalStackLayout>
+    </ScrollView>
+</ContentPage>

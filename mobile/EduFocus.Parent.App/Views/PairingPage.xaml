@@ -1,0 +1,165 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<ContentPage x:Class="EduFocus.Parent.App.Views.PairingPage"
+             xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+             xmlns:vm="clr-namespace:EduFocus.Parent.App.ViewModels"
+             x:DataType="vm:PairingViewModel"
+             Title="Ghép nối"
+             Shell.TabBarIsVisible="False"
+             BackgroundColor="{AppThemeBinding Light=#F8FAFC, Dark=#0B1220}">
+    <ScrollView>
+        <VerticalStackLayout Padding="24,20,24,32" Spacing="16">
+            <Button Text="‹ Quay lại"
+                    Clicked="OnBackClicked"
+                    HorizontalOptions="Start"
+                    Padding="0"
+                    BackgroundColor="Transparent"
+                    TextColor="{StaticResource Primary}"
+                    FontSize="15" />
+
+            <Label Text="Ghép nối với máy tính"
+                   FontSize="24"
+                   FontAttributes="Bold"
+                   TextColor="{AppThemeBinding Light={StaticResource TextLight}, Dark={StaticResource TextDark}}" />
+            <Label Text="Trên máy tính, mở EduFocus → Parent Mode → Điện thoại → tạo mã ghép nối, rồi quét mã QR hoặc nhập mã 8 ký tự bên dưới."
+                   FontSize="14"
+                   TextColor="{AppThemeBinding Light=#475569, Dark=#CBD5E1}" />
+
+            <Border IsVisible="{Binding IsAlreadyLinked}"
+                    Padding="14"
+                    StrokeThickness="1"
+                    Stroke="#F59E0B"
+                    StrokeShape="RoundRectangle 12"
+                    BackgroundColor="{AppThemeBinding Light=#FFFBEB, Dark=#3B2F10}">
+                <Label Text="{Binding LinkedBannerText}"
+                       FontSize="13"
+                       TextColor="{AppThemeBinding Light=#92400E, Dark=#FCD34D}" />
+            </Border>
+
+            <Border Padding="18"
+                    StrokeThickness="0"
+                    StrokeShape="RoundRectangle 16"
+                    BackgroundColor="{AppThemeBinding Light=#FFFFFF, Dark=#111827}">
+                <VerticalStackLayout Spacing="12">
+                    <Label Text="Quét mã QR"
+                           FontSize="17"
+                           FontAttributes="Bold"
+                           TextColor="{AppThemeBinding Light={StaticResource TextLight}, Dark={StaticResource TextDark}}" />
+                    <Label Text="Camera chỉ dùng để đọc mã QR trên màn hình máy tính. Ứng dụng không lưu hình ảnh."
+                           FontSize="13"
+                           TextColor="{AppThemeBinding Light=#475569, Dark=#CBD5E1}" />
+
+                    <Border x:Name="ScannerHost"
+                            IsVisible="{Binding IsScannerActive}"
+                            HeightRequest="260"
+                            StrokeThickness="0"
+                            StrokeShape="RoundRectangle 12"
+                            BackgroundColor="#0B1220" />
+
+                    <Button Text="Bật camera quét QR"
+                            Clicked="OnToggleScannerClicked"
+                            IsVisible="{Binding ShowStartScanner}"
+                            IsEnabled="{Binding IsNotBusy}"
+                            BackgroundColor="{StaticResource Primary}"
+                            TextColor="White"
+                            CornerRadius="12"
+                            HeightRequest="46" />
+                    <Button Text="Tắt camera"
+                            Clicked="OnToggleScannerClicked"
+                            IsVisible="{Binding ShowStopScanner}"
+                            BackgroundColor="Transparent"
+                            TextColor="{StaticResource Primary}"
+                            BorderColor="{StaticResource Primary}"
+                            BorderWidth="1"
+                            CornerRadius="12"
+                            HeightRequest="42" />
+
+                    <Button Text="Mở cài đặt quyền camera"
+                            Clicked="OnOpenPermissionSettingsClicked"
+                            IsVisible="{Binding CameraPermissionDenied}"
+                            BackgroundColor="Transparent"
+                            TextColor="{StaticResource Primary}"
+                            FontSize="13" />
+                </VerticalStackLayout>
+            </Border>
+
+            <Label Text="Hoặc nhập mã thủ công"
+                   FontSize="15"
+                   FontAttributes="Bold"
+                   HorizontalOptions="Center"
+                   TextColor="{AppThemeBinding Light=#64748B, Dark=#94A3B8}" />
+
+            <Border Padding="18"
+                    StrokeThickness="0"
+                    StrokeShape="RoundRectangle 16"
+                    BackgroundColor="{AppThemeBinding Light=#FFFFFF, Dark=#111827}">
+                <VerticalStackLayout Spacing="12">
+                    <Label Text="Mã ghép nối"
+                           FontSize="14"
+                           FontAttributes="Bold"
+                           TextColor="{AppThemeBinding Light={StaticResource TextLight}, Dark={StaticResource TextDark}}" />
+                    <Entry Text="{Binding CodeInput}"
+                           Placeholder="ABCD-2345"
+                           MaxLength="11"
+                           Keyboard="Text"
+                           FontSize="20"
+                           CharacterSpacing="2"
+                           IsEnabled="{Binding IsNotBusy}" />
+                    <Label Text="Mã gồm 8 ký tự chữ và số, hiển thị trên màn hình máy tính."
+                           FontSize="12"
+                           TextColor="{AppThemeBinding Light=#64748B, Dark=#94A3B8}" />
+
+                    <Label Text="Máy chủ cloud"
+                           FontSize="14"
+                           FontAttributes="Bold"
+                           Margin="0,6,0,0"
+                           TextColor="{AppThemeBinding Light={StaticResource TextLight}, Dark={StaticResource TextDark}}" />
+                    <Entry Text="{Binding CloudBaseUrl}"
+                           Placeholder="https://cloud.example.com"
+                           Keyboard="Url"
+                           IsEnabled="{Binding IsNotBusy}" />
+                    <Label Text="Chỉ đổi khi bạn tự vận hành máy chủ. Quét QR sẽ tự điền địa chỉ này."
+                           FontSize="12"
+                           TextColor="{AppThemeBinding Light=#64748B, Dark=#94A3B8}" />
+                    <Label Text="Địa chỉ http không mã hóa chỉ dùng khi thử nghiệm trong mạng LAN."
+                           IsVisible="{Binding IsInsecureUrl}"
+                           FontSize="12"
+                           TextColor="{AppThemeBinding Light=#B45309, Dark=#FCD34D}" />
+
+                    <Button Text="Ghép nối"
+                            Command="{Binding SubmitCommand}"
+                            IsEnabled="{Binding CanSubmit}"
+                            BackgroundColor="{StaticResource Primary}"
+                            TextColor="White"
+                            CornerRadius="12"
+                            HeightRequest="48"
+                            FontAttributes="Bold"
+                            Margin="0,6,0,0" />
+                </VerticalStackLayout>
+            </Border>
+
+            <ActivityIndicator IsRunning="{Binding IsBusy}"
+                               IsVisible="{Binding IsBusy}"
+                               Color="{StaticResource Primary}"
+                               HorizontalOptions="Center" />
+
+            <Label Text="{Binding StatusMessage}"
+                   IsVisible="{Binding HasStatusMessage}"
+                   FontSize="14"
+                   HorizontalTextAlignment="Center"
+                   TextColor="{AppThemeBinding Light={StaticResource TextLight}, Dark={StaticResource TextDark}}">
+                <Label.Triggers>
+                    <DataTrigger TargetType="Label" Binding="{Binding StatusIsError}" Value="True">
+                        <Setter Property="TextColor" Value="{AppThemeBinding Light=#B91C1C, Dark=#FCA5A5}" />
+                    </DataTrigger>
+                </Label.Triggers>
+            </Label>
+
+            <Label Text="{Binding RetryText}"
+                   IsVisible="{Binding IsRateLimited}"
+                   FontSize="13"
+                   HorizontalTextAlignment="Center"
+                   TextColor="{AppThemeBinding Light=#B45309, Dark=#FCD34D}" />
+        </VerticalStackLayout>
+    </ScrollView>
+</ContentPage>

@@ -12,13 +12,35 @@ không điều khiển từ xa bảo vệ của máy học sinh trong phase này
 ```text
 mobile/
 ├── EduFocus.Parent.slnx
-├── EduFocus.Parent.App/      # .NET MAUI net10.0-android: Shell, Views, SecureStorage
-├── EduFocus.Parent.Core/     # net10.0: AppState, CloudApiClient, ITokenStore (test được)
-└── EduFocus.Parent.Tests/    # net10.0: xUnit cho API client và state
+├── EduFocus.Parent.App/      # .NET MAUI net10.0-android: Shell, Views, SecureStorage, ZXing
+├── EduFocus.Parent.Core/     # net10.0: AppState, pairing, CloudApiClient, ITokenStore (test được)
+└── EduFocus.Parent.Tests/    # net10.0: xUnit cho parser, pairing service, API client và state
 ```
 
 `EduFocus.Parent.Core` tham chiếu trực tiếp `cloud/EduFocus.Cloud.Contracts` để dùng chung DTO,
 không copy model sang mobile.
+
+## Luồng ghép nối (issue #90)
+
+1. Lần đầu mở app (chưa có token) → màn hình **Welcome** giới thiệu và nút "Ghép nối với máy tính".
+2. Trên máy tính: Parent Mode → **Điện thoại** → bật kết nối cloud để nhận mã QR + mã 8 ký tự.
+3. Trên điện thoại: quét QR (camera) hoặc nhập mã thủ công. QR mã hóa
+   `edufocus://pair?v=1&u=<base64url URL>&s=<sessionId>&c=<code>`; parser từ chối sai scheme,
+   sai phiên bản, URL không hợp lệ hoặc mã không đúng 8 ký tự Crockford base32.
+4. App gọi `POST /v1/pairing/claim` (không cần token) với mã, sessionId (nếu có từ QR), tên thiết bị,
+   `android`, phiên bản app và múi giờ IANA. Thành công → token `efm_` vào **SecureStorage**, tên máy
+   tính/múi giờ/server vào **Preferences**, mở tab **Tổng quan**.
+5. Deep link `edufocus://pair?...` mở thẳng màn hình ghép nối và chỉ điền sẵn mã — luôn cần bấm
+   "Ghép nối" để tránh liên kết ngoài ý muốn.
+6. Đã ghép nối mà quét mã mới → hộp thoại xác nhận thay thế; token cũ được thu hồi qua
+   `DELETE /v1/devices/{id}` (best effort) trước khi claim.
+7. Lỗi 400/410 → "Mã ghép nối không hợp lệ hoặc đã hết hạn"; 429 → đếm ngược theo `Retry-After`;
+   lỗi mạng → thử lại. Không hiển thị chi tiết kỹ thuật.
+8. **Cài đặt** hiển thị máy tính đang kết nối và nút **Ngắt kết nối** (xóa token, quay về Welcome).
+   Địa chỉ server self-host được giữ lại để ghép nối lại nhanh.
+
+Camera chỉ được xin quyền khi phụ huynh bấm "Bật camera quét QR"; từ chối quyền vẫn dùng được
+nhập mã thủ công và có nút mở Cài đặt quyền của hệ thống.
 
 ## Yêu cầu
 
@@ -58,10 +80,14 @@ adb install -r mobile/EduFocus.Parent.App/bin/Debug/net10.0-android/com.qtech.ed
 ## Bảo mật
 
 - Token mobile (`efm_`) chỉ lưu trong `SecureStorage`; không ghi log, không đưa vào crash report.
-- `CloudApiClient` không hard-code domain; base URL lấy từ kết quả ghép nối.
+- `CloudApiClient` không hard-code domain; base URL lấy từ QR hoặc cấu hình self-host.
 - Timeout 15 giây; lỗi API được chuyển thành `CloudApiException` có mã và thông báo tiếng Việt.
-- Debug có thể gọi HTTP LAN khi demo; bản Release đặt `usesCleartextTraffic=false` và chỉ dùng HTTPS.
-- Không commit `google-services.json`, keystore hay secret; FCM/QR bổ sung ở issue #90–#93.
+- Debug có thể gọi HTTP LAN khi demo (chỉ với localhost/IP LAN); bản Release đặt
+  `usesCleartextTraffic=false` và chỉ dùng HTTPS.
+- Parser QR là hàm thuần trong `EduFocus.Parent.Core` và có unit test cho scheme/version/URL/code.
+- Camera chỉ dùng khi người dùng bật quét QR; app không lưu ảnh. Deep link chỉ điền sẵn mã và cần
+  người dùng xác nhận ghép nối.
+- Không commit `google-services.json`, keystore hay secret; FCM bổ sung ở issue #91.
 
 ## CI
 

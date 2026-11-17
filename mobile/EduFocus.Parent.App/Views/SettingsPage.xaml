@@ -2,15 +2,108 @@
 <ContentPage x:Class="EduFocus.Parent.App.Views.SettingsPage"
              xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
              xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
-             Title="Cài đặt">
-    <VerticalStackLayout Padding="24" Spacing="12" VerticalOptions="Center">
-        <Label Text="Ghép nối với máy học sinh"
-               FontSize="22"
-               FontAttributes="Bold"
-               HorizontalOptions="Center" />
-        <Label Text="Tính năng nhập mã ghép nối và quản lý thiết bị sẽ được bổ sung ở bước tiếp theo."
-               FontSize="14"
-               HorizontalTextAlignment="Center"
-               HorizontalOptions="Center" />
-    </VerticalStackLayout>
+             xmlns:vm="clr-namespace:EduFocus.Parent.App.ViewModels"
+             x:DataType="vm:SettingsViewModel"
+             Title="Cài đặt"
+             BackgroundColor="{AppThemeBinding Light=#F8FAFC, Dark=#0B1220}">
+    <ScrollView>
+        <VerticalStackLayout Padding="24,20,24,32" Spacing="16">
+            <Label Text="Cài đặt"
+                   FontSize="24"
+                   FontAttributes="Bold"
+                   TextColor="{AppThemeBinding Light={StaticResource TextLight}, Dark={StaticResource TextDark}}" />
+
+            <Border IsVisible="{Binding ShowWelcomeHint}"
+                    Padding="18"
+                    StrokeThickness="0"
+                    StrokeShape="RoundRectangle 16"
+                    BackgroundColor="{AppThemeBinding Light=#FFFFFF, Dark=#111827}">
+                <VerticalStackLayout Spacing="12">
+                    <Label Text="Chưa ghép nối"
+                           FontSize="17"
+                           FontAttributes="Bold"
+                           TextColor="{AppThemeBinding Light={StaticResource TextLight}, Dark={StaticResource TextDark}}" />
+                    <Label Text="Ghép nối với máy tính đang chạy EduFocus để nhận thông báo và báo cáo."
+                           FontSize="14"
+                           TextColor="{AppThemeBinding Light=#475569, Dark=#CBD5E1}" />
+                    <Button Text="Ghép nối với máy tính"
+                            Clicked="OnPairClicked"
+                            BackgroundColor="{StaticResource Primary}"
+                            TextColor="White"
+                            CornerRadius="12"
+                            HeightRequest="46" />
+                </VerticalStackLayout>
+            </Border>
+
+            <Border IsVisible="{Binding IsLinked}"
+                    Padding="18"
+                    StrokeThickness="0"
+                    StrokeShape="RoundRectangle 16"
+                    BackgroundColor="{AppThemeBinding Light=#FFFFFF, Dark=#111827}">
+                <VerticalStackLayout Spacing="10">
+                    <Label Text="Đã ghép nối"
+                           FontSize="17"
+                           FontAttributes="Bold"
+                           TextColor="{AppThemeBinding Light=#0F766E, Dark=#5EEAD4}" />
+                    <Label Text="{Binding DesktopName, StringFormat='Máy tính: {0}'}"
+                           FontSize="14"
+                           TextColor="{AppThemeBinding Light=#334155, Dark=#CBD5E1}" />
+                    <Label Text="{Binding ServerUrl, StringFormat='Máy chủ: {0}'}"
+                           FontSize="13"
+                           TextColor="{AppThemeBinding Light=#64748B, Dark=#94A3B8}" />
+
+                    <Button Text="Ghép nối lại"
+                            Clicked="OnPairClicked"
+                            BackgroundColor="Transparent"
+                            TextColor="{StaticResource Primary}"
+                            BorderColor="{StaticResource Primary}"
+                            BorderWidth="1"
+                            CornerRadius="12"
+                            HeightRequest="44"
+                            Margin="0,6,0,0" />
+
+                    <Button Text="Ngắt kết nối"
+                            Clicked="OnUnlinkClicked"
+                            IsEnabled="{Binding IsNotBusy}"
+                            BackgroundColor="Transparent"
+                            TextColor="{AppThemeBinding Light=#B91C1C, Dark=#FCA5A5}"
+                            BorderColor="{AppThemeBinding Light=#FCA5A5, Dark=#7F1D1D}"
+                            BorderWidth="1"
+                            CornerRadius="12"
+                            HeightRequest="44" />
+                </VerticalStackLayout>
+            </Border>
+
+            <ActivityIndicator IsRunning="{Binding IsBusy}"
+                               IsVisible="{Binding IsBusy}"
+                               Color="{StaticResource Primary}"
+                               HorizontalOptions="Center" />
+
+            <Border Padding="18"
+                    StrokeThickness="0"
+                    StrokeShape="RoundRectangle 16"
+                    BackgroundColor="{AppThemeBinding Light=#FFFFFF, Dark=#111827}">
+                <VerticalStackLayout Spacing="8">
+                    <Label Text="Quyền riêng tư"
+                           FontSize="15"
+                           FontAttributes="Bold"
+                           TextColor="{AppThemeBinding Light={StaticResource TextLight}, Dark={StaticResource TextDark}}" />
+                    <Label Text="Xem chính sách quyền riêng tư"
+                           FontSize="14"
+                           TextColor="{StaticResource Primary}"
+                           TextDecorations="Underline">
+                        <Label.GestureRecognizers>
+                            <TapGestureRecognizer Tapped="OnPrivacyTapped" />
+                        </Label.GestureRecognizers>
+                    </Label>
+                </VerticalStackLayout>
+            </Border>
+
+            <Label Text="EduFocus Phụ huynh"
+                   FontSize="12"
+                   HorizontalOptions="Center"
+                   TextColor="{AppThemeBinding Light=#94A3B8, Dark=#64748B}"
+                   Margin="0,12,0,0" />
+        </VerticalStackLayout>
+    </ScrollView>
 </ContentPage>

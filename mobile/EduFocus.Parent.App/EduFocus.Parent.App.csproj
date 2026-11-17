@@ -28,6 +28,7 @@
   <ItemGroup>
     <PackageReference Include="CommunityToolkit.Maui" Version="14.0.0" />
     <PackageReference Include="Microsoft.Maui.Controls" Version="10.0.30" />
+    <PackageReference Include="ZXing.Net.Maui.Controls" Version="0.10.4" />
   </ItemGroup>
 
   <ItemGroup>

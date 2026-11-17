@@ -1,0 +1,56 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<ContentPage x:Class="EduFocus.Parent.App.Views.PrivacyPage"
+             xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+             Title="Quyền riêng tư"
+             Shell.TabBarIsVisible="False"
+             BackgroundColor="{AppThemeBinding Light=#F8FAFC, Dark=#0B1220}">
+    <ScrollView>
+        <VerticalStackLayout Padding="24,20,24,32" Spacing="14">
+            <Label Text="Quyền riêng tư trên điện thoại"
+                   FontSize="22"
+                   FontAttributes="Bold"
+                   TextColor="{AppThemeBinding Light={StaticResource TextLight}, Dark={StaticResource TextDark}}" />
+
+            <Label FontSize="14"
+                   TextColor="{AppThemeBinding Light=#334155, Dark=#CBD5E1}"
+                   Text="Ứng dụng EduFocus Phụ huynh chỉ nhận thông báo đẩy và báo cáo tổng hợp từ máy tính đã được phụ huynh ghép nối. Ứng dụng không điều khiển từ xa việc bảo vệ của máy học sinh." />
+
+            <Label Text="Dữ liệu được lưu trên điện thoại"
+                   FontSize="16"
+                   FontAttributes="Bold"
+                   TextColor="{AppThemeBinding Light={StaticResource TextLight}, Dark={StaticResource TextDark}}" />
+            <Label FontSize="14"
+                   TextColor="{AppThemeBinding Light=#334155, Dark=#CBD5E1}"
+                   Text="• Mã truy cập cloud được lưu trong SecureStorage của hệ điều hành và không hiển thị ở bất kỳ màn hình nào.&#10;• Địa chỉ máy chủ, tên máy tính và múi giờ được lưu trong Preferences (không phải bí mật).&#10;• Ứng dụng không lưu ảnh camera; camera chỉ đọc mã QR khi bạn chủ động bật." />
+
+            <Label Text="Dữ liệu nhận từ cloud"
+                   FontSize="16"
+                   FontAttributes="Bold"
+                   TextColor="{AppThemeBinding Light={StaticResource TextLight}, Dark={StaticResource TextDark}}" />
+            <Label FontSize="14"
+                   TextColor="{AppThemeBinding Light=#334155, Dark=#CBD5E1}"
+                   Text="Chỉ các sự kiện tổng hợp: thời lượng tập trung/xao nhãng/vắng mặt, số lần cố truy cập bị chặn và tóm tắt báo cáo theo ngày. Không có URL, tiêu đề cửa sổ, tên ứng dụng, hình ảnh hay dữ liệu sinh trắc học." />
+
+            <Label Text="Thông báo đẩy"
+                   FontSize="16"
+                   FontAttributes="Bold"
+                   TextColor="{AppThemeBinding Light={StaticResource TextLight}, Dark={StaticResource TextDark}}" />
+            <Label FontSize="14"
+                   TextColor="{AppThemeBinding Light=#334155, Dark=#CBD5E1}"
+                   Text="Thông báo được vận chuyển qua Firebase Cloud Messaging của Google; nội dung chỉ gồm loại sự kiện và ngày, không chứa chi tiết học tập. Không có quảng cáo, telemetry hay bán dữ liệu." />
+
+            <Label Text="Thời hạn và xóa dữ liệu"
+                   FontSize="16"
+                   FontAttributes="Bold"
+                   TextColor="{AppThemeBinding Light={StaticResource TextLight}, Dark={StaticResource TextDark}}" />
+            <Label FontSize="14"
+                   TextColor="{AppThemeBinding Light=#334155, Dark=#CBD5E1}"
+                   Text="Dữ liệu cloud được giữ 24 giờ đến 365 ngày tùy loại. Phụ huynh có thể ngắt kết nối và xóa dữ liệu cloud trong Parent Mode của máy tính. Ngắt kết nối trên điện thoại cũng xóa mã truy cập khỏi thiết bị." />
+
+            <Label Text="Thông báo đầy đủ và kênh liên hệ nằm trong Parent Mode → Quyền riêng tư trên máy tính. Báo cáo riêng tư/bảo mật gửi qua GitHub Security Advisories của dự án EduFocus."
+                   FontSize="13"
+                   TextColor="{AppThemeBinding Light=#64748B, Dark=#94A3B8}" />
+        </VerticalStackLayout>
+    </ScrollView>
+</ContentPage>

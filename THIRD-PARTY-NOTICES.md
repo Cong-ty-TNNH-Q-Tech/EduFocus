@@ -54,6 +54,8 @@ thành phần đó có thêm thông báo bên thứ ba của Microsoft tại
 | System.Management | 10.0.14 | MIT | .NET Foundation and Contributors |
 | System.Numerics.Tensors | 9.0.0 | MIT | .NET Foundation and Contributors |
 | System.Security.Cryptography.ProtectedData | 10.0.0 | MIT | .NET Foundation and Contributors |
+| ZXing.Net | 0.16.11 | Apache-2.0 | Michael Jahn |
+| ZXing.Net.Maui | 0.10.4 | MIT | ZXing.Net.Maui contributors |
 
 ONNX Runtime kèm theo các thành phần bên thứ ba khác của Microsoft; danh sách đầy đủ nằm trong
 `ThirdPartyNotices.txt` của gói `Microsoft.ML.OnnxRuntime` 1.31.0 và tại
@@ -89,7 +91,6 @@ bản chính xác được chốt tại thời điểm phát hành và cập nh�
 
 | Thành phần | Dùng ở | Giấy phép | Bản quyền |
 | --- | --- | --- | --- |
-| ZXing.Net.Maui | App Android — quét QR | MIT | ZXing.Net.Maui contributors |
 | CommunityToolkit.Maui | App Android — UI/behaviors | MIT | .NET Foundation and Contributors |
 | Plugin.Firebase (hoặc tương đương) | App Android — nhận FCM | MIT | Plugin.Firebase contributors |
 | Microsoft.Extensions.Http | Desktop — HTTP client cloud | MIT | .NET Foundation and Contributors |
@@ -163,7 +164,7 @@ Liên hệ về giấy phép: mở báo cáo riêng tư tại
 Áp dụng cho: Microsoft .NET Runtime, Windows Desktop Runtime, CommunityToolkit.Mvvm,
 Microsoft.Data.Sqlite, Microsoft.EntityFrameworkCore, Microsoft.Extensions.*,
 Microsoft.ML.OnnxRuntime, QRCoder, System.Management, System.Numerics.Tensors,
-System.Security.Cryptography.ProtectedData, Microsoft.NET.Test.Sdk, coverlet.collector và YuNet
+System.Security.Cryptography.ProtectedData, Microsoft.NET.Test.Sdk, coverlet.collector, ZXing.Net.Maui và YuNet
 (khi được phân phối).
 
 ```text
@@ -195,7 +196,7 @@ SOFTWARE.
 
 ## Phụ lục B — Apache License 2.0
 
-Áp dụng cho: OpenCvSharp4, OpenCvSharp4.runtime.win, SQLitePCLRaw (bundle/core/lib/provider), OpenCV native, xunit, xunit.runner.visualstudio, FluentAssertions 7.2.0 (test-only) và dữ liệu Haar cascade của OpenCV (khi được phân phối).
+Áp dụng cho: OpenCvSharp4, OpenCvSharp4.runtime.win, SQLitePCLRaw (bundle/core/lib/provider), OpenCV native, ZXing.Net, xunit, xunit.runner.visualstudio, FluentAssertions 7.2.0 (test-only) và dữ liệu Haar cascade của OpenCV (khi được phân phối).
 
 ```text
 
@@ -956,6 +957,7 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 - YuNet / OpenCV Zoo: <https://github.com/opencv/opencv_zoo/tree/main/models/face_detection_yunet>
 - QRCoder: <https://github.com/codebude/QRCoder/blob/master/LICENSE.txt>
 - ZXing.Net.Maui: <https://github.com/Redth/ZXing.Net.Maui/blob/master/LICENSE>
+- ZXing.Net: <https://github.com/micjahn/ZXing.Net/blob/master/COPYING>
 - CommunityToolkit.Maui: <https://github.com/CommunityToolkit/Maui/blob/main/LICENSE>
 - Plugin.Firebase: <https://github.com/TobiasBuchholz/Plugin.Firebase/blob/master/LICENSE>
 - Firebase Admin SDK: <https://github.com/firebase/firebase-admin-dotnet/blob/master/LICENSE>

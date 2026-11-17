@@ -167,7 +167,23 @@ public sealed class CloudApiClient(
             message = "Cloud trả về lỗi không đọc được. Vui lòng thử lại.";
         }
 
-        return new CloudApiException(statusCode, code, Truncate(message), traceId);
+        return new CloudApiException(statusCode, code, Truncate(message), traceId, RetryAfterOf(response));
+    }
+
+    private static TimeSpan? RetryAfterOf(HttpResponseMessage response)
+    {
+        var retryAfter = response.Headers.RetryAfter;
+        if (retryAfter?.Delta is { } delta && delta > TimeSpan.Zero)
+            return delta;
+
+        if (retryAfter?.Date is { } date)
+        {
+            var delay = date - DateTimeOffset.UtcNow;
+            if (delay > TimeSpan.Zero)
+                return delay;
+        }
+
+        return null;
     }
 
     private static string Truncate(string value) =>
