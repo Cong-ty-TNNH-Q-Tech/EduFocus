@@ -78,7 +78,7 @@ public sealed partial class OverviewViewModel(
             }
 
             var days = await data.GetDailyAsync(today, today);
-            cache.SaveDaily(days);
+            cache.MergeDaily(days);
             IsShowingCachedData = false;
             CachedBannerText = string.Empty;
             Apply(days.FirstOrDefault(d => d.LocalDate == today), zone);

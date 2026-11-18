@@ -90,6 +90,27 @@ public sealed class OverviewViewModelTests
     }
 
     [Fact]
+    public async Task Loading_today_preserves_earlier_cached_days()
+    {
+        var harness = new ScreenHarness();
+        var yesterday = ScreenHarness.Today.AddDays(-1);
+        harness.Cache.SaveDaily(
+        [
+            TestSummaries.Daily(yesterday, studySeconds: 3600),
+            TestSummaries.Daily(ScreenHarness.Today, studySeconds: 1200),
+        ]);
+        harness.Api.DailyResult = [TestSummaries.Daily(ScreenHarness.Today, studySeconds: 2400)];
+
+        var viewModel = harness.Overview();
+        await viewModel.LoadAsync();
+
+        Assert.True(harness.Cache.TryGetDaily(out var cached, out _));
+        Assert.Equal(2, cached.Count);
+        Assert.Equal(3600, cached.Single(d => d.LocalDate == yesterday).StudySeconds);
+        Assert.Equal(2400, cached.Single(d => d.LocalDate == ScreenHarness.Today).StudySeconds);
+    }
+
+    [Fact]
     public async Task Unauthorized_clears_the_link_and_raises_expiry()
     {
         var harness = new ScreenHarness();

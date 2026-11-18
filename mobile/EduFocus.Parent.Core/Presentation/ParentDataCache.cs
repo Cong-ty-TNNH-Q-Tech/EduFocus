@@ -30,6 +30,27 @@ public sealed class ParentDataCache(
     public void SaveDaily(IReadOnlyList<DailySummaryDto> days) =>
         Save(DailyKey, new DailyCacheEntry(Now(), days.ToList()));
 
+    public void MergeDaily(IReadOnlyList<DailySummaryDto> days)
+    {
+        var merged = new Dictionary<DateOnly, DailySummaryDto>();
+        var existing = Read<DailyCacheEntry>(DailyKey);
+        if (existing is not null && IsFresh(existing.SavedAtUtc))
+        {
+            foreach (var day in existing.Days)
+                merged[day.LocalDate] = day;
+        }
+
+        foreach (var day in days)
+            merged[day.LocalDate] = day;
+
+        var ordered = merged.Values
+            .OrderByDescending(day => day.LocalDate)
+            .Take(14)
+            .ToList();
+
+        Save(DailyKey, new DailyCacheEntry(Now(), ordered));
+    }
+
     public bool TryGetDaily(out IReadOnlyList<DailySummaryDto> days, out DateTimeOffset savedAt)
     {
         days = [];
