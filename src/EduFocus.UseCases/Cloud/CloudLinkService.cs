@@ -97,8 +97,10 @@ public sealed class CloudLinkService : ICloudLinkUseCase
             }
             else
             {
+                await _links
+                    .TryRecordErrorAsync(link.DesktopToken!, ex.Message, now, cancellationToken)
+                    .ConfigureAwait(false);
                 link.RecordError(ex.Message, now);
-                await _links.UpdateAsync(link, cancellationToken).ConfigureAwait(false);
             }
 
             _logger.Warning(LogCategories.Cloud, $"Cloud status refresh failed with code '{ex.Code}'.");
@@ -439,21 +441,20 @@ public sealed class CloudLinkService : ICloudLinkUseCase
             return RemoteSnapshot.Empty;
         }
 
-        var changed = false;
         if (linkStatus.LastSyncAtUtc is { } lastSync && link.LastSyncAtUtc != lastSync)
         {
+            await _links
+                .TryRecordSyncAsync(link.DesktopToken!, lastSync, now, cancellationToken)
+                .ConfigureAwait(false);
             link.RecordSync(lastSync, now);
-            changed = true;
         }
-
-        if (link.LastError is not null)
+        else if (link.LastError is not null)
         {
+            await _links
+                .TryRecordErrorAsync(link.DesktopToken!, null, now, cancellationToken)
+                .ConfigureAwait(false);
             link.RecordError(null, now);
-            changed = true;
         }
-
-        if (changed)
-            await _links.UpdateAsync(link, cancellationToken).ConfigureAwait(false);
 
         return new RemoteSnapshot(linkStatus.Devices.Select(ToDto).ToList(), linkStatus.PendingSyncEvents);
     }
