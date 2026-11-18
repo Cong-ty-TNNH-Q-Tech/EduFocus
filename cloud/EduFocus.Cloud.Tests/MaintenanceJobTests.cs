@@ -93,6 +93,52 @@ public sealed class MaintenanceJobTests
     }
 
     [Fact]
+    public async Task Daily_summary_during_overnight_quiet_hours_is_created_once_quiet_hours_end()
+    {
+        var connectionString = TestConnectionString();
+        if (connectionString is null)
+        {
+            return;
+        }
+
+        await ResetDatabaseAsync(connectionString);
+        var family = await SeedFamilyAsync(connectionString);
+        await SeedSummaryAsync(connectionString, family, Today);
+        await SeedPreferencesAsync(connectionString, family.FamilyId, prefs =>
+        {
+            prefs.QuietStartMinutes = 22 * 60;
+            prefs.QuietEndMinutes = 6 * 60;
+            prefs.DailySummaryMinutes = 23 * 60;
+        });
+
+        // 23:15 local on Today (inside quiet hours): suppressed for now.
+        var duringQuiet = new DateTimeOffset(2026, 11, 17, 16, 15, 0, TimeSpan.Zero);
+        await using (var db = CreateContext(connectionString))
+        {
+            var result = await CreateService(db, duringQuiet).RunAsync(CancellationToken.None);
+            Assert.Equal(0, result.SummaryNotifications);
+        }
+
+        // 06:05 local on Today + 1 (quiet hours ended): yesterday's summary is created once.
+        var afterQuiet = new DateTimeOffset(2026, 11, 17, 23, 5, 0, TimeSpan.Zero);
+        await using (var db = CreateContext(connectionString))
+        {
+            var result = await CreateService(db, afterQuiet).RunAsync(CancellationToken.None);
+            Assert.Equal(1, result.SummaryNotifications);
+            var notification = await db.Notifications.AsNoTracking().SingleAsync();
+            Assert.Equal("daily_summary:20261117", notification.DedupeKey);
+            Assert.Equal(Today, notification.LocalDate);
+        }
+
+        // Running again does not duplicate.
+        await using (var db = CreateContext(connectionString))
+        {
+            var result = await CreateService(db, afterQuiet.AddMinutes(5)).RunAsync(CancellationToken.None);
+            Assert.Equal(0, result.SummaryNotifications);
+        }
+    }
+
+    [Fact]
     public async Task Retention_removes_only_expired_rows()
     {
         var connectionString = TestConnectionString();
@@ -253,11 +299,11 @@ public sealed class MaintenanceJobTests
         }
     }
 
-    private static CloudMaintenanceService CreateService(CloudDbContext db) =>
+    private static CloudMaintenanceService CreateService(CloudDbContext db, DateTimeOffset? now = null) =>
         new(
             db,
             Options.Create(new JobOptions()),
-            new FixedTimeProvider(Now),
+            new FixedTimeProvider(now ?? Now),
             NullLogger<CloudMaintenanceService>.Instance);
 
     private static PairingSession NewPairing(

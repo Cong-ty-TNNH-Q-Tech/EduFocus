@@ -103,11 +103,6 @@ public sealed class CloudMaintenanceService(
             var localNow = TimeZoneInfo.ConvertTime(now, zone);
             var localMinutes = (localNow.Hour * 60) + localNow.Minute;
             var summaryMinutes = preferences?.DailySummaryMinutes ?? 20 * 60 + 30;
-            if (localMinutes < summaryMinutes)
-            {
-                continue;
-            }
-
             if (PushRules.IsQuietHours(
                     now,
                     timeZoneId,
@@ -118,40 +113,25 @@ public sealed class CloudMaintenanceService(
             }
 
             var localDate = DateOnly.FromDateTime(localNow.DateTime);
-            var hasSummary = await db.DailySummaries
-                .AsNoTracking()
-                .AnyAsync(
-                    s => s.FamilyId == family.Id && s.LocalDate == localDate,
-                    cancellationToken);
-            if (!hasSummary)
+            // Catch up yesterday's summary if its scheduled time fell inside overnight quiet hours.
+            if (await TryCreateDailySummaryNotificationAsync(
+                    family.Id,
+                    localDate.AddDays(-1),
+                    now,
+                    cancellationToken))
             {
-                continue;
+                created++;
             }
 
-            var dedupeKey = NotificationPlanner.DailySummary(localDate).DedupeKey;
-            var exists = db.Notifications.Local.Any(
-                    n => n.FamilyId == family.Id && n.DedupeKey == dedupeKey)
-                || await db.Notifications
-                    .AsNoTracking()
-                    .AnyAsync(
-                        n => n.FamilyId == family.Id && n.DedupeKey == dedupeKey,
-                        cancellationToken);
-            if (exists)
+            if (localMinutes >= summaryMinutes
+                && await TryCreateDailySummaryNotificationAsync(
+                    family.Id,
+                    localDate,
+                    now,
+                    cancellationToken))
             {
-                continue;
+                created++;
             }
-
-            db.Notifications.Add(new NotificationRecord
-            {
-                Id = Guid.NewGuid(),
-                FamilyId = family.Id,
-                Category = NotificationCategory.DailySummary,
-                DedupeKey = dedupeKey,
-                LocalDate = localDate,
-                CreatedAtUtc = now,
-                Status = NotificationStatus.Pending,
-            });
-            created++;
         }
 
         if (created > 0)
@@ -160,6 +140,48 @@ public sealed class CloudMaintenanceService(
         }
 
         return created;
+    }
+
+    private async Task<bool> TryCreateDailySummaryNotificationAsync(
+        Guid familyId,
+        DateOnly localDate,
+        DateTimeOffset now,
+        CancellationToken cancellationToken)
+    {
+        var hasSummary = await db.DailySummaries
+            .AsNoTracking()
+            .AnyAsync(
+                s => s.FamilyId == familyId && s.LocalDate == localDate,
+                cancellationToken);
+        if (!hasSummary)
+        {
+            return false;
+        }
+
+        var dedupeKey = NotificationPlanner.DailySummary(localDate).DedupeKey;
+        var exists = db.Notifications.Local.Any(
+                n => n.FamilyId == familyId && n.DedupeKey == dedupeKey)
+            || await db.Notifications
+                .AsNoTracking()
+                .AnyAsync(
+                    n => n.FamilyId == familyId && n.DedupeKey == dedupeKey,
+                    cancellationToken);
+        if (exists)
+        {
+            return false;
+        }
+
+        db.Notifications.Add(new NotificationRecord
+        {
+            Id = Guid.NewGuid(),
+            FamilyId = familyId,
+            Category = NotificationCategory.DailySummary,
+            DedupeKey = dedupeKey,
+            LocalDate = localDate,
+            CreatedAtUtc = now,
+            Status = NotificationStatus.Pending,
+        });
+        return true;
     }
 
     private async Task<RetentionCounts> ApplyRetentionAsync(
