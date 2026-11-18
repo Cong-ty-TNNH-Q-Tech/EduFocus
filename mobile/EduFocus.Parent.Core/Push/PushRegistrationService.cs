@@ -1,4 +1,6 @@
+using System.Diagnostics;
 using EduFocus.Cloud.Contracts.Push;
+using EduFocus.Parent.Core.Presentation;
 using EduFocus.Parent.Core.Services;
 using EduFocus.Parent.Core.Settings;
 
@@ -29,6 +31,7 @@ public sealed class PushRegistrationService(
     ICloudApiClient api,
     AppState appState,
     ParentSettingsStore settings,
+    SessionExpiryService? sessionExpiry = null,
     Func<TimeSpan, CancellationToken, Task>? delay = null) : IPushRegistrationService
 {
     private const string RegistrationsPath = "/v1/push/registrations";
@@ -88,8 +91,22 @@ public sealed class PushRegistrationService(
             }
             catch (CloudApiException ex)
             {
-                if (ex.StatusCode is 400 or 401 or 403 or 404)
+                if (ex.StatusCode == 401)
+                {
+                    if (sessionExpiry is not null)
+                        await sessionExpiry.HandleUnauthorizedAsync(cancellationToken);
+
                     return false;
+                }
+
+                if (ex.StatusCode is 400 or 403 or 404)
+                {
+                    Trace.TraceWarning(
+                        "Push registration failed with status {0} ({1}).",
+                        ex.StatusCode,
+                        ex.Code);
+                    return false;
+                }
 
                 if (attempt == MaxAttempts)
                     return false;

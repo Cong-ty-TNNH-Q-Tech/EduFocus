@@ -1,5 +1,6 @@
 using System.Net;
 using EduFocus.Parent.Core;
+using EduFocus.Parent.Core.Presentation;
 using EduFocus.Parent.Core.Push;
 using EduFocus.Parent.Core.Services;
 using EduFocus.Parent.Core.Settings;
@@ -106,16 +107,37 @@ public sealed class PushRegistrationServiceTests
     }
 
     [Fact]
-    public async Task Unauthorized_is_not_retried()
+    public async Task Unauthorized_is_not_retried_and_triggers_session_expiry()
     {
         var waits = new List<TimeSpan>();
-        var (service, handler, _) = CreateService(
+        var (service, handler, _, session, state) = CreateServiceWithSession(
             _ => HttpStubs.Json(HttpStatusCode.Unauthorized, "{\"error\":{\"code\":\"invalid_token\"}}"),
             waits: waits);
+        var expiredCount = 0;
+        session.Expired += () => expiredCount++;
 
         Assert.False(await service.RegisterAsync(FcmToken, "android", "0.1.0"));
         Assert.Single(handler.Requests);
         Assert.Empty(waits);
+        Assert.Equal(1, expiredCount);
+        Assert.False(state.IsLinked);
+    }
+
+    [Theory]
+    [InlineData(HttpStatusCode.BadRequest)]
+    [InlineData(HttpStatusCode.Forbidden)]
+    [InlineData(HttpStatusCode.NotFound)]
+    public async Task Client_config_errors_do_not_expire_session(HttpStatusCode statusCode)
+    {
+        var (service, handler, _, session, state) = CreateServiceWithSession(
+            _ => HttpStubs.Json(statusCode, "{\"error\":{\"code\":\"bad_request\"}}"));
+        var expiredCount = 0;
+        session.Expired += () => expiredCount++;
+
+        Assert.False(await service.RegisterAsync(FcmToken, "android", "0.1.0"));
+        Assert.Single(handler.Requests);
+        Assert.Equal(0, expiredCount);
+        Assert.True(state.IsLinked);
     }
 
     [Fact]
@@ -161,21 +183,40 @@ public sealed class PushRegistrationServiceTests
             bool linked = true,
             List<TimeSpan>? waits = null)
     {
+        var (service, handler, settings, _, _) = CreateServiceWithSession(responder, linked, waits);
+        return (service, handler, settings);
+    }
+
+    private static (
+        PushRegistrationService Service,
+        RecordingHttpMessageHandler Handler,
+        ParentSettingsStore Settings,
+        SessionExpiryService Session,
+        AppState State)
+        CreateServiceWithSession(
+            Func<HttpRequestMessage, HttpResponseMessage> responder,
+            bool linked = true,
+            List<TimeSpan>? waits = null)
+    {
         var handler = new RecordingHttpMessageHandler(responder);
         var state = new AppState
         {
             CloudBaseUrl = BaseUrl,
             IsLinked = linked,
         };
-        var settings = new ParentSettingsStore(new FakeKeyValueStore());
+        var kv = new FakeKeyValueStore();
+        var settings = new ParentSettingsStore(kv);
+        var tokens = new MemoryTokenStore("efm_token");
+        var session = new SessionExpiryService(tokens, state, settings, new ParentDataCache(kv));
         var api = new CloudApiClient(
             new RecordingHttpClientFactory(handler),
-            new MemoryTokenStore("efm_token"),
+            tokens,
             state);
         var service = new PushRegistrationService(
             api,
             state,
             settings,
+            session,
             waits is null
                 ? null
                 : (delay, _) =>
@@ -184,7 +225,7 @@ public sealed class PushRegistrationServiceTests
                     return Task.CompletedTask;
                 });
 
-        return (service, handler, settings);
+        return (service, handler, settings, session, state);
     }
 
     private static HttpResponseMessage Success() =>
