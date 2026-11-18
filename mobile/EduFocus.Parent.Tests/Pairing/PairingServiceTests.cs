@@ -397,6 +397,60 @@ public sealed class PairingServiceTests
         Assert.Equal("https://old.example.com", capturedState.CloudBaseUrl);
     }
 
+    [Fact]
+    public async Task Unlink_clears_cache_and_local_link_even_when_token_store_read_throws()
+    {
+        var handler = new RecordingHttpMessageHandler(_ => HttpStubs.Json(HttpStatusCode.NoContent, string.Empty));
+        var state = new AppState
+        {
+            IsLinked = true,
+            CloudBaseUrl = "https://cloud.example.com",
+            FamilyId = Guid.NewGuid(),
+            DeviceId = Guid.Parse(OldDeviceId),
+        };
+        var store = new FakeKeyValueStore();
+        store.Set(ParentDataCache.DailyKey, "{\"cached\":true}");
+        store.Set(ParentDataCache.NotificationsKey, "{\"cached\":true}");
+        var settings = new ParentSettingsStore(store)
+        {
+            CloudBaseUrl = "https://cloud.example.com",
+            FamilyId = state.FamilyId,
+            DeviceId = state.DeviceId,
+        };
+        var throwingTokens = new ThrowingReadTokenStore();
+        var service = new PairingService(
+            new CloudApiClient(new RecordingHttpClientFactory(handler), throwingTokens, state),
+            throwingTokens,
+            state,
+            settings,
+            new ParentDataCache(store));
+
+        await service.UnlinkAsync();
+
+        Assert.False(state.IsLinked);
+        Assert.Null(settings.DeviceId);
+        Assert.True(throwingTokens.Cleared);
+        Assert.Null(store.Get(ParentDataCache.DailyKey));
+        Assert.Null(store.Get(ParentDataCache.NotificationsKey));
+    }
+
+    private sealed class ThrowingReadTokenStore : ITokenStore
+    {
+        public bool Cleared { get; private set; }
+
+        public Task<string?> GetTokenAsync(CancellationToken cancellationToken = default) =>
+            throw new InvalidOperationException("Keystore corrupted.");
+
+        public Task SaveTokenAsync(string token, CancellationToken cancellationToken = default) =>
+            Task.CompletedTask;
+
+        public Task ClearAsync(CancellationToken cancellationToken = default)
+        {
+            Cleared = true;
+            return Task.CompletedTask;
+        }
+    }
+
     private static MobileDeviceIdentity Identity() =>
         new("Pixel test", "android", "0.1.0", "Asia/Ho_Chi_Minh");
 

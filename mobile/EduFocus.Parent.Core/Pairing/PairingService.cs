@@ -181,8 +181,14 @@ public sealed class PairingService(
 
     public async Task UnlinkAsync(CancellationToken cancellationToken = default)
     {
-        await RevokeCurrentDeviceAsync(cancellationToken);
-        await ClearLocalLinkAsync(cancellationToken);
+        try
+        {
+            await RevokeCurrentDeviceAsync(cancellationToken);
+        }
+        finally
+        {
+            await ClearLocalLinkAsync(cancellationToken);
+        }
     }
 
     private async Task RevokeCurrentDeviceAsync(CancellationToken cancellationToken)
@@ -191,7 +197,7 @@ public sealed class PairingService(
         if (deviceId is null)
             return;
 
-        var token = await tokenStore.GetTokenAsync(cancellationToken);
+        var token = await TryReadTokenAsync(cancellationToken);
         if (string.IsNullOrWhiteSpace(token))
             return;
 
@@ -207,10 +213,6 @@ public sealed class PairingService(
         catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException)
         {
         }
-        finally
-        {
-            await ClearLocalLinkAsync(cancellationToken);
-        }
     }
 
     private async Task ClearLocalLinkAsync(CancellationToken cancellationToken)
@@ -222,6 +224,7 @@ public sealed class PairingService(
         appState.TimeZone = null;
         appState.DesktopName = null;
         settings.ClearLink();
+        cache.Clear();
     }
 
     private async Task<string?> TryReadTokenAsync(CancellationToken cancellationToken)
