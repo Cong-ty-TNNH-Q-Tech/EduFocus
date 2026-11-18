@@ -17,8 +17,20 @@ public sealed class PushDispatchService(
     {
         var now = timeProvider.GetUtcNow();
         var settings = options.Value;
+        var cutoff1 = now - PushRules.RetryBackoff(1);
+        var cutoff2 = now - PushRules.RetryBackoff(2);
+        var cutoff3 = now - PushRules.RetryBackoff(3);
+        var cutoff4 = now - PushRules.RetryBackoff(4);
+        var cutoff5 = now - PushRules.RetryBackoff(5);
+
         var candidates = await db.Notifications
-            .Where(n => n.Status == NotificationStatus.Pending)
+            .Where(n => n.Status == NotificationStatus.Pending
+                && (n.LastAttemptAtUtc == null
+                    || (n.AttemptCount <= 1 && n.LastAttemptAtUtc <= cutoff1)
+                    || (n.AttemptCount == 2 && n.LastAttemptAtUtc <= cutoff2)
+                    || (n.AttemptCount == 3 && n.LastAttemptAtUtc <= cutoff3)
+                    || (n.AttemptCount == 4 && n.LastAttemptAtUtc <= cutoff4)
+                    || (n.AttemptCount >= 5 && n.LastAttemptAtUtc <= cutoff5)))
             .OrderBy(n => n.CreatedAtUtc)
             .Take(settings.BatchSize)
             .ToListAsync(cancellationToken);
