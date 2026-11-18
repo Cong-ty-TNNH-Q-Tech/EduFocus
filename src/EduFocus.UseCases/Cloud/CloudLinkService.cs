@@ -22,6 +22,7 @@ public sealed class CloudLinkService : ICloudLinkUseCase
     private const string CloudDataDeletionConfirmation = "XÓA";
 
     private readonly ICloudLinkRepository _links;
+    private readonly ICloudOutboxRepository _outbox;
     private readonly ICloudSyncPort _sync;
     private readonly IParentAuthorizer _authorizer;
     private readonly IAuditLogRepository _auditLogs;
@@ -39,6 +40,7 @@ public sealed class CloudLinkService : ICloudLinkUseCase
 
     public CloudLinkService(
         ICloudLinkRepository links,
+        ICloudOutboxRepository outbox,
         ICloudSyncPort sync,
         IParentAuthorizer authorizer,
         IAuditLogRepository auditLogs,
@@ -47,6 +49,7 @@ public sealed class CloudLinkService : ICloudLinkUseCase
         TimeProvider timeProvider)
     {
         _links = links ?? throw new ArgumentNullException(nameof(links));
+        _outbox = outbox ?? throw new ArgumentNullException(nameof(outbox));
         _sync = sync ?? throw new ArgumentNullException(nameof(sync));
         _authorizer = authorizer ?? throw new ArgumentNullException(nameof(authorizer));
         _auditLogs = auditLogs ?? throw new ArgumentNullException(nameof(auditLogs));
@@ -77,6 +80,7 @@ public sealed class CloudLinkService : ICloudLinkUseCase
             {
                 // The family or device was removed on the server (UC18): stop
                 // syncing immediately and require pairing again.
+                await ClearCloudOutboxAsync(cancellationToken).ConfigureAwait(false);
                 link.Unlink(now);
                 link.RecordError(
                     "Liên kết cloud đã bị thu hồi hoặc xóa trên máy chủ. Hãy ghép nối lại nếu vẫn muốn nhận thông báo.",
@@ -139,18 +143,11 @@ public sealed class CloudLinkService : ICloudLinkUseCase
         if (existing is null)
             return;
 
-        CloudSyncException? remoteFailure = null;
         if (existing.IsEnabled)
         {
-            try
-            {
-                await UnlinkAsync(deleteCloudData: false, cancellationToken).ConfigureAwait(false);
-            }
-            catch (CloudSyncException ex)
-            {
-                // The local link was already cleared; consent must still go.
-                remoteFailure = ex;
-            }
+            // Keep both the link and the consent until the server confirms the
+            // revoke; otherwise the token would be lost with no way to retry.
+            await UnlinkAsync(deleteCloudData: false, cancellationToken).ConfigureAwait(false);
         }
 
         var link = await _links.GetAsync(cancellationToken).ConfigureAwait(false) ?? existing;
@@ -166,15 +163,6 @@ public sealed class CloudLinkService : ICloudLinkUseCase
                 null,
                 cancellationToken)
             .ConfigureAwait(false);
-
-        if (remoteFailure is not null)
-        {
-            throw new CloudSyncException(
-                remoteFailure.Code,
-                "Đã thu hồi đồng ý cloud trên máy này nhưng chưa thu hồi được token trên máy chủ. Hãy thử lại khi có mạng.",
-                remoteFailure.IsNetworkError,
-                remoteFailure.StatusCode);
-        }
     }
 
     public async Task<CloudPairingInfo> EnableAsync(
@@ -239,6 +227,10 @@ public sealed class CloudLinkService : ICloudLinkUseCase
                 "Máy chủ cloud trả về phiên ghép nối không hợp lệ.");
         }
 
+        // A new pairing starts a new link; queued events belong to the old one
+        // and must never be uploaded into a different family.
+        await ClearCloudOutboxAsync(cancellationToken).ConfigureAwait(false);
+
         link.BeginPairing(
             baseUrl!.ToString().TrimEnd('/'),
             session.SessionId,
@@ -297,6 +289,10 @@ public sealed class CloudLinkService : ICloudLinkUseCase
                     await _sync.RevokeDeviceAsync(baseUrl, token, deviceId, cancellationToken).ConfigureAwait(false);
                 }
             }
+            catch (CloudSyncException ex) when (ex.Code == CloudErrorCodes.NotFound || ex.StatusCode == 404)
+            {
+                // The family or device is already gone on the server.
+            }
             catch (CloudSyncException ex)
             {
                 remoteFailure = ex;
@@ -304,14 +300,42 @@ public sealed class CloudLinkService : ICloudLinkUseCase
         }
 
         var now = UtcNow(link);
-        link.Unlink(now);
         if (remoteFailure is not null)
         {
+            // Keep the token and identifiers so the parent can retry the remote
+            // revoke or deletion later; only a confirmed unlink is local-only.
             link.RecordError(
-                "Đã ngắt liên kết trên máy này nhưng chưa thu hồi được trên máy chủ cloud. Hãy thử lại khi có mạng.",
+                "Chưa thu hồi được liên kết trên máy chủ cloud. Liên kết vẫn được giữ trên máy này; hãy thử lại khi có mạng.",
                 now);
+            await _links.UpdateAsync(link, cancellationToken).ConfigureAwait(false);
+
+            await WriteAuditAsync(
+                    AuditActor.Parent,
+                    deleteCloudData ? AuditEventType.CloudDataDeletionRequested : AuditEventType.CloudLinkRevoked,
+                    deleteCloudData
+                        ? "Parent requested deletion of all cloud relay data but the server did not confirm."
+                        : "Parent requested unlinking but the server did not confirm.",
+                    now,
+                    new { remoteConfirmed = false, deleteCloudData, code = remoteFailure.Code },
+                    cancellationToken)
+                .ConfigureAwait(false);
+
+            _logger.Warning(
+                LogCategories.Cloud,
+                $"Cloud unlink failed ('{remoteFailure.Code}'); the link and its outbox were kept for retry.");
+
+            throw new CloudSyncException(
+                remoteFailure.Code,
+                deleteCloudData
+                    ? "Chưa xóa được dữ liệu trên máy chủ cloud. Liên kết vẫn được giữ trên máy này; hãy thử lại khi có mạng."
+                    : "Chưa thu hồi được token trên máy chủ cloud. Liên kết vẫn được giữ trên máy này; hãy thử lại khi có mạng.",
+                remoteFailure.IsNetworkError,
+                remoteFailure.StatusCode);
         }
 
+        await ClearCloudOutboxAsync(cancellationToken).ConfigureAwait(false);
+
+        link.Unlink(now);
         await _links.UpdateAsync(link, cancellationToken).ConfigureAwait(false);
 
         await WriteAuditAsync(
@@ -321,29 +345,15 @@ public sealed class CloudLinkService : ICloudLinkUseCase
                     ? "Parent requested deletion of all cloud relay data."
                     : "Parent unlinked the cloud relay from this desktop.",
                 now,
-                new { remoteConfirmed = remoteFailure is null, confirmation = deleteCloudData ? CloudDataDeletionConfirmation : null },
+                new { remoteConfirmed = true, confirmation = deleteCloudData ? CloudDataDeletionConfirmation : null },
                 cancellationToken)
             .ConfigureAwait(false);
 
         _logger.Info(
             LogCategories.Cloud,
             deleteCloudData
-                ? "Cloud data deletion requested; the local link was cleared."
-                : "Cloud link removed locally.");
-
-        if (remoteFailure is not null)
-        {
-            _logger.Warning(
-                LogCategories.Cloud,
-                $"Cloud unlink could not reach the server ('{remoteFailure.Code}'); local state was cleared.");
-            throw new CloudSyncException(
-                remoteFailure.Code,
-                deleteCloudData
-                    ? "Đã ngắt liên kết trên máy này nhưng chưa xóa được dữ liệu trên máy chủ cloud. Hãy thử lại khi có mạng."
-                    : "Đã ngắt liên kết trên máy này nhưng chưa thu hồi được token trên máy chủ cloud. Hãy thử lại khi có mạng.",
-                remoteFailure.IsNetworkError,
-                remoteFailure.StatusCode);
-        }
+                ? "Cloud data deletion confirmed; the local link and outbox were cleared."
+                : "Cloud link removed and its outbox cleared.");
     }
 
     private async Task<RemoteSnapshot> RefreshAsync(
@@ -396,6 +406,7 @@ public sealed class CloudLinkService : ICloudLinkUseCase
 
                 case CloudPairingStatus.Expired:
                 case CloudPairingStatus.Cancelled:
+                    await ClearCloudOutboxAsync(cancellationToken).ConfigureAwait(false);
                     link.Unlink(now);
                     await _links.UpdateAsync(link, cancellationToken).ConfigureAwait(false);
                     return RemoteSnapshot.Empty;
@@ -414,6 +425,7 @@ public sealed class CloudLinkService : ICloudLinkUseCase
 
         if (!linkStatus.Linked)
         {
+            await ClearCloudOutboxAsync(cancellationToken).ConfigureAwait(false);
             link.Unlink(now);
             await _links.UpdateAsync(link, cancellationToken).ConfigureAwait(false);
             await WriteAuditAsync(
@@ -544,6 +556,15 @@ public sealed class CloudLinkService : ICloudLinkUseCase
 
     private static CloudLinkedDevice ToDto(CloudRemoteDevice device) =>
         new(device.Id, device.Kind, device.Name, device.Platform, device.IsRevoked);
+
+    private async Task ClearCloudOutboxAsync(CancellationToken cancellationToken)
+    {
+        var removed = await _outbox.ClearAllAsync(cancellationToken).ConfigureAwait(false);
+        if (removed > 0)
+        {
+            _logger.Info(LogCategories.Cloud, $"Cloud outbox cleared with {removed} event(s).");
+        }
+    }
 
     private Task WriteAuditAsync(
         AuditActor actor,

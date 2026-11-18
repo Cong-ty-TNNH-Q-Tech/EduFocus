@@ -79,12 +79,12 @@ internal sealed class FakeCloudLinkUseCase : ICloudLinkUseCase
         UnlinkCalls++;
         LastDeleteCloudData = deleteCloudData;
 
-        // The real service clears local state even when the server call fails.
-        Snapshot = CloudTestData.Disabled(hasConsent: true);
-
         if (ThrowOnUnlink is not null)
             throw ThrowOnUnlink;
 
+        // Only a confirmed unlink clears local state; a remote failure keeps
+        // the link so the parent can retry the server revoke.
+        Snapshot = CloudTestData.Disabled(hasConsent: true);
         return Task.CompletedTask;
     }
 }

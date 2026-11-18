@@ -14,6 +14,8 @@ internal sealed class FakeCloudOutboxRepository : ICloudOutboxRepository
 
     public int TrimRemoved { get; set; }
 
+    public int ClearAllCalls { get; private set; }
+
     public Task AddAsync(CloudOutboxEvent item, CancellationToken cancellationToken = default)
     {
         Items.Add(item);
@@ -58,6 +60,14 @@ internal sealed class FakeCloudOutboxRepository : ICloudOutboxRepository
     {
         TrimCalls++;
         return Task.FromResult(TrimRemoved);
+    }
+
+    public Task<int> ClearAllAsync(CancellationToken cancellationToken = default)
+    {
+        ClearAllCalls++;
+        var removed = Items.Count;
+        Items.Clear();
+        return Task.FromResult(removed);
     }
 
     public Task<CloudOutboxStatus> GetStatusAsync(CancellationToken cancellationToken = default) =>

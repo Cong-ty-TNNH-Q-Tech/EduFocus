@@ -236,6 +236,20 @@ public sealed class CloudSyncWorkerTests
         harness.Logger.Warnings.Should().Contain(message => message.Contains("3 oldest event(s)"));
     }
 
+    [Fact]
+    public async Task Trim_runs_even_when_the_link_is_disabled()
+    {
+        var harness = new Harness(linked: false);
+        await harness.Outbox.AddAsync(NewEvent(Start));
+        harness.Outbox.TrimRemoved = 1;
+
+        await harness.Worker.RunOnceAsync();
+
+        harness.Outbox.TrimCalls.Should().Be(1);
+        harness.Sync.Batches.Should().BeEmpty();
+        harness.Logger.Warnings.Should().Contain(message => message.Contains("1 oldest event(s)"));
+    }
+
     private static CloudOutboxEvent NewEvent(DateTime createdAtUtc) =>
         CloudOutboxEvent.Create(Guid.NewGuid().ToString("D"), "daily_summary", Payload, createdAtUtc);
 
@@ -413,6 +427,13 @@ public sealed class CloudSyncWorkerTests
         {
             TrimCalls++;
             return Task.FromResult(TrimRemoved);
+        }
+
+        public Task<int> ClearAllAsync(CancellationToken cancellationToken = default)
+        {
+            var removed = Items.Count;
+            Items.Clear();
+            return Task.FromResult(removed);
         }
 
         public Task<CloudOutboxStatus> GetStatusAsync(CancellationToken cancellationToken = default) =>

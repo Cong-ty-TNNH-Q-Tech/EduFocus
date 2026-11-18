@@ -1,3 +1,4 @@
+using EduFocus.Domain.Entities;
 using EduFocus.Domain.Enums;
 using EduFocus.Ports.Outbound.Cloud;
 using EduFocus.Ports.Security;
@@ -162,6 +163,7 @@ public sealed class CloudLinkServiceTests
         await harness.AcceptConsentAsync();
         await harness.EnableAsync();
 
+        QueueEvent(harness);
         harness.Clock.Advance(TimeSpan.FromMinutes(11));
         harness.Sync.PairingStatus = FakeCloudSyncPort.CreatePendingStatus()
             with { Status = CloudPairingStatus.Expired };
@@ -172,6 +174,7 @@ public sealed class CloudLinkServiceTests
         snapshot.IsLinked.Should().BeFalse();
         harness.Links.Stored!.DesktopToken.Should().BeNull();
         harness.Links.Stored.HasConsent.Should().BeTrue();
+        harness.Outbox.Items.Should().BeEmpty();
     }
 
     [Fact]
@@ -200,6 +203,7 @@ public sealed class CloudLinkServiceTests
     {
         var harness = CloudLinkHarness.Create();
         await harness.SeedLinkedAsync();
+        QueueEvent(harness);
 
         harness.Sync.LinkStatusFailure = new CloudSyncException(
             CloudErrorCodes.Unauthorized,
@@ -211,6 +215,7 @@ public sealed class CloudLinkServiceTests
         snapshot.IsEnabled.Should().BeFalse();
         snapshot.IsLinked.Should().BeFalse();
         snapshot.LastError.Should().NotBeNullOrWhiteSpace();
+        harness.Outbox.Items.Should().BeEmpty();
 
         var link = harness.Links.Stored!;
         link.DesktopToken.Should().BeNull();
@@ -227,6 +232,7 @@ public sealed class CloudLinkServiceTests
     {
         var harness = CloudLinkHarness.Create();
         await harness.SeedLinkedAsync();
+        QueueEvent(harness);
 
         await harness.Service.UnlinkAsync(deleteCloudData: false);
 
@@ -234,6 +240,7 @@ public sealed class CloudLinkServiceTests
         harness.Sync.RevokedDevices[0].DeviceId.Should().Be(FakeCloudSyncPort.DesktopDeviceId);
         harness.Sync.RevokedDevices[0].Token.Should().Be(FakeCloudSyncPort.DesktopToken);
         harness.Sync.DeleteFamilyCalls.Should().Be(0);
+        harness.Outbox.Items.Should().BeEmpty();
 
         var link = harness.Links.Stored!;
         link.IsEnabled.Should().BeFalse();
@@ -244,6 +251,9 @@ public sealed class CloudLinkServiceTests
 
         harness.Audits.Entries.Should().Contain(
             entry => entry.EventType == AuditEventType.CloudLinkRevoked);
+        harness.Audits.Entries.Should().Contain(
+            entry => entry.MetadataJson != null
+                && entry.MetadataJson.Contains("\"remoteConfirmed\":true"));
 
         var networkCallsBeforeRestart = harness.Sync.Calls.Count;
         var reopened = harness.CreateService();
@@ -259,11 +269,13 @@ public sealed class CloudLinkServiceTests
     {
         var harness = CloudLinkHarness.Create();
         await harness.SeedLinkedAsync();
+        QueueEvent(harness);
 
         await harness.Service.UnlinkAsync(deleteCloudData: true);
 
         harness.Sync.DeleteFamilyCalls.Should().Be(1);
         harness.Sync.RevokedDevices.Should().BeEmpty();
+        harness.Outbox.Items.Should().BeEmpty();
         harness.Audits.Entries.Should().Contain(
             entry => entry.EventType == AuditEventType.CloudDataDeletionRequested);
 
@@ -275,10 +287,12 @@ public sealed class CloudLinkServiceTests
     }
 
     [Fact]
-    public async Task Unlink_clears_local_state_even_when_the_server_is_unreachable()
+    public async Task Unlink_keeps_the_link_and_outbox_when_the_server_is_unreachable()
     {
         var harness = CloudLinkHarness.Create();
         await harness.SeedLinkedAsync();
+        QueueEvent(harness);
+        var clearsBefore = harness.Outbox.ClearAllCalls;
         harness.Sync.UnlinkFailure = new CloudSyncException(
             CloudErrorCodes.Network,
             "Không kết nối được tới máy chủ cloud.",
@@ -288,17 +302,62 @@ public sealed class CloudLinkServiceTests
         var exception = (await unlink.Should().ThrowAsync<CloudSyncException>()).Which;
 
         exception.IsNetworkError.Should().BeTrue();
-        exception.Message.Should().Contain("Đã ngắt liên kết");
+        exception.Message.Should().Contain("vẫn được giữ");
 
         var link = harness.Links.Stored!;
-        link.DesktopToken.Should().BeNull();
-        link.IsEnabled.Should().BeFalse();
+        link.DesktopToken.Should().Be(FakeCloudSyncPort.DesktopToken);
+        link.DesktopDeviceId.Should().Be(FakeCloudSyncPort.DesktopDeviceId);
+        link.IsEnabled.Should().BeTrue();
+        link.IsLinked.Should().BeTrue();
         link.LastError.Should().NotBeNullOrWhiteSpace();
 
-        harness.Audits.Entries.Should().Contain(
-            entry => entry.EventType == AuditEventType.CloudLinkRevoked);
+        harness.Outbox.Items.Should().ContainSingle();
+        harness.Outbox.ClearAllCalls.Should().Be(clearsBefore);
+
+        harness.Audits.Entries.Should().Contain(entry =>
+            entry.EventType == AuditEventType.CloudLinkRevoked
+            && entry.MetadataJson != null
+            && entry.MetadataJson.Contains("\"remoteConfirmed\":false"));
         harness.Logger.Warnings.Should().Contain(
             message => message.Contains(CloudErrorCodes.Network));
+        harness.Logger.Warnings.Should().Contain(
+            message => message.Contains("kept for retry"));
+    }
+
+    [Fact]
+    public async Task Unlink_treats_a_link_already_missing_on_the_server_as_confirmed()
+    {
+        var harness = CloudLinkHarness.Create();
+        await harness.SeedLinkedAsync();
+        QueueEvent(harness);
+        harness.Sync.UnlinkFailure = new CloudSyncException(
+            CloudErrorCodes.NotFound,
+            "Không tìm thấy thiết bị trên máy chủ cloud.",
+            statusCode: 404);
+
+        await harness.Service.UnlinkAsync(deleteCloudData: false);
+
+        var link = harness.Links.Stored!;
+        link.IsEnabled.Should().BeFalse();
+        link.DesktopToken.Should().BeNull();
+        harness.Outbox.Items.Should().BeEmpty();
+        harness.Audits.Entries.Should().Contain(entry =>
+            entry.EventType == AuditEventType.CloudLinkRevoked
+            && entry.MetadataJson != null
+            && entry.MetadataJson.Contains("\"remoteConfirmed\":true"));
+    }
+
+    [Fact]
+    public async Task Enable_clears_events_queued_for_the_previous_link()
+    {
+        var harness = CloudLinkHarness.Create();
+        await harness.SeedLinkedAsync();
+        QueueEvent(harness);
+
+        await harness.EnableAsync();
+
+        harness.Outbox.Items.Should().BeEmpty();
+        harness.Outbox.ClearAllCalls.Should().Be(2);
     }
 
     [Fact]
@@ -306,6 +365,7 @@ public sealed class CloudLinkServiceTests
     {
         var harness = CloudLinkHarness.Create();
         await harness.SeedLinkedAsync();
+        QueueEvent(harness);
 
         await harness.Service.RevokeConsentAsync();
 
@@ -314,11 +374,35 @@ public sealed class CloudLinkServiceTests
         link.ConsentAcceptedAtUtc.Should().BeNull();
         link.IsEnabled.Should().BeFalse();
         link.DesktopToken.Should().BeNull();
+        harness.Outbox.Items.Should().BeEmpty();
 
         harness.Sync.RevokedDevices.Should().ContainSingle();
         harness.Audits.Entries.Select(entry => entry.EventType)
             .Should().Contain(AuditEventType.CloudLinkRevoked)
             .And.Contain(AuditEventType.CloudConsentRevoked);
+    }
+
+    [Fact]
+    public async Task Revoke_consent_keeps_the_link_when_the_server_is_unreachable()
+    {
+        var harness = CloudLinkHarness.Create();
+        await harness.SeedLinkedAsync();
+        QueueEvent(harness);
+        harness.Sync.UnlinkFailure = new CloudSyncException(
+            CloudErrorCodes.Network,
+            "Không kết nối được tới máy chủ cloud.",
+            isNetworkError: true);
+
+        var revoke = async () => await harness.Service.RevokeConsentAsync();
+        await revoke.Should().ThrowAsync<CloudSyncException>();
+
+        var link = harness.Links.Stored!;
+        link.HasConsent.Should().BeTrue();
+        link.IsEnabled.Should().BeTrue();
+        link.DesktopToken.Should().Be(FakeCloudSyncPort.DesktopToken);
+        harness.Outbox.Items.Should().ContainSingle();
+        harness.Audits.Entries.Should().NotContain(
+            entry => entry.EventType == AuditEventType.CloudConsentRevoked);
     }
 
     [Fact]
@@ -349,6 +433,13 @@ public sealed class CloudLinkServiceTests
         text.Should().NotContain(FakeCloudSyncPort.DesktopToken);
         text.Should().NotContain(FakeCloudSyncPort.PairingCode);
     }
+
+    private static void QueueEvent(CloudLinkHarness harness) =>
+        harness.Outbox.Items.Add(CloudOutboxEvent.Create(
+            Guid.NewGuid().ToString("D"),
+            "daily_summary",
+            "{\"sessionsCount\":1}",
+            harness.Clock.GetUtcNow().UtcDateTime));
 
     private static Func<Task> EnableAsync(
         EduFocus.UseCases.Cloud.CloudLinkService service,

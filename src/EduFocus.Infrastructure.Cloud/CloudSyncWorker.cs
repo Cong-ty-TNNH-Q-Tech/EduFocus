@@ -89,6 +89,18 @@ public sealed class CloudSyncWorker : ICloudOutboxNotifier, IDisposable
 
         try
         {
+            // Trim before the link check so a disabled or unlinked queue is
+            // still bounded and years-old rows never linger indefinitely.
+            var trimmed = await _outbox
+                .TrimAsync(UtcNow(), CloudOutboxLimits.MaxPendingEvents, CloudOutboxLimits.MaxEventAge, cancellationToken)
+                .ConfigureAwait(false);
+            if (trimmed > 0)
+            {
+                _logger.Warning(
+                    LogCategories.Cloud,
+                    $"Cloud outbox removed {trimmed} oldest event(s) to stay within limits.");
+            }
+
             var link = await _links.GetAsync(cancellationToken).ConfigureAwait(false);
             if (link is null
                 || !link.IsEnabled
@@ -107,16 +119,6 @@ public sealed class CloudSyncWorker : ICloudOutboxNotifier, IDisposable
                 await RecordLinkErrorAsync(link, "Địa chỉ cloud không hợp lệ.", cancellationToken)
                     .ConfigureAwait(false);
                 return;
-            }
-
-            var trimmed = await _outbox
-                .TrimAsync(UtcNow(), CloudOutboxLimits.MaxPendingEvents, CloudOutboxLimits.MaxEventAge, cancellationToken)
-                .ConfigureAwait(false);
-            if (trimmed > 0)
-            {
-                _logger.Warning(
-                    LogCategories.Cloud,
-                    $"Cloud outbox removed {trimmed} oldest event(s) to stay within limits.");
             }
 
             await DrainAsync(link, baseUrl, cancellationToken).ConfigureAwait(false);

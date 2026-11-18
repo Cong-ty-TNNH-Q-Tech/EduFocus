@@ -290,11 +290,10 @@ public sealed partial class CloudLinkViewModel : ObservableObject
         }
         catch (CloudSyncException ex)
         {
-            // The local link was already cleared; only the server call failed.
+            // The link stays intact so the parent can retry the remote revoke.
             _logger.Warning(
                 LogCategories.Cloud,
-                $"Cloud unlink reported a remote failure ('{ex.Code}'); the local link was cleared.");
-            ResetAfterUnlink();
+                $"Cloud unlink failed ('{ex.Code}'); the link was kept for retry.");
             SetStatus(ex.Message, true);
             await RefreshCoreAsync(showBusy: false).ConfigureAwait(true);
         }

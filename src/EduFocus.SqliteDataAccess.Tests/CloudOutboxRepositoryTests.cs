@@ -169,6 +169,24 @@ public sealed class CloudOutboxRepositoryTests
     }
 
     [Fact]
+    public async Task Clear_all_deletes_every_row_and_is_idempotent()
+    {
+        await using var db = new TempDatabase();
+        await db.CreateInitializer().InitializeAsync();
+
+        var repository = new SqliteCloudOutboxRepository(db.ContextFactory);
+        await repository.AddAsync(CloudOutboxEvent.Create(NewClientEventId(), "daily_summary", Payload, Now));
+        await repository.AddAsync(CloudOutboxEvent.Create(NewClientEventId(), "attention_alert", Payload, Now.AddSeconds(1)));
+
+        var removed = await repository.ClearAllAsync();
+
+        removed.Should().Be(2);
+        (await repository.GetDueAsync(Now, 50)).Should().BeEmpty();
+        (await repository.GetStatusAsync()).PendingCount.Should().Be(0);
+        (await repository.ClearAllAsync()).Should().Be(0);
+    }
+
+    [Fact]
     public async Task Exists_matches_the_stored_client_event_id_only()
     {
         await using var db = new TempDatabase();

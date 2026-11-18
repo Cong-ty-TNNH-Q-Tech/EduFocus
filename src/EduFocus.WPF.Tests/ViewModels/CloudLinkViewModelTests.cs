@@ -234,12 +234,12 @@ public sealed class CloudLinkViewModelTests
     }
 
     [Fact]
-    public async Task Unlink_remote_failure_reports_the_message_and_still_clears_local_state()
+    public async Task Unlink_remote_failure_keeps_the_link_so_the_parent_can_retry()
     {
         _links.Snapshot = CloudTestData.Linked(_time.UtcNow.UtcDateTime);
         _links.ThrowOnUnlink = new CloudSyncException(
             CloudErrorCodes.Network,
-            "Đã ngắt liên kết trên máy này nhưng chưa thu hồi được trên máy chủ cloud. Hãy thử lại khi có mạng.",
+            "Chưa thu hồi được token trên máy chủ cloud. Liên kết vẫn được giữ trên máy này; hãy thử lại khi có mạng.",
             isNetworkError: true);
 
         var sut = CreateSut();
@@ -248,10 +248,21 @@ public sealed class CloudLinkViewModelTests
 
         await sut.UnlinkCommand.ExecuteAsync(null);
 
-        sut.IsCloudEnabled.Should().BeFalse();
+        _links.UnlinkCalls.Should().Be(1);
+        sut.IsCloudEnabled.Should().BeTrue();
+        sut.IsLinked.Should().BeTrue();
+        sut.ShowUnlinkConfirm.Should().BeTrue();
         sut.StatusIsError.Should().BeTrue();
-        sut.StatusMessage.Should().Contain("chưa thu hồi");
+        sut.StatusMessage.Should().Contain("vẫn được giữ");
         _logger.Warnings.Should().ContainMatch("Cloud:*network*");
+
+        _links.ThrowOnUnlink = null;
+        await sut.UnlinkCommand.ExecuteAsync(null);
+
+        _links.UnlinkCalls.Should().Be(2);
+        sut.IsCloudEnabled.Should().BeFalse();
+        sut.ShowEnablePanel.Should().BeTrue();
+        sut.ShowUnlinkConfirm.Should().BeFalse();
     }
 
     [Fact]

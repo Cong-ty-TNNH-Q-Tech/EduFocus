@@ -27,6 +27,8 @@ internal sealed class CloudLinkHarness
 
     public FakeCloudLinkRepository Links { get; } = new();
 
+    public FakeCloudOutboxRepository Outbox { get; } = new();
+
     public FakeCloudSyncPort Sync { get; } = new();
 
     public RecordingAuditLogRepository Audits { get; } = new();
@@ -45,6 +47,7 @@ internal sealed class CloudLinkHarness
     {
         Service = new CloudLinkService(
             Links,
+            Outbox,
             Sync,
             Session,
             Audits,

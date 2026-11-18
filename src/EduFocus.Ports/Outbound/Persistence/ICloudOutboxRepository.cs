@@ -45,5 +45,11 @@ public interface ICloudOutboxRepository
         TimeSpan maxAge,
         CancellationToken cancellationToken = default);
 
+    /// <summary>
+    /// Deletes every queued event. Used when the cloud link is removed so
+    /// events queued for the old link can never reach another family.
+    /// </summary>
+    Task<int> ClearAllAsync(CancellationToken cancellationToken = default);
+
     Task<CloudOutboxStatus> GetStatusAsync(CancellationToken cancellationToken = default);
 }

@@ -115,6 +115,12 @@ public sealed class SqliteCloudOutboxRepository : ICloudOutboxRepository
         return removed;
     }
 
+    public async Task<int> ClearAllAsync(CancellationToken cancellationToken = default)
+    {
+        await using var context = _contextFactory.CreateDbContext();
+        return await context.CloudOutbox.ExecuteDeleteAsync(cancellationToken);
+    }
+
     public async Task<CloudOutboxStatus> GetStatusAsync(CancellationToken cancellationToken = default)
     {
         await using var context = _contextFactory.CreateDbContext();
