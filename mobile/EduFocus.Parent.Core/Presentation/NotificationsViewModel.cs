@@ -42,6 +42,7 @@ public sealed partial class NotificationsViewModel(
     private string? _nextBefore;
     private string _timeZoneId = TimeZoneInfo.Local.Id;
     private bool _securityAlertBypassQuietHours = true;
+    private int _loadGeneration;
     private List<NotificationItem> _loaded = [];
 
     partial void OnErrorMessageChanged(string value) => OnPropertyChanged(nameof(HasError));
@@ -75,14 +76,18 @@ public sealed partial class NotificationsViewModel(
     [RelayCommand]
     private async Task LoadMoreAsync()
     {
-        if (IsLoadingMore || _nextBefore is null)
+        if (IsLoadingMore || IsLoading || IsRefreshing || _nextBefore is null)
             return;
 
+        var generation = _loadGeneration;
         IsLoadingMore = true;
         ErrorMessage = string.Empty;
         try
         {
             var page = await data.GetNotificationsAsync(PageSize, _nextBefore);
+            if (generation != _loadGeneration)
+                return;
+
             _nextBefore = page.NextBefore;
             ApplyPage(page.Items, replace: false);
         }
@@ -148,55 +153,62 @@ public sealed partial class NotificationsViewModel(
         else
             IsLoading = true;
 
+        _loadGeneration++;
         var zone = FamilyCalendar.Resolve(appState.TimeZone);
         ErrorMessage = string.Empty;
 
         try
         {
-            if (!appState.IsLinked)
+            try
             {
-                _nextBefore = null;
-                ApplyPage([], replace: true);
-                return;
-            }
+                if (!appState.IsLinked)
+                {
+                    _nextBefore = null;
+                    CanEditPreferences = false;
+                    PreferencesStatus = string.Empty;
+                    PreferencesStatusIsError = false;
+                    ApplyPage([], replace: true);
+                    return;
+                }
 
-            var page = await data.GetNotificationsAsync(PageSize, before: null);
-            cache.SaveNotifications(page);
-            _nextBefore = page.NextBefore;
-            IsShowingCachedData = false;
-            CachedBannerText = string.Empty;
-            ApplyPage(page.Items, replace: true);
-        }
-        catch (Exception exception)
-        {
-            if (CloudErrors.IsUnauthorized(exception))
-                await session.HandleUnauthorizedAsync();
-
-            ErrorMessage = CloudErrors.Describe(exception);
-            if (cache.TryGetNotifications(out var cachedPage, out var savedAt))
-            {
-                IsShowingCachedData = true;
-                CachedBannerText =
-                    $"Đang xem dữ liệu lưu lúc {VietnameseFormat.DateTimeLocal(savedAt, zone)}.";
-                _nextBefore = cachedPage.NextBefore;
-                ApplyPage(cachedPage.Items, replace: true);
-            }
-            else
-            {
+                var page = await data.GetNotificationsAsync(PageSize, before: null);
+                cache.SaveNotifications(page);
+                _nextBefore = page.NextBefore;
                 IsShowingCachedData = false;
                 CachedBannerText = string.Empty;
-                _nextBefore = null;
-                ApplyPage([], replace: true);
+                ApplyPage(page.Items, replace: true);
             }
+            catch (Exception exception)
+            {
+                if (CloudErrors.IsUnauthorized(exception))
+                    await session.HandleUnauthorizedAsync();
+
+                ErrorMessage = CloudErrors.Describe(exception);
+                if (cache.TryGetNotifications(out var cachedPage, out var savedAt))
+                {
+                    IsShowingCachedData = true;
+                    CachedBannerText =
+                        $"Đang xem dữ liệu lưu lúc {VietnameseFormat.DateTimeLocal(savedAt, zone)}.";
+                    _nextBefore = cachedPage.NextBefore;
+                    ApplyPage(cachedPage.Items, replace: true);
+                }
+                else
+                {
+                    IsShowingCachedData = false;
+                    CachedBannerText = string.Empty;
+                    _nextBefore = null;
+                    ApplyPage([], replace: true);
+                }
+            }
+
+            if (appState.IsLinked)
+                await LoadPreferencesAsync();
         }
         finally
         {
             IsLoading = false;
             IsRefreshing = false;
         }
-
-        if (appState.IsLinked)
-            await LoadPreferencesAsync();
     }
 
     private async Task LoadPreferencesAsync()

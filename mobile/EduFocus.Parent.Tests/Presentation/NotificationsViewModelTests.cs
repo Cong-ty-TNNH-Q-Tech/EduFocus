@@ -173,4 +173,36 @@ public sealed class NotificationsViewModelTests
         Assert.Equal(Core.Presentation.CloudErrors.SessionExpired, viewModel.ErrorMessage);
         Assert.False(viewModel.CanEditPreferences);
     }
+
+    [Fact]
+    public async Task Unlinked_state_resets_can_edit_preferences()
+    {
+        var harness = new ScreenHarness();
+        var viewModel = harness.Notifications();
+        await viewModel.LoadAsync();
+        Assert.True(viewModel.CanEditPreferences);
+
+        harness.State.IsLinked = false;
+        await viewModel.LoadAsync();
+
+        Assert.False(viewModel.CanEditPreferences);
+        Assert.Empty(viewModel.Items);
+    }
+
+    [Fact]
+    public async Task Load_more_is_skipped_while_loading_or_refreshing()
+    {
+        var harness = new ScreenHarness();
+        harness.Api.NotificationPages.Add(new NotificationListResponse(
+            [TestNotifications.Notification()],
+            "cursor-1"));
+        var viewModel = harness.Notifications();
+        await viewModel.LoadAsync();
+
+        viewModel.IsRefreshing = true;
+        await viewModel.LoadMoreCommand.ExecuteAsync(null);
+        viewModel.IsRefreshing = false;
+
+        Assert.Single(harness.Api.NotificationRequests);
+    }
 }
