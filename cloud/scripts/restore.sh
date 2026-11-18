@@ -31,9 +31,21 @@ if [[ ! -f "$SOURCE" ]]; then
   exit 1
 fi
 
+API_STOPPED=false
 cleanup() {
+  local exit_code=$?
   if [[ "$WORK_FILE" != "$SOURCE" ]]; then
     rm -f "$WORK_FILE"
+  fi
+  if [[ "$API_STOPPED" == true ]]; then
+    echo "Ensuring API service is started..." >&2
+    if docker compose -f "$COMPOSE_FILE" start api >/dev/null 2>&1; then
+      if [[ $exit_code -ne 0 ]]; then
+        echo "Restore failed (exit $exit_code), but API service was restarted." >&2
+      fi
+    else
+      echo "WARNING: Restore exited ($exit_code) and failed to restart API service." >&2
+    fi
   fi
 }
 trap cleanup EXIT
@@ -44,7 +56,8 @@ if [[ "$SOURCE" == *.gpg ]]; then
     exit 1
   fi
   WORK_FILE="$(mktemp)"
-  gpg --batch --yes --decrypt --passphrase "$BACKUP_PASSPHRASE" --output "$WORK_FILE" "$SOURCE"
+  gpg --batch --yes --pinentry-mode loopback --decrypt \
+    --passphrase-fd 3 --output "$WORK_FILE" "$SOURCE" 3<<<"$BACKUP_PASSPHRASE"
 fi
 
 run_psql() {
@@ -54,6 +67,7 @@ run_psql() {
 
 echo "Stopping API to prevent writes during restore..."
 docker compose -f "$COMPOSE_FILE" stop api >/dev/null
+API_STOPPED=true
 
 run_psql -c "SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE datname = '$TARGET_DB' AND pid <> pg_backend_pid();" >/dev/null
 run_psql -c "DROP DATABASE IF EXISTS \"$TARGET_DB\";"
@@ -64,4 +78,5 @@ docker compose -f "$COMPOSE_FILE" exec -T postgres \
 
 echo "Restored $SOURCE into database $TARGET_DB"
 docker compose -f "$COMPOSE_FILE" start api >/dev/null
+API_STOPPED=false
 echo "API started again."

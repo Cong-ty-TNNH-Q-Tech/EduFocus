@@ -20,20 +20,40 @@ STAMP="$(date -u +%Y%m%dT%H%M%SZ)"
 umask 077
 mkdir -p "$BACKUP_DIR"
 
-dump_file="$BACKUP_DIR/edufocus-$STAMP.dump"
-docker compose -f "$COMPOSE_FILE" exec -T postgres \
-  pg_dump -U "$DB_USER" -d "$DB_NAME" --format=custom --no-owner > "$dump_file"
-chmod 600 "$dump_file"
+if [[ -n "${BACKUP_PASSPHRASE:-}" ]] && ! command -v gpg >/dev/null 2>&1; then
+  echo "gpg is required to encrypt backups but was not found." >&2
+  exit 1
+fi
 
+tmp_dump="$(mktemp "$BACKUP_DIR/.edufocus-$STAMP.dump.XXXXXX")"
+tmp_gpg=""
+cleanup() {
+  rm -f "${tmp_dump:-}" "${tmp_gpg:-}"
+}
+trap cleanup EXIT
+
+docker compose -f "$COMPOSE_FILE" exec -T postgres \
+  pg_dump -U "$DB_USER" -d "$DB_NAME" --format=custom --no-owner > "$tmp_dump"
+if [[ ! -s "$tmp_dump" ]]; then
+  echo "pg_dump produced an empty backup file." >&2
+  exit 1
+fi
+chmod 600 "$tmp_dump"
+
+dump_file="$BACKUP_DIR/edufocus-$STAMP.dump"
 if [[ -n "${BACKUP_PASSPHRASE:-}" ]]; then
-  if ! command -v gpg >/dev/null 2>&1; then
-    echo "gpg is required to encrypt backups but was not found." >&2
-    exit 1
-  fi
-  gpg --batch --yes --symmetric --cipher-algo AES256 \
-    --passphrase "$BACKUP_PASSPHRASE" --output "$dump_file.gpg" "$dump_file"
-  rm -f "$dump_file"
+  tmp_gpg="$(mktemp "$BACKUP_DIR/.edufocus-$STAMP.dump.gpg.XXXXXX")"
+  gpg --batch --yes --pinentry-mode loopback --symmetric --cipher-algo AES256 \
+    --passphrase-fd 3 --output "$tmp_gpg" "$tmp_dump" 3<<<"$BACKUP_PASSPHRASE"
+  chmod 600 "$tmp_gpg"
   dump_file="$dump_file.gpg"
+  mv "$tmp_gpg" "$dump_file"
+  tmp_gpg=""
+  rm -f "$tmp_dump"
+  tmp_dump=""
+else
+  mv "$tmp_dump" "$dump_file"
+  tmp_dump=""
 fi
 
 mapfile -t backups < <(ls -1t "$BACKUP_DIR"/edufocus-*.dump* 2>/dev/null || true)
