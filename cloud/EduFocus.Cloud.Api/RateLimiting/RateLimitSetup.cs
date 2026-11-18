@@ -1,7 +1,6 @@
 using System.Globalization;
-using System.Security.Cryptography;
-using System.Text;
 using System.Threading.RateLimiting;
+using EduFocus.Cloud.Api.Auth;
 using EduFocus.Cloud.Api.Common;
 using EduFocus.Cloud.Api.Options;
 using EduFocus.Cloud.Contracts.Common;
@@ -69,11 +68,18 @@ public static class RateLimitSetup
     private static string ClientKey(HttpContext context) =>
         context.Connection.RemoteIpAddress?.ToString() ?? "unknown";
 
-    private static string TokenKey(HttpContext context)
+    public static string TokenKey(HttpContext context)
     {
         var header = context.Request.Headers.Authorization.ToString();
-        return string.IsNullOrWhiteSpace(header)
-            ? "anonymous:" + ClientKey(context)
-            : "token:" + Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes(header)));
+        if (header.StartsWith("Bearer ", StringComparison.OrdinalIgnoreCase))
+        {
+            var token = header["Bearer ".Length..].Trim();
+            if (DeviceTokenService.TryHash(token, out var hash))
+            {
+                return "token:" + hash;
+            }
+        }
+
+        return "anonymous:" + ClientKey(context);
     }
 }
