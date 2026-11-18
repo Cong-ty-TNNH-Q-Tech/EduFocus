@@ -67,7 +67,7 @@ public sealed class CloudMaintenanceService(
             {
                 await db.Database.ExecuteSqlRawAsync(
                     $"SELECT pg_advisory_unlock({AdvisoryLockKey})",
-                    cancellationToken);
+                    CancellationToken.None);
             }
         }
         finally
