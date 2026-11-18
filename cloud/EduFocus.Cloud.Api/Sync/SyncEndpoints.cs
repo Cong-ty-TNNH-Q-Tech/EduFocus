@@ -46,10 +46,10 @@ public static class SyncEndpoints
             return PayloadTooLarge(options.MaxBodyBytes);
         }
 
-        SyncBatchRequest? batch;
+        RawSyncBatchRequest? batch;
         try
         {
-            batch = await httpContext.Request.ReadFromJsonAsync<SyncBatchRequest>(
+            batch = await httpContext.Request.ReadFromJsonAsync<RawSyncBatchRequest>(
                 ApiJson.Options, cancellationToken);
         }
         catch (JsonException)
@@ -85,8 +85,35 @@ public static class SyncEndpoints
         await using var transaction = await db.Database.BeginTransactionAsync(cancellationToken);
         try
         {
-            foreach (var dto in batch.Events)
+            foreach (var rawEvent in batch.Events)
             {
+                if (rawEvent is null)
+                {
+                    results.Add(new SyncEventResult(
+                        string.Empty,
+                        SyncEventResultStatus.Rejected,
+                        "invalid_event",
+                        "Sự kiện không hợp lệ."));
+                    continue;
+                }
+
+                // Parse the type out of the raw element so an unknown enum is rejected
+                // per event instead of failing deserialization for the whole batch.
+                if (!TryParseEventType(rawEvent.Type, out var eventType))
+                {
+                    results.Add(new SyncEventResult(
+                        rawEvent.ClientEventId?.Trim() ?? string.Empty,
+                        SyncEventResultStatus.Rejected,
+                        "invalid_event",
+                        "Loại sự kiện không hợp lệ."));
+                    continue;
+                }
+
+                var dto = new SyncEventDto(
+                    rawEvent.ClientEventId ?? string.Empty,
+                    eventType,
+                    rawEvent.OccurredAtUtc,
+                    rawEvent.Payload);
                 results.Add(await ProcessEventAsync(
                     db, family, deviceId, dto, now, options, cancellationToken));
             }
@@ -111,13 +138,13 @@ public static class SyncEndpoints
         CloudDbContext db,
         Family family,
         Guid deviceId,
-        SyncEventDto? dto,
+        SyncEventDto dto,
         DateTimeOffset now,
         SyncOptions options,
         CancellationToken cancellationToken)
     {
-        var validation = SyncPayloadValidator.Validate(dto);
-        var clientEventId = dto?.ClientEventId?.Trim() ?? string.Empty;
+        var validation = SyncPayloadValidator.Validate(dto, now);
+        var clientEventId = dto.ClientEventId?.Trim() ?? string.Empty;
         var storableId = !string.IsNullOrWhiteSpace(clientEventId)
             && clientEventId.Length <= SyncPayloadValidator.MaxClientEventIdLength
             && !clientEventId.Any(char.IsControl);
@@ -132,14 +159,14 @@ public static class SyncEndpoints
         }
 
         SyncEvent? entity = null;
-        if (storableId)
+        if (storableId && TryMapType(dto.Type, out var entityType))
         {
             entity = new SyncEvent
             {
                 Id = Guid.NewGuid(),
                 FamilyId = family.Id,
                 ClientEventId = clientEventId,
-                Type = MapType(validation.Value?.Type ?? dto!.Type),
+                Type = entityType,
                 ReceivedAtUtc = now,
                 Status = SyncEventStatus.Pending,
             };
@@ -166,7 +193,7 @@ public static class SyncEndpoints
         if (validation.Value!.Type != ContractEventType.DailySummary)
         {
             await PlanAlertNotificationAsync(
-                db, family.Id, validation.Value!, dto!.OccurredAtUtc, now, cancellationToken);
+                db, family.Id, validation.Value!, dto.OccurredAtUtc, now, cancellationToken);
         }
 
         await CompleteEventAsync(db, entity, SyncEventStatus.Processed, now, cancellationToken);
@@ -329,14 +356,47 @@ public static class SyncEndpoints
         return ApplyResult.Ok;
     }
 
-    private static EntityEventType MapType(ContractEventType type) => type switch
+    private static bool TryParseEventType(JsonElement element, out ContractEventType type)
     {
-        ContractEventType.DailySummary => EntityEventType.DailySummary,
-        ContractEventType.AttentionAlert => EntityEventType.AttentionAlert,
-        ContractEventType.ProtectionOff => EntityEventType.ProtectionOff,
-        ContractEventType.SecurityAlert => EntityEventType.SecurityAlert,
-        _ => throw new ArgumentOutOfRangeException(nameof(type)),
-    };
+        type = default;
+        if (element.ValueKind is not (JsonValueKind.String or JsonValueKind.Number))
+        {
+            return false;
+        }
+
+        try
+        {
+            type = element.Deserialize<ContractEventType>(ApiJson.Options);
+        }
+        catch (JsonException)
+        {
+            return false;
+        }
+
+        return Enum.IsDefined(type);
+    }
+
+    private static bool TryMapType(ContractEventType type, out EntityEventType mapped)
+    {
+        switch (type)
+        {
+            case ContractEventType.DailySummary:
+                mapped = EntityEventType.DailySummary;
+                return true;
+            case ContractEventType.AttentionAlert:
+                mapped = EntityEventType.AttentionAlert;
+                return true;
+            case ContractEventType.ProtectionOff:
+                mapped = EntityEventType.ProtectionOff;
+                return true;
+            case ContractEventType.SecurityAlert:
+                mapped = EntityEventType.SecurityAlert;
+                return true;
+            default:
+                mapped = default;
+                return false;
+        }
+    }
 
     private static IResult PayloadTooLarge(int maxBodyBytes) =>
         ApiResults.Error(
@@ -357,3 +417,11 @@ public static class SyncEndpoints
         public static ApplyResult Rejected(string code, string message) => new(code, message);
     }
 }
+
+internal sealed record RawSyncBatchRequest(IReadOnlyList<RawSyncEventDto?>? Events);
+
+internal sealed record RawSyncEventDto(
+    string? ClientEventId,
+    JsonElement Type,
+    DateTimeOffset OccurredAtUtc,
+    JsonElement Payload);

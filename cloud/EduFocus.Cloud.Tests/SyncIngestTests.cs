@@ -196,6 +196,95 @@ public sealed class SyncIngestTests
         Assert.Equal("payload_too_large", oversizedError!.Error.Code);
     }
 
+    [Fact]
+    public async Task Invalid_enums_and_out_of_window_dates_are_rejected_per_event()
+    {
+        var connectionString = Environment.GetEnvironmentVariable(TestDbVariable);
+        if (string.IsNullOrWhiteSpace(connectionString))
+        {
+            return;
+        }
+
+        await ResetDatabaseAsync(connectionString);
+        await using var factory = new CloudApiFactory(connectionString);
+        using var anonymous = factory.CreateClient();
+        var desktopToken = await CreateDesktopTokenAsync(anonymous);
+        using var desktop = CreateAuthenticatedClient(factory, desktopToken);
+
+        var now = DateTimeOffset.UtcNow;
+        var today = LocalToday();
+        var todayText = today.ToString("yyyy-MM-dd");
+        var body = new
+        {
+            events = new object[]
+            {
+                new { clientEventId = "bad-type-number", type = 99, occurredAtUtc = now, payload = new { } },
+                new { clientEventId = "bad-type-string", type = "bogus", occurredAtUtc = now, payload = new { } },
+                new
+                {
+                    clientEventId = "bad-kind",
+                    type = "attention_alert",
+                    occurredAtUtc = now,
+                    payload = new { kind = 99, localDate = todayText, startedAtUtc = now, durationSeconds = 300 },
+                },
+                new
+                {
+                    clientEventId = "future-summary",
+                    type = "daily_summary",
+                    occurredAtUtc = now,
+                    payload = new { localDate = todayText, generatedAtUtc = now.AddDays(1) },
+                },
+                new
+                {
+                    clientEventId = "old-alert",
+                    type = "security_alert",
+                    occurredAtUtc = now,
+                    payload = new
+                    {
+                        kind = "clock_jump",
+                        localDate = today.AddDays(-30).ToString("yyyy-MM-dd"),
+                    },
+                },
+                new
+                {
+                    clientEventId = "good-alert",
+                    type = "security_alert",
+                    occurredAtUtc = now,
+                    payload = new { kind = "clock_jump", localDate = todayText },
+                },
+            },
+        };
+
+        var response = await desktop.PostAsJsonAsync("/v1/sync/events", body);
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+
+        var payload = await response.Content.ReadFromJsonAsync<SyncBatchResponse>(Json);
+        Assert.NotNull(payload);
+        var results = payload.Results.ToDictionary(result => result.ClientEventId);
+
+        foreach (var id in new[] { "bad-type-number", "bad-type-string" })
+        {
+            Assert.Equal(SyncEventResultStatus.Rejected, results[id].Status);
+            Assert.Equal("invalid_event", results[id].Code);
+        }
+
+        foreach (var id in new[] { "bad-kind", "future-summary", "old-alert" })
+        {
+            Assert.Equal(SyncEventResultStatus.Rejected, results[id].Status);
+            Assert.Equal("invalid_payload", results[id].Code);
+        }
+
+        Assert.Equal(SyncEventResultStatus.Applied, results["good-alert"].Status);
+
+        await using var db = CreateContext(connectionString);
+        Assert.Equal(4, await db.SyncEvents.CountAsync());
+        Assert.Equal(3, await db.SyncEvents.CountAsync(e => e.Status == EntitySyncEventStatus.Rejected));
+        Assert.Equal(1, await db.SyncEvents.CountAsync(e => e.Status == EntitySyncEventStatus.Processed));
+        Assert.Equal(0, await db.DailySummaries.CountAsync());
+        var notification = await db.Notifications.AsNoTracking().SingleAsync();
+        Assert.Equal(NotificationCategory.SecurityAlert, notification.Category);
+    }
+
     private static async Task<IReadOnlyList<SyncEventResult>> PostBatchAsync(
         HttpClient client,
         params SyncEventDto[] events)
