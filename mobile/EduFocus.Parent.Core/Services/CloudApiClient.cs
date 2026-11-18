@@ -20,6 +20,13 @@ public interface ICloudApiClient
         bool authenticated = true,
         CancellationToken cancellationToken = default);
 
+    Task<TResponse> PostAsync<TBody, TResponse>(
+        string relativePath,
+        TBody body,
+        Uri cloudBaseUrl,
+        bool authenticated = false,
+        CancellationToken cancellationToken = default);
+
     Task PostAsync<TBody>(
         string relativePath,
         TBody body,
@@ -75,6 +82,14 @@ public sealed class CloudApiClient(
         bool authenticated = true,
         CancellationToken cancellationToken = default) =>
         SendAsync<TResponse>(HttpMethod.Post, relativePath, body, authenticated, cancellationToken);
+
+    public Task<TResponse> PostAsync<TBody, TResponse>(
+        string relativePath,
+        TBody body,
+        Uri cloudBaseUrl,
+        bool authenticated = false,
+        CancellationToken cancellationToken = default) =>
+        SendAsync<TResponse>(HttpMethod.Post, relativePath, body, authenticated, cancellationToken, cloudBaseUrl);
 
     public async Task PostAsync<TBody>(
         string relativePath,

@@ -105,10 +105,6 @@ public sealed class PairingService(
 
         var normalizedUrl = cloudBaseUrl!.GetLeftPart(UriPartial.Authority);
 
-        // The API client resolves the server from app state, so the claim sees
-        // the new URL; the previous link is restored if the claim fails.
-        appState.CloudBaseUrl = normalizedUrl;
-
         ClaimPairingResponse response;
         try
         {
@@ -121,17 +117,16 @@ public sealed class PairingService(
                     Truncate(identity.AppVersion, 32),
                     claim.SessionId?.ToString("D"),
                     Truncate(identity.TimeZoneId, 64)),
+                cloudBaseUrl!,
                 authenticated: false,
                 cancellationToken);
         }
         catch (CloudApiException ex)
         {
-            appState.CloudBaseUrl = previousBaseUrl;
             throw Map(ex);
         }
         catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException)
         {
-            appState.CloudBaseUrl = previousBaseUrl;
             throw new PairingException(
                 "Không kết nối được máy chủ cloud. Kiểm tra mạng và thử lại.",
                 PairingFailure.Network);
@@ -145,12 +140,10 @@ public sealed class PairingService(
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {
-            appState.CloudBaseUrl = previousBaseUrl;
             throw;
         }
         catch (Exception)
         {
-            appState.CloudBaseUrl = previousBaseUrl;
             throw new PairingException(
                 "Đã ghép nối nhưng chưa lưu được mã truy cập trên máy này. Hãy nhờ máy tính tạo mã mới.",
                 PairingFailure.Configuration);

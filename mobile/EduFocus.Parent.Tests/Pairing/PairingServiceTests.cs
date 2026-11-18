@@ -352,6 +352,51 @@ public sealed class PairingServiceTests
         return (service, handler, tokens, appState, settings, store);
     }
 
+    [Fact]
+    public async Task Re_pairing_does_not_mutate_app_state_cloud_url_before_claim_succeeds()
+    {
+        string? observedBaseUrlDuringClaim = null;
+        AppState? capturedState = null;
+        var handler = new RecordingHttpMessageHandler(request =>
+        {
+            if (request.RequestUri!.AbsolutePath == "/v1/pairing/claim")
+            {
+                observedBaseUrlDuringClaim = capturedState?.CloudBaseUrl;
+                return HttpStubs.Json(HttpStatusCode.BadRequest, "{\"error\":{\"code\":\"pairing_expired\"}}");
+            }
+            return HttpStubs.Json(HttpStatusCode.NoContent, string.Empty);
+        });
+        capturedState = new AppState
+        {
+            IsLinked = true,
+            CloudBaseUrl = "https://old.example.com",
+            FamilyId = Guid.NewGuid(),
+            DeviceId = Guid.Parse(OldDeviceId),
+        };
+        var store = new FakeKeyValueStore();
+        var settings = new ParentSettingsStore(store)
+        {
+            CloudBaseUrl = "https://old.example.com",
+            FamilyId = capturedState.FamilyId,
+            DeviceId = capturedState.DeviceId,
+        };
+        var tokens = new MemoryTokenStore("efm_old-token");
+        var service = new PairingService(
+            new CloudApiClient(new RecordingHttpClientFactory(handler), tokens, capturedState),
+            tokens,
+            capturedState,
+            settings,
+            new ParentDataCache(store));
+
+        await Assert.ThrowsAsync<PairingException>(() => service.ClaimAsync(
+            new PairingClaim("ABCD2345", "https://new.example.com", null),
+            Identity(),
+            replaceExisting: true));
+
+        Assert.Equal("https://old.example.com", observedBaseUrlDuringClaim);
+        Assert.Equal("https://old.example.com", capturedState.CloudBaseUrl);
+    }
+
     private static MobileDeviceIdentity Identity() =>
         new("Pixel test", "android", "0.1.0", "Asia/Ho_Chi_Minh");
 
