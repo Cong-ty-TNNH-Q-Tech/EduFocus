@@ -13,7 +13,45 @@ public sealed class PushDispatchService(
     TimeProvider timeProvider,
     ILogger<PushDispatchService> logger)
 {
+    public const long AdvisoryLockKey = 7_309_114_027;
+
     public async Task<int> DispatchPendingAsync(CancellationToken cancellationToken)
+    {
+        if (!db.Database.IsNpgsql())
+        {
+            return await DispatchCoreAsync(cancellationToken);
+        }
+
+        await db.Database.OpenConnectionAsync(cancellationToken);
+        try
+        {
+            var acquired = await db.Database
+                .SqlQueryRaw<bool>(
+                    $"SELECT pg_try_advisory_lock({AdvisoryLockKey}) AS \"Value\"")
+                .SingleAsync(cancellationToken);
+            if (!acquired)
+            {
+                return 0;
+            }
+
+            try
+            {
+                return await DispatchCoreAsync(cancellationToken);
+            }
+            finally
+            {
+                await db.Database.ExecuteSqlRawAsync(
+                    $"SELECT pg_advisory_unlock({AdvisoryLockKey})",
+                    CancellationToken.None);
+            }
+        }
+        finally
+        {
+            await db.Database.CloseConnectionAsync();
+        }
+    }
+
+    private async Task<int> DispatchCoreAsync(CancellationToken cancellationToken)
     {
         var now = timeProvider.GetUtcNow();
         var settings = options.Value;
