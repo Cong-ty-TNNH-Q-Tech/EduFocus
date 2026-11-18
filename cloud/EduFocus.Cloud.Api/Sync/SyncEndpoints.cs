@@ -293,6 +293,18 @@ public static class SyncEndpoints
             return ApplyResult.Rejected("invalid_payload", "Ngày tóm tắt không hợp lệ.");
         }
 
+        var summary = await db.DailySummaries
+            .FirstOrDefaultAsync(
+                s => s.FamilyId == family.Id
+                    && s.DesktopDeviceId == deviceId
+                    && s.LocalDate == payload.LocalDate,
+                cancellationToken);
+
+        if (summary is not null && summary.UpdatedAtUtc >= payload.GeneratedAtUtc)
+        {
+            return ApplyResult.Ok;
+        }
+
         if (payload.TimeZoneId is { } newTimeZoneId && newTimeZoneId != family.TimeZoneId)
         {
             var previousTimeZoneId = family.TimeZoneId;
@@ -300,7 +312,7 @@ public static class SyncEndpoints
 
             var preferences = await db.NotificationPreferences
                 .FirstOrDefaultAsync(p => p.FamilyId == family.Id, cancellationToken);
-            if (preferences is not null)
+            if (preferences is not null && preferences.UpdatedAtUtc < payload.GeneratedAtUtc)
             {
                 preferences.TimeZoneId = newTimeZoneId;
                 preferences.UpdatedAtUtc = now;
@@ -312,18 +324,6 @@ public static class SyncEndpoints
                 "FamilyTimeZoneChanged",
                 now,
                 new { oldTimeZoneId = previousTimeZoneId, newTimeZoneId }));
-        }
-
-        var summary = await db.DailySummaries
-            .FirstOrDefaultAsync(
-                s => s.FamilyId == family.Id
-                    && s.DesktopDeviceId == deviceId
-                    && s.LocalDate == payload.LocalDate,
-                cancellationToken);
-
-        if (summary is not null && summary.UpdatedAtUtc >= payload.GeneratedAtUtc)
-        {
-            return ApplyResult.Ok;
         }
 
         if (summary is null)
