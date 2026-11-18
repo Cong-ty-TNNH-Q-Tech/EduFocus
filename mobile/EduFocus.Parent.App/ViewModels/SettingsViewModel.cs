@@ -129,6 +129,10 @@ public sealed partial class SettingsViewModel(
 
     public async Task<bool> RevokeDeviceAsync(Guid deviceId)
     {
+        if (IsBusy)
+            return false;
+
+        IsBusy = true;
         try
         {
             await admin.RevokeDeviceAsync(deviceId);
@@ -143,13 +147,18 @@ public sealed partial class SettingsViewModel(
             DevicesStatus = CloudErrors.Describe(exception);
             return false;
         }
+        finally
+        {
+            IsBusy = false;
+        }
     }
 
     public async Task<bool> DeleteCloudDataAsync()
     {
-        if (IsDeletingCloudData)
+        if (IsBusy || IsDeletingCloudData)
             return false;
 
+        IsBusy = true;
         IsDeletingCloudData = true;
         try
         {
@@ -167,6 +176,7 @@ public sealed partial class SettingsViewModel(
         finally
         {
             IsDeletingCloudData = false;
+            IsBusy = false;
         }
     }
 
