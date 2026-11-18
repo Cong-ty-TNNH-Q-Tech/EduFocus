@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using EduFocus.Parent.Core;
+using EduFocus.Parent.Core.Pairing;
 using EduFocus.Parent.Core.Push;
 
 namespace EduFocus.Parent.App.Services;
@@ -13,17 +14,21 @@ public sealed class PushCoordinator(
     IPushRegistrationService registration,
     IPushTokenProvider tokenProvider,
     PushPermissionService permission,
+    LinkStateRestorer restorer,
     AppState appState)
 {
     public const string PlatformName = "android";
 
     public async Task SyncTokenAsync(bool force = false, CancellationToken cancellationToken = default)
     {
-        if (!appState.IsLinked)
-            return;
-
         try
         {
+            if (!appState.IsLinked)
+                await restorer.RestoreAsync(cancellationToken);
+
+            if (!appState.IsLinked)
+                return;
+
             var token = await tokenProvider.GetTokenAsync(cancellationToken);
             await registration.RegisterAsync(
                 token,

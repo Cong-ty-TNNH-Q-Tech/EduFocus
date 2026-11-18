@@ -1,5 +1,6 @@
 #if FCM_ENABLED
 using EduFocus.Parent.Core.Push;
+using EduFocus.Parent.Core.Settings;
 using Plugin.Firebase.CloudMessaging;
 using Plugin.Firebase.CloudMessaging.EventArgs;
 
@@ -13,10 +14,14 @@ namespace EduFocus.Parent.App.Services;
 public sealed class PushMessageHandler(
     PushNotificationDedupe dedupe,
     PushNotificationPresenter presenter,
-    PushCoordinator coordinator)
+    PushCoordinator coordinator,
+    ParentSettingsStore settings)
 {
     public void OnNotificationReceived(object? sender, FCMNotificationReceivedEventArgs e)
     {
+        if (settings.DeviceId is null)
+            return;
+
         if (e.Notification?.Data is not { } data)
             return;
 
