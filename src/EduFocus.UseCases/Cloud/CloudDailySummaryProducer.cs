@@ -21,6 +21,7 @@ public sealed class CloudDailySummaryProducer
     private readonly ICloudEventSink _sink;
     private readonly IAppLogger _logger;
     private readonly TimeProvider _timeProvider;
+    private DateOnly? _lastLocalDate;
 
     public CloudDailySummaryProducer(
         IStudySessionRepository sessions,
@@ -34,25 +35,30 @@ public sealed class CloudDailySummaryProducer
         _timeProvider = timeProvider ?? throw new ArgumentNullException(nameof(timeProvider));
     }
 
-    /// <summary>Captures the current local day; returns false when nothing was queued.</summary>
+    /// <summary>
+    /// Captures the current local day (and the previous local day when a
+    /// midnight rollover is observed); returns false when nothing was queued.
+    /// </summary>
     public async Task<bool> TryPublishAsync(CancellationToken cancellationToken = default)
     {
         try
         {
             var now = _timeProvider.GetUtcNow();
             var localDate = DateOnly.FromDateTime(_timeProvider.GetLocalNow().DateTime);
+            var timeZoneId = CloudTimeZones.ToSendableId(_timeProvider.LocalTimeZone);
 
-            var summary = await _sessions
-                .GetDailySummaryAsync(localDate, cancellationToken)
+            var anyQueued = false;
+            if (_lastLocalDate is { } previousDate && previousDate < localDate)
+            {
+                anyQueued |= await TryPublishDateAsync(previousDate, timeZoneId, now, cancellationToken)
+                    .ConfigureAwait(false);
+            }
+
+            _lastLocalDate = localDate;
+            anyQueued |= await TryPublishDateAsync(localDate, timeZoneId, now, cancellationToken)
                 .ConfigureAwait(false);
-            if (summary is null || !summary.HasSessions)
-                return false;
 
-            var payload = BuildPayload(summary, CloudTimeZones.ToSendableId(_timeProvider.LocalTimeZone), now);
-
-            return await _sink
-                .TryEnqueueAsync(CloudEventTypes.DailySummary, payload, clientEventId: null, cancellationToken)
-                .ConfigureAwait(false);
+            return anyQueued;
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {
@@ -65,6 +71,25 @@ public sealed class CloudDailySummaryProducer
                 $"Could not capture the daily summary ({ex.GetType().Name}).");
             return false;
         }
+    }
+
+    private async Task<bool> TryPublishDateAsync(
+        DateOnly localDate,
+        string? timeZoneId,
+        DateTimeOffset generatedAtUtc,
+        CancellationToken cancellationToken)
+    {
+        var summary = await _sessions
+            .GetDailySummaryAsync(localDate, cancellationToken)
+            .ConfigureAwait(false);
+        if (summary is null || !summary.HasSessions)
+            return false;
+
+        var payload = BuildPayload(summary, timeZoneId, generatedAtUtc);
+
+        return await _sink
+            .TryEnqueueAsync(CloudEventTypes.DailySummary, payload, clientEventId: null, cancellationToken)
+            .ConfigureAwait(false);
     }
 
     private static JsonElement BuildPayload(

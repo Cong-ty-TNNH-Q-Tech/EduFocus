@@ -125,6 +125,25 @@ public sealed class CloudDailySummaryProducerTests
             .Which.Should().Contain(nameof(InvalidOperationException));
     }
 
+    [Fact]
+    public async Task Midnight_rollover_publishes_previous_day_summary()
+    {
+        var harness = new Harness();
+        harness.Sessions.DailySummary = Summary(new DateOnly(2026, 11, 18));
+
+        (await harness.Producer.TryPublishAsync()).Should().BeTrue();
+        harness.Sink.Enqueued.Should().ContainSingle();
+
+        // Advance past midnight (03:30 UTC+7 on 2026-11-18 -> 00:30 UTC+7 on 2026-11-19).
+        harness.Time.Advance(TimeSpan.FromHours(21));
+
+        (await harness.Producer.TryPublishAsync()).Should().BeTrue();
+        harness.Sessions.DailySummaryRequests.Should().Equal(
+            new DateOnly(2026, 11, 18),
+            new DateOnly(2026, 11, 18),
+            new DateOnly(2026, 11, 19));
+    }
+
     private static DailyStudySummary Summary(DateOnly localDate) => new()
     {
         LocalDate = localDate,
@@ -145,12 +164,15 @@ public sealed class CloudDailySummaryProducerTests
     {
         public Harness()
         {
+            Time = new ManualTimeProvider(Now, UtcPlus7);
             Producer = new CloudDailySummaryProducer(
                 Sessions,
                 Sink,
                 Logger,
-                new ManualTimeProvider(Now, UtcPlus7));
+                Time);
         }
+
+        public ManualTimeProvider Time { get; }
 
         public FakeStudySessionRepository Sessions { get; } = new();
 
