@@ -41,6 +41,7 @@ public sealed partial class NotificationsViewModel(
 
     private string? _nextBefore;
     private string _timeZoneId = TimeZoneInfo.Local.Id;
+    private bool _securityAlertBypassQuietHours = true;
     private List<NotificationItem> _loaded = [];
 
     partial void OnErrorMessageChanged(string value) => OnPropertyChanged(nameof(HasError));
@@ -118,7 +119,8 @@ public sealed partial class NotificationsViewModel(
                 ToMinutes(QuietStart),
                 ToMinutes(QuietEnd),
                 ToMinutes(DailySummaryTime),
-                _timeZoneId));
+                _timeZoneId,
+                _securityAlertBypassQuietHours));
 
             ApplyPreferences(updated);
             PreferencesStatus = "Đã lưu tùy chọn thông báo.";
@@ -233,6 +235,7 @@ public sealed partial class NotificationsViewModel(
         QuietStart = TimeOf(preferences.QuietStartMinutes);
         QuietEnd = TimeOf(preferences.QuietEndMinutes);
         DailySummaryTime = TimeOf(preferences.DailySummaryMinutes);
+        _securityAlertBypassQuietHours = preferences.SecurityAlertBypassQuietHours;
     }
 
     private void ApplyPage(IReadOnlyList<NotificationDto> notifications, bool replace)

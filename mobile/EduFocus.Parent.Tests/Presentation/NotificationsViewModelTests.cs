@@ -85,6 +85,32 @@ public sealed class NotificationsViewModelTests
     }
 
     [Fact]
+    public async Task Save_preferences_preserves_security_alert_bypass_quiet_hours()
+    {
+        var harness = new ScreenHarness();
+        harness.Api.PreferencesResult = new(
+            true,
+            true,
+            true,
+            true,
+            22 * 60,
+            6 * 60,
+            20 * 60 + 30,
+            "Asia/Ho_Chi_Minh",
+            SecurityAlertBypassQuietHours: false);
+
+        var viewModel = harness.Notifications();
+        await viewModel.LoadAsync();
+
+        viewModel.DailySummary = false;
+        await viewModel.SavePreferencesCommand.ExecuteAsync(null);
+
+        var request = Assert.Single(harness.Api.PreferenceUpdates);
+        Assert.False(request.DailySummary);
+        Assert.False(request.SecurityAlertBypassQuietHours);
+    }
+
+    [Fact]
     public async Task Save_failure_shows_friendly_error()
     {
         var harness = new ScreenHarness();
