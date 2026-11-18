@@ -48,7 +48,7 @@ public partial class SettingsPage : ContentPage
     }
 
     private async void OnPrivacyTapped(object sender, TappedEventArgs e) =>
-        await Shell.Current.GoToAsync("//privacy");
+        await Shell.Current.GoToAsync("privacy");
 
     private async void OnRevokeDeviceClicked(object sender, EventArgs e)
     {

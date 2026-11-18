@@ -24,6 +24,4 @@
                   ContentTemplate="{DataTemplate views:WelcomePage}" />
     <ShellContent Route="pairing"
                   ContentTemplate="{DataTemplate views:PairingPage}" />
-    <ShellContent Route="privacy"
-                  ContentTemplate="{DataTemplate views:PrivacyPage}" />
 </Shell>

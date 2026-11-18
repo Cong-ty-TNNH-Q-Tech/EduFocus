@@ -14,6 +14,7 @@ public partial class AppShell : Shell
     public AppShell()
     {
         InitializeComponent();
+        Routing.RegisterRoute("privacy", typeof(Views.PrivacyPage));
     }
 
     protected override async void OnAppearing()

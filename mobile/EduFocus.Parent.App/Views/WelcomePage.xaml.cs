@@ -11,5 +11,5 @@ public partial class WelcomePage : ContentPage
         await Shell.Current.GoToAsync("//pairing");
 
     private async void OnPrivacyTapped(object sender, TappedEventArgs e) =>
-        await Shell.Current.GoToAsync("//privacy");
+        await Shell.Current.GoToAsync("privacy");
 }
