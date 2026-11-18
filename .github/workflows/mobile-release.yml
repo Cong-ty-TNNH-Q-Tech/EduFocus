@@ -40,6 +40,7 @@ jobs:
       tag: ${{ steps.ver.outputs.tag }}
       prerelease: ${{ steps.ver.outputs.prerelease }}
       dry_run: ${{ steps.ver.outputs.dry_run }}
+      commit: ${{ github.sha }}
 
     steps:
       - name: Checkout
@@ -59,37 +60,16 @@ jobs:
           set -euo pipefail
           raw="$INPUT_VERSION"
           if [ -z "$raw" ]; then raw="$REF_NAME"; fi
-          version="${raw#[vV]}"
-          if ! [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+([-+][0-9A-Za-z.+-]+)?$ ]]; then
-            echo "::error::Version '$version' is not a valid SemVer value."
-            exit 1
-          fi
-          numeric="${version%%[-+]*}"
-          IFS=. read -r major minor patch <<< "$numeric"
-          major=$((10#$major)); minor=$((10#$minor)); patch=$((10#$patch))
-          if (( major > 9999 || minor > 9999 || patch > 9999 )); then
-            echo "::error::Each version component must be 0-9999 for the versionCode rule."
-            exit 1
-          fi
-          code=$((major * 10000 + minor * 100 + patch))
-          if (( code < 1 || code > 2100000000 )); then
-            echo "::error::Computed versionCode $code is outside Android's allowed range."
-            exit 1
-          fi
-          prerelease=false
-          case "$version" in *-*) prerelease=true ;; esac
+          resolved="$(bash mobile/scripts/resolve-mobile-version.sh "$raw")"
           dry_run=false
           if [ "$EVENT_NAME" = "workflow_dispatch" ] && [ "$INPUT_DRY_RUN" = "true" ]; then
             dry_run=true
           fi
           {
-            echo "version=$version"
-            echo "code=$code"
-            echo "tag=v$version"
-            echo "prerelease=$prerelease"
+            printf '%s\n' "$resolved"
             echo "dry_run=$dry_run"
           } >> "$GITHUB_OUTPUT"
-          echo "Mobile release: $version (versionCode $code), tag v$version, prerelease: $prerelease, dry run: $dry_run"
+          echo "Mobile release resolved ($resolved, dry_run=$dry_run)"
 
       # The release cannot ship without a signing key and Firebase config.
       # Never echo secret values; only their names are reported.
@@ -262,6 +242,8 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           TAG: ${{ needs.build.outputs.tag }}
           PRERELEASE: ${{ needs.build.outputs.prerelease }}
+          TARGET_COMMIT: ${{ needs.build.outputs.commit }}
+          REPO: ${{ github.repository }}
         run: |
           set -euo pipefail
           shopt -s nullglob
@@ -271,12 +253,19 @@ jobs:
             exit 1
           fi
 
+          existing_sha="$(gh api "repos/${REPO}/git/ref/tags/${TAG}" --jq '.object.sha' 2>/dev/null || true)"
+          if [ -n "$existing_sha" ] && [ "$existing_sha" != "$TARGET_COMMIT" ]; then
+            echo "::error::Tag $TAG already exists on commit $existing_sha (expected $TARGET_COMMIT)."
+            exit 1
+          fi
+
           if gh release view "$TAG" >/dev/null 2>&1; then
             gh release upload "$TAG" "${files[@]}" --clobber
           else
             prerelease_flag=()
             if [ "$PRERELEASE" = "true" ]; then prerelease_flag=(--prerelease); fi
             if ! gh release create "$TAG" "${files[@]}" \
+              --target "$TARGET_COMMIT" \
               --title "EduFocus $TAG" \
               --notes "EduFocus Phụ huynh cho Android. Cài đặt và kiểm tra SHA-256 theo hướng dẫn trong mobile/README.md." \
               "${prerelease_flag[@]}"
