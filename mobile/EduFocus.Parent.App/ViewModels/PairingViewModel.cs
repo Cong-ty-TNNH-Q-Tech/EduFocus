@@ -222,13 +222,15 @@ public sealed partial class PairingViewModel : ObservableObject
             return;
         }
 
-        _retryTimer ??= dispatcher.CreateTimer();
-        if (!_retryTimer.IsRunning)
+        if (_retryTimer is null)
         {
+            _retryTimer = dispatcher.CreateTimer();
             _retryTimer.Interval = TimeSpan.FromSeconds(1);
             _retryTimer.Tick += OnRetryTick;
-            _retryTimer.Start();
         }
+
+        if (!_retryTimer.IsRunning)
+            _retryTimer.Start();
 
         UpdateRetryText();
     }

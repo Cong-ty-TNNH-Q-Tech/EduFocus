@@ -75,23 +75,26 @@ public partial class PairingPage : ContentPage, IQueryAttributable
 
     private async void OnBarcodesDetected(object? sender, BarcodeDetectionEventArgs e)
     {
-        if (_handlingScan)
-            return;
-
         var raw = e.Results?.FirstOrDefault()?.Value;
         if (string.IsNullOrWhiteSpace(raw))
             return;
 
-        _handlingScan = true;
-        try
+        await MainThread.InvokeOnMainThreadAsync(async () =>
         {
-            _viewModel.SetScannerActive(false);
-            await _viewModel.HandleScannedPayloadAsync(raw);
-        }
-        finally
-        {
-            _handlingScan = false;
-        }
+            if (_handlingScan)
+                return;
+
+            _handlingScan = true;
+            try
+            {
+                _viewModel.SetScannerActive(false);
+                await _viewModel.HandleScannedPayloadAsync(raw);
+            }
+            finally
+            {
+                _handlingScan = false;
+            }
+        });
     }
 
     private async void OnToggleScannerClicked(object sender, EventArgs e)
