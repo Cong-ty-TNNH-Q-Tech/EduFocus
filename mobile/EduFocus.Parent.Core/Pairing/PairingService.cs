@@ -1,4 +1,5 @@
 using EduFocus.Cloud.Contracts.Pairing;
+using EduFocus.Parent.Core.Presentation;
 using EduFocus.Parent.Core.Services;
 using EduFocus.Parent.Core.Settings;
 
@@ -57,6 +58,7 @@ public sealed class PairingService(
     ITokenStore tokenStore,
     AppState appState,
     ParentSettingsStore settings,
+    ParentDataCache cache,
     bool allowInsecureEndpoints = false) : IPairingService
 {
     private const string ClaimPath = "/v1/pairing/claim";
@@ -94,16 +96,23 @@ public sealed class PairingService(
         if (appState.IsLinked && !replaceExisting)
             throw new PairingException(LinkedElsewhereMessage, PairingFailure.Configuration);
 
-        if (appState.IsLinked)
-            await RevokeCurrentDeviceAsync(cancellationToken);
+        var wasLinked = appState.IsLinked;
+        var previousBaseUrl = appState.CloudBaseUrl;
+        var previousDeviceId = appState.DeviceId ?? settings.DeviceId;
+        var previousToken = wasLinked && previousDeviceId is not null
+            ? await TryReadTokenAsync(cancellationToken)
+            : null;
 
         var normalizedUrl = cloudBaseUrl!.GetLeftPart(UriPartial.Authority);
-        appState.CloudBaseUrl = normalizedUrl;
-        settings.CloudBaseUrl = normalizedUrl;
 
+        // The API client resolves the server from app state, so the claim sees
+        // the new URL; the previous link is restored if the claim fails.
+        appState.CloudBaseUrl = normalizedUrl;
+
+        ClaimPairingResponse response;
         try
         {
-            var response = await api.PostAsync<ClaimPairingRequest, ClaimPairingResponse>(
+            response = await api.PostAsync<ClaimPairingRequest, ClaimPairingResponse>(
                 ClaimPath,
                 new ClaimPairingRequest(
                     code,
@@ -114,32 +123,67 @@ public sealed class PairingService(
                     Truncate(identity.TimeZoneId, 64)),
                 authenticated: false,
                 cancellationToken);
-
-            await tokenStore.SaveTokenAsync(response.MobileToken, cancellationToken);
-
-            appState.IsLinked = true;
-            appState.FamilyId = response.FamilyId;
-            appState.DeviceId = response.DeviceId;
-            appState.TimeZone = response.TimeZoneId;
-            appState.DesktopName = response.DesktopName;
-
-            settings.FamilyId = response.FamilyId;
-            settings.DeviceId = response.DeviceId;
-            settings.DesktopName = response.DesktopName;
-            settings.TimeZoneId = response.TimeZoneId;
-
-            return response;
         }
         catch (CloudApiException ex)
         {
+            appState.CloudBaseUrl = previousBaseUrl;
             throw Map(ex);
         }
         catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException)
         {
+            appState.CloudBaseUrl = previousBaseUrl;
             throw new PairingException(
                 "Không kết nối được máy chủ cloud. Kiểm tra mạng và thử lại.",
                 PairingFailure.Network);
         }
+
+        // The server has committed the claim; store the new token before the
+        // old link is forgotten locally.
+        try
+        {
+            await tokenStore.SaveTokenAsync(response.MobileToken, cancellationToken);
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            appState.CloudBaseUrl = previousBaseUrl;
+            throw;
+        }
+        catch (Exception)
+        {
+            appState.CloudBaseUrl = previousBaseUrl;
+            throw new PairingException(
+                "Đã ghép nối nhưng chưa lưu được mã truy cập trên máy này. Hãy nhờ máy tính tạo mã mới.",
+                PairingFailure.Configuration);
+        }
+
+        // Cached reports belong to the previous family; drop them before the
+        // new link becomes visible to the screens.
+        cache.Clear();
+
+        appState.CloudBaseUrl = normalizedUrl;
+        appState.IsLinked = true;
+        appState.FamilyId = response.FamilyId;
+        appState.DeviceId = response.DeviceId;
+        appState.TimeZone = response.TimeZoneId;
+        appState.DesktopName = response.DesktopName;
+
+        settings.CloudBaseUrl = normalizedUrl;
+        settings.FamilyId = response.FamilyId;
+        settings.DeviceId = response.DeviceId;
+        settings.DesktopName = response.DesktopName;
+        settings.TimeZoneId = response.TimeZoneId;
+
+        // Retire the replaced device only now that the new link is active.
+        // Uses the old token explicitly so the new link is never touched.
+        if (wasLinked
+            && previousDeviceId is { } oldDeviceId
+            && !string.IsNullOrWhiteSpace(previousToken)
+            && TryParseBaseUrl(previousBaseUrl, out var previousBaseUri))
+        {
+            await TryRevokeDeviceAsync(previousBaseUri, previousToken, oldDeviceId, cancellationToken);
+        }
+
+        return response;
     }
 
     public async Task UnlinkAsync(CancellationToken cancellationToken = default)
@@ -185,6 +229,54 @@ public sealed class PairingService(
         appState.TimeZone = null;
         appState.DesktopName = null;
         settings.ClearLink();
+    }
+
+    private async Task<string?> TryReadTokenAsync(CancellationToken cancellationToken)
+    {
+        try
+        {
+            return await tokenStore.GetTokenAsync(cancellationToken);
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch (Exception)
+        {
+            return null;
+        }
+    }
+
+    private async Task TryRevokeDeviceAsync(
+        Uri cloudBaseUrl,
+        string token,
+        Guid deviceId,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            await api.DeleteAsync($"/v1/devices/{deviceId:D}", cloudBaseUrl, token, cancellationToken);
+        }
+        catch (CloudApiException)
+        {
+        }
+        catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException)
+        {
+        }
+    }
+
+    private static bool TryParseBaseUrl(string? value, out Uri baseUrl)
+    {
+        baseUrl = null!;
+        if (string.IsNullOrWhiteSpace(value)
+            || !Uri.TryCreate(value, UriKind.Absolute, out var parsed)
+            || (parsed.Scheme != Uri.UriSchemeHttps && parsed.Scheme != Uri.UriSchemeHttp))
+        {
+            return false;
+        }
+
+        baseUrl = parsed;
+        return true;
     }
 
     private static PairingException Map(CloudApiException ex) =>

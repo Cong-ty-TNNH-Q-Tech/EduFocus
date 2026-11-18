@@ -36,6 +36,7 @@ public static class MauiProgram
             sp.GetRequiredService<ITokenStore>(),
             sp.GetRequiredService<AppState>(),
             sp.GetRequiredService<ParentSettingsStore>(),
+            sp.GetRequiredService<ParentDataCache>(),
             BuildConfig.AllowInsecureCloudEndpoints));
         builder.Services.AddSingleton<LinkStateRestorer>();
         builder.Services.AddSingleton<PairingViewModel>();

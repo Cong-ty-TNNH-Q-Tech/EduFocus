@@ -1,6 +1,7 @@
 using System.Net;
 using EduFocus.Parent.Core;
 using EduFocus.Parent.Core.Pairing;
+using EduFocus.Parent.Core.Presentation;
 using EduFocus.Parent.Core.Services;
 using EduFocus.Parent.Core.Settings;
 using EduFocus.Parent.Tests.TestSupport;
@@ -17,7 +18,7 @@ public sealed class PairingServiceTests
     [Fact]
     public async Task Claim_stores_token_and_link_state()
     {
-        var (service, handler, tokens, state, settings) = CreateService(_ => Claimed());
+        var (service, handler, tokens, state, settings, _) = CreateService(_ => Claimed());
 
         var response = await service.ClaimAsync(
             new PairingClaim("abcd-2345", "https://cloud.example.com", Guid.Parse(SessionId)),
@@ -51,7 +52,7 @@ public sealed class PairingServiceTests
     [Fact]
     public async Task Manual_claim_without_session_sends_no_session_id()
     {
-        var (service, handler, _, _, _) = CreateService(_ => Claimed());
+        var (service, handler, _, _, _, _) = CreateService(_ => Claimed());
 
         await service.ClaimAsync(
             new PairingClaim("ABCD2345", "https://cloud.example.com", SessionId: null),
@@ -64,7 +65,7 @@ public sealed class PairingServiceTests
     [Fact]
     public async Task Invalid_code_is_rejected_before_any_network_call()
     {
-        var (service, handler, tokens, state, _) = CreateService(_ => Claimed());
+        var (service, handler, tokens, state, _, _) = CreateService(_ => Claimed());
 
         var exception = await Assert.ThrowsAsync<PairingException>(
             () => service.ClaimAsync(
@@ -81,7 +82,7 @@ public sealed class PairingServiceTests
     [Fact]
     public async Task Manual_claim_requires_server_url()
     {
-        var (service, handler, _, _, _) = CreateService(_ => Claimed());
+        var (service, handler, _, _, _, _) = CreateService(_ => Claimed());
 
         var exception = await Assert.ThrowsAsync<PairingException>(
             () => service.ClaimAsync(
@@ -97,7 +98,7 @@ public sealed class PairingServiceTests
     [Fact]
     public async Task Http_is_rejected_outside_development()
     {
-        var (service, _, _, _, _) = CreateService(_ => Claimed());
+        var (service, _, _, _, _, _) = CreateService(_ => Claimed());
 
         var exception = await Assert.ThrowsAsync<PairingException>(
             () => service.ClaimAsync(
@@ -112,7 +113,7 @@ public sealed class PairingServiceTests
     [Fact]
     public async Task Expired_code_maps_to_friendly_message()
     {
-        var (service, _, tokens, _, _) = CreateService(_ => HttpStubs.Json(
+        var (service, _, tokens, _, _, _) = CreateService(_ => HttpStubs.Json(
             HttpStatusCode.Gone,
             """{"error":{"code":"pairing_unavailable","message":"Mã ghép nối không hợp lệ, đã dùng hoặc đã hết hạn."}}"""));
 
@@ -130,7 +131,7 @@ public sealed class PairingServiceTests
     [Fact]
     public async Task Rate_limit_exposes_retry_after()
     {
-        var (service, _, _, _, _) = CreateService(_ => HttpStubs.RateLimited(
+        var (service, _, _, _, _, _) = CreateService(_ => HttpStubs.RateLimited(
             """{"error":{"code":"rate_limited","message":"Quá nhiều yêu cầu. Vui lòng thử lại sau."}}""",
             120));
 
@@ -147,7 +148,7 @@ public sealed class PairingServiceTests
     [Fact]
     public async Task Network_failure_maps_to_retryable_message()
     {
-        var (service, _, _, _, _) = CreateService(_ => throw new HttpRequestException("offline"));
+        var (service, _, _, _, _, _) = CreateService(_ => throw new HttpRequestException("offline"));
 
         var exception = await Assert.ThrowsAsync<PairingException>(
             () => service.ClaimAsync(
@@ -160,9 +161,9 @@ public sealed class PairingServiceTests
     }
 
     [Fact]
-    public async Task Replace_revokes_old_device_before_claiming()
+    public async Task Replace_claims_before_revoking_the_old_device()
     {
-        var (service, handler, tokens, state, _) = CreateLinkedState(responder: request =>
+        var (service, handler, tokens, state, _, _) = CreateLinkedState(responder: request =>
             request.Method == HttpMethod.Delete
                 ? HttpStubs.Json(HttpStatusCode.OK, """{"ok":true}""")
                 : Claimed());
@@ -173,13 +174,16 @@ public sealed class PairingServiceTests
             replaceExisting: true);
 
         Assert.Equal(2, handler.Requests.Count);
-        var revoke = handler.Requests[0];
+        var claim = handler.Requests[0];
+        Assert.Equal(HttpMethod.Post, claim.Method);
+        Assert.Equal("https://new.example.com/v1/pairing/claim", claim.RequestUri?.ToString());
+        Assert.Null(claim.Headers.Authorization);
+
+        var revoke = handler.Requests[1];
         Assert.Equal(HttpMethod.Delete, revoke.Method);
         Assert.Equal($"https://cloud.example.com/v1/devices/{OldDeviceId}", revoke.RequestUri?.ToString());
         Assert.Equal("efm_old-token", revoke.Headers.Authorization?.Parameter);
 
-        Assert.Null(handler.Requests[1].Headers.Authorization);
-        Assert.Equal("https://new.example.com/v1/pairing/claim", handler.Requests[1].RequestUri?.ToString());
         Assert.Equal("efm_new-token", tokens.Token);
         Assert.Equal(Guid.Parse(NewDeviceId), state.DeviceId);
         Assert.Equal("https://new.example.com", state.CloudBaseUrl);
@@ -188,7 +192,7 @@ public sealed class PairingServiceTests
     [Fact]
     public async Task Replace_still_claims_when_old_token_revoke_fails()
     {
-        var (service, handler, tokens, state, _) = CreateLinkedState(responder: request =>
+        var (service, handler, tokens, state, _, _) = CreateLinkedState(responder: request =>
             request.Method == HttpMethod.Delete
                 ? HttpStubs.Json(HttpStatusCode.InternalServerError, "{}")
                 : Claimed());
@@ -201,12 +205,54 @@ public sealed class PairingServiceTests
         Assert.Equal(2, handler.Requests.Count);
         Assert.Equal("efm_new-token", tokens.Token);
         Assert.True(state.IsLinked);
+        Assert.Equal(Guid.Parse(NewDeviceId), state.DeviceId);
+    }
+
+    [Fact]
+    public async Task Successful_replacement_clears_the_previous_family_cache()
+    {
+        var (service, _, _, _, _, store) = CreateLinkedState(
+            _ => Claimed(),
+            seedCache: true);
+
+        await service.ClaimAsync(
+            new PairingClaim("ABCD2345", "https://new.example.com", null),
+            Identity(),
+            replaceExisting: true);
+
+        Assert.Null(store.Get(ParentDataCache.DailyKey));
+        Assert.Null(store.Get(ParentDataCache.NotificationsKey));
+    }
+
+    [Fact]
+    public async Task Failed_replacement_keeps_the_existing_link_and_cache()
+    {
+        var (service, handler, tokens, state, settings, store) = CreateLinkedState(
+            _ => HttpStubs.Json(
+                HttpStatusCode.Gone,
+                """{"error":{"code":"pairing_unavailable","message":"Mã ghép nối không hợp lệ, đã dùng hoặc đã hết hạn."}}"""),
+            seedCache: true);
+
+        var exception = await Assert.ThrowsAsync<PairingException>(
+            () => service.ClaimAsync(
+                new PairingClaim("ABCD2345", "https://new.example.com", null),
+                Identity(),
+                replaceExisting: true));
+
+        Assert.Equal(PairingFailure.InvalidCode, exception.Failure);
+        Assert.Single(handler.Requests);
+        Assert.Equal("efm_old-token", tokens.Token);
+        Assert.True(state.IsLinked);
+        Assert.Equal(Guid.Parse(OldDeviceId), state.DeviceId);
+        Assert.Equal("https://cloud.example.com", state.CloudBaseUrl);
+        Assert.Equal("https://cloud.example.com", settings.CloudBaseUrl);
+        Assert.NotNull(store.Get(ParentDataCache.DailyKey));
     }
 
     [Fact]
     public async Task Linked_app_refuses_claim_without_replace_confirmation()
     {
-        var (service, handler, tokens, _, _) = CreateLinkedState(_ => Claimed());
+        var (service, handler, tokens, _, _, _) = CreateLinkedState(_ => Claimed());
 
         var exception = await Assert.ThrowsAsync<PairingException>(
             () => service.ClaimAsync(
@@ -222,7 +268,7 @@ public sealed class PairingServiceTests
     [Fact]
     public async Task Unlink_revokes_device_and_clears_token_but_keeps_server()
     {
-        var (service, handler, tokens, state, settings) = CreateLinkedState(
+        var (service, handler, tokens, state, settings, _) = CreateLinkedState(
             _ => HttpStubs.Json(HttpStatusCode.OK, """{"ok":true}"""));
 
         await service.UnlinkAsync();
@@ -241,7 +287,7 @@ public sealed class PairingServiceTests
     [Fact]
     public async Task Unlink_without_token_clears_local_state_without_network()
     {
-        var (service, handler, tokens, state, _) = CreateLinkedState(
+        var (service, handler, tokens, state, _, _) = CreateLinkedState(
             _ => HttpStubs.Json(HttpStatusCode.OK, """{"ok":true}"""));
         await tokens.ClearAsync();
 
@@ -252,7 +298,7 @@ public sealed class PairingServiceTests
         Assert.Null(state.DeviceId);
     }
 
-    private static (PairingService Service, RecordingHttpMessageHandler Handler, MemoryTokenStore Tokens, AppState State, ParentSettingsStore Settings)
+    private static (PairingService Service, RecordingHttpMessageHandler Handler, MemoryTokenStore Tokens, AppState State, ParentSettingsStore Settings, FakeKeyValueStore Store)
         CreateService(
             Func<HttpRequestMessage, HttpResponseMessage> responder,
             string? token = null,
@@ -262,18 +308,22 @@ public sealed class PairingServiceTests
         var handler = new RecordingHttpMessageHandler(responder);
         var tokens = new MemoryTokenStore(token);
         var appState = state ?? new AppState();
-        var settings = new ParentSettingsStore(new FakeKeyValueStore());
+        var store = new FakeKeyValueStore();
+        var settings = new ParentSettingsStore(store);
         var service = new PairingService(
             new CloudApiClient(new RecordingHttpClientFactory(handler), tokens, appState),
             tokens,
             appState,
             settings,
+            new ParentDataCache(store),
             allowInsecure);
-        return (service, handler, tokens, appState, settings);
+        return (service, handler, tokens, appState, settings, store);
     }
 
-    private static (PairingService Service, RecordingHttpMessageHandler Handler, MemoryTokenStore Tokens, AppState State, ParentSettingsStore Settings)
-        CreateLinkedState(Func<HttpRequestMessage, HttpResponseMessage> responder)
+    private static (PairingService Service, RecordingHttpMessageHandler Handler, MemoryTokenStore Tokens, AppState State, ParentSettingsStore Settings, FakeKeyValueStore Store)
+        CreateLinkedState(
+            Func<HttpRequestMessage, HttpResponseMessage> responder,
+            bool seedCache = false)
     {
         var state = new AppState
         {
@@ -284,7 +334,7 @@ public sealed class PairingServiceTests
             TimeZone = "Asia/Ho_Chi_Minh",
             DesktopName = "Old PC",
         };
-        var (service, handler, tokens, appState, settings) =
+        var (service, handler, tokens, appState, settings, store) =
             CreateService(responder, token: "efm_old-token", state: state);
 
         settings.CloudBaseUrl = "https://cloud.example.com";
@@ -293,7 +343,13 @@ public sealed class PairingServiceTests
         settings.DesktopName = state.DesktopName;
         settings.TimeZoneId = state.TimeZone;
 
-        return (service, handler, tokens, appState, settings);
+        if (seedCache)
+        {
+            store.Set(ParentDataCache.DailyKey, "{\"cached\":true}");
+            store.Set(ParentDataCache.NotificationsKey, "{\"cached\":true}");
+        }
+
+        return (service, handler, tokens, appState, settings, store);
     }
 
     private static MobileDeviceIdentity Identity() =>

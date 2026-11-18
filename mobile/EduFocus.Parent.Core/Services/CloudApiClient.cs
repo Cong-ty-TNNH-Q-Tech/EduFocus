@@ -37,6 +37,17 @@ public interface ICloudApiClient
         bool authenticated = true,
         CancellationToken cancellationToken = default);
 
+    /// <summary>
+    /// Revokes a device against an explicit server with an explicit bearer
+    /// token, so a replaced link's token can be retired after the new link is
+    /// already stored.
+    /// </summary>
+    Task DeleteAsync(
+        string relativePath,
+        Uri cloudBaseUrl,
+        string bearerToken,
+        CancellationToken cancellationToken = default);
+
     Task DeleteAsync<TBody>(
         string relativePath,
         TBody body,
@@ -89,6 +100,20 @@ public sealed class CloudApiClient(
         await SendAsync<object>(HttpMethod.Delete, relativePath, null, authenticated, cancellationToken);
     }
 
+    public Task DeleteAsync(
+        string relativePath,
+        Uri cloudBaseUrl,
+        string bearerToken,
+        CancellationToken cancellationToken = default) =>
+        SendAsync<object>(
+            HttpMethod.Delete,
+            relativePath,
+            null,
+            authenticated: true,
+            cancellationToken,
+            cloudBaseUrl,
+            bearerToken);
+
     public async Task DeleteAsync<TBody>(
         string relativePath,
         TBody body,
@@ -103,9 +128,18 @@ public sealed class CloudApiClient(
         string relativePath,
         object? body,
         bool authenticated,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        Uri? cloudBaseUrl = null,
+        string? bearerToken = null)
     {
-        using var request = await CreateRequestAsync(method, relativePath, body, authenticated, cancellationToken);
+        using var request = await CreateRequestAsync(
+            method,
+            relativePath,
+            body,
+            authenticated,
+            cancellationToken,
+            cloudBaseUrl,
+            bearerToken);
         using var response = await httpClientFactory
             .CreateClient(HttpClientName)
             .SendAsync(request, HttpCompletionOption.ResponseHeadersRead, cancellationToken);
@@ -130,12 +164,20 @@ public sealed class CloudApiClient(
         string relativePath,
         object? body,
         bool authenticated,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        Uri? cloudBaseUrl = null,
+        string? bearerToken = null)
     {
-        if (string.IsNullOrWhiteSpace(appState.CloudBaseUrl)
-            || !Uri.TryCreate(appState.CloudBaseUrl, UriKind.Absolute, out var baseUri))
+        var baseUri = cloudBaseUrl;
+        if (baseUri is null)
         {
-            throw new CloudApiException(0, "cloud_not_linked", "Máy chưa được ghép nối với cloud.");
+            if (string.IsNullOrWhiteSpace(appState.CloudBaseUrl)
+                || !Uri.TryCreate(appState.CloudBaseUrl, UriKind.Absolute, out var appBaseUri))
+            {
+                throw new CloudApiException(0, "cloud_not_linked", "Máy chưa được ghép nối với cloud.");
+            }
+
+            baseUri = appBaseUri;
         }
 
         var request = new HttpRequestMessage(method, new Uri(baseUri, relativePath));
@@ -146,7 +188,7 @@ public sealed class CloudApiClient(
 
         if (authenticated)
         {
-            var token = await tokenStore.GetTokenAsync(cancellationToken);
+            var token = bearerToken ?? await tokenStore.GetTokenAsync(cancellationToken);
             if (string.IsNullOrWhiteSpace(token))
             {
                 throw new CloudApiException(0, "missing_token", "Chưa có mã truy cập cloud. Hãy ghép nối lại.");
