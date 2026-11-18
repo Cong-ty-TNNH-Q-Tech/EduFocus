@@ -1,3 +1,6 @@
+using System.Text.Json;
+using EduFocus.Ports.DTOs;
+using EduFocus.Ports.Inbound;
 using EduFocus.Ports.Outbound.Cloud;
 using EduFocus.WPF.Tests.TestSupport;
 using EduFocus.WPF.ViewModels;
@@ -11,6 +14,7 @@ public sealed class CloudLinkViewModelTests
     private readonly FakeCloudOutboxNotifier _notifier = new();
     private readonly FakeClipboardService _clipboard = new();
     private readonly RecordingLogger _logger = new();
+    private readonly FakeCloudOutboxUseCase _outbox = new();
     private readonly ManualTimeProvider _time =
         new(new DateTimeOffset(2026, 11, 17, 3, 0, 0, TimeSpan.Zero));
 
@@ -332,8 +336,73 @@ public sealed class CloudLinkViewModelTests
         sut.StatusMessage.Should().BeEmpty();
     }
 
+    [Fact]
+    public async Task Offline_status_shows_local_outbox_pending_and_unreachable_server()
+    {
+        _links.Snapshot = CloudTestData.Linked(
+            _time.GetUtcNow().UtcDateTime,
+            remoteStatusChecked: false,
+            pendingSyncEvents: 0);
+        _outbox.Status = new CloudOutboxStatus(3, 1, "offline", null);
+        var sut = CreateSut();
+
+        await sut.RefreshAsync();
+
+        sut.PendingEventsText.Should().Contain("4");
+        sut.PendingEventsText.Should().Contain("không kiểm tra được");
+    }
+
+    [Fact]
+    public async Task Offline_with_empty_outbox_reports_server_unreachable()
+    {
+        _links.Snapshot = CloudTestData.Linked(
+            _time.GetUtcNow().UtcDateTime,
+            remoteStatusChecked: false,
+            pendingSyncEvents: 0);
+        _outbox.Status = new CloudOutboxStatus(0, 0, null, null);
+        var sut = CreateSut();
+
+        await sut.RefreshAsync();
+
+        sut.PendingEventsText.Should().Contain("Không kiểm tra được máy chủ");
+    }
+
+    [Fact]
+    public async Task Online_status_distinguishes_local_outbox_from_server_pending_events()
+    {
+        _links.Snapshot = CloudTestData.Linked(
+            _time.GetUtcNow().UtcDateTime,
+            remoteStatusChecked: true,
+            pendingSyncEvents: 2);
+        _outbox.Status = new CloudOutboxStatus(0, 0, null, null);
+        var sut = CreateSut();
+
+        await sut.RefreshAsync();
+
+        sut.PendingEventsText.Should().Contain("Trên máy: 0");
+        sut.PendingEventsText.Should().Contain("Máy chủ: 2");
+    }
+
     private CloudLinkViewModel CreateSut() =>
-        new(_links, _notifier, _clipboard, _logger, _time);
+        new(_links, _notifier, _clipboard, _logger, _time, _outbox);
+
+    private sealed class FakeCloudOutboxUseCase : ICloudOutboxUseCase
+    {
+        public CloudOutboxStatus Status { get; set; } = new(0, 0, null, null);
+
+        public Task EnqueueAsync(string type, JsonElement payload, CancellationToken cancellationToken = default) =>
+            Task.CompletedTask;
+
+        public Task EnqueueAsync(
+            string type,
+            JsonElement payload,
+            string? clientEventId,
+            CancellationToken cancellationToken = default) =>
+            Task.CompletedTask;
+
+        public Task<CloudOutboxStatus> GetStatusAsync(CancellationToken cancellationToken = default) =>
+            Task.FromResult(Status);
+    }
 
     private async Task<CloudLinkViewModel> CreatePairingSutAsync()
     {

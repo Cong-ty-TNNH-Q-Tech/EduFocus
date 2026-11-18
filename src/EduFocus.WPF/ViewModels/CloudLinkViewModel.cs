@@ -34,6 +34,7 @@ public sealed partial class CloudLinkViewModel : ObservableObject
     private readonly IClipboardService _clipboard;
     private readonly IAppLogger _logger;
     private readonly TimeProvider _timeProvider;
+    private readonly ICloudOutboxUseCase? _outbox;
 
     private DateTimeOffset? _lastPollAtUtc;
     private DateTime? _pairingExpiresAtUtc;
@@ -72,13 +73,15 @@ public sealed partial class CloudLinkViewModel : ObservableObject
         ICloudOutboxNotifier notifier,
         IClipboardService clipboard,
         IAppLogger logger,
-        TimeProvider timeProvider)
+        TimeProvider timeProvider,
+        ICloudOutboxUseCase? outbox = null)
     {
         _links = links ?? throw new ArgumentNullException(nameof(links));
         _notifier = notifier ?? throw new ArgumentNullException(nameof(notifier));
         _clipboard = clipboard ?? throw new ArgumentNullException(nameof(clipboard));
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
         _timeProvider = timeProvider ?? throw new ArgumentNullException(nameof(timeProvider));
+        _outbox = outbox;
     }
 
     public event EventHandler? PrivacyNoticeRequested;
@@ -413,7 +416,10 @@ public sealed partial class CloudLinkViewModel : ObservableObject
         try
         {
             var snapshot = await _links.GetStatusAsync().ConfigureAwait(true);
-            ApplySnapshot(snapshot);
+            var outboxStatus = _outbox is not null
+                ? await _outbox.GetStatusAsync().ConfigureAwait(true)
+                : null;
+            ApplySnapshot(snapshot, outboxStatus);
         }
         catch (Exception ex)
         {
@@ -452,7 +458,7 @@ public sealed partial class CloudLinkViewModel : ObservableObject
         }
     }
 
-    private void ApplySnapshot(CloudLinkStatusSnapshot snapshot)
+    private void ApplySnapshot(CloudLinkStatusSnapshot snapshot, CloudOutboxStatus? outboxStatus = null)
     {
         IsCloudEnabled = snapshot.IsEnabled;
         IsLinked = snapshot.IsLinked;
@@ -475,13 +481,36 @@ public sealed partial class CloudLinkViewModel : ObservableObject
         LinkedDeviceText = BuildDeviceText(snapshot);
         LinkedSinceText = FormatLocal(snapshot.LinkedAtUtc, "Chưa ghép nối.");
         LastSyncText = FormatLocal(snapshot.LastSyncAtUtc, "Chưa đồng bộ lần nào.");
-        PendingEventsText = snapshot.PendingSyncEvents == 0
-            ? "Không có sự kiện chờ gửi."
-            : FormattableString.Invariant(
-                $"{snapshot.PendingSyncEvents} sự kiện đang chờ gửi.");
+        PendingEventsText = BuildPendingEventsText(snapshot, outboxStatus);
         LastErrorText = snapshot.LastError ?? string.Empty;
 
         UpdatePairingState();
+    }
+
+    private static string BuildPendingEventsText(
+        CloudLinkStatusSnapshot snapshot,
+        CloudOutboxStatus? outboxStatus)
+    {
+        var localPending = (outboxStatus?.PendingCount ?? 0) + (outboxStatus?.FailedCount ?? 0);
+
+        if (!snapshot.RemoteStatusChecked)
+        {
+            if (localPending > 0)
+            {
+                return FormattableString.Invariant(
+                    $"Trên máy: {localPending} sự kiện chờ gửi · Máy chủ: không kiểm tra được.");
+            }
+
+            return snapshot.IsLinked
+                ? "Không kiểm tra được máy chủ."
+                : "Không có sự kiện chờ gửi.";
+        }
+
+        if (localPending == 0 && snapshot.PendingSyncEvents == 0)
+            return "Không có sự kiện chờ gửi.";
+
+        return FormattableString.Invariant(
+            $"Trên máy: {localPending} chờ gửi · Máy chủ: {snapshot.PendingSyncEvents} đang xử lý.");
     }
 
     private void ApplyPairing(CloudPairingInfo pairing)

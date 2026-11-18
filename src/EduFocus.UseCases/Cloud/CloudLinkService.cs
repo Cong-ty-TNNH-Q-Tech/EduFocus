@@ -102,7 +102,7 @@ public sealed class CloudLinkService : ICloudLinkUseCase
             }
 
             _logger.Warning(LogCategories.Cloud, $"Cloud status refresh failed with code '{ex.Code}'.");
-            return ToSnapshot(link, [], 0, remoteChecked: true);
+            return ToSnapshot(link, [], 0, remoteChecked: false);
         }
     }
 

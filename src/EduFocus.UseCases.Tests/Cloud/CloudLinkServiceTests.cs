@@ -192,6 +192,7 @@ public sealed class CloudLinkServiceTests
 
         snapshot.IsEnabled.Should().BeTrue();
         snapshot.IsLinked.Should().BeTrue();
+        snapshot.RemoteStatusChecked.Should().BeFalse();
         snapshot.LastError.Should().Be("Không kết nối được tới máy chủ cloud.");
         harness.Logger.Warnings.Should().Contain(message => message.Contains(CloudErrorCodes.Network));
         string.Join("\n", harness.Logger.Warnings)
