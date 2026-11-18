@@ -226,14 +226,19 @@ public sealed class CloudSyncClientTests
     }
 
     [Fact]
-    public void Client_applies_the_fifteen_second_timeout_and_user_agent()
+    public async Task Client_sends_user_agent_per_request_without_mutating_shared_http_client()
     {
-        var http = new HttpClient();
+        var handler = new StubHandler(_ => JsonResponse(
+            HttpStatusCode.OK,
+            new { linked = true, devices = Array.Empty<object>(), pendingSyncEvents = 0 }));
+        var http = new HttpClient(handler);
+        await http.GetAsync(new Uri($"{CloudBaseUrl}/health"));
 
-        _ = new CloudSyncClient(http, "1.2.3");
+        var client = new CloudSyncClient(http, "1.2.3");
+        await client.GetLinkStatusAsync(new Uri(CloudBaseUrl), Token);
 
-        http.Timeout.Should().Be(TimeSpan.FromSeconds(15));
-        http.DefaultRequestHeaders.UserAgent.ToString().Should().Be("EduFocus/1.2.3");
+        http.DefaultRequestHeaders.UserAgent.Should().BeEmpty();
+        handler.Requests[^1].UserAgent.Should().Be("EduFocus/1.2.3");
     }
 
     [Fact]
@@ -355,7 +360,8 @@ public sealed class CloudSyncClientTests
                 request.Method.Method,
                 request.RequestUri,
                 request.Headers.Authorization?.ToString(),
-                body));
+                body,
+                request.Headers.UserAgent.ToString()));
 
             return _respond(request);
         }
@@ -365,5 +371,6 @@ public sealed class CloudSyncClientTests
         string Method,
         Uri? Uri,
         string? Authorization,
-        string Body);
+        string Body,
+        string UserAgent);
 }

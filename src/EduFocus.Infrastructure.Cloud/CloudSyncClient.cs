@@ -23,18 +23,17 @@ public sealed class CloudSyncClient : ICloudSyncPort
     private const string FamilyDeletionConfirmation = "XÓA";
 
     private readonly HttpClient _httpClient;
+    private readonly ProductInfoHeaderValue _userAgent;
 
     public CloudSyncClient(HttpClient httpClient, string? appVersion = null)
     {
         ArgumentNullException.ThrowIfNull(httpClient);
         _httpClient = httpClient;
-        _httpClient.Timeout = RequestTimeout;
 
         var version = string.IsNullOrWhiteSpace(appVersion) ? "1.0.0" : appVersion.Trim();
-        _httpClient.DefaultRequestHeaders.UserAgent.Clear();
         if (!ProductInfoHeaderValue.TryParse($"EduFocus/{version}", out var userAgent))
             userAgent = new ProductInfoHeaderValue("EduFocus", "1.0.0");
-        _httpClient.DefaultRequestHeaders.UserAgent.Add(userAgent);
+        _userAgent = userAgent;
     }
 
     public async Task<CloudPairingSession> CreatePairingSessionAsync(
@@ -247,16 +246,20 @@ public sealed class CloudSyncClient : ICloudSyncPort
     {
         using var request = new HttpRequestMessage(method, uri);
 
+        request.Headers.UserAgent.Add(_userAgent);
         if (!string.IsNullOrEmpty(desktopToken))
             request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", desktopToken);
 
         if (body is not null)
             request.Content = JsonContent.Create(body, options: ApiJson.Options);
 
+        using var timeoutCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        timeoutCts.CancelAfter(RequestTimeout);
+
         try
         {
             return await _httpClient
-                .SendAsync(request, HttpCompletionOption.ResponseHeadersRead, cancellationToken)
+                .SendAsync(request, HttpCompletionOption.ResponseHeadersRead, timeoutCts.Token)
                 .ConfigureAwait(false);
         }
         catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
