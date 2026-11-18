@@ -123,6 +123,33 @@ public sealed class CloudSecurityAlertProducerTests
     }
 
     [Fact]
+    public async Task More_than_scan_limit_audits_are_all_enqueued_without_duplicates()
+    {
+        var harness = new Harness();
+        harness.Links.Stored = CloudTestData.Linked(Now.UtcDateTime.AddDays(-1));
+        const int total = 105;
+        for (var i = 0; i < total; i++)
+        {
+            var entry = Tamper(Now.UtcDateTime.AddMinutes(-total + i));
+            harness.Audits.Entries.Add(entry);
+            if (i < 55)
+            {
+                harness.Outbox.Items.Add(CloudOutboxEvent.Create(
+                    $"audit-{entry.Id.Value:D}",
+                    CloudEventTypes.SecurityAlert,
+                    "{}",
+                    Now.UtcDateTime));
+            }
+        }
+
+        var queued = await harness.Producer.TryScanAsync();
+
+        queued.Should().Be(50);
+        harness.Sink.Enqueued.Should().HaveCount(50);
+        harness.Sink.Enqueued.Select(e => e.ClientEventId).Should().OnlyHaveUniqueItems();
+    }
+
+    [Fact]
     public async Task Other_audit_types_are_never_reported()
     {
         var harness = new Harness();

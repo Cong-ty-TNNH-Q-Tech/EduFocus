@@ -312,6 +312,15 @@ internal sealed class RecordingAuditLogRepository : IAuditLogRepository
         int limit,
         CancellationToken cancellationToken = default) =>
         Task.FromResult<IReadOnlyList<AuditLog>>([]);
+
+    public Task<IReadOnlyList<AuditLog>> ListByTypeSinceAsync(
+        EduFocus.Domain.Enums.AuditEventType eventType,
+        DateTime fromUtc,
+        int limit,
+        DateTime? afterCreatedAtUtc,
+        EduFocus.Domain.ValueObjects.AuditLogId? afterId,
+        CancellationToken cancellationToken = default) =>
+        Task.FromResult<IReadOnlyList<AuditLog>>([]);
 }
 
 internal sealed class TempDatabase : IAsyncDisposable

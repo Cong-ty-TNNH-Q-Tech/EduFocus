@@ -29,10 +29,19 @@ public sealed class SqliteAuditLogRepository : IAuditLogRepository
         await context.SaveChangesAsync(cancellationToken);
     }
 
+    public Task<IReadOnlyList<AuditLog>> ListByTypeSinceAsync(
+        AuditEventType eventType,
+        DateTime fromUtc,
+        int limit,
+        CancellationToken cancellationToken = default) =>
+        ListByTypeSinceAsync(eventType, fromUtc, limit, null, null, cancellationToken);
+
     public async Task<IReadOnlyList<AuditLog>> ListByTypeSinceAsync(
         AuditEventType eventType,
         DateTime fromUtc,
         int limit,
+        DateTime? afterCreatedAtUtc,
+        Domain.ValueObjects.AuditLogId? afterId,
         CancellationToken cancellationToken = default)
     {
         if (limit <= 0)
@@ -42,9 +51,18 @@ public sealed class SqliteAuditLogRepository : IAuditLogRepository
 
         // IX_AuditLogs_EventType keeps the tamper scan narrow; only markers are
         // read and descriptions never leave the device.
-        return await context.AuditLogs
+        var query = context.AuditLogs
             .AsNoTracking()
-            .Where(x => x.EventType == eventType && x.OccurredAtUtc >= fromUtc)
+            .Where(x => x.EventType == eventType && x.OccurredAtUtc >= fromUtc);
+
+        if (afterCreatedAtUtc is { } cursorTime && afterId is { } cursorId)
+        {
+            query = query.Where(x =>
+                x.CreatedAtUtc > cursorTime
+                || (x.CreatedAtUtc == cursorTime && x.Id.CompareTo(cursorId) > 0));
+        }
+
+        return await query
             .OrderBy(x => x.CreatedAtUtc)
             .ThenBy(x => x.Id)
             .Take(limit)

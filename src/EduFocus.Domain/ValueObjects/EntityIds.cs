@@ -72,12 +72,13 @@ public readonly record struct BlockedAttemptId(Guid Value)
     public override string ToString() => Value.ToString();
 }
 
-public readonly record struct AuditLogId(Guid Value)
+public readonly record struct AuditLogId(Guid Value) : IComparable<AuditLogId>
 {
     public static AuditLogId New() => new(Guid.NewGuid());
     public static AuditLogId From(Guid value) => new(value);
     public static readonly AuditLogId Empty = new(Guid.Empty);
     public bool IsEmpty => Value == Guid.Empty;
+    public int CompareTo(AuditLogId other) => Value.CompareTo(other.Value);
     public override string ToString() => Value.ToString();
 }
 

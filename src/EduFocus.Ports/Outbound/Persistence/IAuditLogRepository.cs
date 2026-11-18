@@ -1,5 +1,6 @@
 using EduFocus.Domain.Entities;
 using EduFocus.Domain.Enums;
+using EduFocus.Domain.ValueObjects;
 
 namespace EduFocus.Ports.Outbound.Persistence;
 
@@ -20,5 +21,17 @@ public interface IAuditLogRepository
         AuditEventType eventType,
         DateTime fromUtc,
         int limit,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Keyset-paginated variant of <see cref="ListByTypeSinceAsync(AuditEventType, DateTime, int, CancellationToken)"/>
+    /// starting strictly after <paramref name="afterCreatedAtUtc"/> / <paramref name="afterId"/>.
+    /// </summary>
+    Task<IReadOnlyList<AuditLog>> ListByTypeSinceAsync(
+        AuditEventType eventType,
+        DateTime fromUtc,
+        int limit,
+        DateTime? afterCreatedAtUtc,
+        AuditLogId? afterId,
         CancellationToken cancellationToken = default);
 }

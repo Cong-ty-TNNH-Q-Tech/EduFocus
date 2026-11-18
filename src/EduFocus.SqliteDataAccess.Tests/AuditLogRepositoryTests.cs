@@ -64,5 +64,13 @@ public sealed class AuditLogRepositoryTests
         result.Should().HaveCount(2);
         result.Select(entry => entry.Id).Should().ContainInOrder(first.Id, second.Id);
         limited.Should().ContainSingle().Which.Id.Should().Be(first.Id);
+
+        var page2 = await repository.ListByTypeSinceAsync(
+            AuditEventType.TamperDetected,
+            from,
+            10,
+            limited[0].CreatedAtUtc,
+            limited[0].Id);
+        page2.Should().ContainSingle().Which.Id.Should().Be(second.Id);
     }
 }

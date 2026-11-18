@@ -1,5 +1,6 @@
 using System.Text.Json;
 using EduFocus.Domain.Enums;
+using EduFocus.Domain.ValueObjects;
 using EduFocus.Ports.Inbound;
 using EduFocus.Ports.Outbound.Cloud;
 using EduFocus.Ports.Outbound.Persistence;
@@ -58,36 +59,60 @@ public sealed class CloudSecurityAlertProducer
             if (linkedAtUtc > fromUtc)
                 fromUtc = linkedAtUtc;
 
-            var audits = await _audits
-                .ListByTypeSinceAsync(AuditEventType.TamperDetected, fromUtc, ScanLimit, cancellationToken)
-                .ConfigureAwait(false);
-
+            DateTime? afterCreatedAtUtc = null;
+            AuditLogId? afterId = null;
             var queued = 0;
-            foreach (var audit in audits)
+
+            while (true)
             {
-                var clientEventId = $"audit-{audit.Id.Value:D}";
-                if (await _outbox.ExistsAsync(clientEventId, cancellationToken).ConfigureAwait(false))
-                    continue;
+                var audits = await _audits
+                    .ListByTypeSinceAsync(
+                        AuditEventType.TamperDetected,
+                        fromUtc,
+                        ScanLimit,
+                        afterCreatedAtUtc,
+                        afterId,
+                        cancellationToken)
+                    .ConfigureAwait(false);
 
-                var occurredAtUtc = new DateTimeOffset(
-                    DateTime.SpecifyKind(audit.OccurredAtUtc, DateTimeKind.Utc));
-                var localDate = DateOnly.FromDateTime(
-                    TimeZoneInfo.ConvertTime(occurredAtUtc, _timeProvider.LocalTimeZone).DateTime);
-
-                var payload = JsonSerializer.SerializeToElement(new
-                {
-                    kind = "clock_jump",
-                    localDate,
-                });
-
-                if (!await _sink
-                        .TryEnqueueAsync(CloudEventTypes.SecurityAlert, payload, clientEventId, cancellationToken)
-                        .ConfigureAwait(false))
-                {
+                if (audits.Count == 0)
                     break;
+
+                var stop = false;
+                foreach (var audit in audits)
+                {
+                    var clientEventId = $"audit-{audit.Id.Value:D}";
+                    if (await _outbox.ExistsAsync(clientEventId, cancellationToken).ConfigureAwait(false))
+                        continue;
+
+                    var occurredAtUtc = new DateTimeOffset(
+                        DateTime.SpecifyKind(audit.OccurredAtUtc, DateTimeKind.Utc));
+                    var localDate = DateOnly.FromDateTime(
+                        TimeZoneInfo.ConvertTime(occurredAtUtc, _timeProvider.LocalTimeZone).DateTime);
+
+                    var payload = JsonSerializer.SerializeToElement(new
+                    {
+                        kind = "clock_jump",
+                        localDate,
+                    });
+
+                    if (!await _sink
+                            .TryEnqueueAsync(CloudEventTypes.SecurityAlert, payload, clientEventId, cancellationToken)
+                            .ConfigureAwait(false))
+                    {
+                        stop = true;
+                        break;
+                    }
+
+                    queued++;
                 }
 
-                queued++;
+                if (stop || audits.Count < ScanLimit)
+                    break;
+
+                var last = audits[^1];
+                afterCreatedAtUtc = last.CreatedAtUtc;
+                afterId = last.Id;
             }
 
             return queued;
