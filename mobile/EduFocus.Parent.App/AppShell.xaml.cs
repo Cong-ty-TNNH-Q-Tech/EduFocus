@@ -9,6 +9,7 @@ namespace EduFocus.Parent.App;
 public partial class AppShell : Shell
 {
     private bool _initialized;
+    private bool _initializing;
 
     public AppShell()
     {
@@ -18,30 +19,52 @@ public partial class AppShell : Shell
     protected override async void OnAppearing()
     {
         base.OnAppearing();
-        if (_initialized)
+        if (_initialized || _initializing)
             return;
 
-        _initialized = true;
+        _initializing = true;
+
+        var linked = false;
         try
         {
-            var linked = await ServiceHelper.GetService<LinkStateRestorer>().RestoreAsync();
-            if (!linked)
-                await GoToAsync("//welcome", animate: false);
+            linked = await ServiceHelper.GetService<LinkStateRestorer>().RestoreAsync();
+        }
+        catch (Exception ex)
+        {
+            Debug.WriteLine($"Startup restore failed: {ex.GetType().Name}");
+        }
 
+        // Subscriptions must happen even when restore fails, otherwise deep
+        // links and notification taps stay dead for the rest of the session.
+        try
+        {
             PairingDeepLink.Received += OnDeepLinkReceived;
             PushTapRouter.Tapped += OnPushTapped;
             ServiceHelper.GetService<SessionExpiryService>().Expired += OnSessionExpired;
+        }
+        catch (Exception ex)
+        {
+            Debug.WriteLine($"Startup subscriptions failed: {ex.GetType().Name}");
+        }
+        finally
+        {
+            _initializing = false;
+            _initialized = true;
+        }
 
-            if (linked)
+        try
+        {
+            if (!linked)
+            {
+                await GoToAsync("//welcome", animate: false);
+                PushTapRouter.ConsumePending();
+            }
+            else
             {
                 _ = ServiceHelper.GetService<PushCoordinator>().SyncTokenAsync();
 
                 if (PushTapRouter.ConsumePending() is { } route)
                     await GoToAsync(route, animate: false);
-            }
-            else
-            {
-                PushTapRouter.ConsumePending();
             }
 
             if (PairingDeepLink.ConsumePending() is { } pending)
