@@ -161,7 +161,7 @@ function updateBadge() {
 }
 
 async function handleNavigation(details) {
-  if (!details || details.tabId < 0) return;
+  if (!details || details.tabId < 0 || details.frameId !== 0) return;
 
   if (snapshot === null) {
     connectBridge();
