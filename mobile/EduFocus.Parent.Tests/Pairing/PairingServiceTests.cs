@@ -2,6 +2,7 @@ using System.Net;
 using EduFocus.Parent.Core;
 using EduFocus.Parent.Core.Pairing;
 using EduFocus.Parent.Core.Presentation;
+using EduFocus.Parent.Core.Push;
 using EduFocus.Parent.Core.Services;
 using EduFocus.Parent.Core.Settings;
 using EduFocus.Parent.Tests.TestSupport;
@@ -435,10 +436,14 @@ public sealed class PairingServiceTests
     }
 
     [Fact]
-    public async Task Re_pairing_clears_stale_push_token_and_app_version()
+    public async Task Re_pairing_clears_stale_push_endpoint_and_app_version()
     {
         var (service, _, _, _, settings, _) = CreateLinkedState(_ => Claimed());
-        settings.PushToken = "fcm-old-token";
+        settings.SetPushEndpoint(new PushEndpointRegistration(
+            "https://ntfy.sh/up-old",
+            "p256dh-old",
+            "auth-old"));
+        settings.PushVapidPublicKey = "vapid-old";
         settings.PushAppVersion = "1.0.0";
 
         await service.ClaimAsync(
@@ -446,7 +451,8 @@ public sealed class PairingServiceTests
             Identity(),
             replaceExisting: true);
 
-        Assert.Null(settings.PushToken);
+        Assert.Null(settings.GetPushEndpoint());
+        Assert.Null(settings.PushVapidPublicKey);
         Assert.Null(settings.PushAppVersion);
     }
 

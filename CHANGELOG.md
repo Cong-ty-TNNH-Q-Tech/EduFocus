@@ -87,7 +87,7 @@ và dự án tuân theo [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
   hướng dẫn cài APK.
 - [docs/phase8-e2e-checklist.md](./docs/phase8-e2e-checklist.md): ma trận E2E 7 nhóm, kiểm tra
   dữ liệu/quyền riêng tư, demo script 10 phút và biên bản ký duyệt.
-- 173 unit test mobile (parser, pairing, push, API client, view model, cache, 401) và bộ test backend.
+- 174 unit test mobile (parser, pairing, push, API client, view model, cache, 401) và bộ test backend.
 
 ### Added (Tài liệu cloud relay và quyền riêng tư)
 

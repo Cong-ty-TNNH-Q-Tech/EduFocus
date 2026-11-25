@@ -292,7 +292,7 @@ staging):
 
 - Parser QR/mã ghép nối, token storage, push payload parser/dedupe phía mobile.
 - API client, view model Tổng quan/Báo cáo/Thông báo/Cài đặt (loading, lỗi, cache, 401, định dạng
-  tiếng Việt), `ParentDataCache`, `SessionExpiryService`, `FamilyAdminService` — 173 test.
+  tiếng Việt), `ParentDataCache`, `SessionExpiryService`, `FamilyAdminService` — 174 test.
 - Backend: claim pairing, auth scope, idempotent ingest, read APIs, preferences/quiet hours, Web Push
   payload/endpoint validation, cascade delete — `cloud/EduFocus.Cloud.Tests`.
 - Release: `apksigner verify` + `aapt2 dump badging` + SHA-256 trong workflow mobile release.
