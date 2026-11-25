@@ -36,6 +36,7 @@ public sealed class AttentionMonitorService : IAttentionMonitorUseCase, IAsyncDi
     private readonly AttentionThresholds _baseThresholds;
     private AttentionThresholds _activeThresholds;
     private readonly SemaphoreSlim _lifecycleGate = new(1, 1);
+    private readonly SemaphoreSlim _pipelineSyncGate = new(1, 1);
 
     private Channel<WorkItem>? _queue;
     private Task? _writer;
@@ -252,6 +253,7 @@ public sealed class AttentionMonitorService : IAttentionMonitorUseCase, IAsyncDi
     {
         await StopAsync(CancellationToken.None).ConfigureAwait(false);
         _lifecycleGate.Dispose();
+        _pipelineSyncGate.Dispose();
     }
 
     private async Task StopCoreAsync()
@@ -620,7 +622,7 @@ public sealed class AttentionMonitorService : IAttentionMonitorUseCase, IAsyncDi
     {
         try
         {
-            await _lifecycleGate.WaitAsync().ConfigureAwait(false);
+            await _pipelineSyncGate.WaitAsync().ConfigureAwait(false);
             try
             {
                 var shouldRun = _running
@@ -638,7 +640,7 @@ public sealed class AttentionMonitorService : IAttentionMonitorUseCase, IAsyncDi
             }
             finally
             {
-                _lifecycleGate.Release();
+                _pipelineSyncGate.Release();
             }
         }
         catch (ObjectDisposedException)
