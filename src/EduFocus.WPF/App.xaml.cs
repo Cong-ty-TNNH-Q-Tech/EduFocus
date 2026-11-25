@@ -366,6 +366,8 @@ public partial class App : Application
         services.AddSingleton<BlocklistViewModel>();
         services.AddSingleton<PrivacyViewModel>();
         services.AddSingleton<CloudLinkViewModel>();
+        services.AddSingleton<IFocusAudioPort, FocusAudioPlayer>();
+        services.AddSingleton<FocusAudioViewModel>();
         services.AddSingleton<IClipboardService, WindowsClipboardService>();
         services.AddSingleton<MainWindowViewModel>();
         services.AddSingleton<TrayIconService>();

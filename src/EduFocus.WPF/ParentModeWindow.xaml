@@ -147,6 +147,45 @@
             </Border>
         </DataTemplate>
 
+        <DataTemplate x:Key="HeatmapCellTemplate">
+            <Border Width="15" Height="15" CornerRadius="3" Margin="0,0,3,3"
+                    ToolTip="{Binding TooltipText}">
+                <Border.Style>
+                    <Style TargetType="Border">
+                        <Setter Property="Background" Value="{StaticResource SurfaceAltBrush}" />
+                        <Style.Triggers>
+                            <DataTrigger Binding="{Binding IsInRange}" Value="False">
+                                <Setter Property="Opacity" Value="0.35" />
+                            </DataTrigger>
+                            <DataTrigger Binding="{Binding Level}" Value="1">
+                                <Setter Property="Background" Value="#C6EFDC" />
+                            </DataTrigger>
+                            <DataTrigger Binding="{Binding Level}" Value="2">
+                                <Setter Property="Background" Value="#93E0BE" />
+                            </DataTrigger>
+                            <DataTrigger Binding="{Binding Level}" Value="3">
+                                <Setter Property="Background" Value="#4FCB93" />
+                            </DataTrigger>
+                            <DataTrigger Binding="{Binding Level}" Value="4">
+                                <Setter Property="Background" Value="#12B76A" />
+                            </DataTrigger>
+                        </Style.Triggers>
+                    </Style>
+                </Border.Style>
+            </Border>
+        </DataTemplate>
+
+        <DataTemplate x:Key="HeatmapWeekTemplate">
+            <ItemsControl ItemsSource="{Binding Cells}"
+                          ItemTemplate="{StaticResource HeatmapCellTemplate}">
+                <ItemsControl.ItemsPanel>
+                    <ItemsPanelTemplate>
+                        <StackPanel Orientation="Horizontal" />
+                    </ItemsPanelTemplate>
+                </ItemsControl.ItemsPanel>
+            </ItemsControl>
+        </DataTemplate>
+
         <DataTemplate x:Key="BlockRuleTemplate">
             <Border Style="{StaticResource RowCard}" Padding="12,9">
                 <Grid>
@@ -736,6 +775,31 @@
                                     <TextBlock Text="Chưa có phiên học nào trong khoảng thời gian này."
                                                Style="{StaticResource BodyText}" Margin="0,14,0,0"
                                                Visibility="{Binding Report.ShowEmptyState, Converter={StaticResource BoolToVisibility}}" />
+
+                                    <TextBlock Text="Bản đồ đóng góp 30 ngày"
+                                               Style="{StaticResource SectionHeaderText}" />
+                                    <StackPanel Visibility="{Binding Report.HasHeatmap, Converter={StaticResource BoolToVisibility}}">
+                                        <TextBlock Text="{Binding Report.HeatmapSummaryText}"
+                                                   Style="{StaticResource CaptionText}" Margin="0,0,0,8" />
+                                        <ItemsControl ItemsSource="{Binding Report.HeatmapWeeks}"
+                                                      ItemTemplate="{StaticResource HeatmapWeekTemplate}" />
+                                        <StackPanel Orientation="Horizontal" Margin="0,6,0,0">
+                                            <TextBlock Text="Ít" Style="{StaticResource CaptionText}"
+                                                       VerticalAlignment="Center" Margin="0,0,6,0" />
+                                            <Border Width="13" Height="13" CornerRadius="3" Margin="0,0,3,0"
+                                                    Background="{StaticResource SurfaceAltBrush}" />
+                                            <Border Width="13" Height="13" CornerRadius="3" Margin="0,0,3,0"
+                                                    Background="#C6EFDC" />
+                                            <Border Width="13" Height="13" CornerRadius="3" Margin="0,0,3,0"
+                                                    Background="#93E0BE" />
+                                            <Border Width="13" Height="13" CornerRadius="3" Margin="0,0,3,0"
+                                                    Background="#4FCB93" />
+                                            <Border Width="13" Height="13" CornerRadius="3" Margin="0,0,6,0"
+                                                    Background="#12B76A" />
+                                            <TextBlock Text="Nhiều" Style="{StaticResource CaptionText}"
+                                                       VerticalAlignment="Center" />
+                                        </StackPanel>
+                                    </StackPanel>
 
                                     <StackPanel Visibility="{Binding Report.ShowSummary, Converter={StaticResource BoolToVisibility}}">
                                         <UniformGrid Columns="3" Margin="0,10,-10,0">

@@ -9,6 +9,19 @@
         FontFamily="Segoe UI"
         TextOptions.TextFormattingMode="Ideal"
         UseLayoutRounding="True">
+    <Window.Resources>
+        <Style x:Key="FocusPresetButton" TargetType="Button" BasedOn="{StaticResource SoftButton}">
+            <Setter Property="Padding" Value="12,8" />
+            <Setter Property="Margin" Value="0,0,8,8" />
+            <Setter Property="MinHeight" Value="34" />
+            <Style.Triggers>
+                <DataTrigger Binding="{Binding IsSelected}" Value="True">
+                    <Setter Property="Background" Value="{StaticResource PrimaryBrush}" />
+                    <Setter Property="Foreground" Value="{StaticResource TextOnPrimaryBrush}" />
+                </DataTrigger>
+            </Style.Triggers>
+        </Style>
+    </Window.Resources>
     <Grid Margin="18">
         <Grid.ColumnDefinitions>
             <ColumnDefinition Width="252" />
@@ -701,6 +714,90 @@
                                                Style="{StaticResource CaptionText}"
                                                Text="EduFocus — đồng hành cùng việc học của bạn." />
                                 </Grid>
+                            </StackPanel>
+                        </Border>
+
+                        <!-- Focus audio -->
+                        <Border Style="{StaticResource CardBorder}" Margin="0,18,0,0">
+                            <StackPanel>
+                                <Grid>
+                                    <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                        <Border Width="40" Height="40" CornerRadius="12"
+                                                Background="{StaticResource TealSoftBrush}">
+                                            <Viewbox Width="20" Height="20" HorizontalAlignment="Center" VerticalAlignment="Center">
+                                                <Canvas Width="24" Height="24">
+                                                    <Path Data="M 9,18 L 9,6 L 19,4 L 19,16"
+                                                          Stroke="{StaticResource TealBrush}" StrokeThickness="2"
+                                                          StrokeLineJoin="Round" />
+                                                    <Ellipse Canvas.Left="5.5" Canvas.Top="16.5" Width="6.5" Height="5"
+                                                             Stroke="{StaticResource TealBrush}" StrokeThickness="2" />
+                                                    <Ellipse Canvas.Left="15.5" Canvas.Top="14.5" Width="6.5" Height="5"
+                                                             Stroke="{StaticResource TealBrush}" StrokeThickness="2" />
+                                                </Canvas>
+                                            </Viewbox>
+                                        </Border>
+                                        <StackPanel Margin="12,0,0,0" VerticalAlignment="Center">
+                                            <TextBlock Text="Âm thanh tập trung" Style="{StaticResource SectionTitleText}" />
+                                            <TextBlock Text="Phát tiếng ồn trắng hoặc âm thanh thư giãn ngay trên máy để vào vùng tập trung."
+                                                       Style="{StaticResource CaptionText}" Margin="0,2,0,0" />
+                                        </StackPanel>
+                                    </StackPanel>
+                                    <Border HorizontalAlignment="Right" VerticalAlignment="Center"
+                                            Style="{StaticResource PillBorder}" Padding="12,6">
+                                        <TextBlock Text="Không cần mở trình duyệt" FontSize="12"
+                                                   FontWeight="SemiBold"
+                                                   Foreground="{StaticResource TealBrush}" />
+                                    </Border>
+                                </Grid>
+
+                                <ItemsControl ItemsSource="{Binding FocusAudio.Presets}" Margin="0,16,0,0">
+                                    <ItemsControl.ItemsPanel>
+                                        <ItemsPanelTemplate>
+                                            <WrapPanel />
+                                        </ItemsPanelTemplate>
+                                    </ItemsControl.ItemsPanel>
+                                    <ItemsControl.ItemTemplate>
+                                        <DataTemplate>
+                                            <Button Style="{StaticResource FocusPresetButton}"
+                                                    ToolTip="{Binding Description}"
+                                                    Command="{Binding DataContext.FocusAudio.SelectPresetCommand, RelativeSource={RelativeSource AncestorType=Window}}"
+                                                    CommandParameter="{Binding}">
+                                                <TextBlock Text="{Binding Title}" />
+                                            </Button>
+                                        </DataTemplate>
+                                    </ItemsControl.ItemTemplate>
+                                </ItemsControl>
+
+                                <Grid Margin="0,6,0,0">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="Auto" />
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="Auto" />
+                                    </Grid.ColumnDefinitions>
+                                    <Button Grid.Column="0" Content="{Binding FocusAudio.PlayButtonText}"
+                                            Style="{StaticResource PrimaryButton}" MinWidth="112"
+                                            Command="{Binding FocusAudio.ToggleCommand}" />
+                                    <StackPanel Grid.Column="1" Orientation="Horizontal" Margin="18,0,0,0"
+                                                VerticalAlignment="Center">
+                                        <TextBlock Text="Âm lượng" Style="{StaticResource CaptionText}"
+                                                   VerticalAlignment="Center" />
+                                        <Slider Width="140" Minimum="0" Maximum="100"
+                                                Value="{Binding FocusAudio.Volume, Mode=TwoWay}"
+                                                Margin="10,0,0,0" VerticalAlignment="Center" />
+                                    </StackPanel>
+                                    <TextBlock Grid.Column="2" Text="{Binding FocusAudio.StatusText}"
+                                               Style="{StaticResource CaptionText}" VerticalAlignment="Center"
+                                               MaxWidth="280" TextWrapping="Wrap" TextAlignment="Right" />
+                                </Grid>
+
+                                <TextBlock Text="{Binding FocusAudio.ErrorMessage}"
+                                           Style="{StaticResource CaptionText}"
+                                           Foreground="{StaticResource DangerBrush}"
+                                           Margin="0,8,0,0" TextWrapping="Wrap"
+                                           Visibility="{Binding FocusAudio.HasError, Converter={StaticResource BoolToVisibility}}" />
+
+                                <TextBlock Text="Âm thanh được tổng hợp sẵn trên máy này; không tải từ mạng và không ghi âm gì."
+                                           Style="{StaticResource CaptionText}" Margin="0,10,0,0" />
                             </StackPanel>
                         </Border>
                     </StackPanel>

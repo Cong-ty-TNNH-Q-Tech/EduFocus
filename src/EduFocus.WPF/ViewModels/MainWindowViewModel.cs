@@ -14,15 +14,19 @@ public sealed class MainWindowViewModel
 
     public DashboardViewModel Dashboard { get; }
 
+    public FocusAudioViewModel FocusAudio { get; }
+
     public MainWindowViewModel(
         UpdateViewModel update,
         ProtectionStatusViewModel protection,
         CameraStatusViewModel camera,
-        DashboardViewModel dashboard)
+        DashboardViewModel dashboard,
+        FocusAudioViewModel focusAudio)
     {
         Update = update ?? throw new ArgumentNullException(nameof(update));
         Protection = protection ?? throw new ArgumentNullException(nameof(protection));
         Camera = camera ?? throw new ArgumentNullException(nameof(camera));
         Dashboard = dashboard ?? throw new ArgumentNullException(nameof(dashboard));
+        FocusAudio = focusAudio ?? throw new ArgumentNullException(nameof(focusAudio));
     }
 }

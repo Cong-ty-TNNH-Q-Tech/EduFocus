@@ -9,6 +9,17 @@ và dự án tuân theo [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ## [Unreleased] — Phase 8
 
+### Added (Backlog — #21, #23)
+
+- **Bản đồ đóng góp 30 ngày (#21):** thẻ heatmap kiểu GitHub trong Parent Mode → Báo cáo, gồm lưới
+  7 cột theo tuần (Thứ 2 → Chủ nhật), 5 mức đậm theo thời gian học cố định (0, <30 phút, <60 phút,
+  <120 phút, ≥120 phút), tooltip ngày/giờ học và chú giải Ít → Nhiều. Dữ liệu đọc từ báo cáo 30 ngày
+  sẵn có nên không thêm truy vấn khi đang chọn đúng khoảng 30 ngày.
+- **Âm thanh tập trung (#23):** thẻ mini player trong Student Mode với 5 âm thanh lặp (Tiếng ồn
+  trắng, Mưa rơi, Quán cà phê, Lò sưởi, Lo-fi nhẹ), phát/tạm dừng và thanh âm lượng. Track được tổng
+  hợp cục bộ thành WAV 16-bit mono 22,05 kHz có crossfade tại điểm lặp, lưu trong
+  `%LocalAppData%\EduFocus\focus-audio`; không tải mạng, không thêm thư viện âm thanh.
+
 ### Added (Cloud backend — #79–#85)
 
 - ASP.NET Core .NET 10 API + PostgreSQL 16: schema `Families`/`Devices`/`DeviceTokens`/
@@ -36,6 +47,12 @@ và dự án tuân theo [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
   Cài đặt (thiết bị, thu hồi, xóa cloud bằng `XÓA`).
 - Cache JSON tổng hợp TTL 7 ngày khi offline; định dạng tiếng Việt (thời lượng, phần trăm, ngày, múi
   giờ); `SessionExpiryService` xử lý 401 một lần và reset sau khi ghép nối lại.
+
+### Changed (Mobile — giao diện phụ huynh)
+
+- **Thiết kế lại toàn bộ UI ứng dụng phụ huynh:** design system teal (Colors/Styles dùng chung, hỗ trợ
+  dark mode), 25 icon SVG, tab bar có icon, các trang Welcome, Ghép nối, Tổng quan, Báo cáo, Thông báo,
+  Cài đặt và Quyền riêng tư được làm mới; biểu đồ 7 ngày có lưới, nhãn giá trị và làm nổi bật hôm nay.
 
 ### Added (Phát hành và kiểm thử — #93–#94)
 

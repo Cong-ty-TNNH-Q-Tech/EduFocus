@@ -75,6 +75,8 @@ public sealed partial class ReportViewModel : ObservableObject
     [ObservableProperty] private IReadOnlyList<ReportTimelineRow> _timelineRows = [];
     [ObservableProperty] private IReadOnlyList<ReportTopActivityRow> _topActivities = [];
     [ObservableProperty] private IReadOnlyList<ReportAttentionEventRow> _attentionEventRows = [];
+    [ObservableProperty] private IReadOnlyList<ReportHeatmapWeekRow> _heatmapWeeks = [];
+    [ObservableProperty] private string _heatmapSummaryText = string.Empty;
     [ObservableProperty] private string _lastUpdatedText = string.Empty;
 
     public ReportViewModel(
@@ -121,6 +123,8 @@ public sealed partial class ReportViewModel : ObservableObject
     public bool HasTopActivities => TopActivities.Count > 0;
 
     public bool HasAttentionEventRows => AttentionEventRows.Count > 0;
+
+    public bool HasHeatmap => HeatmapWeeks.Count > 0;
 
     partial void OnSelectedRangeChanged(ReportRangeOption? value)
     {
@@ -182,6 +186,9 @@ public sealed partial class ReportViewModel : ObservableObject
     partial void OnAttentionEventRowsChanged(IReadOnlyList<ReportAttentionEventRow> value) =>
         OnPropertyChanged(nameof(HasAttentionEventRows));
 
+    partial void OnHeatmapWeeksChanged(IReadOnlyList<ReportHeatmapWeekRow> value) =>
+        OnPropertyChanged(nameof(HasHeatmap));
+
     /// <summary>
     /// Reads the selected period. Calls are serialized, so a period change made
     /// while a read is running queues the newest selection instead of dropping it.
@@ -198,6 +205,8 @@ public sealed partial class ReportViewModel : ObservableObject
             HasExportMessage = false;
             ExportMessage = string.Empty;
             _currentReport = null;
+            HeatmapWeeks = [];
+            HeatmapSummaryText = string.Empty;
             ExportCommand.NotifyCanExecuteChanged();
 
             var range = SelectedRange ?? Ranges[0];
@@ -205,7 +214,12 @@ public sealed partial class ReportViewModel : ObservableObject
             var report = await _reports
                 .GetAsync(BuildPeriod(range.Kind, today), cancellationToken);
 
+            var heatmap = range.Kind == ReportRangeKind.ThirtyDays
+                ? report
+                : await TryLoadHeatmapAsync(today, cancellationToken);
+
             Apply(report, range);
+            ApplyHeatmap(heatmap, today);
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {
@@ -326,6 +340,67 @@ public sealed partial class ReportViewModel : ObservableObject
                 : "Sự kiện tập trung";
 
         LastUpdatedText = $"Cập nhật lúc {_timeProvider.GetLocalNow():HH:mm:ss}";
+    }
+
+    private async Task<StudyReport?> TryLoadHeatmapAsync(
+        DateOnly today,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            return await _reports.GetAsync(
+                ReportPeriod.Range(today.AddDays(-(StudyHeatmap.DefaultDays - 1)), today),
+                cancellationToken);
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            _logger.Error(LogCategories.UI, "Could not load the 30-day study heatmap.", ex);
+            return null;
+        }
+    }
+
+    private void ApplyHeatmap(StudyReport? report, DateOnly today)
+    {
+        if (report is null)
+        {
+            HeatmapWeeks = [];
+            HeatmapSummaryText = string.Empty;
+            return;
+        }
+
+        var firstDate = today.AddDays(-(StudyHeatmap.DefaultDays - 1));
+        var weeks = StudyHeatmap.Build(report.Days, firstDate, today);
+
+        HeatmapWeeks = weeks
+            .Select(week => new ReportHeatmapWeekRow(
+                week.Days.Select(BuildHeatmapCellRow).ToArray()))
+            .ToArray();
+
+        var daysInRange = report.Days
+            .Where(day => day.LocalDate >= firstDate && day.LocalDate <= today)
+            .ToArray();
+        var activeDays = daysInRange.Count(day => day.HasSessions);
+        var studySeconds = daysInRange.Sum(day => day.StudySeconds);
+
+        HeatmapSummaryText = activeDays == 0
+            ? "Chưa có ngày học nào trong 30 ngày gần nhất."
+            : $"{activeDays}/{StudyHeatmap.DefaultDays} ngày có học · tổng {FormatDuration(studySeconds)}";
+    }
+
+    private ReportHeatmapCellRow BuildHeatmapCellRow(StudyHeatmapCell cell)
+    {
+        var date = cell.LocalDate.ToString("dd/MM/yyyy", CultureInfo.InvariantCulture);
+        var tooltip = !cell.IsInRange
+            ? date
+            : cell.HasSessions
+                ? $"{date} · Học {FormatDuration(cell.StudySeconds)}"
+                : $"{date} · Không có phiên học";
+
+        return new ReportHeatmapCellRow(tooltip, cell.Level, cell.IsInRange);
     }
 
     private ReportDayRow BuildDayRow(DailyStudySummary day)
@@ -527,3 +602,7 @@ public sealed record ReportTimelineRow(string TimeText, string ActivityText, str
 public sealed record ReportTopActivityRow(string Name, string DetailText);
 
 public sealed record ReportAttentionEventRow(string TimeText, string StateText, string DetailText);
+
+public sealed record ReportHeatmapCellRow(string TooltipText, int Level, bool IsInRange);
+
+public sealed record ReportHeatmapWeekRow(IReadOnlyList<ReportHeatmapCellRow> Cells);
