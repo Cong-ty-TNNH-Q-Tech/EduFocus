@@ -33,7 +33,9 @@ public class MainActivity : MauiAppCompatActivity
 
         PairingDeepLink.Handle(Intent?.DataString);
         HandlePushIntent(Intent);
+#if DEBUG
         HandleDemoPush(Intent);
+#endif
     }
 
     protected override void OnNewIntent(Intent? intent)
@@ -41,7 +43,9 @@ public class MainActivity : MauiAppCompatActivity
         base.OnNewIntent(intent);
         PairingDeepLink.Handle(intent?.DataString);
         HandlePushIntent(intent);
+#if DEBUG
         HandleDemoPush(intent);
+#endif
     }
 
     private static void HandlePushIntent(Intent? intent) =>
