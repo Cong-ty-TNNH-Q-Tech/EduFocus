@@ -774,7 +774,17 @@ public partial class App : Application
             // The engine and the heartbeat only implement IAsyncDisposable, so
             // the synchronous ServiceProvider.Dispose() would throw.
             if (Services is { } services)
+            {
+                // Dispose the WPF MediaPlayer on the UI thread before waiting on
+                // async container disposal so its Dispatcher never deadlocks.
+                try
+                {
+                    services.GetService<IFocusAudioPort>()?.Dispose();
+                }
+                catch { }
+
                 Task.Run(() => services.DisposeAsync().AsTask()).Wait(TimeSpan.FromSeconds(5));
+            }
         }
         catch (Exception ex)
         {

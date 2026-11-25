@@ -104,8 +104,8 @@ public sealed class FocusAudioPlayer : IFocusAudioPort
         {
             if (player.Dispatcher.CheckAccess())
                 player.Close();
-            else
-                player.Dispatcher.Invoke(player.Close);
+            else if (!player.Dispatcher.HasShutdownStarted && !player.Dispatcher.HasShutdownFinished)
+                _ = player.Dispatcher.BeginInvoke(player.Close);
         }
         catch (Exception ex)
         {
