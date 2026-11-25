@@ -250,7 +250,11 @@ jobs:
             exit 1
           fi
 
+          existing_type="$(gh api "repos/${REPO}/git/ref/tags/${TAG}" --jq '.object.type' 2>/dev/null || true)"
           existing_sha="$(gh api "repos/${REPO}/git/ref/tags/${TAG}" --jq '.object.sha' 2>/dev/null || true)"
+          if [ "$existing_type" = "tag" ]; then
+            existing_sha="$(gh api "repos/${REPO}/git/tags/${existing_sha}" --jq '.object.sha')"
+          fi
           if [ -n "$existing_sha" ] && [ "$existing_sha" != "$TARGET_COMMIT" ]; then
             echo "::error::Tag $TAG already exists on commit $existing_sha (expected $TARGET_COMMIT)."
             exit 1
