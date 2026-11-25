@@ -1472,7 +1472,7 @@
                                         <StackPanel>
                                             <Grid>
                                                 <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-                                                    <TextBlock Text="Cập nhật ứng dụng" Style="{StaticResource SectionTitle}" />
+                                                    <TextBlock Text="Cập nhật ứng dụng" Style="{StaticResource CardTitleText}" />
                                                     <Border Background="{StaticResource SurfaceAltBrush}"
                                                             CornerRadius="999" Padding="10,4" Margin="10,0,0,0"
                                                             VerticalAlignment="Center">
