@@ -327,8 +327,16 @@ public sealed class ProtectionEngine : IProtectionEnginePort, IAsyncDisposable
 
         // The HTTPS listener is only started when the root is trusted, so the
         // trust step must finish before the block page binds port 443.
-        warnings.AddRange(
-            await EnsureCertificateAuthorityAsync(cancellationToken).ConfigureAwait(false));
+        try
+        {
+            warnings.AddRange(
+                await EnsureCertificateAuthorityAsync(cancellationToken).ConfigureAwait(false));
+        }
+        catch (OperationCanceledException)
+        {
+            await AbortApplyAsync(queue).ConfigureAwait(false);
+            throw;
+        }
 
         BlockPageStartResult page;
         try
