@@ -15,7 +15,30 @@ public sealed class WeeklyBarChart : GraphicsView
     public WeeklyBarChart()
     {
         Drawable = new BarDrawable(this);
+        Loaded += OnLoaded;
+        Unloaded += OnUnloaded;
     }
+
+    private void OnLoaded(object? sender, EventArgs e)
+    {
+        if (Application.Current is { } app)
+        {
+            app.RequestedThemeChanged -= OnRequestedThemeChanged;
+            app.RequestedThemeChanged += OnRequestedThemeChanged;
+        }
+        Invalidate();
+    }
+
+    private void OnUnloaded(object? sender, EventArgs e)
+    {
+        if (Application.Current is { } app)
+        {
+            app.RequestedThemeChanged -= OnRequestedThemeChanged;
+        }
+    }
+
+    private void OnRequestedThemeChanged(object? sender, AppThemeChangedEventArgs e) =>
+        Invalidate();
 
     public IReadOnlyList<ChartBarItem>? Bars
     {
