@@ -180,10 +180,7 @@ public class UpdaterService
         }
         progress?.Report(100);
 
-        if (beforeRestartAsync != null)
-            await beforeRestartAsync();
-        beforeRestart?.Invoke();
-        _exitState?.ApproveExit();
+        // PrepareForRestartAsync is called only after the update process starts successfully.
 
         if (isMsi)
         {
@@ -195,6 +192,7 @@ public class UpdaterService
             {
                 UseShellExecute = true   // required for UAC elevation prompt
             });
+            await PrepareForRestartAsync(beforeRestartAsync, beforeRestart);
             System.Windows.Application.Current?.Shutdown();
         }
         else
@@ -231,8 +229,17 @@ public class UpdaterService
                 UseShellExecute = false,
                 WindowStyle     = ProcessWindowStyle.Hidden
             });
+            await PrepareForRestartAsync(beforeRestartAsync, beforeRestart);
             System.Windows.Application.Current?.Shutdown();
         }
+    }
+
+    private async Task PrepareForRestartAsync(Func<Task>? beforeRestartAsync, Action? beforeRestart)
+    {
+        if (beforeRestartAsync != null)
+            await beforeRestartAsync();
+        beforeRestart?.Invoke();
+        _exitState?.ApproveExit();
     }
 
     // ── GitHub API models ─────────────────────────────────────────
