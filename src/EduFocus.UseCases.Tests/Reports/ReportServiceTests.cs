@@ -446,6 +446,34 @@ public sealed class ReportServiceTests
         day1Report.AttentionEvents.Should().Contain(e => e.StartedAtUtc == sessionStart.AddMinutes(10));
     }
 
+    [Fact]
+    public async Task Midnight_dst_spring_forward_period_start_does_not_throw()
+    {
+        var saoPaulo = TimeZoneInfo.CreateCustomTimeZone(
+            "Test/SaoPaulo",
+            TimeSpan.FromHours(-3),
+            "Test Sao Paulo",
+            "Test Sao Paulo",
+            "Test Sao Paulo DST",
+            [
+                TimeZoneInfo.AdjustmentRule.CreateAdjustmentRule(
+                    new DateTime(2018, 1, 1),
+                    new DateTime(2019, 12, 31),
+                    TimeSpan.FromHours(1),
+                    TimeZoneInfo.TransitionTime.CreateFixedDateRule(new DateTime(1, 1, 1, 0, 0, 0), 11, 4),
+                    TimeZoneInfo.TransitionTime.CreateFixedDateRule(new DateTime(1, 1, 1, 0, 0, 0), 2, 17))
+            ]);
+        var service = new ReportService(
+            new FakeStudySessionRepository(),
+            new FakeActivitySampleRepository(),
+            new FakeAttentionEventRepository(),
+            new ManualTimeProvider(new DateTimeOffset(2018, 11, 4, 12, 0, 0, TimeSpan.Zero), saoPaulo));
+
+        var report = await service.GetAsync(ReportPeriod.Day(new DateOnly(2018, 11, 4)));
+
+        report.SessionCount.Should().Be(0);
+    }
+
     private static ReportActivitySample Sample(
         StudySession session,
         DateTime sampledAtUtc,

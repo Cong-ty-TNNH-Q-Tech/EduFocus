@@ -1,6 +1,7 @@
 using EduFocus.Domain.Entities;
 using EduFocus.Domain.Enums;
 using EduFocus.Domain.Reports;
+using EduFocus.Domain.Scheduling;
 using EduFocus.Ports.DTOs;
 using EduFocus.Ports.Inbound;
 using EduFocus.Ports.Outbound.Persistence;
@@ -50,7 +51,7 @@ public sealed class ReportService : IReportUseCase
             .ConfigureAwait(false);
 
         var periodStartLocal = period.Start.ToDateTime(TimeOnly.MinValue);
-        var periodStartUtc = TimeZoneInfo.ConvertTimeToUtc(periodStartLocal, _timeProvider.LocalTimeZone);
+        var periodStartUtc = ScheduleClock.LocalToUtc(periodStartLocal, _timeProvider.LocalTimeZone);
 
         var sessions = candidateSessions
             .Where(s => s.StartLocalDate >= period.Start ||
