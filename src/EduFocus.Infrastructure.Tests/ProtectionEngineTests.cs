@@ -88,6 +88,26 @@ public sealed class ProtectionEngineTests
     }
 
     [Fact]
+    public async Task Long_domain_suffix_rule_skips_www_when_exceeding_max_domain_length()
+    {
+        // 250 chars (labels <= 63): valid DomainName (<=253), but "www." + domain = 254 > 253.
+        var longDomain = new string('a', 60) + "." + new string('b', 60) + "." + new string('c', 60) + "." + new string('d', 63) + ".com";
+        _rules.Rules.Add(BlockRule.Create(
+            RuleType.Domain,
+            RuleMatchType.Suffix,
+            longDomain,
+            BlockRuleCategory.Custom,
+            BlockRuleEffect.Block,
+            new DateTime(2026, 11, 1, 0, 0, 0, DateTimeKind.Utc)));
+        await using var engine = CreateEngine();
+
+        await engine.ApplyAsync();
+
+        _page.Domains.Should().Equal(longDomain);
+        _hosts.Applied.Should().Equal(longDomain);
+    }
+
+    [Fact]
     public async Task Apply_returns_warning_when_block_page_port_is_busy()
     {
         _rules.Rules.Add(Rule(RuleType.Domain, "chatgpt.com"));

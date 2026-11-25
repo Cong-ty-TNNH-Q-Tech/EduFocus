@@ -597,7 +597,8 @@ public sealed class ProtectionEngine : IProtectionEnginePort, IAsyncDisposable
         yield return rule.NormalizedValue;
 
         if (rule.MatchType == RuleMatchType.Suffix
-            && !rule.NormalizedValue.StartsWith("www.", StringComparison.Ordinal))
+            && !rule.NormalizedValue.StartsWith("www.", StringComparison.Ordinal)
+            && DomainName.TryParse("www." + rule.NormalizedValue, out _))
         {
             yield return "www." + rule.NormalizedValue;
         }
