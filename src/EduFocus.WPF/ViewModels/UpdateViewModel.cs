@@ -104,7 +104,7 @@ public partial class UpdateViewModel : ObservableObject
         var settings = await _settings.GetAsync();
         if (_authorizer is null || !_authorizer.IsAuthenticated)
         {
-            StatusMessage = "Vui lòng mở Parent Mode (nhập PIN phụ huynh) trước khi tải và cài đặt bản cập nhật.";
+            StatusMessage = "Vui lòng mở Parent Mode → Quyền riêng tư & dữ liệu (nhập PIN phụ huynh) để tải và cài đặt bản cập nhật.";
             return;
         }
 

@@ -43,6 +43,7 @@ public partial class ParentModeViewModel : ObservableObject
     private readonly ReportViewModel _report;
     private readonly PrivacyViewModel _privacy;
     private readonly CloudLinkViewModel _cloudLink;
+    private readonly UpdateViewModel? _update;
     private readonly DatabaseBootstrapper _database;
     private readonly IAppLogger _logger;
     private readonly TimeProvider _timeProvider;
@@ -92,6 +93,8 @@ public partial class ParentModeViewModel : ObservableObject
 
     public CloudLinkViewModel CloudLink => _cloudLink;
 
+    public UpdateViewModel? Update => _update;
+
     public event EventHandler? PasswordBoxesShouldClear;
     public event EventHandler? CloseRequested;
 
@@ -107,7 +110,8 @@ public partial class ParentModeViewModel : ObservableObject
         CloudLinkViewModel cloudLink,
         DatabaseBootstrapper database,
         IAppLogger logger,
-        TimeProvider timeProvider)
+        TimeProvider timeProvider,
+        UpdateViewModel? update = null)
     {
         _mode = mode ?? throw new ArgumentNullException(nameof(mode));
         _protection = protection ?? throw new ArgumentNullException(nameof(protection));
@@ -121,6 +125,7 @@ public partial class ParentModeViewModel : ObservableObject
         _database = database ?? throw new ArgumentNullException(nameof(database));
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
         _timeProvider = timeProvider ?? throw new ArgumentNullException(nameof(timeProvider));
+        _update = update;
     }
 
     partial void OnViewChanged(ParentModeView value)
