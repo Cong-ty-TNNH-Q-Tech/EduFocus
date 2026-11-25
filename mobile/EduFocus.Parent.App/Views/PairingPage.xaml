@@ -92,7 +92,7 @@
                             <Image Source="icon_scan.png" WidthRequest="20" HeightRequest="20"
                                    Aspect="AspectFit">
                                 <Image.Behaviors>
-                                    <toolkit:IconTintColorBehavior TintColor="{StaticResource Primary}" />
+                                    <toolkit:IconTintColorBehavior TintColor="{AppThemeBinding Light={StaticResource Primary}, Dark=#5EEAD4}" />
                                 </Image.Behaviors>
                             </Image>
                         </Border>

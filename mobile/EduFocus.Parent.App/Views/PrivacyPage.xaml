@@ -53,7 +53,7 @@
                             <Image Source="icon_phone.png" WidthRequest="18" HeightRequest="18"
                                    Aspect="AspectFit">
                                 <Image.Behaviors>
-                                    <toolkit:IconTintColorBehavior TintColor="{StaticResource Primary}" />
+                                    <toolkit:IconTintColorBehavior TintColor="{AppThemeBinding Light={StaticResource Primary}, Dark=#5EEAD4}" />
                                 </Image.Behaviors>
                             </Image>
                         </Border>
