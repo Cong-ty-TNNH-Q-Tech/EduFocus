@@ -78,6 +78,21 @@ public sealed class FocusAudioViewModelTests
         _logger.Errors.Should().ContainSingle();
     }
 
+    [Fact]
+    public void Async_playback_failure_resets_playing_state_and_reports_error()
+    {
+        var sut = CreateSut();
+        sut.ToggleCommand.Execute(null);
+        sut.IsPlaying.Should().BeTrue();
+
+        _audio.SimulateAsyncFailure();
+
+        sut.IsPlaying.Should().BeFalse();
+        sut.PlayButtonText.Should().Be("Phát");
+        sut.HasError.Should().BeTrue();
+        sut.ErrorMessage.Should().NotBeNullOrWhiteSpace();
+    }
+
     private FocusAudioViewModel CreateSut() => new(_audio, _logger);
 
     private sealed class FakeFocusAudioPort : IFocusAudioPort
@@ -93,6 +108,15 @@ public sealed class FocusAudioViewModelTests
         public int StopCalls { get; private set; }
 
         public Exception? PlayException { get; set; }
+
+        public event EventHandler? PlaybackFailed;
+
+        public void SimulateAsyncFailure()
+        {
+            IsPlaying = false;
+            CurrentPreset = null;
+            PlaybackFailed?.Invoke(this, EventArgs.Empty);
+        }
 
         public void Play(FocusAudioPreset preset)
         {

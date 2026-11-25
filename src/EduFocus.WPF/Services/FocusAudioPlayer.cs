@@ -36,6 +36,8 @@ public sealed class FocusAudioPlayer : IFocusAudioPort
 
     public FocusAudioPreset? CurrentPreset { get; private set; }
 
+    public event EventHandler? PlaybackFailed;
+
     public double Volume
     {
         get => _volume;
@@ -136,7 +138,10 @@ public sealed class FocusAudioPlayer : IFocusAudioPort
             catch (InvalidOperationException ex)
             {
                 _logger.Warning(LogCategories.UI, $"Could not start focus audio ({ex.GetType().Name}).");
+                _playRequested = false;
                 IsPlaying = false;
+                CurrentPreset = null;
+                PlaybackFailed?.Invoke(this, EventArgs.Empty);
             }
         };
         player.MediaEnded += (_, _) =>
@@ -154,9 +159,11 @@ public sealed class FocusAudioPlayer : IFocusAudioPort
         {
             _playRequested = false;
             IsPlaying = false;
+            CurrentPreset = null;
             _logger.Warning(
                 LogCategories.UI,
                 $"Focus audio playback failed ({args.ErrorException?.GetType().Name ?? "unknown"}).");
+            PlaybackFailed?.Invoke(this, EventArgs.Empty);
         };
 
         _player = player;

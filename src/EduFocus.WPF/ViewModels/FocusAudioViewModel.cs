@@ -70,6 +70,7 @@ public sealed partial class FocusAudioViewModel : ObservableObject
         _selectedPreset = Presets[0];
         _selectedPreset.IsSelected = true;
         _audio.Volume = Volume / 100.0;
+        _audio.PlaybackFailed += OnPlaybackFailed;
     }
 
     public IReadOnlyList<FocusAudioPresetOption> Presets { get; }
@@ -140,5 +141,13 @@ public sealed partial class FocusAudioViewModel : ObservableObject
 
         IsPlaying = false;
         StatusText = "Đã tạm dừng. Bấm Phát để tiếp tục.";
+    }
+
+    private void OnPlaybackFailed(object? sender, EventArgs e)
+    {
+        IsPlaying = false;
+        HasError = true;
+        ErrorMessage = "Không thể phát âm thanh trên máy này. Hãy thử lại hoặc chọn âm thanh khác.";
+        StatusText = "Phát âm thanh không thành công.";
     }
 }

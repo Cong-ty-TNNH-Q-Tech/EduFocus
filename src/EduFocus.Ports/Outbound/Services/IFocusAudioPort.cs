@@ -26,4 +26,7 @@ public interface IFocusAudioPort : IDisposable
     void Play(FocusAudioPreset preset);
 
     void Stop();
+
+    /// <summary>Raised when asynchronous media opening or playback fails.</summary>
+    event EventHandler? PlaybackFailed;
 }
