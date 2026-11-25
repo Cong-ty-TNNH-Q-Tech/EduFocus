@@ -434,6 +434,22 @@ public sealed class PairingServiceTests
         Assert.Null(store.Get(ParentDataCache.NotificationsKey));
     }
 
+    [Fact]
+    public async Task Re_pairing_clears_stale_push_token_and_app_version()
+    {
+        var (service, _, _, _, settings, _) = CreateLinkedState(_ => Claimed());
+        settings.PushToken = "fcm-old-token";
+        settings.PushAppVersion = "1.0.0";
+
+        await service.ClaimAsync(
+            new PairingClaim("ABCD2345", "https://new.example.com", null),
+            Identity(),
+            replaceExisting: true);
+
+        Assert.Null(settings.PushToken);
+        Assert.Null(settings.PushAppVersion);
+    }
+
     private sealed class ThrowingReadTokenStore : ITokenStore
     {
         public bool Cleared { get; private set; }

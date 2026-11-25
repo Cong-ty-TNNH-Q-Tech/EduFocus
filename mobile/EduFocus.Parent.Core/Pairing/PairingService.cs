@@ -165,6 +165,8 @@ public sealed class PairingService(
         settings.DeviceId = response.DeviceId;
         settings.DesktopName = response.DesktopName;
         settings.TimeZoneId = response.TimeZoneId;
+        settings.PushToken = null;
+        settings.PushAppVersion = null;
 
         // Retire the replaced device only now that the new link is active.
         // Uses the old token explicitly so the new link is never touched.
