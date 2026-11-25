@@ -1,4 +1,4 @@
-﻿using System.Diagnostics;
+using System.Diagnostics;
 using EduFocus.Parent.App.Services;
 using EduFocus.Parent.Core;
 using EduFocus.Parent.Core.Pairing;
@@ -66,6 +66,8 @@ public partial class AppShell : Shell
 
                 if (PushTapRouter.ConsumePending() is { } route)
                     await GoToAsync(route, animate: false);
+                else
+                    await ServiceHelper.GetService<OverviewViewModel>().LoadAsync();
             }
 
             if (PairingDeepLink.ConsumePending() is { } pending)
