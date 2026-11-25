@@ -47,7 +47,7 @@ public partial class ReportsPage : ContentPage, IQueryAttributable
 
     private void OnDayTapped(object? sender, TappedEventArgs e)
     {
-        if (sender is TapGestureRecognizer { BindingContext: ReportDayItem item })
+        if (sender is BindableObject { BindingContext: ReportDayItem item })
             _viewModel.SelectCommand.Execute(item);
     }
 }
