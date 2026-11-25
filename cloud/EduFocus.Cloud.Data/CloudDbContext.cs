@@ -1,3 +1,4 @@
+using EduFocus.Cloud.Data.Converters;
 using EduFocus.Cloud.Data.Entities;
 using Microsoft.EntityFrameworkCore;
 
@@ -15,6 +16,14 @@ public sealed class CloudDbContext(DbContextOptions<CloudDbContext> options) : D
     public DbSet<SyncEvent> SyncEvents => Set<SyncEvent>();
     public DbSet<NotificationRecord> Notifications => Set<NotificationRecord>();
     public DbSet<CloudAuditLog> CloudAuditLogs => Set<CloudAuditLog>();
+
+    protected override void ConfigureConventions(ModelConfigurationBuilder configurationBuilder)
+    {
+        configurationBuilder.Properties<DateTimeOffset>()
+            .HaveConversion<DateTimeOffsetToUtcTicksConverter>();
+        configurationBuilder.Properties<DateTimeOffset?>()
+            .HaveConversion<NullableDateTimeOffsetToUtcTicksConverter>();
+    }
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {

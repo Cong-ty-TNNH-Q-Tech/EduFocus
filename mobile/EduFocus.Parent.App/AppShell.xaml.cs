@@ -62,7 +62,7 @@ public partial class AppShell : Shell
             }
             else
             {
-                _ = ServiceHelper.GetService<PushCoordinator>().SyncTokenAsync();
+                _ = ServiceHelper.GetService<PushCoordinator>().SyncEndpointAsync();
 
                 if (PushTapRouter.ConsumePending() is { } route)
                     await GoToAsync(route, animate: false);

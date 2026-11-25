@@ -6,6 +6,7 @@ public enum SyncEventType
     AttentionAlert,
     ProtectionOff,
     SecurityAlert,
+    BlockedAttempt,
 }
 
 public enum SyncEventStatus

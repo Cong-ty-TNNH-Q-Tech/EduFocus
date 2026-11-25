@@ -1100,15 +1100,16 @@ Trạng thái lưu trong `AppSettings.ProtectionEnabled`; session active lưu tr
 - Không lưu ảnh/video/audio.
 - Không network call chứa dữ liệu học tập khi cloud tắt (mặc định). Update check mặc định tắt, chỉ chạy khi phụ huynh bật; request chỉ gồm `User-Agent: EduFocus/{version}` tới GitHub Releases API (GitHub thấy IP), không tự chạy lúc khởi động. Xóa toàn bộ dữ liệu theo yêu cầu dùng PIN + `XÓA` và chỉ xóa bản ghi chi tiết/session đã kết thúc, giữ settings, PIN, audit và phiên đang chạy.
 - **Ngoại lệ duy nhất:** cloud relay tùy chọn (Phase 8) khi phụ huynh chủ động ghép nối điện thoại; chỉ
-  bốn loại sự kiện tổng hợp rời máy, xem §10.1 và [cloud-backend.md](./cloud-backend.md).
+  năm loại sự kiện tổng hợp rời máy, xem §10.1 và [cloud-backend.md](./cloud-backend.md).
 
 ### 10.1. Cloud relay tùy chọn (Phase 8)
 
 ```text
-EduFocus.WPF ──(opt-in, token efd_)──► EduFocus Cloud API ──(FCM HTTP v1)──► EduFocus.Parent (Android)
-     │  outbox SQLite, batch ≤50             │ PostgreSQL 16                         │
+EduFocus.WPF ──(opt-in, token efd_)──► EduFocus Cloud API ──(Web Push)──► UnifiedPush/ntfy ──► Parent (Android)
+     │  outbox SQLite, batch ≤50             │ SQLite (file)                         │
      └─ daily_summary / attention_alert /    └─ pairing, ingest, preferences,        └─ tổng quan ngày,
-        protection_off / security_alert         reports, notification jobs              danh sách cảnh báo
+        protection_off / security_alert /       reports, notification jobs              danh sách cảnh báo
+        blocked_attempt
 ```
 
 - **Quyết định:** [ADR-20](./adr/ADR-20-optional-cloud-relay.md). Chi tiết API, schema và vận hành:
@@ -1122,24 +1123,26 @@ EduFocus.WPF ──(opt-in, token efd_)──► EduFocus Cloud API ──(FCM H
   JSON tổng hợp trong Preferences (TTL 7 ngày, không chứa token); mọi 401 đi qua
   `SessionExpiryService` (xóa phiên một lần, về Welcome); release APK ký số theo tag, xem
   [mobile/README.md](../mobile/README.md).
-- **Kích hoạt:** chỉ sau khi phụ huynh xác thực PIN, đọc privacy notice bản 2.0 và ghép nối thành
+- **Kích hoạt:** chỉ sau khi phụ huynh xác thực PIN, đọc privacy notice bản 2.1 và ghép nối thành
   công; trạng thái lưu trong `AppSettings` cùng token (bảo vệ DPAPI) và có thể ngắt bất kỳ lúc nào.
 - **Sự kiện rời máy:** `daily_summary` (tổng hợp ngày, latest-wins), `attention_alert` (distracted/
   absent ≥ 5 phút), `protection_off` (chỉ khi phụ huynh chủ động tắt/thoát), `security_alert`
-  (`clock_jump` từ audit `TamperDetected`). Không gửi URL, domain, window title, app name, sample thô,
-  dữ liệu camera, PIN hay recovery code.
+  (`clock_jump` từ audit `TamperDetected`), `blocked_attempt` (lượt truy cập web bị chặn, chỉ ngày địa
+  phương, tối đa 1 lần/15 phút). Không gửi URL, domain, window title, app name, sample thô, dữ liệu
+  camera, PIN hay recovery code.
 - **Outbox:** bảng SQLite riêng, `ClientEventId` UUID, ingest idempotent, retry backoff 1 → 60 phút,
   giới hạn 5.000 sự kiện/7 ngày; xóa cục bộ sau khi server xác nhận.
 - **Pairing:** mã 8 ký tự Crockford base32 hết hạn 10 phút (server lưu hash) hoặc QR; token đục
   `efd_`/`efm_`, server chỉ lưu SHA-256, thu hồi/xoay vòng được.
-- **Push:** FCM **data-only**, app mobile tự dựng câu tiếng Việt chung; quiet hours mặc định
-  22:00–06:00, tóm tắt ngày 20:30 theo múi giờ gia đình, dedupe phía server.
+- **Push:** Web Push mã hóa RFC8291 qua UnifiedPush distributor (ví dụ ntfy), app mobile tự dựng câu
+  tiếng Việt chung; quiet hours mặc định 22:00–06:00, tóm tắt ngày 20:30 theo múi giờ gia đình,
+  dedupe phía server. App lấy VAPID public key qua `GET /v1/push/config` trước khi đăng ký endpoint.
 - **Xóa/thu hồi:** ngắt kết nối trên desktop thu hồi token thiết bị; app mobile xóa gia đình bằng
   xác nhận `XÓA` (backend cascade toàn bộ dữ liệu cloud). Retention cloud: pairing 24 giờ, sync
   event 7 ngày, notification 30 ngày, summary 180 ngày, audit 365 ngày.
-- **Giới hạn:** phụ thuộc FCM/Google (kể cả xử lý ngoài lãnh thổ), độ trễ push do Android, không có
-  timeline chi tiết trên điện thoại, không đồng bộ hai chiều blocklist, admin/SYSTEM vẫn gỡ được
-  cấu hình cloud cục bộ.
+- **Giới hạn:** phụ thuộc distributor UnifiedPush/ntfy (kể cả xử lý ngoài lãnh thổ nếu dùng dịch vụ
+  bên thứ ba), độ trễ push do Android, không có timeline chi tiết trên điện thoại, không đồng bộ hai
+  chiều blocklist, admin/SYSTEM vẫn gỡ được cấu hình cloud cục bộ.
 
 ---
 
@@ -1574,7 +1577,7 @@ EduFocus/
 | ADR-17 | (Đề xuất) OpenCV MSMF + ONNX Runtime + YuNet cho attention Phase 0; Haar chỉ baseline; Drowsy/gaze ở Phase 5 | Face 99,2%/30 phút, CPU 0,23% máy, RAM 184 MB; Haar bỏ sót nhiều; giữ local-first |
 | ADR-18 | Mã hóa DB bằng SQLCipher, khóa 32 byte DPAPI `LocalMachine` + raw key `x'…'` | Bảo vệ dữ liệu trẻ em khi file bị sao chép; raw key tránh PBKDF2 ~525 ms mỗi kết nối; giữ fail-closed khi mất khóa, chấp nhận key gắn thiết bị (issue #47) |
 | ADR-19 | Block page HTTPS bằng CA cục bộ + TLS loopback | Trang chặn nhất quán trên Chrome/Edge, không cần extension/kernel và không gửi dữ liệu ra ngoài; đánh đổi: trust anchor phạm vi máy và Firefox không dùng kho Windows (issue #149–#152) |
-| ADR-20 | (Đề xuất) Cloud relay tùy chọn: desktop outbox → ASP.NET Core + PostgreSQL → FCM; chỉ sự kiện tổng hợp, token đục/hash, tự host được | Đáp ứng thông báo từ xa mà không phá local-first; least-data, thu hồi/xóa được; đánh đổi: phụ thuộc FCM/Google và thêm bề mặt tấn công (Phase 8, issue #77) |
+| ADR-20 | (Đề xuất) Cloud relay tùy chọn: desktop outbox → ASP.NET Core + SQLite → Web Push/UnifiedPush; chỉ sự kiện tổng hợp, token đục/hash, tự host được | Đáp ứng thông báo từ xa mà không phá local-first; least-data, thu hồi/xóa được; đánh đổi: phụ thuộc distributor UnifiedPush/ntfy, thêm bề mặt tấn công và SQLite chỉ chạy một instance API (Phase 8, issue #77) |
 
 ---
 
@@ -1592,9 +1595,9 @@ EduFocus/
 | ONNX model nặng | CPU/RAM cao | Model nhẹ, 1–2 FPS, thread limit |
 | License model ONNX/MediaPipe | Không được phân phối | Rà soát license/attribution trước release |
 | Quyền admin | Bypass toàn bộ | Giới hạn đã biết; tài khoản Windows riêng |
-| Cloud bị xâm nhập | Lộ token/push token/tóm tắt ngày | Token hash + thu hồi; không có dữ liệu thô/URL/camera; rate limit; audit; self-host được |
+| Cloud bị xâm nhập | Lộ token/push endpoint/tóm tắt ngày | Token hash + thu hồi; endpoint allowlist; không có dữ liệu thô/URL/camera; rate limit; audit; self-host được |
 | Token cloud bị lộ | Gửi dữ liệu giả hoặc đọc báo cáo | Token đục, hash phía server, scope tối thiểu, thu hồi/xoay vòng, không ghi log |
-| FCM/Google xử lý ngoài Việt Nam | Rủi ro chuyển dữ liệu xuyên biên giới | Chỉ metadata giao nhận + nội dung chung; nêu trong privacy notice/DPIA; cân nhắc kênh thay thế |
+| UnifiedPush/ntfy xử lý ngoài Việt Nam | Rủi ro chuyển dữ liệu xuyên biên giới | Payload mã hóa + metadata giao nhận; cho phép self-host ntfy; nêu trong privacy notice/DPIA |
 | Lạm dụng ingest/DoS | Backend quá tải, chi phí | Giới hạn 50 event/64 KB mỗi batch, rate limit theo token/IP, cảnh báo |
 | Phụ huynh hiểu nhầm thông báo | Kết luận sai về con | Nội dung "ước lượng", kèm coverage/độ tin cậy; không dùng làm bằng chứng |
 

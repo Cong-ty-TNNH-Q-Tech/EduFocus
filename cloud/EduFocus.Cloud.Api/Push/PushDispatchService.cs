@@ -8,50 +8,12 @@ namespace EduFocus.Cloud.Api.Push;
 
 public sealed class PushDispatchService(
     CloudDbContext db,
-    IFcmPushSender sender,
+    IPushSender sender,
     IOptions<PushOptions> options,
     TimeProvider timeProvider,
     ILogger<PushDispatchService> logger)
 {
-    public const long AdvisoryLockKey = 7_309_114_027;
-
     public async Task<int> DispatchPendingAsync(CancellationToken cancellationToken)
-    {
-        if (!db.Database.IsNpgsql())
-        {
-            return await DispatchCoreAsync(cancellationToken);
-        }
-
-        await db.Database.OpenConnectionAsync(cancellationToken);
-        try
-        {
-            var acquired = await db.Database
-                .SqlQueryRaw<bool>(
-                    $"SELECT pg_try_advisory_lock({AdvisoryLockKey}) AS \"Value\"")
-                .SingleAsync(cancellationToken);
-            if (!acquired)
-            {
-                return 0;
-            }
-
-            try
-            {
-                return await DispatchCoreAsync(cancellationToken);
-            }
-            finally
-            {
-                await db.Database.ExecuteSqlRawAsync(
-                    $"SELECT pg_advisory_unlock({AdvisoryLockKey})",
-                    CancellationToken.None);
-            }
-        }
-        finally
-        {
-            await db.Database.CloseConnectionAsync();
-        }
-    }
-
-    private async Task<int> DispatchCoreAsync(CancellationToken cancellationToken)
     {
         var now = timeProvider.GetUtcNow();
         var settings = options.Value;
@@ -136,7 +98,7 @@ public sealed class PushDispatchService(
                     && device.Kind == DeviceKind.Mobile
                     && device.RevokedAtUtc == null
                     && registration.InvalidatedAtUtc == null
-                select new { registration.FcmToken })
+                select new { registration.Endpoint, registration.P256dh, registration.Auth })
             .Distinct()
             .ToListAsync(cancellationToken);
 
@@ -150,14 +112,14 @@ public sealed class PushDispatchService(
         notification.AttemptCount++;
         notification.LastAttemptAtUtc = now;
         var data = PushRules.BuildPushData(notification);
-        var messages = registrations
-            .Select(r => new PushMessage(r.FcmToken, data))
+        var targets = registrations
+            .Select(r => new PushTarget(r.Endpoint, r.P256dh, r.Auth))
             .ToList();
 
         IReadOnlyList<PushSendResult> results;
         try
         {
-            results = await sender.SendAsync(messages, cancellationToken);
+            results = await sender.SendAsync(targets, data, cancellationToken);
         }
         catch (OperationCanceledException)
         {
@@ -169,19 +131,19 @@ public sealed class PushDispatchService(
                 "Push send failed for notification {NotificationId}: {ErrorType}",
                 notification.Id,
                 exception.GetType().Name);
-            results = messages
-                .Select(m => new PushSendResult(m.Token, false, false, "fcm_unavailable"))
+            results = targets
+                .Select(t => new PushSendResult(t.Endpoint, false, false, "push_unavailable"))
                 .ToList();
         }
 
-        var invalidTokens = results
-            .Where(r => r.TokenInvalid)
-            .Select(r => r.Token)
+        var invalidEndpoints = results
+            .Where(r => r.EndpointInvalid)
+            .Select(r => r.Endpoint)
             .ToList();
-        if (invalidTokens.Count > 0)
+        if (invalidEndpoints.Count > 0)
         {
             await db.PushRegistrations
-                .Where(p => invalidTokens.Contains(p.FcmToken) && p.InvalidatedAtUtc == null)
+                .Where(p => invalidEndpoints.Contains(p.Endpoint) && p.InvalidatedAtUtc == null)
                 .ExecuteUpdateAsync(
                     setters => setters.SetProperty(p => p.InvalidatedAtUtc, now),
                     cancellationToken);
@@ -195,9 +157,9 @@ public sealed class PushDispatchService(
         }
         else
         {
-            var allInvalid = results.Count > 0 && results.All(r => r.TokenInvalid);
+            var allInvalid = results.Count > 0 && results.All(r => r.EndpointInvalid);
             notification.FailureCode = allInvalid
-                ? "token_invalid"
+                ? "endpoint_invalid"
                 : NormalizeCode(results.FirstOrDefault()?.ErrorCode);
             notification.Status = allInvalid || notification.AttemptCount >= settings.MaxAttempts
                 ? NotificationStatus.Failed
@@ -217,7 +179,7 @@ public sealed class PushDispatchService(
     {
         if (string.IsNullOrWhiteSpace(code))
         {
-            return "fcm_unavailable";
+            return "push_unavailable";
         }
 
         var normalized = code.Replace("_", string.Empty).Replace("-", string.Empty).ToLowerInvariant();

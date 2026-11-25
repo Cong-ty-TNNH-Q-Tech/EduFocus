@@ -3,15 +3,15 @@ using Microsoft.EntityFrameworkCore;
 
 namespace EduFocus.Cloud.Tests;
 
-[Collection("Postgres")]
+[Collection("CloudDatabase")]
 public sealed class CloudDatabaseTests
 {
     [Fact]
-    public void Design_time_factory_uses_npgsql()
+    public void Design_time_factory_uses_sqlite()
     {
         using var db = new CloudDbContextFactory().CreateDbContext([]);
 
-        Assert.Equal("Npgsql.EntityFrameworkCore.PostgreSQL", db.Database.ProviderName);
+        Assert.Equal("Microsoft.EntityFrameworkCore.Sqlite", db.Database.ProviderName);
     }
 
     [Fact]
@@ -43,7 +43,7 @@ public sealed class CloudDatabaseTests
         }
 
         await using var db = new CloudDbContext(
-            new DbContextOptionsBuilder<CloudDbContext>().UseNpgsql(connectionString).Options);
+            new DbContextOptionsBuilder<CloudDbContext>().UseSqlite(connectionString).Options);
 
         Assert.True(await db.Database.CanConnectAsync());
     }

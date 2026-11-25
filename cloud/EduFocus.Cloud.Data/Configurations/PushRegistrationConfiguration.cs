@@ -13,7 +13,9 @@ internal sealed class PushRegistrationConfiguration : IEntityTypeConfiguration<P
         builder.HasKey(x => x.Id);
         builder.Property(x => x.Id).ValueGeneratedNever();
 
-        builder.Property(x => x.FcmToken).HasMaxLength(512).IsRequired();
+        builder.Property(x => x.Endpoint).HasMaxLength(1000).IsRequired();
+        builder.Property(x => x.P256dh).HasMaxLength(128).IsRequired();
+        builder.Property(x => x.Auth).HasMaxLength(64).IsRequired();
         builder.Property(x => x.Platform).HasMaxLength(32).IsRequired();
         builder.Property(x => x.UpdatedAtUtc).IsRequired();
 
@@ -23,6 +25,6 @@ internal sealed class PushRegistrationConfiguration : IEntityTypeConfiguration<P
             .OnDelete(DeleteBehavior.Cascade);
 
         builder.HasIndex(x => x.DeviceId).HasDatabaseName("IX_PushRegistrations_DeviceId");
-        builder.HasIndex(x => x.FcmToken).HasDatabaseName("IX_PushRegistrations_FcmToken");
+        builder.HasIndex(x => x.Endpoint).HasDatabaseName("IX_PushRegistrations_Endpoint");
     }
 }

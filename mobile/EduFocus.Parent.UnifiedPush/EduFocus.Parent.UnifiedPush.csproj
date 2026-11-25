@@ -1,0 +1,20 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0-android</TargetFramework>
+    <SupportedOSPlatformVersion>26.0</SupportedOSPlatformVersion>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <IsTrimmable>true</IsTrimmable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <AndroidMavenLibrary Include="org.unifiedpush.android:connector" Version="3.3.6" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Xamarin.Google.Crypto.Tink.Android" Version="1.24.0" JavaArtifact="com.google.crypto.tink:tink:1.24.0" />
+    <PackageReference Include="Xamarin.Kotlin.StdLib" Version="2.4.21" />
+  </ItemGroup>
+
+</Project>

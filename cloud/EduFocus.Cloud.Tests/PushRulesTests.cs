@@ -63,6 +63,13 @@ public sealed class PushRulesTests
     }
 
     [Fact]
+    public void Type_names_match_the_contract_values()
+    {
+        Assert.Equal("attention_alert", PushRules.TypeName(NotificationCategory.AttentionAlert));
+        Assert.Equal("blocked_attempt", PushRules.TypeName(NotificationCategory.BlockedAttempt));
+    }
+
+    [Fact]
     public void Push_payload_contains_only_type_date_and_notification_id()
     {
         var notification = new NotificationRecord
@@ -92,6 +99,7 @@ public sealed class PushRulesTests
             DailySummary = true,
             ProtectionOff = false,
             SecurityAlert = true,
+            BlockedAttempt = false,
             SecurityAlertBypassQuietHours = false,
         };
 
@@ -99,6 +107,7 @@ public sealed class PushRulesTests
         Assert.True(PushRules.IsEnabled(preferences, NotificationCategory.DailySummary));
         Assert.False(PushRules.IsEnabled(preferences, NotificationCategory.ProtectionOff));
         Assert.True(PushRules.IsEnabled(preferences, NotificationCategory.SecurityAlert));
+        Assert.False(PushRules.IsEnabled(preferences, NotificationCategory.BlockedAttempt));
         Assert.False(PushRules.BypassesQuietHours(preferences, NotificationCategory.SecurityAlert));
         Assert.False(PushRules.BypassesQuietHours(preferences, NotificationCategory.AttentionAlert));
     }
@@ -110,6 +119,7 @@ public sealed class PushRulesTests
         Assert.True(PushRules.IsEnabled(null, NotificationCategory.AttentionAlert));
         Assert.True(PushRules.IsEnabled(null, NotificationCategory.ProtectionOff));
         Assert.True(PushRules.IsEnabled(null, NotificationCategory.SecurityAlert));
+        Assert.True(PushRules.IsEnabled(null, NotificationCategory.BlockedAttempt));
         Assert.True(PushRules.BypassesQuietHours(null, NotificationCategory.SecurityAlert));
     }
 }

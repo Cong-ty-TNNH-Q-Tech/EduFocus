@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# Daily logical backup of the cloud PostgreSQL database.
-# Usage: ./scripts/backup.sh   (reads .env next to docker-compose.prod.yml)
+# Daily cold backup of the cloud SQLite database volume.
+# Usage: ./scripts/backup.sh   (reads .env next to docker-compose.yml)
 set -euo pipefail
 
 cd "$(dirname "${BASH_SOURCE[0]}")/.."
@@ -10,11 +10,9 @@ if [[ -f .env ]]; then
   set +a
 fi
 
-COMPOSE_FILE="${COMPOSE_FILE:-docker-compose.prod.yml}"
+COMPOSE_FILE="${COMPOSE_FILE:-docker-compose.yml}"
 BACKUP_DIR="${BACKUP_DIR:-backups}"
 BACKUP_KEEP="${BACKUP_KEEP:-7}"
-DB_NAME="${POSTGRES_DB:-edufocus_cloud}"
-DB_USER="${POSTGRES_USER:-edufocus}"
 STAMP="$(date -u +%Y%m%dT%H%M%SZ)"
 
 umask 077
@@ -25,40 +23,61 @@ if [[ -n "${BACKUP_PASSPHRASE:-}" ]] && ! command -v gpg >/dev/null 2>&1; then
   exit 1
 fi
 
-tmp_dump="$(mktemp "$BACKUP_DIR/.edufocus-$STAMP.dump.XXXXXX")"
+tmp_archive="$(mktemp "$BACKUP_DIR/.edufocus-$STAMP.tar.gz.XXXXXX")"
 tmp_gpg=""
+api_was_running=false
 cleanup() {
-  rm -f "${tmp_dump:-}" "${tmp_gpg:-}"
+  if [[ -n "${tmp_archive:-}" ]]; then
+    rm -f "$tmp_archive"
+  fi
+  if [[ -n "${tmp_gpg:-}" ]]; then
+    rm -f "$tmp_gpg"
+  fi
+  if [[ "$api_was_running" == true ]]; then
+    echo "Ensuring API service is started..." >&2
+    docker compose -f "$COMPOSE_FILE" start api >/dev/null 2>&1 || true
+  fi
 }
 trap cleanup EXIT
 
-docker compose -f "$COMPOSE_FILE" exec -T postgres \
-  pg_dump -U "$DB_USER" -d "$DB_NAME" --format=custom --no-owner > "$tmp_dump"
-if [[ ! -s "$tmp_dump" ]]; then
-  echo "pg_dump produced an empty backup file." >&2
+if docker compose -f "$COMPOSE_FILE" ps --status running --services 2>/dev/null | grep -qx api; then
+  api_was_running=true
+  echo "Stopping API for a consistent SQLite snapshot..."
+  docker compose -f "$COMPOSE_FILE" stop api >/dev/null
+fi
+
+docker compose -f "$COMPOSE_FILE" run --rm --no-deps -T \
+  --entrypoint sh api -c 'tar -czf - -C /data .' > "$tmp_archive"
+if [[ ! -s "$tmp_archive" ]]; then
+  echo "SQLite backup produced an empty archive." >&2
   exit 1
 fi
-chmod 600 "$tmp_dump"
+chmod 600 "$tmp_archive"
 
-dump_file="$BACKUP_DIR/edufocus-$STAMP.dump"
-if [[ -n "${BACKUP_PASSPHRASE:-}" ]]; then
-  tmp_gpg="$(mktemp "$BACKUP_DIR/.edufocus-$STAMP.dump.gpg.XXXXXX")"
-  gpg --batch --yes --pinentry-mode loopback --symmetric --cipher-algo AES256 \
-    --passphrase-fd 3 --output "$tmp_gpg" "$tmp_dump" 3<<<"$BACKUP_PASSPHRASE"
-  chmod 600 "$tmp_gpg"
-  dump_file="$dump_file.gpg"
-  mv "$tmp_gpg" "$dump_file"
-  tmp_gpg=""
-  rm -f "$tmp_dump"
-  tmp_dump=""
-else
-  mv "$tmp_dump" "$dump_file"
-  tmp_dump=""
+if [[ "$api_was_running" == true ]]; then
+  docker compose -f "$COMPOSE_FILE" start api >/dev/null
+  api_was_running=false
 fi
 
-mapfile -t backups < <(ls -1t "$BACKUP_DIR"/edufocus-*.dump* 2>/dev/null || true)
+backup_file="$BACKUP_DIR/edufocus-$STAMP.tar.gz"
+if [[ -n "${BACKUP_PASSPHRASE:-}" ]]; then
+  tmp_gpg="$(mktemp "$BACKUP_DIR/.edufocus-$STAMP.tar.gz.gpg.XXXXXX")"
+  gpg --batch --yes --pinentry-mode loopback --symmetric --cipher-algo AES256 \
+    --passphrase-fd 3 --output "$tmp_gpg" "$tmp_archive" 3<<<"$BACKUP_PASSPHRASE"
+  chmod 600 "$tmp_gpg"
+  backup_file="$backup_file.gpg"
+  mv "$tmp_gpg" "$backup_file"
+  tmp_gpg=""
+  rm -f "$tmp_archive"
+  tmp_archive=""
+else
+  mv "$tmp_archive" "$backup_file"
+  tmp_archive=""
+fi
+
+mapfile -t backups < <(ls -1t "$BACKUP_DIR"/edufocus-*.tar.gz* 2>/dev/null || true)
 if ((${#backups[@]} > BACKUP_KEEP)); then
   printf '%s\n' "${backups[@]:BACKUP_KEEP}" | xargs -r rm -f
 fi
 
-echo "Backup written: $dump_file"
+echo "Backup written: $backup_file"

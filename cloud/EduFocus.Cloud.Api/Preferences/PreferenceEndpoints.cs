@@ -111,6 +111,7 @@ public static class PreferenceEndpoints
             preferences.DailySummary,
             preferences.ProtectionOff,
             preferences.SecurityAlert,
+            preferences.BlockedAttempt,
             preferences.SecurityAlertBypassQuietHours,
             preferences.QuietStartMinutes,
             preferences.QuietEndMinutes,
@@ -122,6 +123,7 @@ public static class PreferenceEndpoints
         preferences.DailySummary = request.DailySummary;
         preferences.ProtectionOff = request.ProtectionOff;
         preferences.SecurityAlert = request.SecurityAlert;
+        preferences.BlockedAttempt = request.BlockedAttempt;
         preferences.SecurityAlertBypassQuietHours = request.SecurityAlertBypassQuietHours;
         preferences.QuietStartMinutes = request.QuietStartMinutes;
         preferences.QuietEndMinutes = request.QuietEndMinutes;
@@ -148,6 +150,7 @@ public static class PreferenceEndpoints
                     request.DailySummary,
                     request.ProtectionOff,
                     request.SecurityAlert,
+                    request.BlockedAttempt,
                     request.SecurityAlertBypassQuietHours,
                     request.QuietStartMinutes,
                     request.QuietEndMinutes,
@@ -176,6 +179,7 @@ public static class PreferenceEndpoints
                 6 * 60,
                 20 * 60 + 30,
                 familyTimeZoneId,
+                true,
                 true)
             : new NotificationPreferencesDto(
                 preferences.AttentionAlert,
@@ -186,5 +190,6 @@ public static class PreferenceEndpoints
                 preferences.QuietEndMinutes,
                 preferences.DailySummaryMinutes,
                 preferences.TimeZoneId,
-                preferences.SecurityAlertBypassQuietHours);
+                preferences.SecurityAlertBypassQuietHours,
+                preferences.BlockedAttempt);
 }

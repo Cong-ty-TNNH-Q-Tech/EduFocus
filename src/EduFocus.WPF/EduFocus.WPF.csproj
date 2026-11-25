@@ -34,10 +34,14 @@
     <PackageReference Include="QRCoder" Version="1.8.1" />
   </ItemGroup>
 
-  <!-- Debug builds pre-fill the local cloud API for pairing demos; Release
-       builds leave the URL empty so self-hosters type their own HTTPS endpoint. -->
-  <ItemGroup Condition="'$(Configuration)' == 'Debug'">
+  <!-- Debug builds pre-fill the local cloud API for pairing demos. Release builds
+       receive the production URL from the release workflow via CloudRelayBaseUrl;
+       self-hosters can leave it empty and type their own HTTPS endpoint. -->
+  <ItemGroup Condition="'$(Configuration)' == 'Debug' and '$(CloudRelayBaseUrl)' == ''">
     <AssemblyMetadata Include="CloudRelayBaseUrl" Value="http://localhost:5281" />
+  </ItemGroup>
+  <ItemGroup Condition="'$(CloudRelayBaseUrl)' != ''">
+    <AssemblyMetadata Include="CloudRelayBaseUrl" Value="$(CloudRelayBaseUrl)" />
   </ItemGroup>
 
   <ItemGroup>

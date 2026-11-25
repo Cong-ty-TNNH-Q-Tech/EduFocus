@@ -34,46 +34,18 @@ public sealed class CloudMaintenanceService(
     TimeProvider timeProvider,
     ILogger<CloudMaintenanceService> logger)
 {
-    public const long AdvisoryLockKey = 7_309_114_026;
-
     public async Task<MaintenanceResult> RunAsync(CancellationToken cancellationToken)
     {
-        await db.Database.OpenConnectionAsync(cancellationToken);
-        try
-        {
-            var acquired = await db.Database
-                .SqlQueryRaw<bool>(
-                    $"SELECT pg_try_advisory_lock({AdvisoryLockKey}) AS \"Value\"")
-                .SingleAsync(cancellationToken);
-            if (!acquired)
-            {
-                return MaintenanceResult.Skipped;
-            }
+        var now = timeProvider.GetUtcNow();
+        var summaryNotifications = await CreateDailySummaryNotificationsAsync(now, cancellationToken);
+        var deleted = await ApplyRetentionAsync(now, cancellationToken);
 
-            try
-            {
-                var now = timeProvider.GetUtcNow();
-                var summaryNotifications = await CreateDailySummaryNotificationsAsync(now, cancellationToken);
-                var deleted = await ApplyRetentionAsync(now, cancellationToken);
-
-                logger.LogInformation(
-                    "Cloud maintenance finished: {SummaryNotifications} summary notifications queued, " +
-                    "{DeletedTotal} expired rows deleted.",
-                    summaryNotifications,
-                    deleted.Total);
-                return new MaintenanceResult(true, summaryNotifications, deleted);
-            }
-            finally
-            {
-                await db.Database.ExecuteSqlRawAsync(
-                    $"SELECT pg_advisory_unlock({AdvisoryLockKey})",
-                    CancellationToken.None);
-            }
-        }
-        finally
-        {
-            await db.Database.CloseConnectionAsync();
-        }
+        logger.LogInformation(
+            "Cloud maintenance finished: {SummaryNotifications} summary notifications queued, " +
+            "{DeletedTotal} expired rows deleted.",
+            summaryNotifications,
+            deleted.Total);
+        return new MaintenanceResult(true, summaryNotifications, deleted);
     }
 
     private async Task<int> CreateDailySummaryNotificationsAsync(

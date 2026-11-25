@@ -169,7 +169,7 @@
                             <Label Text="{Binding NotificationStatusText}" Style="{StaticResource CaptionLabel}" />
                         </VerticalStackLayout>
                     </Grid>
-                    <Button Text="Bật thông báo"
+                    <Button Text="{Binding EnableNotificationsText}"
                             IsVisible="{Binding ShowEnableNotifications}"
                             Clicked="OnEnableNotificationsClicked"
                             Style="{StaticResource SecondaryButton}" />

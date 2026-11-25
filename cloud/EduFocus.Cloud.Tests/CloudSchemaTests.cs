@@ -4,7 +4,7 @@ using Microsoft.EntityFrameworkCore;
 
 namespace EduFocus.Cloud.Tests;
 
-[Collection("Postgres")]
+[Collection("CloudDatabase")]
 public sealed class CloudSchemaTests
 {
     private const string TestDbVariable = "EDUFOCUS_CLOUD_TEST_DB";
@@ -62,7 +62,9 @@ public sealed class CloudSchemaTests
         {
             Id = Guid.NewGuid(),
             DeviceId = mobile.Id,
-            FcmToken = "test-fcm-token",
+            Endpoint = "https://push.example.com/sub/test-device",
+            P256dh = "BAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+            Auth = "AAAAAAAAAAAAAAAAAAAAAA",
             Platform = "android",
             UpdatedAtUtc = now,
         });
@@ -255,8 +257,9 @@ public sealed class CloudSchemaTests
     private static async Task Assert_schema_has_no_disallowed_columns(CloudDbContext db)
     {
         var columns = await db.Database.SqlQueryRaw<string>(
-            "SELECT table_name || '.' || column_name AS \"Value\" FROM information_schema.columns " +
-            "WHERE table_schema = 'public'").ToListAsync();
+            "SELECT m.name || '.' || p.name AS \"Value\" " +
+            "FROM sqlite_master AS m JOIN pragma_table_info(m.name) AS p " +
+            "WHERE m.type = 'table' AND m.name NOT LIKE 'sqlite_%'").ToListAsync();
 
         Assert.NotEmpty(columns);
         string[] forbidden = ["url", "windowtitle", "domain", "screenshot", "image", "blob", "pin", "recoverycode"];
@@ -284,5 +287,5 @@ public sealed class CloudSchemaTests
         };
 
     private static CloudDbContext CreateContext(string connectionString) =>
-        new(new DbContextOptionsBuilder<CloudDbContext>().UseNpgsql(connectionString).Options);
+            new(new DbContextOptionsBuilder<CloudDbContext>().UseSqlite(connectionString).Options);
 }

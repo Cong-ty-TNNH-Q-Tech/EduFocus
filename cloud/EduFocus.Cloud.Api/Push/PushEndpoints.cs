@@ -1,18 +1,19 @@
 using System.Text.Json;
 using EduFocus.Cloud.Api.Auth;
 using EduFocus.Cloud.Api.Common;
+using EduFocus.Cloud.Api.Options;
 using EduFocus.Cloud.Api.RateLimiting;
 using EduFocus.Cloud.Contracts.Json;
 using EduFocus.Cloud.Contracts.Push;
 using EduFocus.Cloud.Data;
 using EduFocus.Cloud.Data.Entities;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Options;
 
 namespace EduFocus.Cloud.Api.Push;
 
 public static class PushEndpoints
 {
-    public const int MaxTokenLength = 512;
     public const int MaxPlatformLength = 32;
     public const int MaxAppVersionLength = 32;
 
@@ -21,13 +22,25 @@ public static class PushEndpoints
         endpoints.MapPost("/push/registrations", RegisterAsync)
             .RequireAuthorization()
             .RequireRateLimiting(RateLimitPolicies.Token);
+        endpoints.MapGet("/push/config", GetConfig)
+            .RequireAuthorization()
+            .RequireRateLimiting(RateLimitPolicies.Token);
 
         return endpoints;
+    }
+
+    private static IResult GetConfig(IOptions<PushOptions> options)
+    {
+        var pushOptions = options.Value;
+        return Results.Ok(new PushConfigResponse(
+            pushOptions.Enabled,
+            pushOptions.Enabled ? pushOptions.VapidPublicKey : null));
     }
 
     private static async Task<IResult> RegisterAsync(
         HttpContext httpContext,
         CloudDbContext db,
+        IOptions<PushOptions> options,
         CancellationToken cancellationToken)
     {
         if (httpContext.User.DeviceKind() != DeviceKind.Mobile)
@@ -46,12 +59,18 @@ public static class PushEndpoints
             return ApiResults.InvalidRequest("Body không đúng định dạng JSON.");
         }
 
-        var token = request?.FcmToken?.Trim();
-        if (string.IsNullOrWhiteSpace(token)
-            || token.Length > MaxTokenLength
-            || token.Any(char.IsControl))
+        var pushOptions = options.Value;
+        if (!PushEndpointValidator.TryValidateRegistration(
+                request?.Endpoint,
+                request?.P256dh,
+                request?.Auth,
+                pushOptions.AllowedEndpointHosts,
+                pushOptions.Enabled,
+                out var endpoint,
+                out var p256dh,
+                out var auth))
         {
-            return ApiResults.InvalidRequest("FCM token không hợp lệ.");
+            return ApiResults.InvalidRequest("Đăng ký thông báo không hợp lệ.");
         }
 
         var platform = request!.Platform?.Trim();
@@ -85,7 +104,7 @@ public static class PushEndpoints
         }
 
         await db.PushRegistrations
-            .Where(p => p.FcmToken == token
+            .Where(p => p.Endpoint == endpoint
                 && p.DeviceId != deviceId
                 && p.InvalidatedAtUtc == null)
             .ExecuteUpdateAsync(
@@ -104,7 +123,9 @@ public static class PushEndpoints
             db.PushRegistrations.Add(registration);
         }
 
-        registration.FcmToken = token;
+        registration.Endpoint = endpoint;
+        registration.P256dh = p256dh;
+        registration.Auth = auth;
         registration.Platform = platform;
         registration.UpdatedAtUtc = now;
         registration.InvalidatedAtUtc = null;

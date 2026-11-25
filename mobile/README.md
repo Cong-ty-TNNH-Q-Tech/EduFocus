@@ -13,7 +13,8 @@ không điều khiển từ xa bảo vệ của máy học sinh trong phase này
 ```text
 mobile/
 ├── EduFocus.Parent.slnx
-├── EduFocus.Parent.App/      # .NET MAUI net10.0-android: Shell, Views, SecureStorage, ZXing, FCM
+├── EduFocus.Parent.App/      # .NET MAUI net10.0-android: Shell, Views, SecureStorage, ZXing, push
+├── EduFocus.Parent.UnifiedPush/ # Android binding org.unifiedpush.android:connector
 ├── EduFocus.Parent.Core/     # net10.0: AppState, pairing, push, CloudApiClient, Presentation (test được)
 └── EduFocus.Parent.Tests/    # net10.0: xUnit cho parser, pairing, push, API client, view model và cache
 ```
@@ -55,7 +56,7 @@ View model của ba tab dữ liệu nằm trong `EduFocus.Parent.Core/Presentati
    xem chi tiết; hôm nay có nhãn "(hôm nay)". Deep link từ notification mở đúng ngày qua
    `//reports?date=yyyy-MM-dd`. Ngày hiển thị dd/MM, giờ theo múi giờ gia đình (IANA).
 3. **Thông báo** — lịch sử `GET /v1/notifications` phân trang 50, nút "Tải thêm" theo cursor; thẻ
-   tùy chọn `GET|PUT /v1/preferences` (4 công tắc cảnh báo, giờ yên tĩnh, giờ tổng kết ngày) chỉ
+   tùy chọn `GET|PUT /v1/preferences` (5 công tắc cảnh báo, giờ yên tĩnh, giờ tổng kết ngày) chỉ
    cho phép sửa trên thiết bị mobile.
 4. **Cài đặt** — tên máy tính đã ghép nối, **host** server (không hiện URL đầy đủ), thông tin điện
    thoại/phiên bản app; danh sách thiết bị trong gia đình `GET /v1/devices` với nút **Thu hồi**
@@ -67,30 +68,31 @@ không chứa token) kèm băng "Đang xem dữ liệu lưu lúc …" và nút t
 `SessionExpiryService`: xóa token/cache một lần duy nhất, quay về Welcome và báo "Phiên ghép nối đã
 hết"; ghép nối lại thành công sẽ reset trạng thái này.
 
-## Thông báo đẩy FCM (issue #91)
+## Thông báo đẩy UnifiedPush/ntfy (issue #91)
 
-1. Tạo Firebase project, thêm Android app `com.qtech.edufocus.parent`, tải `google-services.json`
-   đặt tại `mobile/EduFocus.Parent.App/google-services.json` — **không commit** (đã nằm trong
-   `.gitignore`). Không có tệp này, app vẫn build/chạy bình thường nhưng toàn bộ mã FCM bị loại
-   khỏi build (`FCM_ENABLED`).
-2. CI release giải mã secret `GOOGLE_SERVICES_JSON_BASE64` vào đúng đường dẫn trên trước khi build
-   (issue #93). Không đưa khóa/keystore thật vào repo.
-3. Sau khi ghép nối thành công, app giải thích và xin quyền `POST_NOTIFICATIONS` (Android 13+).
-   Từ chối quyền không chặn tính năng báo cáo; nút **Bật thông báo** trong Cài đặt xin lại quyền
-   hoặc mở Cài đặt hệ thống. Android 8–12 chỉ cần channel và công tắc thông báo của hệ thống.
-4. Token FCM đăng ký bằng `POST /v1/push/registrations` với token mobile. Token refresh được đăng
-   ký lại; lỗi mạng/5xx retry backoff 2s/5s (tối đa 3 lần), 429 tôn trọng `Retry-After`; 400/401/
-   403/404 dừng ngay. Token chỉ gửi trong body và lưu trong Preferences, không ghi log.
-5. Backend gửi **data-only** `{ type, date, notificationId }`. App tự dựng notification channel
-   `edufocus_alerts` (importance high), nội dung chung theo loại (không số liệu, không tên học
-   sinh/app/URL) và dedupe theo `notificationId` (tối đa 64 mã, hết hạn sau 7 ngày).
+1. Cài một **UnifiedPush distributor** trên điện thoại, ví dụ ntfy (F-Droid/GitHub release), và bật
+   tính năng UnifiedPush của distributor. App không nhúng Google Play Services/Firebase.
+2. Sau khi ghép nối, app gọi `GET /v1/push/config`. Nếu server trả `enabled=false`, app báo push
+   đang tắt; nếu bật, app lưu VAPID public key và mới đăng ký với distributor.
+3. Android 13+: app xin quyền `POST_NOTIFICATIONS` sau khi ghép nối. Từ chối quyền không chặn tính
+   năng báo cáo; nút **Bật thông báo** trong Cài đặt xin lại quyền hoặc mở Cài đặt hệ thống.
+   Android 8–12 chỉ cần channel và công tắc thông báo của hệ thống.
+4. App chọn distributor (nếu có nhiều), gọi `UnifiedPush.Register` kèm VAPID public key, rồi đăng
+   ký endpoint bằng `POST /v1/push/registrations` với `endpoint`, `p256dh`, `auth`, nền tảng
+   `android`. Lỗi mạng/5xx retry backoff 2s/5s (tối đa 3 lần), 429 tôn trọng `Retry-After`;
+   400/401/403/404 dừng ngay. Endpoint/khóa chỉ gửi trong body và không ghi log.
+5. Backend mã hóa payload `{ type, date, notificationId }` theo RFC8291 và gửi Web Push. App giải mã,
+   tự dựng notification channel `edufocus_alerts` (importance high), nội dung chung theo loại (không
+   số liệu, không tên học sinh/app/URL) và dedupe theo `notificationId` (tối đa 64 mã, hết hạn sau
+   7 ngày).
 6. Foreground: banner Toast trong app, không thêm notification hệ thống. Background/killed:
    notification hệ thống, bấm vào mở đúng tab:
-   `attention_alert`/`daily_summary` → Báo cáo ngày `date`; `protection_off`/`security_alert` →
-   Thông báo.
-7. Ngắt kết nối thu hồi device phía server (xóa push registration) và xóa token FCM cục bộ; không
-   dùng lại token cũ.
-8. Kiểm thử E2E cần Firebase project thật và thiết bị Android 8/12/14 — thực hiện ở issue #94.
+   `attention_alert`/`daily_summary`/`blocked_attempt` → Báo cáo ngày `date`;
+   `protection_off`/`security_alert` → Thông báo.
+7. Ngắt kết nối thu hồi device phía server (xóa push registration), gọi `UnifiedPush.Unregister` và
+   xóa endpoint/khóa cục bộ; token FCM cũ (nếu nâng cấp từ bản trước) cũng được xóa.
+8. Kiểm thử E2E cần backend bật VAPID + distributor ntfy và thiết bị Android 8/12/14 — thực hiện ở
+   issue #94. Không cần Firebase project hay `google-services.json`.
 
 ## Yêu cầu
 
@@ -111,10 +113,9 @@ dotnet test mobile/EduFocus.Parent.Tests/EduFocus.Parent.Tests.csproj -c Release
 dotnet build mobile/EduFocus.Parent.App/EduFocus.Parent.App.csproj -c Debug -f net10.0-android
 ```
 
-Nếu có `google-services.json` trong thư mục app (hoặc truyền
-`-p:GoogleServicesJsonFile=<đường dẫn>`), build tự bật FCM và tham chiếu
-`Plugin.Firebase.CloudMessaging`; ngược lại app build không có push nhưng vẫn đầy đủ tính năng
-ghép nối/báo cáo.
+Build luôn tham chiếu `EduFocus.Parent.UnifiedPush` (binding `org.unifiedpush.android:connector`
+3.3.6). Lần restore đầu cần mạng để tải AAR từ Maven; không cần `google-services.json` hay thư viện
+Firebase.
 
 APK Debug nằm trong `mobile/EduFocus.Parent.App/bin/Debug/net10.0-android/`. Cài lên thiết bị:
 
@@ -143,11 +144,14 @@ Sau đó thêm vào GitHub Secrets của repo:
 | `ANDROID_KEYSTORE_BASE64` | keystore mã hóa Base64 (`[Convert]::ToBase64String([IO.File]::ReadAllBytes("..."))` trên PowerShell) |
 | `ANDROID_KEYSTORE_PASSWORD` | mật khẩu keystore |
 | `ANDROID_KEY_ALIAS` | alias, ví dụ `edufocus` |
-| `ANDROID_KEY_PASSWORD` | mật khẩu key |
-| `GOOGLE_SERVICES_JSON_BASE64` | `google-services.json` thật, mã hóa Base64, để bản release có FCM |
+| `ANDROID_KEY_PASSWORD` | mật khẩu key; với PKCS12 dùng **cùng giá trị** với mật khẩu keystore |
 
 Workflow dừng ngay nếu thiếu bất kỳ secret nào và chỉ in **tên** secret, không in giá trị. Không
-commit keystore/mật khẩu; `*.jks`, `*.keystore` và `google-services.json` đã nằm trong `.gitignore`.
+commit keystore/mật khẩu; `*.jks` và `*.keystore` đã nằm trong `.gitignore`.
+
+Đặt biến repository `CLOUD_RELAY_BASE_URL` (Settings → Secrets and variables → Actions → Variables)
+thành URL HTTPS production, không có dấu `/` cuối. Workflow desktop và mobile truyền giá trị này qua
+`-p:CloudRelayBaseUrl`; app mobile dùng nó làm endpoint mặc định khi chưa có cấu hình/QR.
 
 ### Quy tắc version
 
@@ -162,7 +166,7 @@ commit keystore/mật khẩu; `*.jks`, `*.keystore` và `google-services.json` �
 version; mặc định dry-run, không đụng GitHub Release):
 
 1. Chạy unit test.
-2. Giải mã keystore và `google-services.json` vào thư mục tạm của runner.
+2. Giải mã keystore vào thư mục tạm của runner.
 3. `dotnet publish -f net10.0-android -c Release` với `AndroidKeyStore=true`,
    `ApplicationDisplayVersion`/`ApplicationVersion` lấy từ tag; xuất cả APK và AAB.
 4. `apksigner verify` và `aapt2 dump badging` kiểm tra package id, `versionName`, `versionCode`.
@@ -170,7 +174,7 @@ version; mặc định dry-run, không đụng GitHub Release):
 6. Upload artifact `edufocus-parent-android-<version>` và đính
    `EduFocus-Parent-Android-<version>.apk` (+ `.aab`) vào GitHub Release cùng tag (tạo release mới
    nếu chưa có).
-7. Xóa keystore và `google-services.json` khỏi runner trong bước `always()`.
+7. Xóa keystore khỏi runner trong bước `always()`.
 
 Build local tương đương:
 
@@ -200,8 +204,8 @@ APK ký nằm trong `publish/` với tên `com.qtech.edufocus.parent-Signed.apk`
   còn. **Không gỡ ứng dụng** nếu muốn giữ liên kết.
 - Trước khi gỡ hẳn, vào **Cài đặt → Ngắt kết nối** hoặc **Xóa dữ liệu trên cloud** (gõ `XÓA`) để
   thu hồi thiết bị và xóa dữ liệu gia đình trên cloud, sau đó mới gỡ app.
-- Bản Release chỉ dùng HTTPS; cần `google-services.json` thật để nhận push. Kiểm tra push trên
-  thiết bị sạch trước khi công bố (issue #94).
+- Bản Release chỉ dùng HTTPS; để nhận push, điện thoại cần cài/chọn distributor UnifiedPush (ví dụ
+  ntfy) và backend bật VAPID. Kiểm tra push trên thiết bị sạch trước khi công bố (issue #94).
 
 ## Thông số app
 
@@ -215,7 +219,8 @@ APK ký nằm trong `publish/` với tên `com.qtech.edufocus.parent-Signed.apk`
 
 ## Giới hạn đã biết
 
-- Push phụ thuộc FCM/Google và Google Play Services; độ trễ do mạng và chính sách pin Android.
+- Push phụ thuộc distributor UnifiedPush (ví dụ ntfy) và kết nối Web Push; độ trễ do mạng và chính
+  sách pin Android.
 - App chỉ xem dữ liệu desktop đã đồng bộ; mất mạng thì dùng cache 7 ngày, không có timeline chi tiết.
 - Không điều khiển từ xa: không sửa blocklist, không bật/tắt Protection, không xem màn hình.
 - Gỡ app không tự xóa dữ liệu cloud; phải dùng **Xóa dữ liệu trên cloud** trên app.
@@ -229,10 +234,10 @@ APK ký nằm trong `publish/` với tên `com.qtech.edufocus.parent-Signed.apk`
 - Parser QR là hàm thuần trong `EduFocus.Parent.Core` và có unit test cho scheme/version/URL/code.
 - Camera chỉ dùng khi người dùng bật quét QR; app không lưu ảnh. Deep link chỉ điền sẵn mã và cần
   người dùng xác nhận ghép nối.
-- Không commit `google-services.json`, keystore hay secret. FCM token chỉ nằm trong request đăng
+- Không commit keystore hay secret. UnifiedPush endpoint/khóa Web Push chỉ nằm trong request đăng
   ký và Preferences; không log, không hiển thị, không đưa vào thông báo/exception.
-- Notification chỉ chứa nội dung chung theo loại; mã loại/ngày/notificationId là dữ liệu duy nhất
-  đi qua FCM, không có dữ liệu học tập chi tiết.
+- Notification chỉ chứa nội dung chung theo loại; payload `{ type, date, notificationId }` được mã
+  hóa Web Push trước khi rời backend, distributor không đọc được nội dung học tập.
 
 ## CI
 

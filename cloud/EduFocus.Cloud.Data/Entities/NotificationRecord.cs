@@ -6,6 +6,7 @@ public enum NotificationCategory
     AttentionAlert,
     ProtectionOff,
     SecurityAlert,
+    BlockedAttempt,
 }
 
 public enum NotificationStatus

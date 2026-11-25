@@ -7,16 +7,18 @@ public sealed class RedactingEnricher : ILogEventEnricher
 {
     private static readonly HashSet<string> SensitiveNames = new(StringComparer.OrdinalIgnoreCase)
     {
+        "auth",
         "authorization",
         "code",
         "desktopToken",
-        "fcmToken",
+        "endpoint",
         "mobileToken",
+        "p256dh",
         "pairingCode",
         "password",
-        "pushToken",
         "secret",
         "token",
+        "vapidPrivateKey",
     };
 
     public void Enrich(LogEvent logEvent, ILogEventPropertyFactory propertyFactory)

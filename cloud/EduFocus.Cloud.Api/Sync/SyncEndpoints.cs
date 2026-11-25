@@ -1,3 +1,4 @@
+using System.Data.Common;
 using System.Text.Json;
 using EduFocus.Cloud.Api.Auth;
 using EduFocus.Cloud.Api.Common;
@@ -11,7 +12,6 @@ using EduFocus.Cloud.Data.Entities;
 using Microsoft.AspNetCore.Http.Features;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
-using Npgsql;
 using ContractEventType = EduFocus.Cloud.Contracts.Sync.SyncEventType;
 using EntityEventType = EduFocus.Cloud.Data.Entities.SyncEventType;
 
@@ -125,7 +125,7 @@ public static class SyncEndpoints
             await transaction.RollbackAsync(cancellationToken);
             return StoreUnavailable();
         }
-        catch (NpgsqlException)
+        catch (DbException)
         {
             await transaction.RollbackAsync(cancellationToken);
             return StoreUnavailable();
@@ -391,6 +391,9 @@ public static class SyncEndpoints
                 return true;
             case ContractEventType.SecurityAlert:
                 mapped = EntityEventType.SecurityAlert;
+                return true;
+            case ContractEventType.BlockedAttempt:
+                mapped = EntityEventType.BlockedAttempt;
                 return true;
             default:
                 mapped = default;

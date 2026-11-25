@@ -13,6 +13,7 @@ public sealed partial class SettingsViewModel(
     ParentSettingsStore settings,
     PushPermissionService permission,
     PushCoordinator coordinator,
+    UnifiedPushManager unifiedPush,
     IFamilyAdminService admin,
     ParentDataCache cache,
     SessionExpiryService session) : ObservableObject
@@ -27,6 +28,7 @@ public sealed partial class SettingsViewModel(
     [ObservableProperty] private string _appVersionText = string.Empty;
     [ObservableProperty] private string _connectionStatusText = string.Empty;
     [ObservableProperty] private bool _notificationsEnabled;
+    [ObservableProperty] private bool _pushDistributorReady;
     [ObservableProperty] private IReadOnlyList<SettingsDeviceItem> _devices = [];
     [ObservableProperty] private bool _hasDevices;
     [ObservableProperty] private string _devicesStatus = string.Empty;
@@ -39,13 +41,27 @@ public sealed partial class SettingsViewModel(
 
     public bool ShowWelcomeHint => !IsLinked;
 
-    public bool ShowEnableNotifications => IsLinked && !NotificationsEnabled;
+    public bool ShowEnableNotifications =>
+        IsLinked && (!NotificationsEnabled || !PushDistributorReady);
+
+    public string EnableNotificationsText => NotificationsEnabled && !PushDistributorReady
+        ? "Chọn ứng dụng thông báo"
+        : "Bật thông báo";
 
     public bool HasDevicesStatus => DevicesStatus.Length > 0;
 
-    public string NotificationStatusText => NotificationsEnabled
-        ? "Thông báo đang bật. Bạn sẽ nhận cảnh báo và báo cáo trên điện thoại."
-        : "Thông báo đang tắt. Ứng dụng vẫn xem được báo cáo khi mở.";
+    public string NotificationStatusText
+    {
+        get
+        {
+            if (!NotificationsEnabled)
+                return "Thông báo đang tắt. Ứng dụng vẫn xem được báo cáo khi mở.";
+
+            return PushDistributorReady
+                ? "Thông báo đang bật. Bạn sẽ nhận cảnh báo và báo cáo trên điện thoại."
+                : "Quyền thông báo đã bật nhưng chưa chọn ứng dụng phân phối UnifiedPush.";
+        }
+    }
 
     partial void OnIsBusyChanged(bool value) => OnPropertyChanged(nameof(IsNotBusy));
 
@@ -58,6 +74,14 @@ public sealed partial class SettingsViewModel(
     partial void OnNotificationsEnabledChanged(bool value)
     {
         OnPropertyChanged(nameof(ShowEnableNotifications));
+        OnPropertyChanged(nameof(EnableNotificationsText));
+        OnPropertyChanged(nameof(NotificationStatusText));
+    }
+
+    partial void OnPushDistributorReadyChanged(bool value)
+    {
+        OnPropertyChanged(nameof(ShowEnableNotifications));
+        OnPropertyChanged(nameof(EnableNotificationsText));
         OnPropertyChanged(nameof(NotificationStatusText));
     }
 
@@ -77,6 +101,7 @@ public sealed partial class SettingsViewModel(
         AppVersionText = AppInfo.Current.VersionString;
         ConnectionStatusText = IsLinked ? "Đã kết nối cloud" : "Chưa ghép nối";
         NotificationsEnabled = permission.IsGranted;
+        PushDistributorReady = unifiedPush.GetAvailability() == UnifiedPushAvailability.Ready;
 
         if (!IsLinked)
         {
@@ -88,11 +113,9 @@ public sealed partial class SettingsViewModel(
 
     public async Task<bool> EnableNotificationsAsync(Page page)
     {
-        var granted = await coordinator.RequestPermissionAsync(page);
+        var granted = await coordinator.EnableNotificationsAsync(page);
         NotificationsEnabled = permission.IsGranted;
-        if (NotificationsEnabled)
-            _ = coordinator.SyncTokenAsync(force: true);
-
+        PushDistributorReady = unifiedPush.GetAvailability() == UnifiedPushAvailability.Ready;
         return granted;
     }
 
@@ -189,6 +212,7 @@ public sealed partial class SettingsViewModel(
         try
         {
             await pairing.UnlinkAsync();
+            coordinator.OnUnlinked();
             cache.Clear();
             Refresh();
             Unlinked?.Invoke(this, EventArgs.Empty);

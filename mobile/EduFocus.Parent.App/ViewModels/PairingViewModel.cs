@@ -42,7 +42,7 @@ public sealed partial class PairingViewModel : ObservableObject
         _pairing = pairing ?? throw new ArgumentNullException(nameof(pairing));
         _appState = appState ?? throw new ArgumentNullException(nameof(appState));
         _settings = settings ?? throw new ArgumentNullException(nameof(settings));
-        _cloudBaseUrl = settings.CloudBaseUrl ?? appState.CloudBaseUrl ?? string.Empty;
+        _cloudBaseUrl = settings.CloudBaseUrl ?? appState.CloudBaseUrl ?? BuildConfig.CloudRelayBaseUrl;
     }
 
     public event EventHandler? PairingSucceeded;
@@ -86,7 +86,7 @@ public sealed partial class PairingViewModel : ObservableObject
     {
         IsAlreadyLinked = _appState.IsLinked;
         if (string.IsNullOrWhiteSpace(CloudBaseUrl))
-            CloudBaseUrl = _settings.CloudBaseUrl ?? _appState.CloudBaseUrl ?? string.Empty;
+            CloudBaseUrl = _settings.CloudBaseUrl ?? _appState.CloudBaseUrl ?? BuildConfig.CloudRelayBaseUrl;
 
         if (_prefillCode is null)
         {

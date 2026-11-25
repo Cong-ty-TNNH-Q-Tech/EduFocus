@@ -16,6 +16,9 @@ public enum NotificationKind
 
     [JsonStringEnumMemberName("security_alert")]
     SecurityAlert,
+
+    [JsonStringEnumMemberName("blocked_attempt")]
+    BlockedAttempt,
 }
 
 [JsonConverter(typeof(JsonStringEnumConverter<NotificationDeliveryStatus>))]

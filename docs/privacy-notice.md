@@ -1,6 +1,6 @@
 # Thông báo quyền riêng tư — EduFocus
 
-Phiên bản 2.0 · Ngày hiệu lực: 2026-11-17 · Áp dụng cho EduFocus 2.1.0 (Phase 8) trở đi
+Phiên bản 2.1 · Ngày hiệu lực: 2026-11-25 · Áp dụng cho EduFocus 2.1.0 (Phase 8) trở đi
 
 EduFocus là ứng dụng học tập chạy trên máy tính Windows, do phụ huynh thiết lập và quản lý.
 Thông báo này giải thích EduFocus xử lý dữ liệu gì, vì sao, lưu ở đâu, lưu bao lâu, ai có thể
@@ -9,18 +9,18 @@ trong lần thiết lập đầu tiên và luôn mở lại được từ Parent
 
 Từ phiên bản 2.1.0, EduFocus có thêm **cloud relay tùy chọn** để gửi thông báo đẩy tới điện thoại
 phụ huynh. Cloud **mặc định tắt**; nếu phụ huynh không ghép nối điện thoại, ứng dụng hoạt động hoàn
-toàn cục bộ như bản 2.0.0. Khi bật, chỉ bốn loại sự kiện tổng hợp rời khỏi máy (mục 6.1).
+toàn cục bộ như bản 2.0.0. Khi bật, chỉ năm loại sự kiện tổng hợp rời khỏi máy (mục 6.1).
 
 ## 1. Tóm tắt
 
 - Mặc định, EduFocus xử lý dữ liệu **trên chính máy tính đã cài đặt** và không gửi dữ liệu học tập ra
-  ngoài. Phụ huynh có thể **tự bật** cloud relay để nhận thông báo trên điện thoại; khi bật, chỉ bốn
+  ngoài. Phụ huynh có thể **tự bật** cloud relay để nhận thông báo trên điện thoại; khi bật, chỉ năm
   loại sự kiện tổng hợp được gửi tới backend (mục 6.1).
 - **Không lưu ảnh, video, âm thanh hoặc khung hình webcam.** Khung hình camera chỉ tồn tại trong
   bộ nhớ trong thời gian ngắn để ước lượng trạng thái tập trung rồi bị xóa.
 - **Không nhận diện danh tính, không phân tích cảm xúc, không tạo dữ liệu sinh trắc học.**
-- **Không telemetry, không quảng cáo, không bán dữ liệu.** Khi cloud bật, Firebase Cloud Messaging
-  (FCM) của Google chỉ nhận metadata giao nhận và nội dung thông báo chung (mục 7.1).
+- **Không telemetry, không quảng cáo, không bán dữ liệu.** Khi cloud bật, distributor UnifiedPush
+  (ví dụ ntfy) chỉ nhận endpoint, metadata giao nhận và payload đã mã hóa (mục 7.1).
 - Kiểm tra cập nhật mặc định **tắt**; khi phụ huynh bật, ứng dụng chỉ gọi GitHub Releases API và
   GitHub có thể thấy địa chỉ IP của máy.
 - Để hiển thị trang chặn trên cả trang HTTPS, khi bảo vệ đang bật EduFocus cài một **chứng chỉ gốc
@@ -82,12 +82,14 @@ tại khi phụ huynh chủ động bật:
 - **Khóa mã hóa DB:** 32 byte ngẫu nhiên dùng để mã hóa cơ sở dữ liệu, được Windows DPAPI bảo vệ
   trong `%ProgramData%\EduFocus\edufocus.key`. Khóa không phải PIN/mật khẩu, không nằm dạng văn bản
   thường và không dùng được trên máy khác.
-- **Dữ liệu cloud (tùy chọn, chỉ khi bật):** bốn loại sự kiện tổng hợp (`daily_summary` gồm phút học,
+- **Dữ liệu cloud (tùy chọn, chỉ khi bật):** năm loại sự kiện tổng hợp (`daily_summary` gồm phút học,
   phút tập trung ước lượng, số lần xao nhãng, số lần bị chặn, độ phủ camera, phút lớp trực tuyến;
   `attention_alert` gồm loại và thời lượng; `protection_off` gồm thời điểm/lý do; `security_alert` gồm
-  loại và thời điểm), tên thiết bị, nền tảng, token FCM, token truy cập cloud (server chỉ lưu hash),
-  preference thông báo và log thông báo đã phát. Không gửi URL, tên miền, tiêu đề cửa sổ, tên ứng
-  dụng, mẫu hoạt động thô, dữ liệu camera, PIN, mã khôi phục hay ghi chú phụ huynh.
+  loại và thời điểm; `blocked_attempt` chỉ gồm ngày địa phương), tên thiết bị, nền tảng, UnifiedPush
+  endpoint và khóa công khai Web Push, token truy cập cloud (server chỉ lưu hash), preference thông báo
+  và log thông báo đã phát. Không gửi
+  URL, tên miền, tiêu đề cửa sổ, tên ứng dụng, mẫu hoạt động thô, dữ liệu camera, PIN, mã khôi phục hay
+  ghi chú phụ huynh.
 
 EduFocus **không** thu thập: vị trí, danh bạ, lịch, email, nội dung clipboard, nội dung trang web,
 lịch sử duyệt web đầy đủ, âm thanh micro, dữ liệu sinh trắc học, hay thông tin nhận dạng khuôn mặt.
@@ -134,9 +136,9 @@ dữ liệu cá nhân (DPIA) được lập riêng và phải được tư vấn
 thương mại.
 
 Cloud relay là **tùy chọn và dựa trên sự đồng ý riêng** của phụ huynh tại thời điểm ghép nối; phụ
-huynh có thể rút lại bất kỳ lúc nào (mục 9). Vì FCM do Google vận hành, việc bật thông báo đẩy có
-thể liên quan đến chuyển dữ liệu/xử lý ngoài lãnh thổ Việt Nam; đánh giá chi tiết và biện pháp bảo
-vệ nằm trong [dpia.md](./dpia.md).
+huynh có thể rút lại bất kỳ lúc nào (mục 9). Vì distributor UnifiedPush/ntfy có thể do bên thứ ba
+vận hành, việc bật thông báo đẩy có thể liên quan đến xử lý dữ liệu ngoài thiết bị; đánh giá chi tiết
+và biện pháp bảo vệ nằm trong [dpia.md](./dpia.md).
 
 ## 6. Lưu trữ và bảo vệ
 
@@ -166,15 +168,16 @@ vệ nằm trong [dpia.md](./dpia.md).
 ### 6.1. Cloud relay tùy chọn (Phase 8)
 
 - Khi phụ huynh ghép nối điện thoại, desktop gửi sự kiện tổng hợp qua HTTPS tới backend EduFocus
-  (do nhà phát triển vận hành hoặc do phụ huynh/tổ chức tự host). Dữ liệu cloud nằm trong PostgreSQL
+  (do nhà phát triển vận hành hoặc do phụ huynh/tổ chức tự host). Dữ liệu cloud nằm trong SQLite
   của backend, không nằm trên máy tính học sinh.
 - Token truy cập cloud (`efd_` cho desktop, `efm_` cho mobile) là chuỗi ngẫu nhiên 32 byte; server chỉ
   lưu SHA-256, có scope tối thiểu và có thể thu hồi/xoay vòng. Token lưu trên desktop được DPAPI bảo
   vệ; trên Android lưu trong secure storage của hệ điều hành. Token không bao giờ được ghi log.
-- Token FCM của điện thoại được lưu để gửi thông báo; token này không chứa dữ liệu học tập và bị vô
-  hiệu khi phụ huynh xóa thiết bị/gia đình hoặc khi FCM báo không hợp lệ.
-- Nội dung push là **data-only** với mã loại và ngày; app mobile tự dựng câu tiếng Việt chung. Chi
-  tiết học tập chỉ được tải qua API khi phụ huynh mở app.
+- Endpoint UnifiedPush và khóa công khai Web Push (`p256dh`, `auth`) của điện thoại được lưu để gửi
+  thông báo; dữ liệu này không chứa nội dung học tập và bị vô hiệu khi phụ huynh xóa thiết bị/gia đình
+  hoặc khi distributor báo endpoint không còn hợp lệ.
+- Nội dung push được mã hóa Web Push (RFC8291) và chỉ gồm mã loại, ngày và mã thông báo; app mobile
+  tự dựng câu tiếng Việt chung. Chi tiết học tập chỉ được tải qua API khi phụ huynh mở app.
 - Backend ghi audit thao tác ghép nối/thu hồi/xóa nhưng không lưu PIN, mã khôi phục, token thô hay
   nội dung học tập chi tiết.
 - Backend có thể tự host: khi đó chủ máy chủ tự chịu trách nhiệm TLS, backup, retention và nghĩa vụ
@@ -196,21 +199,23 @@ vệ nằm trong [dpia.md](./dpia.md).
 - Browser extension chỉ trao đổi với tiến trình EduFocus qua named pipe/native messaging cục bộ;
   không gửi URL, lịch sử duyệt web hay dữ liệu học tập ra ngoài máy.
 
-### 7.1. Cloud relay và FCM (tùy chọn)
+### 7.1. Cloud relay và UnifiedPush/ntfy (tùy chọn)
 
 - Khi phụ huynh bật cloud, dữ liệu ở mục 6.1 được gửi qua HTTPS tới backend EduFocus. Nhà phát triển
   không dùng dữ liệu này cho quảng cáo, huấn luyện mô hình hay mục đích khác ngoài vận hành thông báo
   và báo cáo tóm tắt cho chính gia đình.
-- Backend dùng **Firebase Cloud Messaging (FCM)** của Google làm kênh vận chuyển push. Google xử lý
-  token thiết bị, địa chỉ IP và metadata giao nhận; nội dung message chỉ gồm mã loại, ngày và mã thông
-  báo, không chứa chi tiết học tập. Việc này có thể đồng nghĩa xử lý dữ liệu ngoài Việt Nam.
+- Backend dùng **Web Push (RFC8030)** qua distributor UnifiedPush, ví dụ ntfy. Distributor/ntfy xử lý
+  endpoint thiết bị, địa chỉ IP và metadata giao nhận; nội dung message được mã hóa RFC8291 bằng khóa
+  do app tạo, chỉ gồm mã loại, ngày và mã thông báo, không chứa chi tiết học tập. Tùy distributor, dữ
+  liệu có thể được xử lý ngoài Việt Nam; phụ huynh có thể chọn self-host ntfy.
 - Không có nhà cung cấp quảng cáo, analytics hay dịch vụ bên thứ ba nào khác tham gia khi cloud bật.
-- Nếu phụ huynh tự host backend, dữ liệu cloud nằm trên hạ tầng do phụ huynh/tổ chức chọn; nhà phát
-  triển không có quyền truy cập.
+- Nếu phụ huynh tự host backend hoặc ntfy, dữ liệu cloud/push nằm trên hạ tầng do phụ huynh/tổ chức
+  chọn; nhà phát triển không có quyền truy cập.
 - Phụ huynh có thể ngắt kết nối hoặc xóa dữ liệu cloud bất kỳ lúc nào (mục 9–10).
-- **Giới hạn đã biết:** push phụ thuộc FCM/Google và Google Play Services; độ trễ do mạng và chính
-  sách tiết kiệm pin của Android. App mobile chỉ xem dữ liệu desktop đã đồng bộ (không có timeline chi
-  tiết) và không điều khiển từ xa (không sửa blocklist, không bật/tắt bảo vệ). Gỡ ứng dụng không tự
+- **Giới hạn đã biết:** push phụ thuộc distributor UnifiedPush (ví dụ ntfy) và kết nối Web Push; độ
+  trễ do mạng và chính sách tiết kiệm pin của Android. App mobile chỉ xem dữ liệu desktop đã đồng bộ
+  (không có timeline chi tiết) và không điều khiển từ xa (không sửa blocklist, không bật/tắt bảo vệ).
+  Gỡ ứng dụng không tự
   xóa dữ liệu cloud; phụ huynh phải dùng "Xóa dữ liệu trên cloud" trên app mobile.
 
 ## 8. Thời hạn lưu
@@ -290,8 +295,8 @@ trình, gồm thu hồi token bị ảnh hưởng và thông báo cho phụ huyn
 ## 13. Thay đổi thông báo
 
 Khi dữ liệu, mục đích hoặc cách chia sẻ thay đổi, EduFocus cập nhật thông báo này, tăng số phiên
-bản và hiển thị lại trong onboarding/bản phát hành tương ứng. Bản 2.0 (2026-11-17) bổ sung cloud
-relay tùy chọn và FCM; phụ huynh phải xác nhận lại thông báo trước khi bật cloud lần đầu. Bản đang
+bản và hiển thị lại trong onboarding/bản phát hành tương ứng. Bản 2.1 (2026-11-25) thay FCM bằng
+UnifiedPush/ntfy; phụ huynh phải xác nhận lại thông báo trước khi bật cloud lần đầu. Bản đang
 áp dụng được cài kèm tại `docs/privacy-notice.md` trong thư mục cài đặt và trong ứng dụng tại mục
 "Thông báo quyền riêng tư".
 

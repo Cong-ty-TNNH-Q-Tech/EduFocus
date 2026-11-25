@@ -10,4 +10,13 @@ namespace EduFocus.Ports.Outbound.Persistence;
 public interface IBlockedAttemptRepository
 {
     Task AddAsync(BlockedAttempt attempt, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Returns the newest insertion timestamp for a web (domain or URL) block
+    /// after <paramref name="afterUtc"/>, or null when nothing is newer. Used by
+    /// the cloud producer so application blocks never raise a web alert.
+    /// </summary>
+    Task<DateTime?> GetLatestWebAttemptCreatedAtUtcAsync(
+        DateTime afterUtc,
+        CancellationToken cancellationToken = default);
 }

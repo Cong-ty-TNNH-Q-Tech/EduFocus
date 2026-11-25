@@ -7,7 +7,7 @@ và dự án tuân theo [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ---
 
-## [Unreleased] — Phase 8
+## [2.1.0] - 2026-11-25
 
 ### Added (Backlog — #21, #23)
 
@@ -20,17 +20,34 @@ và dự án tuân theo [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
   hợp cục bộ thành WAV 16-bit mono 22,05 kHz có crossfade tại điểm lặp, lưu trong
   `%LocalAppData%\EduFocus\focus-audio`; không tải mạng, không thêm thư viện âm thanh.
 
+### Changed (Push — UnifiedPush/Web Push)
+
+- **Bỏ Firebase/FCM:** backend dùng Web Push RFC8030 + mã hóa RFC8291 với VAPID, gửi qua UnifiedPush
+  distributor (ví dụ ntfy); Android không còn Google Play Services/Firebase SDK. Endpoint đăng ký phải
+  HTTPS, thuộc allowlist, tối đa 1000 byte; `p256dh`/`auth` được kiểm tra trước khi lưu.
+- Thêm `GET /v1/push/config` trả VAPID public key và trạng thái push; app mobile lưu key, chọn
+  distributor và đăng ký endpoint. Migration `ReplaceFcmWithUnifiedPush` thay `FcmToken` bằng
+  `Endpoint`/`P256dh`/`Auth`; cấu hình `PUSH_VAPID_*`/`PUSH_ALLOWED_ENDPOINT_HOSTS` thay service
+  account; CI mobile release không còn giải mã `google-services.json`.
+
+### Changed (Cloud backend — SQLite)
+
+- Backend cloud chuyển từ PostgreSQL sang **SQLite** một file trong volume Docker; chỉ còn một
+  `cloud/docker-compose.yml` (API + Caddy qua profile `tls`), migration `InitialCloudSchema` viết lại
+  cho SQLite, backup/restore chuyển sang snapshot volume và CI bỏ service PostgreSQL.
+- SQLite chỉ phù hợp một instance API; không scale ngang nhiều replica cùng một file.
+
 ### Added (Cloud backend — #79–#85)
 
-- ASP.NET Core .NET 10 API + PostgreSQL 16: schema `Families`/`Devices`/`DeviceTokens`/
+- ASP.NET Core .NET 10 API + SQLite: schema `Families`/`Devices`/`DeviceTokens`/
   `PairingSessions`/`SyncEvents`/`DailySummaries`/`Notifications`/`PushRegistrations`/
   `NotificationPreferences`, migration `InitialCloudSchema`; ghép nối thiết bị (QR hoặc mã 8 ký tự,
   lưu hash, hết hạn) và bearer token `efd_`/`efm_` với scope tối thiểu, thu hồi/xoay vòng.
 - `POST /v1/sync/events` idempotent theo `ClientEventId`, giới hạn batch/quyền và rate limit; chỉ nhận
   bốn loại sự kiện tổng hợp. API đọc `GET /v1/reports/daily`, `GET /v1/notifications`,
   `GET|PUT /v1/preferences`, `GET /v1/devices`, `DELETE /v1/devices/{id}`, `DELETE /v1/family`.
-- FCM HTTP v1 **data-only**, job gửi theo preference/quiet hours/múi giờ gia đình, dedupe và xử lý
-  token invalid; retention job; Docker/Caddy deploy, backup/restore và runbook staging.
+- Web Push mã hóa RFC8291 qua UnifiedPush/ntfy, job gửi theo preference/quiet hours/múi giờ gia đình,
+  dedupe và xử lý endpoint invalid; retention job; Docker/Caddy deploy, backup/restore và runbook staging.
 
 ### Added (Desktop — #86–#89)
 
@@ -39,11 +56,20 @@ và dự án tuân theo [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
   `attention_alert`, `protection_off`, `security_alert`); UI Parent Mode ghép nối QR/mã, quản lý
   thiết bị và ngắt kết nối. Cloud tắt mặc định; Protection/camera/heartbeat không phụ thuộc cloud.
 
+### Added (Cảnh báo truy cập web bị chặn)
+
+- **Thông báo phụ huynh khi học sinh mở trang web bị chặn:** desktop theo dõi nhật ký
+  `BlockedAttempts` (chỉ domain/URL, bỏ qua chặn ứng dụng) và gửi một sự kiện tổng hợp
+  `blocked_attempt` tối đa mỗi 15 phút; payload chỉ có ngày địa phương, không chứa domain/URL/tiêu đề
+  cửa sổ. Cloud kiểm tra, dedupe theo cửa sổ 15 phút và đẩy Web Push qua UnifiedPush/ntfy; app phụ huynh thêm mục
+  "Truy cập bị chặn", mở báo cáo khi bấm và tùy chọn bật/tắt riêng. Tôn trọng giờ yên tĩnh; lần chạy
+  đầu không gửi bù sự kiện cũ.
+
 ### Added (Mobile — #80, #90–#92)
 
 - App .NET MAUI Android `com.qtech.edufocus.parent`: Welcome và ghép nối QR/mã thủ công, deep link chỉ
-  điền sẵn mã, xử lý mã hết hạn/rate limit; FCM receiver data-only, đăng ký token và mở đúng tab khi
-  bấm thông báo; bốn màn hình Tổng quan, Báo cáo 7 ngày, Thông báo (lịch sử + tùy chọn/quiet hours),
+  điền sẵn mã, xử lý mã hết hạn/rate limit; UnifiedPush receiver nhận payload mã hóa, đăng ký endpoint
+  và mở đúng tab khi bấm thông báo; bốn màn hình Tổng quan, Báo cáo 7 ngày, Thông báo (lịch sử + tùy chọn/quiet hours),
   Cài đặt (thiết bị, thu hồi, xóa cloud bằng `XÓA`).
 - Cache JSON tổng hợp TTL 7 ngày khi offline; định dạng tiếng Việt (thời lượng, phần trăm, ngày, múi
   giờ); `SessionExpiryService` xử lý 401 một lần và reset sau khi ghép nối lại.
@@ -61,17 +87,17 @@ và dự án tuân theo [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
   hướng dẫn cài APK.
 - [docs/phase8-e2e-checklist.md](./docs/phase8-e2e-checklist.md): ma trận E2E 7 nhóm, kiểm tra
   dữ liệu/quyền riêng tư, demo script 10 phút và biên bản ký duyệt.
-- 148 unit test mobile (parser, pairing, push, API client, view model, cache, 401) và bộ test backend.
+- 173 unit test mobile (parser, pairing, push, API client, view model, cache, 401) và bộ test backend.
 
 ### Added (Tài liệu cloud relay và quyền riêng tư)
 
-- ADR-20 mô tả cloud relay tùy chọn (desktop outbox → ASP.NET Core + PostgreSQL → FCM), nguyên tắc
+- ADR-20 mô tả cloud relay tùy chọn (desktop outbox → ASP.NET Core + SQLite → Web Push/UnifiedPush), nguyên tắc
   least-data, ghép nối/token, retention và các đánh đổi; kèm [docs/cloud-backend.md](./docs/cloud-backend.md)
-  với API v1, schema PostgreSQL và quy trình vận hành/tự host.
+  với API v1, schema SQLite và quy trình vận hành/tự host.
 - Use cases UC15–UC18 (ghép nối điện thoại, nhận thông báo đẩy, xem báo cáo tóm tắt, ngắt/xóa dữ liệu
   cloud) và business rules BR-31..BR-35 trong BA document.
-- Privacy notice bản 2.0 (hiệu lực 2026-11-17) bổ sung mục cloud tùy chọn, FCM/Google, retention cloud,
-  quyền rút lại/xóa; DPIA bản 2.0 bổ sung data map, rủi ro và câu hỏi pháp lý cho cloud.
+- Privacy notice bản 2.1 (hiệu lực 2026-11-25) bổ sung mục cloud tùy chọn, UnifiedPush/ntfy, retention
+  cloud, quyền rút lại/xóa; DPIA bản 2.1 bổ sung data map, rủi ro và câu hỏi pháp lý cho cloud.
 - README cập nhật tính năng, nền tảng Android, tech stack và roadmap Phase 8.
 
 ### Breaking changes

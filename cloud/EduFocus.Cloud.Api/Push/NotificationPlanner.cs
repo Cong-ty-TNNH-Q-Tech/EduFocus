@@ -21,6 +21,7 @@ public static class NotificationPlanner
             SyncEventType.AttentionAlert => Attention(validated.AttentionAlert!, occurredAtUtc),
             SyncEventType.ProtectionOff => ProtectionOff(validated.ProtectionOff!, occurredAtUtc),
             SyncEventType.SecurityAlert => SecurityAlert(validated.SecurityAlert!, occurredAtUtc),
+            SyncEventType.BlockedAttempt => BlockedAttempt(validated.BlockedAttempt!, occurredAtUtc),
             _ => null,
         };
 
@@ -56,6 +57,17 @@ public static class NotificationPlanner
         return new(
             NotificationCategory.SecurityAlert,
             Truncate($"security_alert:{ContractName(payload.Kind)}:{window:yyyyMMddHH}"),
+            payload.LocalDate);
+    }
+
+    private static PlannedNotification BlockedAttempt(
+        BlockedAttemptPayload payload,
+        DateTimeOffset occurredAtUtc)
+    {
+        var window = FloorUtc(occurredAtUtc, TimeSpan.FromMinutes(AttentionWindowMinutes));
+        return new(
+            NotificationCategory.BlockedAttempt,
+            Truncate($"blocked_attempt:{window:yyyyMMddHHmm}"),
             payload.LocalDate);
     }
 

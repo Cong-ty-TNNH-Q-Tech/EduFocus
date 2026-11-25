@@ -100,14 +100,16 @@ Tham chiếu: [release-process.md](./release-process.md),
 
 - [ ] `mobile-release.yml` xanh với tag `v...`; `versionName`/`versionCode` khớp quy tắc trong
       [mobile/README.md](../mobile/README.md) và tag; `versionCode` không dùng lại.
+- [ ] Biến repository `CLOUD_RELAY_BASE_URL` trỏ đúng endpoint HTTPS production (không có `/` cuối);
+      artifact desktop/mobile mở lên đã điền sẵn endpoint này.
 - [ ] Đủ secret `ANDROID_KEYSTORE_BASE64`, `ANDROID_KEYSTORE_PASSWORD`, `ANDROID_KEY_ALIAS`,
-      `ANDROID_KEY_PASSWORD`, `GOOGLE_SERVICES_JSON_BASE64`; không có giá trị nào trong repo/log/artifact.
+      `ANDROID_KEY_PASSWORD`; không có giá trị nào trong repo/log/artifact.
 - [ ] `apksigner verify` pass; APK cài được trên thiết bị sạch Android 8/12/14; launcher hiển thị
       "EduFocus Phụ huynh", icon adaptive và splash đúng.
 - [ ] Cài đè để nâng cấp giữ SecureStorage (còn ghép nối); gỡ app rồi cài lại không còn token cũ.
 - [ ] `SHA256SUMS.txt` khớp APK/AAB đính kèm release; hướng dẫn cài nằm trong `mobile/README.md`.
-- [ ] FCM hoạt động trên bản release: nhận đủ 4 loại push, deep link mở đúng màn hình; payload chỉ
-      có `type`, `date`, `notificationId`.
+- [ ] UnifiedPush/ntfy hoạt động trên bản release: nhận đủ 5 loại push, deep link mở đúng màn hình;
+      payload sau giải mã chỉ có `type`, `date`, `notificationId`.
 - [ ] App release chỉ dùng HTTPS (cleartext tắt) và kết nối backend staging/production thành công.
 - [ ] Đã chạy [phase8-e2e-checklist.md](./phase8-e2e-checklist.md) trên staging + thiết bị thật và
       đính kèm biên bản (ngày, phiên bản, thiết bị).

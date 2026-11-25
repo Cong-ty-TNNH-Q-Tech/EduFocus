@@ -54,9 +54,9 @@ EduFocus is designed **not to be spyware**:
 - **No photos, videos, or audio are stored.** Webcam frames are processed in memory only to derive a state.
 - **No page content, messages, or clipboard are captured.**
 - **No study data is sent to the cloud by default.** Everything lives in a local **SQLCipher-encrypted**
-  SQLite database. Only when a parent explicitly pairs a phone (Phase 8) do four aggregate event types
+  SQLite database. Only when a parent explicitly pairs a phone (Phase 8) do five aggregate event types
   leave the device over HTTPS; no URLs, domains, window titles, app names, raw samples or camera data
-  are uploaded. If update checks are enabled, only version/OS is sent and the server can still see the IP.
+  are uploaded. Blocked-website alerts include only the local date, never the site or window. If update checks are enabled, only version/OS is sent and the server can still see the IP.
 - **Data is encrypted at rest:** DB, WAL and backups use SQLCipher; the 32-byte key is protected with
   DPAPI `LocalMachine` in `%ProgramData%\EduFocus\edufocus.key`, bound to the device and never logged.
   The key is not the PIN; if you back up the DB yourself, back up `edufocus.key` too and restore only
@@ -119,7 +119,7 @@ Protection turns off with PIN or when the schedule window ends
 - 🔜 macOS — not supported
 - 🌐 Chrome/Edge/Firefox for domain blocking via hosts; Chrome/Edge 116+ extension adds URL/path blocking; block page over HTTP and HTTPS (Firefox warns about the certificate)
 - 🎥 Built-in or external webcam (optional, for attention)
-- 📱 Android 8.0+ (API 26) for the optional **EduFocus Parent** app (Phase 8); FCM push requires Google Play Services
+- 📱 Android 8.0+ (API 26) for the optional **EduFocus Parent** app (Phase 8); push requires a UnifiedPush distributor such as ntfy, not Google Play Services
 
 ---
 
@@ -136,7 +136,7 @@ Protection turns off with PIN or when the schedule window ends
 | **Background protection** | Windows Service `EduFocusProtection` (LocalSystem) + named-pipe IPC with ACL and process-image verification |
 | **Security** | PBKDF2-SHA256; no other secrets stored |
 | **Installer** | WiX Toolset v4 (MSI, installs the service + native host) |
-| **Cloud relay (Phase 8)** | ASP.NET Core .NET 10 Web API + PostgreSQL 16, Docker; FCM HTTP v1 (data-only) |
+| **Cloud relay (Phase 8)** | ASP.NET Core .NET 10 Web API + SQLite, Docker; Web Push + UnifiedPush/ntfy |
 | **Mobile (Phase 8)** | .NET MAUI `net10.0-android` (`com.qtech.edufocus.parent`) |
 | **CI/CD** | GitHub Actions |
 
@@ -239,7 +239,7 @@ dotnet test EduFocus.slnx --configuration Release
 - The process watcher relies on process name/path; renamed or portable apps may evade detection.
 - The app cannot resist a user with SYSTEM/admin privileges; Windows shutdown/logoff remains a bypass.
 - Installed builds run a Windows Service: it runs as LocalSystem, keeps protection active while the UI is closed and is restarted by the SCM after a crash (~60 seconds; up to 3 times per day). An admin/SYSTEM user can still stop/disable/remove the service. The UI still requires admin in this build because it reads/writes the ACL-protected database. Portable/source builds use the resident watchdog instead: the app is restarted within ≤ 30 seconds, and a killed watchdog is restored by a scheduled task within about 60 seconds. Uninstall PIN is best-effort.
-- Cloud push depends on FCM/Google Play Services; delivery is delayed by network and Android battery policy. The mobile app only shows aggregate data already synced by the desktop and cannot change protection or the blocklist remotely.
+- Cloud push depends on a UnifiedPush distributor such as ntfy and Web Push connectivity, not Google Play Services; delivery is delayed by network and Android battery policy. The mobile app only shows aggregate data already synced by the desktop and cannot change protection or the blocklist remotely.
 - Uninstalling the mobile app does not delete cloud data; use "Xóa dữ liệu trên cloud" in the app first.
 
 EduFocus aims to **support study habits**, not to enable covert surveillance or exam cheating.

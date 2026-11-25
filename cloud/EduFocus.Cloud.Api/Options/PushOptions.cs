@@ -6,11 +6,13 @@ public sealed class PushOptions
 
     public bool Enabled { get; set; }
 
-    public string? ProjectId { get; set; }
+    public string? VapidPublicKey { get; set; }
 
-    public string? ServiceAccountPath { get; set; }
+    public string? VapidPrivateKey { get; set; }
 
-    public string? ServiceAccountJson { get; set; }
+    public string? VapidSubject { get; set; }
+
+    public string[] AllowedEndpointHosts { get; set; } = [];
 
     public int PollSeconds { get; set; } = 60;
 

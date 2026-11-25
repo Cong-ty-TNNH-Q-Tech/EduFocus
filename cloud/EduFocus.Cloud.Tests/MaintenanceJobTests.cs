@@ -5,11 +5,10 @@ using EduFocus.Cloud.Data.Entities;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
-using Npgsql;
 
 namespace EduFocus.Cloud.Tests;
 
-[Collection("Postgres")]
+[Collection("CloudDatabase")]
 public sealed class MaintenanceJobTests
 {
     private const string TestDbVariable = "EDUFOCUS_CLOUD_TEST_DB";
@@ -240,65 +239,6 @@ public sealed class MaintenanceJobTests
         }
     }
 
-    [Fact]
-    public async Task Concurrent_run_is_skipped_while_advisory_lock_is_held()
-    {
-        var connectionString = TestConnectionString();
-        if (connectionString is null)
-        {
-            return;
-        }
-
-        await ResetDatabaseAsync(connectionString);
-        var seeded = await SeedFamilyAsync(connectionString);
-        var expiredNotificationId = Guid.NewGuid();
-
-        await using (var db = CreateContext(connectionString))
-        {
-            db.Notifications.Add(NewNotification(
-                expiredNotificationId,
-                seeded.FamilyId,
-                "notify-old",
-                Now.AddDays(-31)));
-            await db.SaveChangesAsync();
-        }
-
-        await using var lockConnection = new NpgsqlConnection(connectionString);
-        await lockConnection.OpenAsync();
-        await ExecuteScalarAsync(
-            lockConnection,
-            $"SELECT pg_advisory_lock({CloudMaintenanceService.AdvisoryLockKey})");
-
-        try
-        {
-            await using (var db = CreateContext(connectionString))
-            {
-                var result = await CreateService(db).RunAsync(CancellationToken.None);
-                Assert.False(result.LockAcquired);
-                Assert.Equal(0, result.Deleted.Total);
-            }
-
-            await using (var db = CreateContext(connectionString))
-            {
-                Assert.True(await db.Notifications.AnyAsync(x => x.Id == expiredNotificationId));
-            }
-        }
-        finally
-        {
-            await ExecuteScalarAsync(
-                lockConnection,
-                $"SELECT pg_advisory_unlock({CloudMaintenanceService.AdvisoryLockKey})");
-        }
-
-        await using (var db = CreateContext(connectionString))
-        {
-            var result = await CreateService(db).RunAsync(CancellationToken.None);
-            Assert.True(result.LockAcquired);
-            Assert.Equal(1, result.Deleted.Notifications);
-            Assert.False(await db.Notifications.AnyAsync(x => x.Id == expiredNotificationId));
-        }
-    }
-
     private static CloudMaintenanceService CreateService(CloudDbContext db, DateTimeOffset? now = null) =>
         new(
             db,
@@ -432,12 +372,6 @@ public sealed class MaintenanceJobTests
         await db.SaveChangesAsync();
     }
 
-    private static async Task ExecuteScalarAsync(NpgsqlConnection connection, string sql)
-    {
-        await using var command = new NpgsqlCommand(sql, connection);
-        await command.ExecuteScalarAsync();
-    }
-
     private static string? TestConnectionString() =>
         Environment.GetEnvironmentVariable(TestDbVariable) is { Length: > 0 } value
             ? value
@@ -451,7 +385,7 @@ public sealed class MaintenanceJobTests
     }
 
     private static CloudDbContext CreateContext(string connectionString) =>
-        new(new DbContextOptionsBuilder<CloudDbContext>().UseNpgsql(connectionString).Options);
+            new(new DbContextOptionsBuilder<CloudDbContext>().UseSqlite(connectionString).Options);
 
     private sealed record SeededFamily(Guid FamilyId, Guid DesktopDeviceId);
 

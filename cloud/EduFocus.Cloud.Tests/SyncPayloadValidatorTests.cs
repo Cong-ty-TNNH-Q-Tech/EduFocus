@@ -155,6 +155,7 @@ public sealed class SyncPayloadValidatorTests
         """{"kind":"distracted","localDate":"2099-01-01","startedAtUtc":"2026-11-17T09:05:00Z","durationSeconds":300}""")]
     [InlineData(SyncEventType.ProtectionOff, """{"source":"parent","localDate":"2000-01-01"}""")]
     [InlineData(SyncEventType.SecurityAlert, """{"kind":"clock_jump","localDate":"2099-01-01"}""")]
+    [InlineData(SyncEventType.BlockedAttempt, """{"localDate":"2099-01-01"}""")]
     public void Alert_local_date_outside_window_is_rejected(SyncEventType type, string payload)
     {
         var result = Validate(type, payload);
@@ -167,6 +168,7 @@ public sealed class SyncPayloadValidatorTests
     [InlineData("""{"source":"parent","localDate":"2026-11-17"}""", SyncEventType.ProtectionOff)]
     [InlineData("""{"source":"exit","localDate":"2026-11-17"}""", SyncEventType.ProtectionOff)]
     [InlineData("""{"kind":"clock_jump","localDate":"2026-11-17"}""", SyncEventType.SecurityAlert)]
+    [InlineData("""{"localDate":"2026-11-17"}""", SyncEventType.BlockedAttempt)]
     public void Alert_payloads_are_accepted(string payload, SyncEventType type)
     {
         var result = Validate(type, payload);

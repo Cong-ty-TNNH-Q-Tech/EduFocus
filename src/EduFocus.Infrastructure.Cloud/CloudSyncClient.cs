@@ -373,6 +373,7 @@ public sealed class CloudSyncClient : ICloudSyncPort
         CloudEventTypes.AttentionAlert => SyncEventType.AttentionAlert,
         CloudEventTypes.ProtectionOff => SyncEventType.ProtectionOff,
         CloudEventTypes.SecurityAlert => SyncEventType.SecurityAlert,
+        CloudEventTypes.BlockedAttempt => SyncEventType.BlockedAttempt,
         _ => throw new ArgumentException("Unsupported cloud event type.", nameof(type)),
     };
 

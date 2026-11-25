@@ -14,7 +14,7 @@ using SyncEventType = EduFocus.Cloud.Contracts.Sync.SyncEventType;
 
 namespace EduFocus.Cloud.Tests;
 
-[Collection("Postgres")]
+[Collection("CloudDatabase")]
 public sealed class SyncIngestTests
 {
     private const string TestDbVariable = "EDUFOCUS_CLOUD_TEST_DB";
@@ -285,6 +285,46 @@ public sealed class SyncIngestTests
         Assert.Equal(NotificationCategory.SecurityAlert, notification.Category);
     }
 
+    [Fact]
+    public async Task Blocked_attempt_events_queue_one_deduplicated_notification()
+    {
+        var connectionString = Environment.GetEnvironmentVariable(TestDbVariable);
+        if (string.IsNullOrWhiteSpace(connectionString))
+        {
+            return;
+        }
+
+        await ResetDatabaseAsync(connectionString);
+        await using var factory = new CloudApiFactory(connectionString);
+        using var anonymous = factory.CreateClient();
+        var desktopToken = await CreateDesktopTokenAsync(anonymous);
+        using var desktop = CreateAuthenticatedClient(factory, desktopToken);
+
+        var today = LocalToday().ToString("yyyy-MM-dd");
+        var now = DateTimeOffset.UtcNow;
+        var payload = JsonSerializer.SerializeToElement(new { localDate = today });
+
+        var first = await PostBatchAsync(desktop, new SyncEventDto(
+            "blocked-1",
+            SyncEventType.BlockedAttempt,
+            now,
+            payload));
+        Assert.Equal(SyncEventResultStatus.Applied, first[0].Status);
+
+        var second = await PostBatchAsync(desktop, new SyncEventDto(
+            "blocked-2",
+            SyncEventType.BlockedAttempt,
+            now,
+            payload));
+        Assert.Equal(SyncEventResultStatus.Applied, second[0].Status);
+
+        await using var db = CreateContext(connectionString);
+        var notification = await db.Notifications.AsNoTracking().SingleAsync();
+        Assert.Equal(NotificationCategory.BlockedAttempt, notification.Category);
+        Assert.Equal(NotificationStatus.Pending, notification.Status);
+        Assert.StartsWith("blocked_attempt:", notification.DedupeKey);
+    }
+
     private static async Task<IReadOnlyList<SyncEventResult>> PostBatchAsync(
         HttpClient client,
         params SyncEventDto[] events)
@@ -352,5 +392,5 @@ public sealed class SyncIngestTests
     }
 
     private static CloudDbContext CreateContext(string connectionString) =>
-        new(new DbContextOptionsBuilder<CloudDbContext>().UseNpgsql(connectionString).Options);
+            new(new DbContextOptionsBuilder<CloudDbContext>().UseSqlite(connectionString).Options);
 }

@@ -11,7 +11,7 @@ using Microsoft.EntityFrameworkCore;
 
 namespace EduFocus.Cloud.Tests;
 
-[Collection("Postgres")]
+[Collection("CloudDatabase")]
 public sealed class PairingFlowTests
 {
     private const string TestDbVariable = "EDUFOCUS_CLOUD_TEST_DB";
@@ -168,7 +168,7 @@ public sealed class PairingFlowTests
     private static async Task ResetDatabaseAsync(string connectionString)
     {
         await using var db = new CloudDbContext(
-            new DbContextOptionsBuilder<CloudDbContext>().UseNpgsql(connectionString).Options);
+            new DbContextOptionsBuilder<CloudDbContext>().UseSqlite(connectionString).Options);
         await db.Database.EnsureDeletedAsync();
         await db.Database.MigrateAsync();
     }

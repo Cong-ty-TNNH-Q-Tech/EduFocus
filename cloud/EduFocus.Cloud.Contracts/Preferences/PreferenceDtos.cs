@@ -9,7 +9,8 @@ public sealed record NotificationPreferencesDto(
     int QuietEndMinutes,
     int DailySummaryMinutes,
     string TimeZoneId,
-    bool SecurityAlertBypassQuietHours = true);
+    bool SecurityAlertBypassQuietHours = true,
+    bool BlockedAttempt = true);
 
 public sealed record UpdateNotificationPreferencesRequest(
     bool AttentionAlert,
@@ -20,4 +21,5 @@ public sealed record UpdateNotificationPreferencesRequest(
     int QuietEndMinutes,
     int DailySummaryMinutes,
     string TimeZoneId,
-    bool SecurityAlertBypassQuietHours = true);
+    bool SecurityAlertBypassQuietHours = true,
+    bool BlockedAttempt = true);

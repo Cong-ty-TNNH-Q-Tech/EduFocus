@@ -16,26 +16,17 @@
          versionCode = major*10000 + minor*100 + patch; see mobile/README.md. -->
     <ApplicationDisplayVersion>0.1.0</ApplicationDisplayVersion>
     <ApplicationVersion>1</ApplicationVersion>
+    <CloudRelayBaseUrl Condition="'$(CloudRelayBaseUrl)' == ''"></CloudRelayBaseUrl>
     <SupportedOSPlatformVersion>26.0</SupportedOSPlatformVersion>
     <MauiVersion>10.0.30</MauiVersion>
     <AndroidPackageFormats Condition="'$(Configuration)' == 'Debug'">apk</AndroidPackageFormats>
     <AndroidPackageFormats Condition="'$(Configuration)' != 'Debug'">apk;aab</AndroidPackageFormats>
     <AndroidManifestPlaceholders Condition="'$(Configuration)' == 'Debug'">usesCleartextTraffic=true</AndroidManifestPlaceholders>
     <AndroidManifestPlaceholders Condition="'$(Configuration)' != 'Debug'">usesCleartextTraffic=false</AndroidManifestPlaceholders>
-
-    <!-- FCM is compiled in only when a Firebase config is provided (local dev
-         file or CI secret). The file is never committed. -->
-    <GoogleServicesJsonFile Condition="'$(GoogleServicesJsonFile)' == ''">google-services.json</GoogleServicesJsonFile>
-    <EnableFirebase Condition="Exists('$(GoogleServicesJsonFile)')">true</EnableFirebase>
   </PropertyGroup>
 
-  <PropertyGroup Condition="'$(EnableFirebase)' == 'true'">
-    <DefineConstants>$(DefineConstants);FCM_ENABLED</DefineConstants>
-  </PropertyGroup>
-
-  <ItemGroup Condition="'$(EnableFirebase)' == 'true'">
-    <GoogleServicesJson Include="$(GoogleServicesJsonFile)" />
-    <PackageReference Include="Plugin.Firebase.CloudMessaging" Version="4.0.1" />
+  <ItemGroup Condition="'$(CloudRelayBaseUrl)' != ''">
+    <AssemblyMetadata Include="CloudRelayBaseUrl" Value="$(CloudRelayBaseUrl)" />
   </ItemGroup>
 
   <ItemGroup>
@@ -52,6 +43,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\EduFocus.Parent.Core\EduFocus.Parent.Core.csproj" />
+    <ProjectReference Include="..\EduFocus.Parent.UnifiedPush\EduFocus.Parent.UnifiedPush.csproj" />
   </ItemGroup>
 
 </Project>

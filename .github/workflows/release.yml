@@ -27,6 +27,7 @@ concurrency:
 env:
   DOTNET_NOLOGO: "true"
   DOTNET_CLI_TELEMETRY_OPTOUT: "true"
+  CLOUD_RELAY_BASE_URL: ${{ vars.CLOUD_RELAY_BASE_URL }}
 
 jobs:
   build:
@@ -132,6 +133,7 @@ jobs:
             -p:IncludeSourceRevisionInInformationalVersion=false `
             -p:Version="${{ steps.ver.outputs.version }}" `
             -p:FileVersion="${{ steps.ver.outputs.numeric }}" `
+            -p:CloudRelayBaseUrl="$env:CLOUD_RELAY_BASE_URL" `
             --output publish/
 
       - name: Publish Windows service

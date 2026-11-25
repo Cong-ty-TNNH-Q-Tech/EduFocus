@@ -85,6 +85,21 @@ public sealed class NotificationsViewModelTests
     }
 
     [Fact]
+    public async Task Save_preferences_includes_blocked_attempt_toggle()
+    {
+        var harness = new ScreenHarness();
+        var viewModel = harness.Notifications();
+        await viewModel.LoadAsync();
+
+        viewModel.BlockedAttempt = false;
+        await viewModel.SavePreferencesCommand.ExecuteAsync(null);
+
+        var request = Assert.Single(harness.Api.PreferenceUpdates);
+        Assert.False(request.BlockedAttempt);
+        Assert.False(viewModel.BlockedAttempt);
+    }
+
+    [Fact]
     public async Task Save_preferences_preserves_security_alert_bypass_quiet_hours()
     {
         var harness = new ScreenHarness();

@@ -103,7 +103,7 @@
                                Style="{StaticResource SectionLabel}" VerticalOptions="Center" />
                     </Grid>
                     <Label Style="{StaticResource BodyLabel}"
-                           Text="Thông báo được vận chuyển qua Firebase Cloud Messaging của Google; nội dung chỉ gồm loại sự kiện và ngày, không chứa chi tiết học tập. Không có quảng cáo, telemetry hay bán dữ liệu." />
+                           Text="Thông báo được vận chuyển qua ứng dụng phân phối UnifiedPush (ví dụ ntfy) do phụ huynh chọn; payload được mã hóa và chỉ gồm loại sự kiện cùng ngày, không chứa chi tiết học tập. Không có quảng cáo, telemetry hay bán dữ liệu." />
                 </VerticalStackLayout>
             </Border>
 

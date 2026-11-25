@@ -1,3 +1,4 @@
+using EduFocus.Parent.Core.Push;
 using EduFocus.Parent.Core.Settings;
 using EduFocus.Parent.Tests.TestSupport;
 
@@ -35,9 +36,12 @@ public sealed class ParentSettingsStoreTests
             DeviceId = Guid.NewGuid(),
             DesktopName = "Student PC",
             TimeZoneId = "Asia/Ho_Chi_Minh",
-            PushToken = "fcm-token",
             PushAppVersion = "0.1.0",
         };
+        store.SetPushEndpoint(new PushEndpointRegistration(
+            "https://push.example.com/sub/device-1",
+            "BAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+            "AAAAAAAAAAAAAAAAAAAAAA"));
 
         store.ClearLink();
 
@@ -46,8 +50,20 @@ public sealed class ParentSettingsStoreTests
         Assert.Null(store.DeviceId);
         Assert.Null(store.DesktopName);
         Assert.Null(store.TimeZoneId);
-        Assert.Null(store.PushToken);
+        Assert.Null(store.GetPushEndpoint());
         Assert.Null(store.PushAppVersion);
+    }
+
+    [Fact]
+    public void Legacy_fcm_token_is_removed_from_storage()
+    {
+        var keyValue = new FakeKeyValueStore();
+        keyValue.Set("edufocus.parent.push_token", "old-fcm-token");
+        var store = new ParentSettingsStore(keyValue);
+
+        store.ClearLink();
+
+        Assert.Null(keyValue.Get("edufocus.parent.push_token"));
     }
 
     [Fact]

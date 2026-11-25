@@ -262,6 +262,7 @@ public partial class App : Application
         services.AddSingleton<IAttentionStateObserver>(provider =>
             provider.GetRequiredService<CloudAttentionAlertProducer>());
         services.AddSingleton<CloudSecurityAlertProducer>();
+        services.AddSingleton<CloudBlockedAttemptProducer>();
         services.AddSingleton<ISystemPowerEventPort, WindowsSystemPowerEventPort>();
         services.AddSingleton(new StudySessionHeartbeatOptions());
         services.AddSingleton<IStudySessionHeartbeatUseCase, StudySessionHeartbeatService>();

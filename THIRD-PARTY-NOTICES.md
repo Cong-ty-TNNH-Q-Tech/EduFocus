@@ -54,9 +54,6 @@ thành phần đó có thêm thông báo bên thứ ba của Microsoft tại
 | System.Management | 10.0.14 | MIT | .NET Foundation and Contributors |
 | System.Numerics.Tensors | 9.0.0 | MIT | .NET Foundation and Contributors |
 | System.Security.Cryptography.ProtectedData | 10.0.0 | MIT | .NET Foundation and Contributors |
-| Plugin.Firebase.Core | 4.1.0 | MIT | Plugin.Firebase contributors |
-| Plugin.Firebase.CloudMessaging | 4.0.1 | MIT | Plugin.Firebase contributors |
-| Xamarin.Firebase.Messaging | 124.0.0.2 | MIT | Microsoft Corporation |
 | ZXing.Net | 0.16.11 | Apache-2.0 | Michael Jahn |
 | ZXing.Net.Maui | 0.10.4 | MIT | ZXing.Net.Maui contributors |
 
@@ -64,10 +61,9 @@ ONNX Runtime kèm theo các thành phần bên thứ ba khác của Microsoft; d
 `ThirdPartyNotices.txt` của gói `Microsoft.ML.OnnxRuntime` 1.31.0 và tại
 <https://github.com/microsoft/onnxruntime/blob/main/ThirdPartyNotices.txt>.
 
-**Firebase trên Android:** `Plugin.Firebase` và các gói `Xamarin.*` là binding .NET mã nguồn mở
-(MIT); thư viện runtime Firebase Android SDK và Google Play services đi kèm được Google phân phối
-theo Google APIs Terms of Service, không phải giấy phép mã nguồn mở. App chỉ đăng ký FCM token và
-nhận message data-only như mô tả trong `mobile/README.md`.
+**UnifiedPush trên Android:** app dùng `org.unifiedpush.android:connector` (Apache-2.0) cùng runtime
+Kotlin và Tink đi kèm. App không nhúng Google Play services, Firebase hay SDK độc quyền nào cho
+thông báo đẩy; distributor ntfy là ứng dụng riêng do người dùng cài và cấu hình.
 
 ### 1.3 Thư viện native
 
@@ -102,18 +98,23 @@ chính xác được rà soát lại tại mỗi bản phát hành và cập nh�
 | Microsoft.Maui.Controls | App Android — UI | MIT | .NET Foundation and Contributors |
 | CommunityToolkit.Maui | App Android — UI/behaviors | MIT | .NET Foundation and Contributors |
 | Microsoft.Extensions.Http | Desktop — HTTP client cloud | MIT | .NET Foundation and Contributors |
-| FirebaseAdmin | Backend — gửi FCM HTTP v1 | Apache-2.0 | Google LLC |
-| Google.Apis.Auth | Backend — xác thực service account | Apache-2.0 | Google LLC |
-| Npgsql.EntityFrameworkCore.PostgreSQL | Backend — EF Core provider PostgreSQL | PostgreSQL License | The Npgsql contributors |
-| PostgreSQL | Backend — cơ sở dữ liệu | PostgreSQL License | PostgreSQL Global Development Group |
+| Lib.Net.Http.WebPush | Backend — mã hóa và gửi Web Push | MIT | Tomasz Pęczek |
+| org.unifiedpush.android:connector | App Android — UnifiedPush | Apache-2.0 | UnifiedPush contributors |
+| Xamarin.Kotlin.StdLib | App Android — runtime Kotlin | MIT AND Apache-2.0 | Microsoft / JetBrains |
+| Xamarin.Google.Crypto.Tink.Android | App Android — mã hóa Web Push | MIT AND Apache-2.0 | Microsoft / Google LLC |
+| Microsoft.EntityFrameworkCore.Sqlite | Backend — EF Core provider SQLite | MIT | .NET Foundation and Contributors |
+| SQLitePCLRaw.bundle_e_sqlite3 | Backend — SQLite native provider | Apache-2.0 | Eric Sink and contributors |
+| SQLite | Backend — cơ sở dữ liệu | Public Domain | SQLite authors |
 
-**FCM/Google:** thông báo đẩy được vận chuyển qua Firebase Cloud Messaging. Việc dùng FCM tuân theo
-điều khoản dịch vụ của Google; EduFocus chỉ gửi message data-only với mã loại/ngày, không gửi dữ liệu
-học tập chi tiết. Xem [privacy-notice.md](./docs/privacy-notice.md) §7.1 và [dpia.md](./docs/dpia.md).
+**UnifiedPush/ntfy:** thông báo đẩy được vận chuyển qua distributor UnifiedPush (ví dụ ntfy) và
+Web Push RFC8030/RFC8291. Nội dung được mã hóa đầu-cuối bằng khóa do connector tạo; backend chỉ giữ
+endpoint và khóa công khai, không gửi dữ liệu học tập chi tiết. Xem
+[privacy-notice.md](./docs/privacy-notice.md) §7.1 và [dpia.md](./docs/dpia.md).
 
-**PostgreSQL License:** cho phép sử dụng, sao chép, sửa đổi và phân phối với điều kiện giữ thông báo
-bản quyền; toàn văn sẽ được bổ sung vào phụ lục khi chốt phiên bản phân phối. Nguồn:
-<https://www.postgresql.org/about/licence/>.
+**SQLite:** mã nguồn SQLite thuộc phạm vi công cộng (public domain). **SQLitePCLRaw** dùng giấy phép
+Apache-2.0; toàn văn sẽ được bổ sung vào phụ lục khi chốt phiên bản phân phối. Nguồn:
+<https://sqlite.org/copyright.html> và
+<https://github.com/ericsink/SQLitePCL.raw/blob/master/LICENSE.txt>.
 
 ## 2. Gói chỉ dùng khi build và kiểm thử (không phân phối)
 
@@ -173,7 +174,7 @@ Liên hệ về giấy phép: mở báo cáo riêng tư tại
 Microsoft.Data.Sqlite, Microsoft.EntityFrameworkCore, Microsoft.Extensions.*,
 Microsoft.ML.OnnxRuntime, QRCoder, System.Management, System.Numerics.Tensors,
 System.Security.Cryptography.ProtectedData, Microsoft.NET.Test.Sdk, coverlet.collector,
-Plugin.Firebase, Xamarin.Firebase.Messaging, ZXing.Net.Maui và YuNet (khi được phân phối).
+Lib.Net.Http.WebPush, ZXing.Net.Maui và YuNet (khi được phân phối).
 
 ```text
 MIT License
@@ -967,11 +968,12 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 - ZXing.Net.Maui: <https://github.com/Redth/ZXing.Net.Maui/blob/master/LICENSE>
 - ZXing.Net: <https://github.com/micjahn/ZXing.Net/blob/master/COPYING>
 - CommunityToolkit.Maui: <https://github.com/CommunityToolkit/Maui/blob/main/LICENSE>
-- Plugin.Firebase: <https://github.com/TobiasBuchholz/Plugin.Firebase/blob/master/LICENSE>
-- Firebase Admin SDK: <https://github.com/firebase/firebase-admin-dotnet/blob/master/LICENSE>
-- Google.Apis.Auth: <https://github.com/googleapis/google-api-dotnet-client/blob/main/LICENSE>
-- Npgsql: <https://github.com/npgsql/npgsql/blob/main/LICENSE>
-- PostgreSQL: <https://www.postgresql.org/about/licence/>
+- Lib.Net.Http.WebPush: <https://github.com/tpeczek/Lib.Net.Http.WebPush/blob/main/LICENSE>
+- UnifiedPush Android connector: <https://codeberg.org/UnifiedPush/android-connector/src/branch/main/LICENSE>
+- Kotlin stdlib: <https://github.com/JetBrains/kotlin/blob/master/license/LICENSE.txt>
+- Tink: <https://github.com/tink-crypto/tink-java/blob/main/LICENSE>
+- SQLitePCLRaw: <https://github.com/ericsink/SQLitePCL.raw/blob/master/LICENSE.txt>
+- SQLite: <https://sqlite.org/copyright.html>
 
 Các tệp thông báo gốc của Microsoft (`.NET` và `ONNX Runtime`) chứa thêm ghi công cho các thành
 phần bên thứ ba mà Microsoft phân phối kèm; chúng được dẫn chiếu thay vì sao chép toàn bộ do kích

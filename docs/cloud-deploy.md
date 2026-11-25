@@ -1,27 +1,30 @@
 # Triển khai cloud relay (Phase 8)
 
-Tài liệu vận hành backend cloud cho phụ huynh: đóng gói Docker, TLS, cấu hình bí mật, backup/restore,
+Tài liệu vận hành backend cloud cho phụ huynh: dùng gói Docker, TLS, cấu hình bí mật, backup/restore,
 cập nhật/rollback và chế độ demo LAN. Không đưa domain thật, mật khẩu hay service account vào repo;
 mọi giá trị dưới đây là placeholder.
 
 ## 1. Kiến trúc triển khai
 
-```
+```text
 Internet ──80/443──> caddy (TLS tự động, Let's Encrypt)
-                         │ mạng `edge`
+                         │
                          ▼
-                      api :8080 (ASP.NET Core, không publish port)
-                         │ mạng `backend` (internal)
+                     api :8080 (ASP.NET Core, bind 127.0.0.1:8080)
+                         │
                          ▼
-                      postgres:16-alpine (volume pgdata)
+                     /data/edufocus.db (volume edufocus-data, SQLite)
 ```
 
-- Chỉ Caddy mở port **80/443** (kèm **443/UDP** cho HTTP/3). API và PostgreSQL chỉ nằm trong mạng
-  Docker nội bộ; `backend` đặt `internal: true`.
-- `docker-compose.prod.yml` là stack production; `docker-compose.yml` chỉ dùng cho dev/demo LAN.
-- API nhận `X-Forwarded-For/Proto` từ Caddy khi `Cloud__TrustForwardedHeaders=true` (chỉ bật trong
-  compose prod vì API không publish port). HSTS bật ở môi trường non-Development.
-- Log JSON (Serilog compact) ra stdout; Docker giới hạn `10m × 5` mỗi service.
+- Chỉ Caddy mở port **80/443** (kèm **443/UDP** cho HTTP/3) khi bật profile `tls`.
+- API bind mặc định `127.0.0.1:${API_PORT:-8080}` để debug/local; Caddy gọi `api:8080` qua mạng
+  Docker. Không có database server riêng và không có port database nào cần mở.
+- Chỉ dùng **một file** `cloud/docker-compose.yml`. Production chạy thêm profile `tls`; demo LAN
+  chạy API trực tiếp, không cần Caddy.
+- SQLite là **một instance ghi duy nhất**. Không scale nhiều replica API cùng trỏ vào một file.
+- API nhận `X-Forwarded-For/Proto` từ Caddy khi `Cloud__TrustForwardedHeaders=true`. HSTS bật ở môi
+  trường non-Development.
+- Log JSON (Serilog compact) ra stdout; Docker giới hạn `10m x 5` mỗi service.
 
 ## 2. Yêu cầu hạ tầng
 
@@ -31,10 +34,10 @@ Internet ──80/443──> caddy (TLS tự động, Let's Encrypt)
 | OS | Ubuntu 22.04/24.04 LTS | cùng |
 | Docker | Engine 24+, Compose plugin v2 | bản mới nhất |
 | Domain | 1 bản ghi A/AAAA trỏ về VPS | dùng subdomain riêng, ví dụ `cloud.example.com` |
-| Firewall | mở TCP 80, 443 và UDP 443 | đóng toàn bộ port khác, kể cả 8080/5432 |
-| Outbound | HTTPS ra ngoài | cần cho ACME (Let's Encrypt) và FCM |
+| Firewall | mở TCP 80, 443 và UDP 443 | đóng toàn bộ port khác, kể cả 8080 |
+| Outbound | HTTPS ra ngoài | cần cho ACME (Let's Encrypt) và Web Push/ntfy |
 
-Không cần mở port cho API/Postgres. Nếu dùng firewall cloud (Security Group), chỉ mở 22 (SSH, giới hạn
+Không cần mở port cho API/SQLite. Nếu dùng firewall cloud (Security Group), chỉ mở 22 (SSH, giới hạn
 IP quản trị), 80, 443.
 
 ## 3. Chuẩn bị trên VPS
@@ -51,25 +54,36 @@ cp .env.example .env
 
 Sửa `.env` (quyền `chmod 600 .env`):
 
-- `POSTGRES_PASSWORD`: chuỗi ngẫu nhiên dài (`openssl rand -base64 32`).
 - `EDUFOCUS_CLOUD_PUBLIC_URL=https://<domain>` (không có `/` cuối).
 - `EDUFOCUS_DOMAIN=<domain>` để Caddy xin chứng chỉ.
-- `PUSH_ENABLED=false` cho lần deploy đầu; bật sau khi đã có Firebase.
-- Các biến `JOBS_*`, `RATE_LIMIT_*` giữ mặc định trừ khi có lý do chỉnh.
+- `API_BIND=127.0.0.1`, `API_PORT=8080`, `CLOUD_TRUST_FORWARDED_HEADERS=true`.
+- `EDUFOCUS_CLOUD_AUTO_MIGRATE=true` cho deploy một lệnh; đặt `false` nếu muốn chạy migration tường
+  minh trước khi rollout.
+- `PUSH_ENABLED=false` cho lần deploy đầu; bật sau khi đã cài ntfy/UnifiedPush distributor.
+- Các biến `JOBS_*`, `RATE_LIMIT_*` giữ mặc định trừ khi có lý do chính.
 
-Nếu bật push:
+Nếu bật push, tạo cặp khóa VAPID bằng image ntfy:
 
 ```bash
-mkdir -p secrets && chmod 700 secrets
-# tải service account JSON từ Firebase Console vào máy, rồi:
-install -m 600 /duong/dan/firebase-service-account.json secrets/firebase-service-account.json
+docker run --rm binwiederhier/ntfy webpush keys
 ```
 
-Compose mount thư mục `./secrets` vào `/run/secrets` (read-only). Tên file bắt buộc là
-`firebase-service-account.json`; API đọc qua `Push__ServiceAccountPath`. Khi `PUSH_ENABLED=false`,
-file này không bắt buộc và không được đọc.
+Sao chép public/private key vào `.env`, đặt subject là `mailto:` hoặc `https:` mà bạn quản lý, và
+thêm host endpoint của ntfy/Web Push vào allowlist:
 
-`.env`, `secrets/`, `backups/`, `*.dump` đều nằm trong `.gitignore`. Không chạy `git add -f`.
+```dotenv
+PUSH_ENABLED=true
+PUSH_VAPID_PUBLIC_KEY=<public-key>
+PUSH_VAPID_PRIVATE_KEY=<private-key>
+PUSH_VAPID_SUBJECT=mailto:admin@example.com
+PUSH_ALLOWED_ENDPOINT_HOSTS=ntfy.example.com
+```
+
+`PUSH_ALLOWED_ENDPOINT_HOSTS` trong compose chỉ map host đầu tiên. Nếu dùng nhiều distributor, thêm
+`Push__AllowedEndpointHosts__1`, `__2`… trong `docker-compose.yml`. Private key **không** commit và
+không nằm trong image; khi `PUSH_ENABLED=false`, các biến VAPID không bắt buộc.
+
+`.env`, `secrets/`, `backups/`, `*.db` đều nằm trong `.gitignore`. Không chạy `git add -f`.
 
 ## 4. Triển khai lần đầu
 
@@ -77,28 +91,29 @@ file này không bắt buộc và không được đọc.
 cd EduFocus/cloud
 
 # 1) Build image (hoặc đặt CLOUD_API_IMAGE trỏ tới image GHCR đã publish)
-docker compose -f docker-compose.prod.yml build
+docker compose build
 
-# 2) Khởi động PostgreSQL và chờ healthy
-docker compose -f docker-compose.prod.yml up -d postgres
-docker compose -f docker-compose.prod.yml ps
-
-# 3) Chạy migration tường minh (production không tự migrate khi start)
-docker compose -f docker-compose.prod.yml run --rm api --migrate
-
-# 4) Khởi động API + Caddy
-docker compose -f docker-compose.prod.yml up -d
-docker compose -f docker-compose.prod.yml ps
+# 2) Khởi động API + Caddy; API tự chạy migration nếu EDUFOCUS_CLOUD_AUTO_MIGRATE=true
+docker compose --profile tls up -d
+docker compose ps
 ```
 
-Caddy xin chứng chỉ TLS trong lần request đầu tới domain; theo dõi:
+Nếu đặt `EDUFOCUS_CLOUD_AUTO_MIGRATE=false`, chạy migration tường minh trước khi start API:
 
 ```bash
-docker compose -f docker-compose.prod.yml logs -f caddy
+docker compose run --rm api --migrate
+docker compose --profile tls up -d
 ```
 
-`EDUFOCUS_CLOUD_AUTO_MIGRATE` phải là `false` (mặc định) ở production. Lệnh `--migrate` chạy migration
-rồi thoát, không start web server hay background job.
+Lệnh `--migrate` chỉ chạy migration rồi thoát, không start web server hay background job. Caddy xin
+chứng chỉ TLS trong lần request đầu tới domain; theo dõi:
+
+```bash
+docker compose logs -f caddy
+```
+
+Có thể thêm `COMPOSE_PROFILES=tls` vào `.env` để dùng `docker compose up -d` mà không cần
+`--profile tls`.
 
 ## 5. Smoke test sau deploy
 
@@ -115,25 +130,26 @@ Sau đó pair thử bằng app desktop:
 3. Nếu `PUSH_ENABLED=true`: gửi thử một cảnh báo từ desktop, kiểm tra điện thoại nhận thông báo.
 4. Mở màn báo cáo trên mobile, xác nhận dữ liệu ngày hôm nay hiển thị.
 
-Kiểm tra API từ chối cấu hình thiếu: log khởi động sẽ báo rõ nếu thiếu connection string hoặc thiếu
-`Push__ProjectId`/service account khi `Push__Enabled=true`.
+Kiểm tra API từ chối cấu hình thiếu: log khởi động sẽ báo nếu thiếu connection string hoặc thiếu
+VAPID public/private key, subject hay allowlist khi `Push__Enabled=true`.
 
 ## 6. Vận hành thường ngày
 
 ```bash
 cd EduFocus/cloud
-docker compose -f docker-compose.prod.yml ps
-docker compose -f docker-compose.prod.yml logs --since 1h api
-docker compose -f docker-compose.prod.yml logs --since 1h caddy
+docker compose ps
+docker compose logs --since 1h api
+docker compose logs --since 1h caddy
 df -h                                  # dung lượng đĩa
 docker system df                       # image/volume chiếm chỗ
 ```
 
-- Log là JSON một dòng, đã redaction các trường `token`, `authorization`, `fcmToken`, `code`,
+- Log là JSON một dòng, đã redaction các trường `token`, `authorization`, `endpoint`, `code`,
   `password`, `secret`. Không bật log body request; log Serilog request không chứa payload.
-- Healthcheck API gọi `/healthz` (kiểm tra luôn PostgreSQL) mỗi 30 giây.
+- Healthcheck API gọi `/healthz` (kiểm tra luôn SQLite) mỗi 30 giây.
 - Job bảo trì chạy mỗi `JOBS_INTERVAL_SECONDS` (60): tạo notification tổng kết ngày và dọn dữ liệu
   hết hạn. Xem log `Cloud maintenance finished`.
+- SQLite tự checkpoint WAL; không xóa `edufocus.db-wal`/`edufocus.db-shm` khi API đang chạy.
 
 ## 7. Cập nhật phiên bản và rollback
 
@@ -147,20 +163,20 @@ cd EduFocus/cloud
 
 # 2) Nếu bản mới có migration: chạy với image mới trước khi đổi API đang chạy
 CLOUD_API_IMAGE=ghcr.io/cong-ty-tnnh-q-tech/edufocus-cloud-api:<sha-moi> \
-  docker compose -f docker-compose.prod.yml run --rm api --migrate
+  docker compose run --rm api --migrate
 
 # 3) Cập nhật image và recreate API
 sed -i 's|^CLOUD_API_IMAGE=.*|CLOUD_API_IMAGE=ghcr.io/cong-ty-tnnh-q-tech/edufocus-cloud-api:<sha-moi>|' .env
-docker compose -f docker-compose.prod.yml pull api
-docker compose -f docker-compose.prod.yml up -d api
+docker compose pull api
+docker compose up -d api
 
 # 4) Smoke test
 curl -fsS "https://$EDUFOCUS_DOMAIN/healthz"
 ```
 
-Rollback image: đặt `CLOUD_API_IMAGE` về tag cũ và `docker compose -f docker-compose.prod.yml up -d api`.
-Migration **không tự rollback**; nếu bản mới đã chạy migration không tương thích ngược, phải restore
-backup theo mục 10. Vì vậy luôn backup trước khi migrate.
+Rollback image: đặt `CLOUD_API_IMAGE` về tag cũ và `docker compose up -d api`. Migration **không tự
+rollback**; nếu bản mới đã chạy migration không tương thích ngược, phải restore backup theo mục 10.
+Vì vậy luôn backup trước khi migrate.
 
 ## 8. Xoay token và thu hồi thiết bị
 
@@ -170,26 +186,30 @@ Khi nghi lộ token thiết bị:
   registration của thiết bị bị vô hiệu ngay; thiết bị đó nhận 401 ở request kế tiếp.
 - **Xoay token của chính thiết bị**: `POST /v1/devices/token/rotate`, lưu token mới, token cũ mất hiệu lực.
 - **Nghi lộ toàn bộ**: dùng mobile admin gọi `DELETE /v1/family` để xóa sạch dữ liệu và ghép nối lại.
-- **Khẩn cấp ở DB** (khi không còn token admin tin cậy):
+- **Khẩn cấp ở DB** (khi không còn token admin tin cậy): runtime image có `sqlite3`. Trường
+  `RevokedAtUtc` lưu .NET UTC ticks (INTEGER), nên dùng biểu thức chuyển đổi:
 
   ```bash
-  docker compose -f docker-compose.prod.yml exec -T postgres psql -U edufocus -d edufocus_cloud \
-    -c 'UPDATE "DeviceTokens" SET "RevokedAtUtc" = now() WHERE "RevokedAtUtc" IS NULL;'
+  docker compose exec -T api sqlite3 /data/edufocus.db \
+    "UPDATE DeviceTokens SET RevokedAtUtc = CAST(strftime('%s','now') AS INTEGER) * 10000000 + 621355968000000000 WHERE RevokedAtUtc IS NULL;"
   ```
 
   Mọi thiết bị phải tạo phiên ghép nối mới. Ghi lại thời điểm và lý do vào nhật ký vận hành.
-- **Service account Firebase** bị lộ: thu hồi key trong Google Cloud Console, tạo key mới, thay file
-  `secrets/firebase-service-account.json`, `docker compose ... up -d api`. FCM token cũ vẫn dùng được
-  nhưng nên yêu cầu phụ huynh mở lại app để đăng ký token mới.
+- **VAPID private key bị lộ**: tạo cặp khóa mới bằng `ntfy webpush keys`, cập nhật
+  `PUSH_VAPID_PUBLIC_KEY`/`PUSH_VAPID_PRIVATE_KEY`, rồi `docker compose up -d api`. Endpoint cũ vẫn
+  hợp lệ nhưng yêu cầu phụ huynh mở lại app để đăng ký lại với public key mới; xoay khóa có thể làm
+  message đang chờ không giải mã được.
 
 ## 9. Backup định kỳ
 
 `scripts/backup.sh`:
 
-- `pg_dump --format=custom` từ container PostgreSQL, ghi vào `backups/` với quyền `600`.
+- Dừng API trong thời gian ngắn, đóng gói toàn bộ volume `/data` thành `tar.gz` để có snapshot SQLite
+  nhất quán, rồi start API lại.
+- Ghi vào `backups/` với quyền `600`.
 - Giữ **7 bản mới nhất** (`BACKUP_KEEP`), xóa bản cũ hơn.
 - Nếu đặt `BACKUP_PASSPHRASE`, file được mã hóa AES-256 bằng `gpg` và bản thô bị xóa.
-- Tên file: `edufocus-YYYYMMDDTHHMMSSZ.dump[.gpg]`.
+- Tên file: `edufocus-YYYYMMDDTHHMMSSZ.tar.gz[.gpg]`.
 
 Cron chạy hằng ngày (ví dụ 02:00 giờ máy chủ):
 
@@ -201,103 +221,96 @@ Khuyến nghị:
 
 - Cất passphrase backup **tách biệt** khỏi VPS (password manager của công ty).
 - Đồng bộ `backups/` sang nơi khác (object storage hoặc máy backup) và kiểm tra định kỳ.
-- Đặt `umask 077` như script; không để backup trong thư mục web public.
-- Thử restore mỗi tháng một lần vào database tạm.
+- Giữ `umask 077` như script; không để backup trong thư mục web public.
+- Thử restore mỗi tháng một lần vào thư mục tạm (xem mục 10).
 
 ## 10. Restore
 
-`scripts/restore.sh <file> [target-db]` dừng API, xóa và tạo lại database đích, rồi `pg_restore`.
+`scripts/restore.sh <file>` dừng API, chuyển file DB hiện tại sang tên `.pre-restore-<stamp>` trong
+volume, giải nén bản backup vào `/data`, rồi start API.
 
-Khôi phục vào database tạm để kiểm tra trước (không ảnh hưởng production):
+Khôi phục production (chỉ khi có sự cố):
 
 ```bash
 cd EduFocus/cloud
-./scripts/restore.sh backups/edufocus-20261117T020000Z.dump.gpg edufocus_cloud_restore
-docker compose -f docker-compose.prod.yml exec -T postgres \
-  psql -U edufocus -d edufocus_cloud_restore -c 'SELECT count(*) FROM "Families";'
-# kiểm tra xong thì xóa DB tạm
-docker compose -f docker-compose.prod.yml exec -T postgres \
-  psql -U edufocus -d postgres -c 'DROP DATABASE edufocus_cloud_restore;'
-```
-
-Khôi phục đè production (chỉ khi có sự cố):
-
-```bash
-./scripts/restore.sh backups/edufocus-20261117T020000Z.dump.gpg edufocus_cloud
+./scripts/restore.sh backups/edufocus-20261117T020000Z.tar.gz.gpg
 curl -fsS "https://$EDUFOCUS_DOMAIN/healthz"
 ```
 
-Lưu ý:
-
-- Restore là thao tác phá hủy database đích; kiểm tra kỹ tên `target-db`.
-- Script không tự chạy migration sau restore; bản dump đã chứa `__EFMigrationsHistory`. Nếu phục hồi
-  từ bản backup cũ hơn phiên bản API đang chạy, chạy `--migrate` sau restore.
-- API được start lại ở cuối script; nếu restore lỗi, API vẫn dừng để tránh ghi dữ liệu lỗi.
-
-### Biên bản diễn tập restore
-
-| Mục | Kết quả |
-|---|---|
-| Ngày | 2026-11-17 |
-| Môi trường | Docker cục bộ, `postgres:16-alpine` (cùng image production) |
-| Dữ liệu mẫu | 1 family, 1 desktop device, 1 notification; 3 migration |
-| Backup | `pg_dump --format=custom --no-owner`, 30 KB |
-| Restore | `CREATE DATABASE edufocus_restore_rehearsal` + `pg_restore --no-owner --exit-on-error`, thoát mã 0 |
-| Kiểm tra | Đếm 1/1/1 khớp bản gốc, `__EFMigrationsHistory` = 3, `DisplayName` và `DedupeKey` đúng |
-| Kết quả | **PASS** — dọn database tạm và file dump sau khi kiểm tra |
-
-Lệnh diễn tập tương đương script (dùng container test cục bộ thay vì tên service compose):
+Kiểm tra bản backup mà không đụng production:
 
 ```bash
-docker exec <pg-container> pg_dump -U edufocus -d edufocus_cloud_test --format=custom --no-owner > backup.dump
-docker exec <pg-container> psql -U edufocus -d postgres -c 'CREATE DATABASE edufocus_restore_rehearsal;'
-docker exec -i <pg-container> pg_restore -U edufocus -d edufocus_restore_rehearsal --no-owner --exit-on-error < backup.dump
+mkdir -p /tmp/edufocus-restore
+tar -xzf backups/edufocus-20261117T020000Z.tar.gz -C /tmp/edufocus-restore
+sqlite3 /tmp/edufocus-restore/edufocus.db 'PRAGMA integrity_check; SELECT count(*) FROM Families;'
 ```
+
+Nếu file `.gpg`, giải mã trước bằng `gpg --decrypt` rồi mới kiểm tra.
+
+Lưu ý:
+
+- Restore là thao tác phá hủy dữ liệu hiện tại; kiểm tra kỹ tên file.
+- Script không tự chạy migration sau restore; bản backup đã chứa `__EFMigrationsHistory`. Nếu phục
+  hồi từ bản backup cũ hơn phiên bản API đang chạy, chạy `--migrate` sau restore.
+- Sau khi xác nhận dữ liệu đúng, xóa các file `*.pre-restore-*` trong volume để tránh đầy đĩa:
+
+  ```bash
+  docker compose exec -T api sh -c 'rm -f /data/*.pre-restore-*'
+  ```
+
+- API được start lại ở cuối script, kể cả khi restore lỗi (trap cleanup), để service không bị dừng
+  ngoài ý muốn; kiểm tra log và dữ liệu trước khi cho phép ghi tiếp.
 
 ## 11. Xử lý sự cố
 
-**API không khởi động** — `docker compose logs api`:
+**API không khởi động** - `docker compose logs api`:
 
-- `PostgreSQL connection string is required` → thiếu `ConnectionStrings__Postgres`; kiểm tra `.env`
-  và biến trong compose.
-- `Push:ProjectId is required when push is enabled` / `ServiceAccount... is required` → bật push nhưng
-  thiếu cấu hình; sửa `.env` hoặc đặt `PUSH_ENABLED=false` tạm thời.
+- `SQLite connection string is required` → thiếu `ConnectionStrings__Sqlite`; kiểm tra biến trong
+  compose/`.env`.
+- `unable to open database file` hoặc `attempt to write a readonly database` → volume `/data` không
+  ghi được. Kiểm tra quyền volume; container chạy user `APP_UID` (1654). Với volume cũ, chạy một lần
+  container có quyền root để `chown -R 1654:1654 /data` hoặc tạo lại volume.
+- `database is locked` → có hơn một API instance cùng mở file, hoặc backup/restore đang chạy. Chỉ
+  chạy một instance API.
+- `Push:VapidPublicKey ...` / `Push:VapidPrivateKey ...` / `Push:VapidSubject ...` /
+  `Push:AllowedEndpointHosts ...` → bật push nhưng thiếu cấu hình; sửa `.env` hoặc đặt
+  `PUSH_ENABLED=false` tạm thời.
 - `Cloud:PublicBaseUrl must be an absolute URL` → `EDUFOCUS_CLOUD_PUBLIC_URL` sai định dạng.
 
-**Caddy trả 502** — API chưa healthy hoặc sai mạng:
+**Caddy trả 502** - API chưa healthy hoặc sai mạng:
 
 ```bash
-docker compose -f docker-compose.prod.yml ps
-docker compose -f docker-compose.prod.yml logs --since 10m api
-# API không publish port; chạy healthcheck nội bộ:
-docker compose -f docker-compose.prod.yml exec -T api \
-  dotnet EduFocus.Cloud.Api.dll --healthcheck; echo "exit=$?"
+docker compose ps
+docker compose logs --since 10m api
+# API bind localhost; chạy healthcheck nội bộ:
+docker compose exec -T api dotnet EduFocus.Cloud.Api.dll --healthcheck; echo "exit=$?"
 ```
 
-**TLS không cấp được** — kiểm tra DNS trỏ đúng VPS, port 80/443 mở, Caddy log có lỗi ACME. Không chạy
+**TLS không cấp được** - kiểm tra DNS trỏ đúng VPS, port 80/443 mở, Caddy log có lỗi ACME. Không chạy
 nhiều Caddy cùng domain.
 
-**PostgreSQL đầy đĩa**:
+**SQLite đầy đĩa**:
 
 ```bash
 df -h
 docker system df
-docker compose -f docker-compose.prod.yml exec -T postgres \
-  psql -U edufocus -d edufocus_cloud -c 'SELECT pg_size_pretty(pg_database_size(current_database()));'
+docker compose exec -T api sh -c 'ls -lh /data'
+docker compose exec -T api sqlite3 /data/edufocus.db 'PRAGMA page_count; PRAGMA page_size;'
 ```
 
 - Xóa image cũ (`docker image prune`), backup cũ đã đồng bộ offsite, log cũ.
 - Dọn dữ liệu hết hạn: kiểm tra job maintenance đang bật; có thể chạy tay bằng cách restart API
   (`Jobs__Enabled=true`).
-- Không bao giờ xóa trực tiếp thư mục `pgdata`. Nếu buộc phải mở rộng ổ đĩa, snapshot/backup trước.
+- Không bao giờ xóa trực tiếp volume `edufocus-data`. Nếu buộc phải mở rộng ổ đĩa, snapshot/backup
+  trước.
 - `docker compose down` **không** xóa volume; tránh `down -v` ở production.
 
 **Push không tới điện thoại**:
 
-- `PUSH_ENABLED=true` và service account đúng project Firebase.
-- Log API không có lỗi `TokenInvalid` hàng loạt.
-- App mobile đã đăng ký token sau khi cài; token cũ bị vô hiệu khi đổi thiết bị.
-- Kiểm tra quiet hours/preference của gia đình (mặc định 22:00–06:00, tổng kết 20:30).
+- `PUSH_ENABLED=true`, VAPID hợp lệ và allowlist chứa host endpoint ntfy.
+- Log API không có lỗi `endpoint_invalid`/`push_unavailable` hàng loạt.
+- App mobile đã chọn distributor, cấp quyền thông báo và đăng ký endpoint sau khi cài.
+- Kiểm tra quiet hours/preference của gia đình (mặc định 22:00-06:00, tổng kết 20:30).
 
 ## 12. Chế độ demo LAN (chỉ khi demo)
 
@@ -307,15 +320,13 @@ Dùng khi ban giám khảo cần xem trên điện thoại thật trong mạng n
 cd EduFocus/cloud
 cp .env.example .env
 # sửa:
-#   POSTGRES_PASSWORD=<chuỗi mạnh>
 #   EDUFOCUS_CLOUD_PUBLIC_URL=http://<IP-LAN-VPS>:8080
 #   ASPNETCORE_ENVIRONMENT=Development
+#   API_BIND=0.0.0.0
 #   API_PORT=8080
+#   CLOUD_TRUST_FORWARDED_HEADERS=false
 #   PUSH_ENABLED=false (hoặc true nếu đã có service account)
-docker compose build
-docker compose up -d postgres
-docker compose run --rm api --migrate
-docker compose up -d
+docker compose up -d --build
 ip addr show        # lấy IP LAN, ví dụ 192.168.1.50
 ```
 
@@ -331,14 +342,14 @@ Cảnh báo:
 
 ## 13. Checklist trước demo
 
-- [ ] `docker compose -f docker-compose.prod.yml ps` tất cả healthy.
+- [ ] `docker compose ps` tất cả healthy.
 - [ ] `curl https://<domain>/healthz` trả `healthy`.
-- [ ] Pair desktop ↔ mobile thành công, QR dùng đúng domain HTTPS.
+- [ ] Ghép nối desktop ↔ mobile thành công, QR dùng đúng domain HTTPS.
 - [ ] Điện thoại nhận thông báo cảnh báo (nếu bật push) và mở được báo cáo ngày.
 - [ ] Backup gần nhất chạy thành công; biết cách restore.
 - [ ] Không có `.env`, service account hay backup nào trong `git status`.
 
 ## 14. Tài liệu liên quan
 
-- [cloud-backend.md](./cloud-backend.md) — kiến trúc API, schema, retention, biến môi trường.
-- [ADR-20](./adr/ADR-20-optional-cloud-relay.md) — quyết định cloud tùy chọn và đánh đổi.
+- [cloud-backend.md](./cloud-backend.md) - kiến trúc API, schema, retention, biến môi trường.
+- [ADR-20](./adr/ADR-20-optional-cloud-relay.md) - quyết định cloud tùy chọn và đánh đổi.

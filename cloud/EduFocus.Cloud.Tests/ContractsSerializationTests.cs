@@ -64,6 +64,9 @@ public sealed class ContractsSerializationTests
         Assert.Contains("\"type\":\"daily_summary\"", json);
         Assert.Contains("\"generatedAtUtc\"", json);
         Assert.Contains("\"clientEventId\"", json);
+        Assert.Equal(
+            "\"blocked_attempt\"",
+            JsonSerializer.Serialize(SyncEventType.BlockedAttempt, ApiJson.Options));
     }
 
     [Fact]
@@ -80,6 +83,9 @@ public sealed class ContractsSerializationTests
         var json = JsonSerializer.Serialize(NotificationKind.ProtectionOff, ApiJson.Options);
 
         Assert.Equal("\"protection_off\"", json);
+        Assert.Equal(
+            "\"blocked_attempt\"",
+            JsonSerializer.Serialize(NotificationKind.BlockedAttempt, ApiJson.Options));
     }
 
     [Fact]
@@ -102,5 +108,6 @@ public sealed class ContractsSerializationTests
         Assert.Contains("\"quietStartMinutes\":1320", json);
         Assert.Contains("\"dailySummaryMinutes\":1230", json);
         Assert.Contains("\"securityAlertBypassQuietHours\":true", json);
+        Assert.Contains("\"blockedAttempt\":true", json);
     }
 }

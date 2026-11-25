@@ -22,6 +22,9 @@ public static class PushNotificationContentFactory
         PushNotificationType.SecurityAlert => new PushNotificationContent(
             "Cảnh báo bảo mật",
             "Có cảnh báo bảo mật mới. Mở ứng dụng để xem chi tiết."),
+        PushNotificationType.BlockedAttempt => new PushNotificationContent(
+            "Truy cập bị chặn",
+            "Có lượt truy cập trang web bị chặn trên máy tính. Mở ứng dụng để xem báo cáo."),
         _ => throw new ArgumentOutOfRangeException(nameof(type)),
     };
 }

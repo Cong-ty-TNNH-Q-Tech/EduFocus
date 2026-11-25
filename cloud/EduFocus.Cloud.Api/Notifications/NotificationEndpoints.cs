@@ -144,6 +144,7 @@ public static class NotificationEndpoints
         NotificationCategory.AttentionAlert => ContractKind.AttentionAlert,
         NotificationCategory.ProtectionOff => ContractKind.ProtectionOff,
         NotificationCategory.SecurityAlert => ContractKind.SecurityAlert,
+        NotificationCategory.BlockedAttempt => ContractKind.BlockedAttempt,
         _ => throw new ArgumentOutOfRangeException(nameof(category)),
     };
 

@@ -15,10 +15,10 @@ namespace EduFocus.Cloud.Data.Migrations
                 name: "Families",
                 columns: table => new
                 {
-                    Id = table.Column<Guid>(type: "uuid", nullable: false),
-                    CreatedAtUtc = table.Column<DateTimeOffset>(type: "timestamp with time zone", nullable: false),
-                    TimeZoneId = table.Column<string>(type: "character varying(64)", maxLength: 64, nullable: false),
-                    DeletedAtUtc = table.Column<DateTimeOffset>(type: "timestamp with time zone", nullable: true)
+                    Id = table.Column<Guid>(type: "TEXT", nullable: false),
+                    CreatedAtUtc = table.Column<long>(type: "INTEGER", nullable: false),
+                    TimeZoneId = table.Column<string>(type: "TEXT", maxLength: 64, nullable: false),
+                    DeletedAtUtc = table.Column<long>(type: "INTEGER", nullable: true)
                 },
                 constraints: table =>
                 {
@@ -29,15 +29,15 @@ namespace EduFocus.Cloud.Data.Migrations
                 name: "Devices",
                 columns: table => new
                 {
-                    Id = table.Column<Guid>(type: "uuid", nullable: false),
-                    FamilyId = table.Column<Guid>(type: "uuid", nullable: false),
-                    Kind = table.Column<string>(type: "character varying(16)", maxLength: 16, nullable: false),
-                    DisplayName = table.Column<string>(type: "character varying(128)", maxLength: 128, nullable: false),
-                    Platform = table.Column<string>(type: "character varying(32)", maxLength: 32, nullable: false),
-                    AppVersion = table.Column<string>(type: "character varying(32)", maxLength: 32, nullable: true),
-                    CreatedAtUtc = table.Column<DateTimeOffset>(type: "timestamp with time zone", nullable: false),
-                    LastSeenAtUtc = table.Column<DateTimeOffset>(type: "timestamp with time zone", nullable: true),
-                    RevokedAtUtc = table.Column<DateTimeOffset>(type: "timestamp with time zone", nullable: true)
+                    Id = table.Column<Guid>(type: "TEXT", nullable: false),
+                    FamilyId = table.Column<Guid>(type: "TEXT", nullable: false),
+                    Kind = table.Column<string>(type: "TEXT", maxLength: 16, nullable: false),
+                    DisplayName = table.Column<string>(type: "TEXT", maxLength: 128, nullable: false),
+                    Platform = table.Column<string>(type: "TEXT", maxLength: 32, nullable: false),
+                    AppVersion = table.Column<string>(type: "TEXT", maxLength: 32, nullable: true),
+                    CreatedAtUtc = table.Column<long>(type: "INTEGER", nullable: false),
+                    LastSeenAtUtc = table.Column<long>(type: "INTEGER", nullable: true),
+                    RevokedAtUtc = table.Column<long>(type: "INTEGER", nullable: true)
                 },
                 constraints: table =>
                 {
@@ -55,17 +55,18 @@ namespace EduFocus.Cloud.Data.Migrations
                 name: "NotificationPreferences",
                 columns: table => new
                 {
-                    FamilyId = table.Column<Guid>(type: "uuid", nullable: false),
-                    AttentionAlert = table.Column<bool>(type: "boolean", nullable: false),
-                    DailySummary = table.Column<bool>(type: "boolean", nullable: false),
-                    ProtectionOff = table.Column<bool>(type: "boolean", nullable: false),
-                    SecurityAlert = table.Column<bool>(type: "boolean", nullable: false),
-                    SecurityAlertBypassQuietHours = table.Column<bool>(type: "boolean", nullable: false),
-                    QuietStartMinutes = table.Column<int>(type: "integer", nullable: false),
-                    QuietEndMinutes = table.Column<int>(type: "integer", nullable: false),
-                    DailySummaryMinutes = table.Column<int>(type: "integer", nullable: false),
-                    TimeZoneId = table.Column<string>(type: "character varying(64)", maxLength: 64, nullable: false),
-                    UpdatedAtUtc = table.Column<DateTimeOffset>(type: "timestamp with time zone", nullable: false)
+                    FamilyId = table.Column<Guid>(type: "TEXT", nullable: false),
+                    AttentionAlert = table.Column<bool>(type: "INTEGER", nullable: false),
+                    DailySummary = table.Column<bool>(type: "INTEGER", nullable: false),
+                    ProtectionOff = table.Column<bool>(type: "INTEGER", nullable: false),
+                    SecurityAlert = table.Column<bool>(type: "INTEGER", nullable: false),
+                    BlockedAttempt = table.Column<bool>(type: "INTEGER", nullable: false),
+                    SecurityAlertBypassQuietHours = table.Column<bool>(type: "INTEGER", nullable: false),
+                    QuietStartMinutes = table.Column<int>(type: "INTEGER", nullable: false),
+                    QuietEndMinutes = table.Column<int>(type: "INTEGER", nullable: false),
+                    DailySummaryMinutes = table.Column<int>(type: "INTEGER", nullable: false),
+                    TimeZoneId = table.Column<string>(type: "TEXT", maxLength: 64, nullable: false),
+                    UpdatedAtUtc = table.Column<long>(type: "INTEGER", nullable: false)
                 },
                 constraints: table =>
                 {
@@ -83,20 +84,22 @@ namespace EduFocus.Cloud.Data.Migrations
                 name: "Notifications",
                 columns: table => new
                 {
-                    Id = table.Column<Guid>(type: "uuid", nullable: false),
-                    FamilyId = table.Column<Guid>(type: "uuid", nullable: false),
-                    Category = table.Column<string>(type: "character varying(32)", maxLength: 32, nullable: false),
-                    DedupeKey = table.Column<string>(type: "character varying(160)", maxLength: 160, nullable: false),
-                    LocalDate = table.Column<DateOnly>(type: "date", nullable: true),
-                    CreatedAtUtc = table.Column<DateTimeOffset>(type: "timestamp with time zone", nullable: false),
-                    SentAtUtc = table.Column<DateTimeOffset>(type: "timestamp with time zone", nullable: true),
-                    Status = table.Column<string>(type: "character varying(16)", maxLength: 16, nullable: false),
-                    FailureCode = table.Column<string>(type: "character varying(64)", maxLength: 64, nullable: true)
+                    Id = table.Column<Guid>(type: "TEXT", nullable: false),
+                    FamilyId = table.Column<Guid>(type: "TEXT", nullable: false),
+                    Category = table.Column<string>(type: "TEXT", maxLength: 32, nullable: false),
+                    DedupeKey = table.Column<string>(type: "TEXT", maxLength: 160, nullable: false),
+                    LocalDate = table.Column<DateOnly>(type: "TEXT", nullable: true),
+                    CreatedAtUtc = table.Column<long>(type: "INTEGER", nullable: false),
+                    SentAtUtc = table.Column<long>(type: "INTEGER", nullable: true),
+                    Status = table.Column<string>(type: "TEXT", maxLength: 16, nullable: false),
+                    FailureCode = table.Column<string>(type: "TEXT", maxLength: 64, nullable: true),
+                    AttemptCount = table.Column<int>(type: "INTEGER", nullable: false),
+                    LastAttemptAtUtc = table.Column<long>(type: "INTEGER", nullable: true)
                 },
                 constraints: table =>
                 {
                     table.PrimaryKey("PK_Notifications", x => x.Id);
-                    table.CheckConstraint("CK_Notifications_Category", "\"Category\" IN ('DailySummary', 'AttentionAlert', 'ProtectionOff', 'SecurityAlert')");
+                    table.CheckConstraint("CK_Notifications_Category", "\"Category\" IN ('DailySummary', 'AttentionAlert', 'ProtectionOff', 'SecurityAlert', 'BlockedAttempt')");
                     table.CheckConstraint("CK_Notifications_Status", "\"Status\" IN ('Pending', 'Sent', 'Suppressed', 'Failed')");
                     table.ForeignKey(
                         name: "FK_Notifications_Families_FamilyId",
@@ -110,19 +113,19 @@ namespace EduFocus.Cloud.Data.Migrations
                 name: "SyncEvents",
                 columns: table => new
                 {
-                    Id = table.Column<Guid>(type: "uuid", nullable: false),
-                    FamilyId = table.Column<Guid>(type: "uuid", nullable: false),
-                    ClientEventId = table.Column<string>(type: "character varying(64)", maxLength: 64, nullable: false),
-                    Type = table.Column<string>(type: "character varying(32)", maxLength: 32, nullable: false),
-                    ReceivedAtUtc = table.Column<DateTimeOffset>(type: "timestamp with time zone", nullable: false),
-                    ProcessedAtUtc = table.Column<DateTimeOffset>(type: "timestamp with time zone", nullable: true),
-                    Status = table.Column<string>(type: "character varying(16)", maxLength: 16, nullable: false)
+                    Id = table.Column<Guid>(type: "TEXT", nullable: false),
+                    FamilyId = table.Column<Guid>(type: "TEXT", nullable: false),
+                    ClientEventId = table.Column<string>(type: "TEXT", maxLength: 64, nullable: false),
+                    Type = table.Column<string>(type: "TEXT", maxLength: 32, nullable: false),
+                    ReceivedAtUtc = table.Column<long>(type: "INTEGER", nullable: false),
+                    ProcessedAtUtc = table.Column<long>(type: "INTEGER", nullable: true),
+                    Status = table.Column<string>(type: "TEXT", maxLength: 16, nullable: false)
                 },
                 constraints: table =>
                 {
                     table.PrimaryKey("PK_SyncEvents", x => x.Id);
                     table.CheckConstraint("CK_SyncEvents_Status", "\"Status\" IN ('Pending', 'Processed', 'Rejected')");
-                    table.CheckConstraint("CK_SyncEvents_Type", "\"Type\" IN ('DailySummary', 'AttentionAlert', 'ProtectionOff', 'SecurityAlert')");
+                    table.CheckConstraint("CK_SyncEvents_Type", "\"Type\" IN ('DailySummary', 'AttentionAlert', 'ProtectionOff', 'SecurityAlert', 'BlockedAttempt')");
                     table.ForeignKey(
                         name: "FK_SyncEvents_Families_FamilyId",
                         column: x => x.FamilyId,
@@ -135,12 +138,12 @@ namespace EduFocus.Cloud.Data.Migrations
                 name: "CloudAuditLogs",
                 columns: table => new
                 {
-                    Id = table.Column<Guid>(type: "uuid", nullable: false),
-                    FamilyId = table.Column<Guid>(type: "uuid", nullable: true),
-                    ActorDeviceId = table.Column<Guid>(type: "uuid", nullable: true),
-                    Action = table.Column<string>(type: "character varying(64)", maxLength: 64, nullable: false),
-                    MetadataJson = table.Column<string>(type: "jsonb", nullable: false),
-                    CreatedAtUtc = table.Column<DateTimeOffset>(type: "timestamp with time zone", nullable: false)
+                    Id = table.Column<Guid>(type: "TEXT", nullable: false),
+                    FamilyId = table.Column<Guid>(type: "TEXT", nullable: true),
+                    ActorDeviceId = table.Column<Guid>(type: "TEXT", nullable: true),
+                    Action = table.Column<string>(type: "TEXT", maxLength: 64, nullable: false),
+                    MetadataJson = table.Column<string>(type: "TEXT", nullable: false),
+                    CreatedAtUtc = table.Column<long>(type: "INTEGER", nullable: false)
                 },
                 constraints: table =>
                 {
@@ -163,25 +166,25 @@ namespace EduFocus.Cloud.Data.Migrations
                 name: "DailySummaries",
                 columns: table => new
                 {
-                    Id = table.Column<Guid>(type: "uuid", nullable: false),
-                    FamilyId = table.Column<Guid>(type: "uuid", nullable: false),
-                    DesktopDeviceId = table.Column<Guid>(type: "uuid", nullable: false),
-                    LocalDate = table.Column<DateOnly>(type: "date", nullable: false),
-                    SessionsCount = table.Column<int>(type: "integer", nullable: false),
-                    ActiveSeconds = table.Column<long>(type: "bigint", nullable: false),
-                    StudySeconds = table.Column<long>(type: "bigint", nullable: false),
-                    IdleSeconds = table.Column<long>(type: "bigint", nullable: false),
-                    OnlineClassSeconds = table.Column<long>(type: "bigint", nullable: false),
-                    MonitoringEligibleSeconds = table.Column<long>(type: "bigint", nullable: false),
-                    MonitoredSeconds = table.Column<long>(type: "bigint", nullable: false),
-                    FocusedSeconds = table.Column<long>(type: "bigint", nullable: false),
-                    DistractedSeconds = table.Column<long>(type: "bigint", nullable: false),
-                    AbsentSeconds = table.Column<long>(type: "bigint", nullable: false),
-                    DrowsySeconds = table.Column<long>(type: "bigint", nullable: false),
-                    BlockedAttempts = table.Column<int>(type: "integer", nullable: false),
-                    AttentionPercent = table.Column<int>(type: "integer", nullable: true),
-                    CoveragePercent = table.Column<int>(type: "integer", nullable: true),
-                    UpdatedAtUtc = table.Column<DateTimeOffset>(type: "timestamp with time zone", nullable: false)
+                    Id = table.Column<Guid>(type: "TEXT", nullable: false),
+                    FamilyId = table.Column<Guid>(type: "TEXT", nullable: false),
+                    DesktopDeviceId = table.Column<Guid>(type: "TEXT", nullable: false),
+                    LocalDate = table.Column<DateOnly>(type: "TEXT", nullable: false),
+                    SessionsCount = table.Column<int>(type: "INTEGER", nullable: false),
+                    ActiveSeconds = table.Column<long>(type: "INTEGER", nullable: false),
+                    StudySeconds = table.Column<long>(type: "INTEGER", nullable: false),
+                    IdleSeconds = table.Column<long>(type: "INTEGER", nullable: false),
+                    OnlineClassSeconds = table.Column<long>(type: "INTEGER", nullable: false),
+                    MonitoringEligibleSeconds = table.Column<long>(type: "INTEGER", nullable: false),
+                    MonitoredSeconds = table.Column<long>(type: "INTEGER", nullable: false),
+                    FocusedSeconds = table.Column<long>(type: "INTEGER", nullable: false),
+                    DistractedSeconds = table.Column<long>(type: "INTEGER", nullable: false),
+                    AbsentSeconds = table.Column<long>(type: "INTEGER", nullable: false),
+                    DrowsySeconds = table.Column<long>(type: "INTEGER", nullable: false),
+                    BlockedAttempts = table.Column<int>(type: "INTEGER", nullable: false),
+                    AttentionPercent = table.Column<double>(type: "REAL", nullable: true),
+                    CoveragePercent = table.Column<double>(type: "REAL", nullable: true),
+                    UpdatedAtUtc = table.Column<long>(type: "INTEGER", nullable: false)
                 },
                 constraints: table =>
                 {
@@ -207,13 +210,13 @@ namespace EduFocus.Cloud.Data.Migrations
                 name: "DeviceTokens",
                 columns: table => new
                 {
-                    Id = table.Column<Guid>(type: "uuid", nullable: false),
-                    DeviceId = table.Column<Guid>(type: "uuid", nullable: false),
+                    Id = table.Column<Guid>(type: "TEXT", nullable: false),
+                    DeviceId = table.Column<Guid>(type: "TEXT", nullable: false),
                     TokenHash = table.Column<string>(type: "char(64)", maxLength: 64, nullable: false),
-                    Scopes = table.Column<string>(type: "character varying(128)", maxLength: 128, nullable: false),
-                    CreatedAtUtc = table.Column<DateTimeOffset>(type: "timestamp with time zone", nullable: false),
-                    LastUsedAtUtc = table.Column<DateTimeOffset>(type: "timestamp with time zone", nullable: true),
-                    RevokedAtUtc = table.Column<DateTimeOffset>(type: "timestamp with time zone", nullable: true)
+                    Scopes = table.Column<string>(type: "TEXT", maxLength: 128, nullable: false),
+                    CreatedAtUtc = table.Column<long>(type: "INTEGER", nullable: false),
+                    LastUsedAtUtc = table.Column<long>(type: "INTEGER", nullable: true),
+                    RevokedAtUtc = table.Column<long>(type: "INTEGER", nullable: true)
                 },
                 constraints: table =>
                 {
@@ -230,15 +233,15 @@ namespace EduFocus.Cloud.Data.Migrations
                 name: "PairingSessions",
                 columns: table => new
                 {
-                    Id = table.Column<Guid>(type: "uuid", nullable: false),
-                    FamilyId = table.Column<Guid>(type: "uuid", nullable: false),
-                    DesktopDeviceId = table.Column<Guid>(type: "uuid", nullable: false),
+                    Id = table.Column<Guid>(type: "TEXT", nullable: false),
+                    FamilyId = table.Column<Guid>(type: "TEXT", nullable: false),
+                    DesktopDeviceId = table.Column<Guid>(type: "TEXT", nullable: false),
                     CodeHash = table.Column<string>(type: "char(64)", maxLength: 64, nullable: false),
-                    CreatedAtUtc = table.Column<DateTimeOffset>(type: "timestamp with time zone", nullable: false),
-                    ExpiresAtUtc = table.Column<DateTimeOffset>(type: "timestamp with time zone", nullable: false),
-                    ClaimedAtUtc = table.Column<DateTimeOffset>(type: "timestamp with time zone", nullable: true),
-                    ClaimedByDeviceId = table.Column<Guid>(type: "uuid", nullable: true),
-                    AttemptCount = table.Column<int>(type: "integer", nullable: false)
+                    CreatedAtUtc = table.Column<long>(type: "INTEGER", nullable: false),
+                    ExpiresAtUtc = table.Column<long>(type: "INTEGER", nullable: false),
+                    ClaimedAtUtc = table.Column<long>(type: "INTEGER", nullable: true),
+                    ClaimedByDeviceId = table.Column<Guid>(type: "TEXT", nullable: true),
+                    AttemptCount = table.Column<int>(type: "INTEGER", nullable: false)
                 },
                 constraints: table =>
                 {
@@ -268,12 +271,12 @@ namespace EduFocus.Cloud.Data.Migrations
                 name: "PushRegistrations",
                 columns: table => new
                 {
-                    Id = table.Column<Guid>(type: "uuid", nullable: false),
-                    DeviceId = table.Column<Guid>(type: "uuid", nullable: false),
-                    FcmToken = table.Column<string>(type: "character varying(512)", maxLength: 512, nullable: false),
-                    Platform = table.Column<string>(type: "character varying(32)", maxLength: 32, nullable: false),
-                    UpdatedAtUtc = table.Column<DateTimeOffset>(type: "timestamp with time zone", nullable: false),
-                    InvalidatedAtUtc = table.Column<DateTimeOffset>(type: "timestamp with time zone", nullable: true)
+                    Id = table.Column<Guid>(type: "TEXT", nullable: false),
+                    DeviceId = table.Column<Guid>(type: "TEXT", nullable: false),
+                    FcmToken = table.Column<string>(type: "TEXT", maxLength: 512, nullable: false),
+                    Platform = table.Column<string>(type: "TEXT", maxLength: 32, nullable: false),
+                    UpdatedAtUtc = table.Column<long>(type: "INTEGER", nullable: false),
+                    InvalidatedAtUtc = table.Column<long>(type: "INTEGER", nullable: true)
                 },
                 constraints: table =>
                 {

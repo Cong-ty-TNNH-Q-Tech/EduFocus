@@ -1,0 +1,8 @@
+<metadata>
+  <remove-node path="/api/package[@name='org.unifiedpush.android.connector.data']/class[@name='PublicKeySet']/field[@name='CREATOR']" />
+  <remove-node path="/api/package[@name='org.unifiedpush.android.connector.data']/class[@name='PublicKeySet.CREATOR']" />
+  <remove-node path="/api/package[@name='org.unifiedpush.android.connector.data']/class[@name='PushEndpoint']/field[@name='CREATOR']" />
+  <remove-node path="/api/package[@name='org.unifiedpush.android.connector.data']/class[@name='PushEndpoint.CREATOR']" />
+  <remove-node path="/api/package[@name='org.unifiedpush.android.connector.data']/class[@name='PushMessage']/field[@name='CREATOR']" />
+  <remove-node path="/api/package[@name='org.unifiedpush.android.connector.data']/class[@name='PushMessage.CREATOR']" />
+</metadata>

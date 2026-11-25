@@ -20,6 +20,8 @@ public sealed class LinkStateRestorer(
 {
     public async Task<bool> RestoreAsync(CancellationToken cancellationToken = default)
     {
+        settings.RemoveLegacyPushToken();
+
         string? token;
         try
         {

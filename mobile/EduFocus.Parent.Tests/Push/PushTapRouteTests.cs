@@ -7,6 +7,7 @@ public sealed class PushTapRouteTests
     [Theory]
     [InlineData("daily_summary")]
     [InlineData("attention_alert")]
+    [InlineData("blocked_attempt")]
     public void Report_types_open_reports_with_date(string type)
     {
         var created = PushTapRoute.TryCreate(type, "2026-11-17", out var route);
@@ -18,6 +19,7 @@ public sealed class PushTapRouteTests
     [Theory]
     [InlineData("daily_summary", null)]
     [InlineData("attention_alert", "17/11/2026")]
+    [InlineData("blocked_attempt", null)]
     [InlineData("daily_summary", "2026-13-01")]
     public void Report_types_still_open_reports_without_a_valid_date(string type, string? date)
     {

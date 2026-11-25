@@ -6,31 +6,37 @@ using EduFocus.UseCases.Cloud;
 namespace EduFocus.WPF.Services;
 
 /// <summary>
-/// Drives the cloud producers every 30 minutes and once at startup: the daily
-/// summary while protection is on, and the tamper scan for security alerts.
-/// Cloud outages surface as warnings only, so the timer must keep running and
-/// never throw into the dispatcher.
+/// Drives the cloud producers: the daily summary while protection is on and the
+/// tamper scan every 30 minutes, plus a one-minute blocked-attempt watcher so
+/// web blocks reach the parent quickly. Cloud outages surface as warnings only,
+/// so the timers must keep running and never throw into the dispatcher.
 /// </summary>
 public sealed class CloudEventSchedulerService : IDisposable
 {
     public static readonly TimeSpan Interval = TimeSpan.FromMinutes(30);
+    public static readonly TimeSpan BlockedAttemptInterval = TimeSpan.FromMinutes(1);
 
     private readonly CloudDailySummaryProducer _summaries;
     private readonly CloudSecurityAlertProducer _security;
+    private readonly CloudBlockedAttemptProducer _blockedAttempts;
     private readonly IProtectionUseCase _protection;
     private readonly IAppLogger _logger;
     private readonly DispatcherTimer _timer;
+    private readonly DispatcherTimer _blockedAttemptTimer;
 
     private bool _publishing;
+    private bool _publishingBlockedAttempts;
 
     public CloudEventSchedulerService(
         CloudDailySummaryProducer summaries,
         CloudSecurityAlertProducer security,
+        CloudBlockedAttemptProducer blockedAttempts,
         IProtectionUseCase protection,
         IAppLogger logger)
     {
         _summaries = summaries ?? throw new ArgumentNullException(nameof(summaries));
         _security = security ?? throw new ArgumentNullException(nameof(security));
+        _blockedAttempts = blockedAttempts ?? throw new ArgumentNullException(nameof(blockedAttempts));
         _protection = protection ?? throw new ArgumentNullException(nameof(protection));
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
 
@@ -39,22 +45,43 @@ public sealed class CloudEventSchedulerService : IDisposable
             Interval = Interval
         };
         _timer.Tick += OnTimerTick;
+
+        _blockedAttemptTimer = new DispatcherTimer(DispatcherPriority.Background)
+        {
+            Interval = BlockedAttemptInterval
+        };
+        _blockedAttemptTimer.Tick += OnBlockedAttemptTimerTick;
     }
 
-    /// <summary>Captures the startup snapshot and scans tamper audit rows once.</summary>
-    public Task PublishStartupAsync() =>
-        PublishAsync(requireProtectionOn: false);
+    /// <summary>
+    /// Captures the startup snapshot, scans tamper audit rows and establishes
+    /// the blocked-attempt cursor once.
+    /// </summary>
+    public async Task PublishStartupAsync()
+    {
+        await PublishAsync(requireProtectionOn: false);
+        await PublishBlockedAttemptsAsync();
+    }
 
-    public void Start() => _timer.Start();
+    public void Start()
+    {
+        _timer.Start();
+        _blockedAttemptTimer.Start();
+    }
 
     public void Dispose()
     {
         _timer.Stop();
         _timer.Tick -= OnTimerTick;
+        _blockedAttemptTimer.Stop();
+        _blockedAttemptTimer.Tick -= OnBlockedAttemptTimerTick;
     }
 
     private async void OnTimerTick(object? sender, EventArgs e) =>
         await PublishAsync(requireProtectionOn: true);
+
+    private async void OnBlockedAttemptTimerTick(object? sender, EventArgs e) =>
+        await PublishBlockedAttemptsAsync();
 
     private async Task PublishAsync(bool requireProtectionOn)
     {
@@ -82,6 +109,29 @@ public sealed class CloudEventSchedulerService : IDisposable
         finally
         {
             _publishing = false;
+        }
+    }
+
+    private async Task PublishBlockedAttemptsAsync()
+    {
+        if (_publishingBlockedAttempts)
+            return;
+
+        _publishingBlockedAttempts = true;
+
+        try
+        {
+            await Task.Run(() => _blockedAttempts.TryPublishAsync());
+        }
+        catch (Exception ex)
+        {
+            _logger.Warning(
+                LogCategories.Cloud,
+                $"The blocked-attempt watcher tick failed ({ex.GetType().Name}).");
+        }
+        finally
+        {
+            _publishingBlockedAttempts = false;
         }
     }
 

@@ -17,6 +17,11 @@ WORKDIR /app
 ENV ASPNETCORE_URLS=http://+:8080
 EXPOSE 8080
 COPY --from=build /app/publish .
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends sqlite3 \
+    && rm -rf /var/lib/apt/lists/* \
+    && mkdir -p /data \
+    && chown "$APP_UID:$APP_UID" /data
 USER $APP_UID
 HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \
     CMD ["dotnet", "EduFocus.Cloud.Api.dll", "--healthcheck"]

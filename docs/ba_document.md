@@ -64,7 +64,7 @@ EduFocus cung cấp một lớp bảo vệ và quan sát **tối thiểu, minh b
 
 - Không ghi màn hình, không chụp ảnh, không keylogger, không đọc nội dung chat.
 - Không gửi dữ liệu thô lên cloud hoặc server của nhà phát triển. Ngoại lệ duy nhất là cloud relay tùy
-  chọn (Phase 8): chỉ bốn loại sự kiện tổng hợp, không có URL/domain/window title/app name/camera.
+  chọn (Phase 8): chỉ năm loại sự kiện tổng hợp, không có URL/domain/window title/app name/camera.
 - Không theo dõi vị trí, GPS, micro hay lịch sử duyệt web ngoài phạm vi phiên học.
 - Không phải hệ thống chống gian lận thi cử hoặc giám sát tập trung (MDM).
 - Không hỗ trợ macOS/Linux trong MVP.
@@ -224,7 +224,7 @@ EduFocus cung cấp một lớp bảo vệ và quan sát **tối thiểu, minh b
 | F15 | Nhiều hồ sơ học sinh | Mỗi con có lịch, blocklist, báo cáo riêng |
 | F16 | Báo cáo PDF | Xuất báo cáo tuần cho gia đình/gia sư |
 | F17 | Gợi ý cải thiện | Phân tích xu hướng, gợi ý thời gian học |
-| F18 | Cloud relay tùy chọn (Phase 8) | Đã thiết kế ở ADR-20 và [cloud-backend.md](./cloud-backend.md): desktop outbox → ASP.NET Core + PostgreSQL → FCM; chỉ sự kiện tổng hợp, mặc định tắt |
+| F18 | Cloud relay tùy chọn (Phase 8) | Đã thiết kế ở ADR-20 và [cloud-backend.md](./cloud-backend.md): desktop outbox → ASP.NET Core + SQLite → Web Push/UnifiedPush; chỉ sự kiện tổng hợp, mặc định tắt |
 | F19 | Ứng dụng phụ huynh mobile (Phase 8) | .NET MAUI Android: ghép nối QR/mã, nhận thông báo đẩy, xem báo cáo tóm tắt và chỉnh preference |
 
 ### 6.3. Tính năng sẽ loại bỏ khỏi sản phẩm cũ
@@ -275,10 +275,10 @@ EduFocus cung cấp một lớp bảo vệ và quan sát **tối thiểu, minh b
 | BR-28 | Watchdog chỉ restart app khi Protection ON và lần thoát trước không phải clean exit; exit hợp lệ có PIN phải dừng watchdog/đánh dấu clean shutdown. |
 | BR-29 | Chặn app: ưu tiên gửi `WM_CLOSE`, chờ tối đa 2 giây rồi kill process tree nếu vẫn chạy; không kill process hệ thống/EduFocus/Allow; ghi `BlockedAttempt` với `ObservedVia = ProcessWatcher`; chấp nhận rủi ro mất dữ liệu chưa lưu và phải thông báo. |
 | BR-30 | Thoát app hợp lệ bằng PIN sẽ đặt `ProtectionEnabled = false` và ghi clean exit; Windows shutdown/logoff giữ nguyên `ProtectionEnabled` để lần đăng nhập sau phục hồi và không ghi clean exit. |
-| BR-31 | Cloud relay mặc định tắt; chỉ bật sau khi phụ huynh xác thực PIN, xác nhận đã đọc privacy notice bản 2.0 và ghép nối điện thoại thành công. Tắt cloud/ngắt kết nối không ảnh hưởng bảo vệ cục bộ. |
-| BR-32 | Chỉ bốn loại sự kiện tổng hợp được rời máy: `daily_summary`, `attention_alert`, `protection_off`, `security_alert`. Không gửi URL, domain, window title, tên ứng dụng, sample thô, dữ liệu camera, PIN, recovery code hay ghi chú phụ huynh. |
+| BR-31 | Cloud relay mặc định tắt; chỉ bật sau khi phụ huynh xác thực PIN, xác nhận đã đọc privacy notice bản 2.1 và ghép nối điện thoại thành công. Tắt cloud/ngắt kết nối không ảnh hưởng bảo vệ cục bộ. |
+| BR-32 | Chỉ năm loại sự kiện tổng hợp được rời máy: `daily_summary`, `attention_alert`, `protection_off`, `security_alert`, `blocked_attempt` (chỉ ngày địa phương, tối đa 1 lần/15 phút). Không gửi URL, domain, window title, tên ứng dụng, sample thô, dữ liệu camera, PIN, recovery code hay ghi chú phụ huynh. |
 | BR-33 | Pairing code 8 ký tự hết hạn sau 10 phút và chỉ lưu hash; token cloud là chuỗi đục 32 byte (`efd_`/`efm_`), server chỉ lưu SHA-256, có scope tối thiểu, thu hồi/xoay vòng được và không bao giờ ghi log. |
-| BR-34 | Thông báo attention chỉ phát khi trạng thái kéo dài ≥ 5 phút, tối đa 1 lần/15 phút/loại; tôn trọng quiet hours (mặc định 22:00–06:00) và preference; FCM là data-only, nội dung chung, app mobile tự dựng câu tiếng Việt. |
+| BR-34 | Thông báo attention chỉ phát khi trạng thái kéo dài ≥ 5 phút, tối đa 1 lần/15 phút/loại; tôn trọng quiet hours (mặc định 22:00–06:00) và preference; Web Push được mã hóa qua UnifiedPush/ntfy, nội dung chung, app mobile tự dựng câu tiếng Việt. |
 | BR-35 | Phụ huynh có thể ngắt kết nối (desktop dừng outbox, thu hồi token) hoặc xóa toàn bộ dữ liệu cloud bằng xác nhận `XÓA` (backend cascade). Retention cloud: pairing 24 giờ, sync event 7 ngày, notification 30 ngày, summary 180 ngày, audit 365 ngày. |
 
 ---

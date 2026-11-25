@@ -45,6 +45,7 @@ public static class PushRules
         NotificationCategory.AttentionAlert => "attention_alert",
         NotificationCategory.ProtectionOff => "protection_off",
         NotificationCategory.SecurityAlert => "security_alert",
+        NotificationCategory.BlockedAttempt => "blocked_attempt",
         _ => throw new ArgumentOutOfRangeException(nameof(category)),
     };
 
@@ -55,6 +56,7 @@ public static class PushRules
             NotificationCategory.AttentionAlert => preferences?.AttentionAlert ?? true,
             NotificationCategory.ProtectionOff => preferences?.ProtectionOff ?? true,
             NotificationCategory.SecurityAlert => preferences?.SecurityAlert ?? true,
+            NotificationCategory.BlockedAttempt => preferences?.BlockedAttempt ?? true,
             _ => false,
         };
 

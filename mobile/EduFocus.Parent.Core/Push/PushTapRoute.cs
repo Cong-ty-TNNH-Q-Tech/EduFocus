@@ -3,9 +3,9 @@ using System.Globalization;
 namespace EduFocus.Parent.Core.Push;
 
 /// <summary>
-/// Maps a tapped notification to a Shell route: summary/attention open the
-/// daily report (with the local date when present), protection/security open
-/// the notifications tab.
+/// Maps a tapped notification to a Shell route: summary/attention/blocked
+/// attempts open the daily report (with the local date when present),
+/// protection/security open the notifications tab.
 /// </summary>
 public static class PushTapRoute
 {
@@ -29,7 +29,9 @@ public static class PushTapRoute
 
         route = type switch
         {
-            PushNotificationType.DailySummary or PushNotificationType.AttentionAlert
+            PushNotificationType.DailySummary
+                or PushNotificationType.AttentionAlert
+                or PushNotificationType.BlockedAttempt
                 => date is { } value
                     ? $"//reports?date={value.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture)}"
                     : "//reports",

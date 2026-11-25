@@ -12,7 +12,7 @@ public sealed class CloudDbContextFactory : IDesignTimeDbContextFactory<CloudDbC
             "Development");
 
         var options = new DbContextOptionsBuilder<CloudDbContext>()
-            .UseNpgsql(connectionString)
+            .UseSqlite(connectionString)
             .Options;
 
         return new CloudDbContext(options);

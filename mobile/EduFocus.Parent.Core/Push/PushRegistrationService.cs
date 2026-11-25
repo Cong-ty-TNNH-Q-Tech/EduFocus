@@ -6,15 +6,12 @@ using EduFocus.Parent.Core.Settings;
 
 namespace EduFocus.Parent.Core.Push;
 
-public interface IPushTokenProvider
-{
-    Task<string?> GetTokenAsync(CancellationToken cancellationToken = default);
-}
+public sealed record PushEndpointRegistration(string Endpoint, string P256dh, string Auth);
 
 public interface IPushRegistrationService
 {
     Task<bool> RegisterAsync(
-        string? fcmToken,
+        PushEndpointRegistration? endpoint,
         string platform,
         string? appVersion,
         bool force = false,
@@ -22,10 +19,11 @@ public interface IPushRegistrationService
 }
 
 /// <summary>
-/// Registers the FCM token with the cloud using the mobile token. Network and
-/// server errors retry with backoff; auth/invalid-token errors stop so the app
-/// does not hammer the API. The token itself is only ever sent in the request
-/// body and stored in preferences, never in messages or logs.
+/// Registers the UnifiedPush endpoint and Web Push keys with the cloud using
+/// the mobile token. Network and server errors retry with backoff;
+/// auth/invalid-request errors stop so the app does not hammer the API. The
+/// endpoint and keys are only ever sent in the request body and stored in
+/// preferences, never in messages or logs.
 /// </summary>
 public sealed class PushRegistrationService(
     ICloudApiClient api,
@@ -36,7 +34,8 @@ public sealed class PushRegistrationService(
 {
     private const string RegistrationsPath = "/v1/push/registrations";
     private const int MaxAttempts = 3;
-    private const int MaxTokenLength = 512;
+    private const int MaxEndpointLength = 1000;
+    private const int MaxKeyLength = 128;
     private const int MaxPlatformLength = 32;
     private const int MaxAppVersionLength = 32;
     private static readonly TimeSpan[] Backoff =
@@ -46,7 +45,7 @@ public sealed class PushRegistrationService(
     ];
 
     public async Task<bool> RegisterAsync(
-        string? fcmToken,
+        PushEndpointRegistration? endpoint,
         string platform,
         string? appVersion,
         bool force = false,
@@ -55,13 +54,8 @@ public sealed class PushRegistrationService(
         if (!appState.IsLinked)
             return false;
 
-        var token = fcmToken?.Trim();
-        if (string.IsNullOrEmpty(token)
-            || token.Length > MaxTokenLength
-            || token.Any(char.IsControl))
-        {
+        if (!IsValidEndpoint(endpoint, out var normalizedEndpoint))
             return false;
-        }
 
         var platformName = Truncate(platform, MaxPlatformLength);
         if (platformName is null)
@@ -69,7 +63,9 @@ public sealed class PushRegistrationService(
 
         var version = Truncate(appVersion, MaxAppVersionLength);
         if (!force
-            && string.Equals(settings.PushToken, token, StringComparison.Ordinal)
+            && string.Equals(settings.PushEndpoint, normalizedEndpoint.Endpoint, StringComparison.Ordinal)
+            && string.Equals(settings.PushP256dh, normalizedEndpoint.P256dh, StringComparison.Ordinal)
+            && string.Equals(settings.PushAuth, normalizedEndpoint.Auth, StringComparison.Ordinal)
             && string.Equals(settings.PushAppVersion, version, StringComparison.Ordinal))
         {
             return true;
@@ -82,10 +78,15 @@ public sealed class PushRegistrationService(
             {
                 await api.PostAsync<RegisterPushRequest, RegisterPushResponse>(
                     RegistrationsPath,
-                    new RegisterPushRequest(token, platformName, version),
+                    new RegisterPushRequest(
+                        normalizedEndpoint.Endpoint,
+                        normalizedEndpoint.P256dh,
+                        normalizedEndpoint.Auth,
+                        platformName,
+                        version),
                     cancellationToken: cancellationToken);
 
-                settings.PushToken = token;
+                settings.SetPushEndpoint(normalizedEndpoint);
                 settings.PushAppVersion = version;
                 return true;
             }
@@ -135,6 +136,67 @@ public sealed class PushRegistrationService(
         }
 
         return Backoff[attempt - 1];
+    }
+
+    private static bool IsValidEndpoint(
+        PushEndpointRegistration? registration,
+        out PushEndpointRegistration normalized)
+    {
+        normalized = registration ?? new PushEndpointRegistration(string.Empty, string.Empty, string.Empty);
+        if (registration is null)
+            return false;
+
+        var endpoint = registration.Endpoint?.Trim();
+        if (string.IsNullOrEmpty(endpoint)
+            || endpoint.Length > MaxEndpointLength
+            || endpoint.Any(char.IsControl)
+            || !Uri.TryCreate(endpoint, UriKind.Absolute, out var uri)
+            || uri.Scheme != Uri.UriSchemeHttps
+            || string.IsNullOrWhiteSpace(uri.Host)
+            || !string.IsNullOrEmpty(uri.UserInfo))
+        {
+            return false;
+        }
+
+        var p256dh = registration.P256dh?.Trim();
+        var auth = registration.Auth?.Trim();
+        if (!IsValidBase64Url(p256dh, 65, firstByte: 0x04)
+            || !IsValidBase64Url(auth, 16, firstByte: null))
+        {
+            return false;
+        }
+
+        normalized = new PushEndpointRegistration(endpoint, p256dh!, auth!);
+        return true;
+    }
+
+    private static bool IsValidBase64Url(string? value, int expectedLength, byte? firstByte)
+    {
+        if (string.IsNullOrEmpty(value)
+            || value.Length > MaxKeyLength
+            || value.Any(ch => !char.IsAsciiLetterOrDigit(ch) && ch is not '-' and not '_'))
+        {
+            return false;
+        }
+
+        var padded = value.Replace('-', '+').Replace('_', '/');
+        padded = (padded.Length % 4) switch
+        {
+            2 => padded + "==",
+            3 => padded + "=",
+            _ => padded,
+        };
+
+        try
+        {
+            var bytes = Convert.FromBase64String(padded);
+            return bytes.Length == expectedLength
+                && (firstByte is null || bytes[0] == firstByte.Value);
+        }
+        catch (FormatException)
+        {
+            return false;
+        }
     }
 
     private static string? Truncate(string? value, int maxLength)

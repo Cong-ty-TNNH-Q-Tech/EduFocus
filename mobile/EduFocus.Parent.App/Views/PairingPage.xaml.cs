@@ -140,8 +140,7 @@ public partial class PairingPage : ContentPage, IQueryAttributable
         try
         {
             var coordinator = ServiceHelper.GetService<PushCoordinator>();
-            await coordinator.RequestPermissionAsync(this);
-            _ = coordinator.SyncTokenAsync(force: true);
+            await coordinator.EnableNotificationsAsync(this);
         }
         catch (Exception ex)
         {

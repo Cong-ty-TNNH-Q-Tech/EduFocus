@@ -17,11 +17,14 @@ using SyncEventType = EduFocus.Cloud.Contracts.Sync.SyncEventType;
 
 namespace EduFocus.Cloud.Tests;
 
-[Collection("Postgres")]
+[Collection("CloudDatabase")]
 public sealed class ReadApiTests
 {
     private const string TestDbVariable = "EDUFOCUS_CLOUD_TEST_DB";
     private const string TimeZone = "Asia/Ho_Chi_Minh";
+    private const string PushEndpoint = "https://push.example.com/sub/device-1";
+    private const string PushP256dh = "BAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA";
+    private const string PushAuth = "AAAAAAAAAAAAAAAAAAAAAA";
 
     private static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web)
     {
@@ -260,7 +263,7 @@ public sealed class ReadApiTests
             SecurityAlert("security-1", DateTimeOffset.UtcNow));
         var register = await mobile.PostAsJsonAsync(
             "/v1/push/registrations",
-            new RegisterPushRequest("fcm-token-1", "android"));
+            new RegisterPushRequest(PushEndpoint, PushP256dh, PushAuth, "android"));
         Assert.Equal(HttpStatusCode.OK, register.StatusCode);
 
         using var wrongRequest = new HttpRequestMessage(HttpMethod.Delete, "/v1/family")
@@ -435,7 +438,7 @@ public sealed class ReadApiTests
     }
 
     private static CloudDbContext CreateContext(string connectionString) =>
-        new(new DbContextOptionsBuilder<CloudDbContext>().UseNpgsql(connectionString).Options);
+            new(new DbContextOptionsBuilder<CloudDbContext>().UseSqlite(connectionString).Options);
 
     private sealed record PairedFamily(
         string DesktopToken,

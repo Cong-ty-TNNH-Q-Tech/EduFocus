@@ -28,6 +28,7 @@ public sealed partial class NotificationsViewModel(
     [ObservableProperty] private bool _dailySummary;
     [ObservableProperty] private bool _protectionOff;
     [ObservableProperty] private bool _securityAlert;
+    [ObservableProperty] private bool _blockedAttempt;
     [ObservableProperty] private TimeSpan _quietStart = TimeSpan.FromHours(22);
     [ObservableProperty] private TimeSpan _quietEnd = TimeSpan.FromHours(6);
     [ObservableProperty] private TimeSpan _dailySummaryTime = new(20, 30, 0);
@@ -125,7 +126,8 @@ public sealed partial class NotificationsViewModel(
                 ToMinutes(QuietEnd),
                 ToMinutes(DailySummaryTime),
                 _timeZoneId,
-                _securityAlertBypassQuietHours));
+                _securityAlertBypassQuietHours,
+                BlockedAttempt));
 
             ApplyPreferences(updated);
             PreferencesStatus = "Đã lưu tùy chọn thông báo.";
@@ -244,6 +246,7 @@ public sealed partial class NotificationsViewModel(
         DailySummary = preferences.DailySummary;
         ProtectionOff = preferences.ProtectionOff;
         SecurityAlert = preferences.SecurityAlert;
+        BlockedAttempt = preferences.BlockedAttempt;
         QuietStart = TimeOf(preferences.QuietStartMinutes);
         QuietEnd = TimeOf(preferences.QuietEndMinutes);
         DailySummaryTime = TimeOf(preferences.DailySummaryMinutes);

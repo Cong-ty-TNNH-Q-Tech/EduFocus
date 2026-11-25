@@ -2,8 +2,9 @@ namespace EduFocus.Cloud.Data;
 
 public static class CloudDatabaseConnection
 {
-    public const string EnvironmentVariable = "ConnectionStrings__Postgres";
-    public const string DevelopmentFallback = "Host=localhost;Port=5432;Database=edufocus_cloud;Username=edufocus;Password=edufocus_dev";
+    public const string EnvironmentVariable = "ConnectionStrings__Sqlite";
+    public const string DevelopmentFallback =
+        "Data Source=edufocus-cloud.db;Foreign Keys=True;Default Timeout=30";
 
     public static string Resolve(string? configured, string? environmentName)
     {
@@ -19,6 +20,6 @@ public static class CloudDatabaseConnection
         }
 
         throw new InvalidOperationException(
-            $"PostgreSQL connection string is required. Set {EnvironmentVariable} or ConnectionStrings:Postgres.");
+            $"SQLite connection string is required. Set {EnvironmentVariable} or ConnectionStrings:Sqlite.");
     }
 }

@@ -20,6 +20,7 @@ public sealed class PushNotificationContentTests
     [InlineData(PushNotificationType.AttentionAlert)]
     [InlineData(PushNotificationType.ProtectionOff)]
     [InlineData(PushNotificationType.SecurityAlert)]
+    [InlineData(PushNotificationType.BlockedAttempt)]
     public void Content_is_generic_and_free_of_sensitive_details(PushNotificationType type)
     {
         var content = PushNotificationContentFactory.Create(type);

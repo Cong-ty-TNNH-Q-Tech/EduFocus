@@ -1,41 +1,51 @@
 name: edufocus-cloud
 
 services:
-  postgres:
-    image: postgres:16-alpine
-    restart: unless-stopped
-    environment:
-      POSTGRES_DB: ${POSTGRES_DB:-edufocus_cloud}
-      POSTGRES_USER: ${POSTGRES_USER:-edufocus}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-edufocus_dev}
-    volumes:
-      - postgres-data:/var/lib/postgresql/data
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
-      interval: 10s
-      timeout: 5s
-      retries: 10
-
   api:
+    image: ${CLOUD_API_IMAGE:-edufocus-cloud-api:local}
     build:
       context: .
     restart: unless-stopped
     environment:
       ASPNETCORE_ENVIRONMENT: ${ASPNETCORE_ENVIRONMENT:-Production}
       ASPNETCORE_URLS: http://+:8080
-      ConnectionStrings__Postgres: Host=postgres;Port=5432;Database=${POSTGRES_DB:-edufocus_cloud};Username=${POSTGRES_USER:-edufocus};Password=${POSTGRES_PASSWORD:-edufocus_dev}
+      ConnectionStrings__Sqlite: "Data Source=/data/edufocus.db;Foreign Keys=True;Default Timeout=30"
       EDUFOCUS_CLOUD_PUBLIC_URL: ${EDUFOCUS_CLOUD_PUBLIC_URL:-http://localhost:8080}
-      EDUFOCUS_CLOUD_AUTO_MIGRATE: ${EDUFOCUS_CLOUD_AUTO_MIGRATE:-false}
+      EDUFOCUS_CLOUD_AUTO_MIGRATE: ${EDUFOCUS_CLOUD_AUTO_MIGRATE:-true}
+      Cloud__TrustForwardedHeaders: ${CLOUD_TRUST_FORWARDED_HEADERS:-true}
       Push__Enabled: ${PUSH_ENABLED:-false}
-      Push__ProjectId: ${FIREBASE_PROJECT_ID:-}
-      Push__ServiceAccountPath: /run/secrets/firebase-service-account.json
+      Push__VapidPublicKey: ${PUSH_VAPID_PUBLIC_KEY:-}
+      Push__VapidPrivateKey: ${PUSH_VAPID_PRIVATE_KEY:-}
+      Push__VapidSubject: ${PUSH_VAPID_SUBJECT:-mailto:admin@example.com}
+      Push__AllowedEndpointHosts__0: ${PUSH_ALLOWED_ENDPOINT_HOSTS:-ntfy.sh}
+      Push__PollSeconds: ${PUSH_POLL_SECONDS:-60}
+      Jobs__Enabled: ${JOBS_ENABLED:-true}
+      Jobs__IntervalSeconds: ${JOBS_INTERVAL_SECONDS:-60}
+      Jobs__PairingSessionHours: ${JOBS_PAIRING_SESSION_HOURS:-24}
+      Jobs__SyncEventDays: ${JOBS_SYNC_EVENT_DAYS:-7}
+      Jobs__NotificationDays: ${JOBS_NOTIFICATION_DAYS:-30}
+      Jobs__DailySummaryDays: ${JOBS_DAILY_SUMMARY_DAYS:-180}
+      Jobs__CloudAuditDays: ${JOBS_CLOUD_AUDIT_DAYS:-365}
+      Jobs__SoftDeletedFamilyDays: ${JOBS_SOFT_DELETED_FAMILY_DAYS:-30}
+      RateLimiting__PairingCreatePerHour: ${RATE_LIMIT_PAIRING_CREATE_PER_HOUR:-10}
+      RateLimiting__PairingClaimPerHour: ${RATE_LIMIT_PAIRING_CLAIM_PER_HOUR:-20}
+      RateLimiting__RequestsPerMinute: ${RATE_LIMIT_REQUESTS_PER_MINUTE:-120}
+      RateLimiting__SyncRequestsPerMinute: ${RATE_LIMIT_SYNC_REQUESTS_PER_MINUTE:-60}
     volumes:
-      - ./secrets:/run/secrets:ro
+      - edufocus-data:/data
     ports:
-      - "${API_PORT:-8080}:8080"
-    depends_on:
-      postgres:
-        condition: service_healthy
+      - "${API_BIND:-127.0.0.1}:${API_PORT:-8080}:8080"
+    healthcheck:
+      test: ["CMD", "dotnet", "EduFocus.Cloud.Api.dll", "--healthcheck"]
+      interval: 30s
+      timeout: 5s
+      start_period: 20s
+      retries: 3
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "5"
 
   caddy:
     image: caddy:2-alpine
@@ -46,14 +56,21 @@ services:
     ports:
       - "80:80"
       - "443:443"
+      - "443:443/udp"
     volumes:
       - ./Caddyfile:/etc/caddy/Caddyfile:ro
       - caddy-data:/data
       - caddy-config:/config
     depends_on:
-      - api
+      api:
+        condition: service_healthy
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "5"
 
 volumes:
-  postgres-data:
+  edufocus-data:
   caddy-data:
   caddy-config:

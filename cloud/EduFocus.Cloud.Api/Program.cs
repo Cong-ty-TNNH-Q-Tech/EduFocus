@@ -55,13 +55,13 @@ builder.Host.UseSerilog((_, _, configuration) => configuration
     .WriteTo.Console(new CompactJsonFormatter()));
 
 var connectionString = CloudDatabaseConnection.Resolve(
-    builder.Configuration.GetConnectionString("Postgres"),
+    builder.Configuration.GetConnectionString("Sqlite"),
     builder.Environment.EnvironmentName);
 
-builder.Services.AddDbContext<CloudDbContext>(options => options.UseNpgsql(connectionString));
+builder.Services.AddDbContext<CloudDbContext>(options => options.UseSqlite(connectionString));
 builder.Services.AddProblemDetails();
 builder.Services.AddOpenApi();
-builder.Services.AddHealthChecks().AddCheck<DatabaseHealthCheck>("postgres");
+builder.Services.AddHealthChecks().AddCheck<DatabaseHealthCheck>("sqlite");
 builder.Services.AddAuthentication(DeviceAuthenticationDefaults.Scheme)
     .AddScheme<AuthenticationSchemeOptions, DeviceAuthenticationHandler>(
         DeviceAuthenticationDefaults.Scheme,
@@ -112,15 +112,24 @@ builder.Services.AddOptions<PushOptions>()
         "Push:BatchSize must be between 1 and 500")
     .Validate(
         options => !options.Enabled
-            || !string.IsNullOrWhiteSpace(options.ServiceAccountJson)
-            || !string.IsNullOrWhiteSpace(options.ServiceAccountPath),
-        "Push:ServiceAccountJson or Push:ServiceAccountPath is required when push is enabled")
+            || PushEndpointValidator.IsValidVapidPublicKey(options.VapidPublicKey),
+        "Push:VapidPublicKey must be a base64url P-256 public key when push is enabled")
     .Validate(
-        options => !options.Enabled || !string.IsNullOrWhiteSpace(options.ProjectId),
-        "Push:ProjectId is required when push is enabled")
+        options => !options.Enabled
+            || PushEndpointValidator.IsValidVapidPrivateKey(options.VapidPrivateKey),
+        "Push:VapidPrivateKey must be a base64url P-256 private key when push is enabled")
+    .Validate(
+        options => !options.Enabled || IsValidVapidSubject(options.VapidSubject),
+        "Push:VapidSubject must be a mailto: or https: URL when push is enabled")
+    .Validate(
+        options => !options.Enabled || options.AllowedEndpointHosts.Length > 0,
+        "Push:AllowedEndpointHosts must contain at least one host when push is enabled")
+    .Validate(
+        options => options.AllowedEndpointHosts.All(PushEndpointValidator.IsValidAllowedHost),
+        "Push:AllowedEndpointHosts entries must be host or host:port values")
     .ValidateOnStart();
 builder.Services.AddSingleton(TimeProvider.System);
-builder.Services.AddSingleton<IFcmPushSender, FirebaseFcmSender>();
+builder.Services.AddSingleton<IPushSender, WebPushSender>();
 builder.Services.AddScoped<PushDispatchService>();
 builder.Services.AddHostedService<PushWorker>();
 builder.Services.AddOptions<JobOptions>()
@@ -260,6 +269,11 @@ v1.MapPreferenceEndpoints();
 v1.MapReportEndpoints();
 v1.MapNotificationEndpoints();
 v1.MapFamilyEndpoints();
+
+static bool IsValidVapidSubject(string? subject) =>
+    Uri.TryCreate(subject, UriKind.Absolute, out var uri)
+    && (uri.Scheme == Uri.UriSchemeHttps || uri.Scheme == "mailto");
+
 app.Run();
 
 public partial class Program;

@@ -12,7 +12,7 @@ internal sealed class SyncEventConfiguration : IEntityTypeConfiguration<SyncEven
         {
             table.HasCheckConstraint(
                 "CK_SyncEvents_Type",
-                "\"Type\" IN ('DailySummary', 'AttentionAlert', 'ProtectionOff', 'SecurityAlert')");
+                "\"Type\" IN ('DailySummary', 'AttentionAlert', 'ProtectionOff', 'SecurityAlert', 'BlockedAttempt')");
             table.HasCheckConstraint(
                 "CK_SyncEvents_Status",
                 "\"Status\" IN ('Pending', 'Processed', 'Rejected')");

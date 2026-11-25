@@ -78,11 +78,12 @@ internal sealed class FakeParentDataService : IParentDataService
             request.QuietEndMinutes,
             request.DailySummaryMinutes,
             request.TimeZoneId,
-            request.SecurityAlertBypassQuietHours));
+            request.SecurityAlertBypassQuietHours,
+            request.BlockedAttempt));
     }
 
     public static NotificationPreferencesDto DefaultPreferences() =>
-        new(true, true, true, true, 22 * 60, 6 * 60, 20 * 60 + 30, "Asia/Ho_Chi_Minh", true);
+        new(true, true, true, true, 22 * 60, 6 * 60, 20 * 60 + 30, "Asia/Ho_Chi_Minh", true, true);
 }
 
 internal static class TestSummaries

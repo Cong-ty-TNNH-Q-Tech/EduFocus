@@ -4,7 +4,7 @@ using EduFocus.Parent.Core.Settings;
 namespace EduFocus.Parent.Core.Push;
 
 /// <summary>
-/// Remembers recently shown notification ids so an FCM redelivery does not
+/// Remembers recently shown notification ids so a repeated Web Push delivery does not
 /// create a second notification. Entries persist in preferences as
 /// <c>key|unix-ms</c> lines, capped and pruned after seven days.
 /// </summary>

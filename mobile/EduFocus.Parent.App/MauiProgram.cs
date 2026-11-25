@@ -1,4 +1,5 @@
-﻿using CommunityToolkit.Maui;
+﻿using System.Reflection;
+using CommunityToolkit.Maui;
 using EduFocus.Parent.App.Services;
 using EduFocus.Parent.App.ViewModels;
 using EduFocus.Parent.Core;
@@ -63,24 +64,15 @@ public static class MauiProgram
             sp.GetRequiredService<SessionExpiryService>()));
 
         builder.Services.AddSingleton<PushNotificationDedupe>();
+        builder.Services.AddSingleton<IPushConfigService, PushConfigService>();
         builder.Services.AddSingleton<IPushRegistrationService, PushRegistrationService>();
         builder.Services.AddSingleton<PushNotificationPresenter>();
         builder.Services.AddSingleton<PushPermissionService>();
+        builder.Services.AddSingleton<UnifiedPushManager>();
         builder.Services.AddSingleton<PushCoordinator>();
-#if FCM_ENABLED
-        builder.Services.AddSingleton<IPushTokenProvider, FirebasePushTokenProvider>();
         builder.Services.AddSingleton<PushMessageHandler>();
-#else
-        builder.Services.AddSingleton<IPushTokenProvider, DisabledPushTokenProvider>();
-#endif
 
-        var app = builder.Build();
-
-#if FCM_ENABLED
-        FirebasePushBootstrap.Initialize(app.Services);
-#endif
-
-        return app;
+        return builder.Build();
     }
 }
 
@@ -91,4 +83,13 @@ internal static class BuildConfig
 #else
     public const bool AllowInsecureCloudEndpoints = false;
 #endif
+
+    public static string CloudRelayBaseUrl =>
+        typeof(BuildConfig).Assembly
+            .GetCustomAttributes<AssemblyMetadataAttribute>()
+            .FirstOrDefault(attribute =>
+                string.Equals(attribute.Key, "CloudRelayBaseUrl", StringComparison.Ordinal))
+            ?.Value
+            ?.Trim()
+        ?? string.Empty;
 }

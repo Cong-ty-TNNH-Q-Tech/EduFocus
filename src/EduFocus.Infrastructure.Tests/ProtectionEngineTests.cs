@@ -1111,6 +1111,11 @@ public sealed class ProtectionEngineTests
             set => Volatile.Write(ref _failuresRemaining, value);
         }
 
+        public Task<DateTime?> GetLatestWebAttemptCreatedAtUtcAsync(
+            DateTime afterUtc,
+            CancellationToken cancellationToken = default) =>
+            Task.FromResult<DateTime?>(null);
+
         public Task AddAsync(BlockedAttempt attempt, CancellationToken cancellationToken = default)
         {
             Interlocked.Increment(ref _calls);

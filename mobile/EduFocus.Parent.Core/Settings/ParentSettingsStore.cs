@@ -1,3 +1,5 @@
+using EduFocus.Parent.Core.Push;
+
 namespace EduFocus.Parent.Core.Settings;
 
 /// <summary>Non-secret key/value storage (MAUI Preferences on the app).</summary>
@@ -21,8 +23,12 @@ public sealed class ParentSettingsStore(IKeyValueStore store)
     public const string DeviceIdKey = "edufocus.parent.device_id";
     public const string DesktopNameKey = "edufocus.parent.desktop_name";
     public const string TimeZoneIdKey = "edufocus.parent.time_zone";
-    public const string PushTokenKey = "edufocus.parent.push_token";
+    public const string PushEndpointKey = "edufocus.parent.push_endpoint";
+    public const string PushP256dhKey = "edufocus.parent.push_p256dh";
+    public const string PushAuthKey = "edufocus.parent.push_auth";
+    public const string PushVapidPublicKeyKey = "edufocus.parent.push_vapid_public";
     public const string PushAppVersionKey = "edufocus.parent.push_app_version";
+    private const string LegacyPushTokenKey = "edufocus.parent.push_token";
 
     public string? CloudBaseUrl
     {
@@ -54,10 +60,28 @@ public sealed class ParentSettingsStore(IKeyValueStore store)
         set => SetOptional(TimeZoneIdKey, value?.Trim());
     }
 
-    public string? PushToken
+    public string? PushEndpoint
     {
-        get => store.Get(PushTokenKey);
-        set => SetOptional(PushTokenKey, value?.Trim());
+        get => store.Get(PushEndpointKey);
+        set => SetOptional(PushEndpointKey, value?.Trim());
+    }
+
+    public string? PushP256dh
+    {
+        get => store.Get(PushP256dhKey);
+        set => SetOptional(PushP256dhKey, value?.Trim());
+    }
+
+    public string? PushAuth
+    {
+        get => store.Get(PushAuthKey);
+        set => SetOptional(PushAuthKey, value?.Trim());
+    }
+
+    public string? PushVapidPublicKey
+    {
+        get => store.Get(PushVapidPublicKeyKey);
+        set => SetOptional(PushVapidPublicKeyKey, value?.Trim());
     }
 
     public string? PushAppVersion
@@ -66,9 +90,37 @@ public sealed class ParentSettingsStore(IKeyValueStore store)
         set => SetOptional(PushAppVersionKey, value?.Trim());
     }
 
+    public PushEndpointRegistration? GetPushEndpoint()
+    {
+        var endpoint = PushEndpoint;
+        var p256dh = PushP256dh;
+        var auth = PushAuth;
+        return string.IsNullOrWhiteSpace(endpoint)
+            || string.IsNullOrWhiteSpace(p256dh)
+            || string.IsNullOrWhiteSpace(auth)
+            ? null
+            : new PushEndpointRegistration(endpoint, p256dh, auth);
+    }
+
+    public void SetPushEndpoint(PushEndpointRegistration endpoint)
+    {
+        PushEndpoint = endpoint.Endpoint;
+        PushP256dh = endpoint.P256dh;
+        PushAuth = endpoint.Auth;
+    }
+
+    public void ClearPushEndpoint()
+    {
+        store.Remove(PushEndpointKey);
+        store.Remove(PushP256dhKey);
+        store.Remove(PushAuthKey);
+    }
+
+    public void RemoveLegacyPushToken() => store.Remove(LegacyPushTokenKey);
+
     /// <summary>
-    /// Forgets the link identifiers and the FCM token but keeps the server URL
-    /// so re-pairing is quick and an old token is never reused.
+    /// Forgets the link identifiers and the UnifiedPush endpoint but keeps the
+    /// server URL so re-pairing is quick and an old endpoint is never reused.
     /// </summary>
     public void ClearLink()
     {
@@ -76,8 +128,10 @@ public sealed class ParentSettingsStore(IKeyValueStore store)
         store.Remove(DeviceIdKey);
         store.Remove(DesktopNameKey);
         store.Remove(TimeZoneIdKey);
-        store.Remove(PushTokenKey);
+        ClearPushEndpoint();
+        store.Remove(PushVapidPublicKeyKey);
         store.Remove(PushAppVersionKey);
+        store.Remove(LegacyPushTokenKey);
     }
 
     private Guid? GetGuid(string key) =>

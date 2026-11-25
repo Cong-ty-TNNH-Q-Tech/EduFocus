@@ -3,8 +3,8 @@ using Android.Content;
 using Android.Content.PM;
 using Android.OS;
 using EduFocus.Parent.App.Services;
-#if FCM_ENABLED
-using Plugin.Firebase.Core.Platforms.Android;
+#if DEBUG
+using EduFocus.Parent.Core.Push;
 #endif
 
 namespace EduFocus.Parent.App;
@@ -31,12 +31,9 @@ public class MainActivity : MauiAppCompatActivity
     {
         base.OnCreate(savedInstanceState);
 
-#if FCM_ENABLED
-        CrossFirebase.Initialize(this, () => Microsoft.Maui.ApplicationModel.Platform.CurrentActivity ?? this);
-#endif
-
         PairingDeepLink.Handle(Intent?.DataString);
         HandlePushIntent(Intent);
+        HandleDemoPush(Intent);
     }
 
     protected override void OnNewIntent(Intent? intent)
@@ -44,10 +41,35 @@ public class MainActivity : MauiAppCompatActivity
         base.OnNewIntent(intent);
         PairingDeepLink.Handle(intent?.DataString);
         HandlePushIntent(intent);
+        HandleDemoPush(intent);
     }
 
     private static void HandlePushIntent(Intent? intent) =>
         PushTapRouter.Handle(
             intent?.GetStringExtra(PushTapRouter.TypeExtra),
             intent?.GetStringExtra(PushTapRouter.DateExtra));
+
+#if DEBUG
+    private const string DemoPushExtra = "edufocus.debug.push";
+
+    private void HandleDemoPush(Intent? intent)
+    {
+        if (intent?.GetStringExtra(DemoPushExtra) is not { } typeKey
+            || !PushNotificationPayloadParser.TryParseType(typeKey, out var type))
+        {
+            return;
+        }
+
+        var typeName = PushNotificationPayloadParser.TypeKeyOf(type);
+        var presenter = ServiceHelper.GetService<PushNotificationPresenter>();
+        presenter.EnsureChannel();
+        presenter.Present(
+            new PushNotificationPayload(
+                type,
+                typeName,
+                DateOnly.FromDateTime(DateTime.Today),
+                $"{typeName}:demo-{Guid.NewGuid():N}"),
+            foreground: false);
+    }
+#endif
 }

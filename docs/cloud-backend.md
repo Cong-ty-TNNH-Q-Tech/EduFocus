@@ -1,7 +1,7 @@
 # Cloud relay (Phase 8) — kiến trúc, API và vận hành
 
 > **Trạng thái:** Thiết kế đích cho Phase 8, chưa phát hành.
-> **Ngày:** 2026-11-17 · **Áp dụng cho:** EduFocus 2.1.0 trở đi (cloud tùy chọn)
+> **Ngày:** 2026-11-17 · **Cập nhật:** 2026-11-25 · **Áp dụng cho:** EduFocus 2.1.0 trở đi (cloud tùy chọn)
 > **Quyết định kiến trúc:** [ADR-20](./adr/ADR-20-optional-cloud-relay.md)
 
 Cloud relay là thành phần **tùy chọn** giúp phụ huynh nhận thông báo đẩy và xem báo cáo tóm tắt trên
@@ -13,10 +13,10 @@ Cloud relay là thành phần **tùy chọn** giúp phụ huynh nhận thông b�
 
 - **Opt-in rõ ràng:** cloud mặc định tắt; chỉ bật sau khi phụ huynh xác thực PIN, đọc thông báo cập
   nhật và ghép nối điện thoại thành công.
-- **Least data:** chỉ rời máy bốn loại sự kiện tổng hợp (xem §3). Không gửi URL, tên miền, tiêu đề
+- **Least data:** chỉ rời máy năm loại sự kiện tổng hợp (xem §3). Không gửi URL, tên miền, tiêu đề
   cửa sổ, tên ứng dụng, mẫu hoạt động thô, dữ liệu camera, PIN hay mã khôi phục.
-- **Không khóa nhà cung cấp:** backend đóng gói Docker, tự host được; mobile chỉ phụ thuộc FCM làm
-  kênh vận chuyển.
+- **Không khóa nhà cung cấp:** backend đóng gói Docker, tự host được; mobile dùng UnifiedPush qua
+  distributor do người dùng chọn (ví dụ ntfy), không phụ thuộc Google Play Services.
 - **Có thể thu hồi và xóa:** ngắt kết nối, thu hồi token, xóa gia đình trên cloud bất kỳ lúc nào.
 - **Không phải bản sao DB:** cloud không chứa đủ dữ liệu để tái tạo báo cáo chi tiết; báo cáo chi
   tiết vẫn chỉ có trên máy tính.
@@ -27,28 +27,28 @@ Cloud relay là thành phần **tùy chọn** giúp phụ huynh nhận thông b�
 ┌─────────────────────────────┐        HTTPS (JSON)        ┌──────────────────────────────┐
 │ EduFocus Desktop (WPF)      │ ─────────────────────────► │ EduFocus Cloud API           │
 │  - CloudLinkService (opt-in)│   Bearer efd_…             │  ASP.NET Core .NET 10        │
-│  - SQLite outbox            │ ◄───────────────────────── │  PostgreSQL 16               │
+│  - SQLite outbox            │ ◄───────────────────────── │  SQLite (file)               │
 │  - event producers          │   pairing / status         │  - pairing, auth, ingest     │
 └─────────────────────────────┘                            │  - preferences, reports      │
                                                            │  - notification jobs         │
-┌─────────────────────────────┐        HTTPS (JSON)        │  - FCM sender                │
-│ EduFocus Parent (MAUI)      │ ─────────────────────────► │                              │
+┌─────────────────────────────┐        HTTPS (JSON)        │  - Web Push sender           │
+│ EduFocus Parent (MAUI)      │ ─────────────────────────► │  - VAPID / allowlist         │
 │  - pairing (QR / mã)        │   Bearer efm_…             └──────────────┬───────────────┘
-│  - notifications, reports   │ ◄─────────────────────────                │ HTTPS (HTTP v1)
+│  - notifications, reports   │ ◄─────────────────────────                │ HTTPS (RFC8030)
 └──────────────▲──────────────┘                                           ▼
-               │  FCM push (data-only)                        ┌─────────────────────────┐
-               └──────────────────────────────────────────────│ Firebase Cloud Messaging│
-                                                              └─────────────────────────┘
+               │ UnifiedPush distributor                     ┌─────────────────────────┐
+               └─────────────────────────────────────────────│ ntfy / distributor      │
+                                                             └─────────────────────────┘
 ```
 
 | Thành phần | Vai trò |
 |---|---|
 | `EduFocus.Infrastructure.Cloud` | HTTP client, outbox worker, pairing client phía desktop |
 | `EduFocus.Cloud.Api` | REST API v1, xác thực token, rate limit, ingest |
-| `EduFocus.Cloud.Data` | EF Core model + migration PostgreSQL, repository |
+| `EduFocus.Cloud.Data` | EF Core model + migration SQLite, repository |
 | `EduFocus.Cloud.Contracts` | DTO dùng chung server (và tham chiếu khi test) |
 | Background jobs | tổng hợp daily summary, gửi push theo preference/quiet hours, retention |
-| FCM HTTP v1 | kênh gửi push duy nhất tới Android |
+| Web Push + UnifiedPush | kênh gửi push tới Android qua distributor ntfy |
 
 Backend **không** nằm trong `EduFocus.slnx`; có solution và CI riêng (`cloud/`).
 
@@ -132,6 +132,23 @@ Mỗi sự kiện có `clientEventId` (UUID do desktop sinh) để ingest idempo
 - Sinh từ audit `TamperDetected` (lệch wall clock > 2 phút so với monotonic), `clientEventId` dạng
   `audit-{auditId}` để chống trùng.
 
+### 3.5. `blocked_attempt`
+
+```json
+{
+  "clientEventId": "blocked-1711",
+  "type": "blocked_attempt",
+  "occurredAtUtc": "2026-11-17T09:12:00Z",
+  "payload": { "localDate": "2026-11-17" }
+}
+```
+
+- Sinh khi desktop ghi nhận lượt truy cập web bị chặn (domain/URL, không gồm chặn ứng dụng), tối đa
+  1 sự kiện/15 phút. Payload chỉ có ngày địa phương; **không** gửi domain, URL, tiêu đề cửa sổ hay tên
+  ứng dụng.
+- Server dedupe theo cửa sổ 15 phút (`blocked_attempt:{window15m}`), tôn trọng preference và quiet
+  hours; app mở báo cáo ngày khi phụ huynh chạm thông báo.
+
 ## 4. API v1
 
 Base path: `/v1`. Response lỗi dùng JSON `{"error":{"code","message","traceId?"}}` (401/403/404/429 có
@@ -146,7 +163,8 @@ Base path: `/v1`. Response lỗi dùng JSON `{"error":{"code","message","traceId
 | `DELETE` | `/v1/devices/{id}` | `family:admin` | Thu hồi thiết bị, token và push registration |
 | `POST` | `/v1/devices/token/rotate` | `efd_`/`efm_` | Xoay token của chính thiết bị đang gọi |
 | `POST` | `/v1/sync/events` | `efd_`+`sync` | Ingest batch sự kiện |
-| `POST` | `/v1/push/registrations` | `efm_` | Đăng ký/cập nhật FCM token |
+| `POST` | `/v1/push/registrations` | `efm_` | Đăng ký/cập nhật UnifiedPush endpoint + khóa Web Push |
+| `GET` | `/v1/push/config` | `efm_`+`read` | Trạng thái push và VAPID public key cho distributor |
 | `GET` | `/v1/preferences` | `efm_`+`read` | Đọc preference thông báo |
 | `PUT` | `/v1/preferences` | `efm_`+`prefs` | Cập nhật quiet hours, bật/tắt loại thông báo |
 | `GET` | `/v1/reports/daily?from=&to=` | `efm_`+`read` | Báo cáo tóm tắt theo khoảng ngày |
@@ -197,7 +215,7 @@ hiệu. Claim dùng cập nhật nguyên tử để hai điện thoại không t
 - `POST /v1/push/registrations` (chỉ thiết bị mobile) upsert token theo device; cùng token ở thiết bị
   khác bị vô hiệu để không gửi trùng. Token invalid (`UNREGISTERED`, `INVALID_ARGUMENT`) bị đánh dấu
   `InvalidatedAtUtc` và không thử lại.
-- `GET/PUT /v1/preferences`: bật/tắt 4 loại, quiet hours 22:00–06:00 mặc định, tổng kết ngày 20:30
+- `GET/PUT /v1/preferences`: bật/tắt 5 loại, quiet hours 22:00–06:00 mặc định, tổng kết ngày 20:30
   theo múi giờ gia đình; phút 0–1439, `timeZoneId` IANA; đổi preference ghi audit (không chứa token).
 - Job gửi chạy mỗi phút (`Push:PollSeconds`): chọn `Notifications` Pending, áp preference + quiet
   hours, chỉ gửi khi có ít nhất một thiết bị mobile active có token hợp lệ.
@@ -209,14 +227,16 @@ hiệu. Claim dùng cập nhật nguyên tử để hai điện thoại không t
   | `daily_summary` | `daily_summary:{localDate}` | 1 lần/ngày/gia đình (job #84) |
   | `protection_off` | `protection_off:{source}:{hourUtc}` | 1 lần/giờ/source |
   | `security_alert` | `security_alert:{kind}:{hourUtc}` | 1 lần/giờ/kind |
+  | `blocked_attempt` | `blocked_attempt:{window15m}` | 1 lần/15 phút |
 
 - Trạng thái: `Pending` → `Sent` | `Failed` | `Suppressed` (`preference_disabled`, `quiet_hours`,
   `no_device`, `family_unavailable`). Lỗi tạm thời retry tối đa 3 lần, backoff 2 → 4 phút; hết lượt
   hoặc toàn bộ token invalid → `Failed`. Security alert bỏ qua quiet hours khi
   `SecurityAlertBypassQuietHours = true` (mặc định).
-- Gửi bằng FCM HTTP v1, message **data-only** đúng 3 khóa `{ "type", "date", "notificationId" }`;
-  tiêu đề/nội dung tiếng Việt chung do app tự dựng, không chứa tên học sinh, URL hay số liệu chi tiết.
-  Dùng `SendEachAsync` theo batch, xử lý lỗi từng token độc lập; token không bao giờ nằm trong log.
+- Gửi bằng Web Push (RFC8030) với payload mã hóa RFC8291 đúng 3 khóa
+  `{ "type", "date", "notificationId" }`; tiêu đề/nội dung tiếng Việt chung do app tự dựng, không chứa
+  tên học sinh, URL hay số liệu chi tiết. Gửi từng endpoint độc lập; `404`/`410` đánh dấu endpoint
+  invalid, `429`/`5xx` retry; endpoint và khóa không bao giờ nằm trong log.
 
 ### 4.4. Đọc dữ liệu cho mobile
 
@@ -240,7 +260,7 @@ tồn tại.
   push registration, preference, summary, sync event, notification, pairing session) và ghi audit ẩn
   danh `FamilyDeleted` với `FamilyId`/`ActorDeviceId` = NULL.
 
-## 5. Mô hình dữ liệu PostgreSQL
+## 5. Mô hình dữ liệu SQLite
 
 | Bảng | Cột chính | Ghi chú |
 |---|---|---|
@@ -248,21 +268,23 @@ tồn tại.
 | `Devices` | `Id`, `FamilyId`, `Kind` (`Desktop`/`Mobile`), `DisplayName`, `Platform`, `AppVersion`, `CreatedAtUtc`, `LastSeenAtUtc`, `RevokedAtUtc` | không lưu token thô |
 | `DeviceTokens` | `Id`, `DeviceId`, `TokenHash char(64)`, `Scopes`, `CreatedAtUtc`, `LastUsedAtUtc`, `RevokedAtUtc` | hash SHA-256, unique toàn cục |
 | `PairingSessions` | `Id`, `FamilyId`, `DesktopDeviceId`, `CodeHash char(64)`, `CreatedAtUtc`, `ExpiresAtUtc`, `ClaimedAtUtc`, `ClaimedByDeviceId`, `AttemptCount` | unique partial trên `CodeHash` khi `ClaimedAtUtc IS NULL` |
-| `PushRegistrations` | `Id`, `DeviceId`, `FcmToken`, `Platform`, `UpdatedAtUtc`, `InvalidatedAtUtc` | token FCM là dữ liệu nhạy cảm |
-| `NotificationPreferences` | `FamilyId`, `AttentionAlert`, `DailySummary`, `ProtectionOff`, `SecurityAlert`, `SecurityAlertBypassQuietHours`, `QuietStartMinutes`, `QuietEndMinutes`, `DailySummaryMinutes`, `TimeZoneId`, `UpdatedAtUtc` | một bản/gia đình |
-| `DailySummaries` | `Id`, `FamilyId`, `DesktopDeviceId`, `LocalDate date`, `SessionsCount`, các cột `*Seconds`, `BlockedAttempts`, `AttentionPercent double?`, `CoveragePercent double?`, `UpdatedAtUtc` | unique `(FamilyId, DesktopDeviceId, LocalDate)` cho upsert; `UpdatedAtUtc` = `generatedAtUtc` mới nhất |
+| `PushRegistrations` | `Id`, `DeviceId`, `Endpoint`, `P256dh`, `Auth`, `Platform`, `UpdatedAtUtc`, `InvalidatedAtUtc` | endpoint/khóa Web Push là dữ liệu nhạy cảm; unique `(DeviceId, Endpoint)` |
+| `NotificationPreferences` | `FamilyId`, `AttentionAlert`, `DailySummary`, `ProtectionOff`, `SecurityAlert`, `BlockedAttempt`, `SecurityAlertBypassQuietHours`, `QuietStartMinutes`, `QuietEndMinutes`, `DailySummaryMinutes`, `TimeZoneId`, `UpdatedAtUtc` | một bản/gia đình |
+| `DailySummaries` | `Id`, `FamilyId`, `DesktopDeviceId`, `LocalDate` (TEXT), `SessionsCount`, các cột `*Seconds`, `BlockedAttempts`, `AttentionPercent double?`, `CoveragePercent double?`, `UpdatedAtUtc` | unique `(FamilyId, DesktopDeviceId, LocalDate)` cho upsert; `UpdatedAtUtc` = `generatedAtUtc` mới nhất |
 | `SyncEvents` | `Id`, `FamilyId`, `ClientEventId`, `Type`, `ReceivedAtUtc`, `ProcessedAtUtc`, `Status` | unique `(FamilyId, ClientEventId)`; payload xử lý ngay, không lưu |
 | `Notifications` | `Id`, `FamilyId`, `Category`, `DedupeKey`, `LocalDate?`, `CreatedAtUtc`, `SentAtUtc`, `Status`, `FailureCode`, `AttemptCount`, `LastAttemptAtUtc?` | unique `(FamilyId, DedupeKey)`; retry state cho push worker |
-| `CloudAuditLogs` | `Id`, `FamilyId?`, `ActorDeviceId?`, `Action`, `MetadataJson jsonb`, `CreatedAtUtc` | FK `SET NULL` để giữ bản ghi ẩn danh sau khi xóa |
+| `CloudAuditLogs` | `Id`, `FamilyId?`, `ActorDeviceId?`, `Action`, `MetadataJson` (TEXT), `CreatedAtUtc` | FK `SET NULL` để giữ bản ghi ẩn danh sau khi xóa |
 
 Quan hệ cascade từ `Families` xuống các bảng con; riêng `CloudAuditLogs` dùng `ON DELETE SET NULL` để
 bản ghi audit còn lại nhưng không còn định danh gia đình/thiết bị. Check constraint bảo vệ dữ liệu:
 giây ≥ 0, phần trăm 0–100 hoặc NULL, quiet minutes 0–1439 và `Kind`/`Type`/`Status`/`Category` chỉ nhận
 giá trị enum đã định nghĩa.
 
-Migration `InitialCloudSchema` nằm trong `cloud/EduFocus.Cloud.Data/Migrations`. Startup chỉ tự chạy
-migration khi `EDUFOCUS_CLOUD_AUTO_MIGRATE=true`; mặc định tắt và production chạy migration tường minh
-(`dotnet ef database update`).
+Migration SQLite `InitialCloudSchema` nằm trong `cloud/EduFocus.Cloud.Data/Migrations`. Thời gian
+`DateTimeOffset` được lưu thành UTC ticks (INTEGER) để so sánh/sắp xếp ổn định; `DateOnly` lưu TEXT
+theo ISO-8601. Startup tự chạy migration khi `EDUFOCUS_CLOUD_AUTO_MIGRATE=true` (mặc định trong
+compose); có thể đặt `false` và chạy migration tường minh (`docker compose run --rm api --migrate`
+hoặc `dotnet ef database update`).
 
 ## 6. Thời hạn lưu trên cloud
 
@@ -276,9 +298,9 @@ migration khi `EDUFOCUS_CLOUD_AUTO_MIGRATE=true`; mặc định tắt và produc
 | Gia đình đã xóa mềm (`DeletedAtUtc`) | 30 ngày | job retention, xóa cứng + cascade |
 | Tài khoản/token | tới khi thu hồi hoặc xóa gia đình | cascade |
 
-Job bảo trì `CloudMaintenanceWorker` chạy mỗi `Jobs:IntervalSeconds` (mặc định 60 giây) và dùng
-PostgreSQL advisory lock (`pg_try_advisory_lock`) để chỉ một instance xử lý tại một thời điểm; instance
-khác bỏ qua lượt đó. Mỗi lượt job tạo notification `daily_summary` khi đã tới `DailySummaryMinutes`
+Job bảo trì `CloudMaintenanceWorker` chạy mỗi `Jobs:IntervalSeconds` (mặc định 60 giây). SQLite chỉ
+cho phép một instance API ghi tại một thời điểm, nên deployment chuẩn chạy đúng một replica; job không
+dùng advisory lock. Mỗi lượt job tạo notification `daily_summary` khi đã tới `DailySummaryMinutes`
 theo múi giờ gia đình, preference bật, không trong quiet hours và đã có summary của ngày; dedupe
 `(FamilyId, DedupeKey)` bảo đảm mỗi ngày một lần. `DELETE /v1/family` xóa cứng đồng bộ ngay khi nhận
 yêu cầu; retention chỉ dọn các bản ghi còn sót của gia đình đã xóa mềm (nếu có).
@@ -290,56 +312,60 @@ yêu cầu; retention chỉ dọn các bản ghi còn sót của gia đình đã
 - Rate limit theo IP/token/endpoint; body size limit; validate schema chặt (reject unknown fields ở
   ingest).
 - Pairing code chỉ lưu hash; giới hạn thử; mã hết hạn 10 phút.
-- FCM service account chỉ nằm trong secret của môi trường deploy, **không** commit vào repo, không
-  nằm trong image.
-- Database không public; chỉ API trong cùng mạng Docker; backup mã hóa nếu hạ tầng hỗ trợ.
+- VAPID private key chỉ nằm trong secret của môi trường deploy, **không** commit vào repo, không nằm
+  trong image. Endpoint đăng ký phải HTTPS, thuộc allowlist và tối đa 1000 byte; khóa `p256dh`/`auth`
+  được kiểm tra kích thước trước khi lưu.
+- SQLite chỉ nằm trong volume Docker; API bind mặc định `127.0.0.1` khi chạy sau Caddy; backup mã hóa
+  nếu hạ tầng hỗ trợ.
 - Audit mọi thao tác xóa/thu hồi và mọi lỗi xác thực bất thường.
 
 ## 8. Triển khai và vận hành
 
-- `cloud/docker-compose.prod.yml`: `caddy` (TLS tự động, chỉ service này mở 80/443) + `api` +
-  `postgres:16-alpine`; API/Postgres chỉ nằm trong mạng Docker nội bộ. `cloud/docker-compose.yml` chỉ
-  dùng cho dev/demo LAN.
+- `cloud/docker-compose.yml` là stack duy nhất: `api` + volume `edufocus-data` (SQLite) + `caddy`
+  trong profile `tls` (TLS tự động, chỉ service này mở 80/443). API bind mặc định `127.0.0.1:8080`;
+  không có database server riêng.
 - `Dockerfile` multi-stage, chạy user không phải root, healthcheck `/healthz`; `.dockerignore` loại
-  `.env`, `secrets/`, service account và backup khỏi build context. CI build image và kiểm tra image
+  `.env`, `secrets/`, file backup và file `.db` khỏi build context. CI build image và kiểm tra image
   không chứa file bí mật.
-- Biến chính: `ConnectionStrings__Postgres`, `EDUFOCUS_CLOUD_PUBLIC_URL` (hoặc `Cloud__PublicBaseUrl`),
-  `Push__Enabled`, `Push__ProjectId`, `Push__ServiceAccountPath` hoặc `Push__ServiceAccountJson`
-  (secret mount), `ASPNETCORE_URLS`; rate limit tinh chỉnh qua `RateLimiting__…`, chu kỳ gửi qua
-  `Push__PollSeconds`.
+- Biến chính: `ConnectionStrings__Sqlite`, `EDUFOCUS_CLOUD_PUBLIC_URL` (hoặc `Cloud__PublicBaseUrl`),
+  `Push__Enabled`, `Push__VapidPublicKey`, `Push__VapidPrivateKey`, `Push__VapidSubject`,
+  `Push__AllowedEndpointHosts__0…N`, `ASPNETCORE_URLS`; rate limit tinh chỉnh qua `RateLimiting__…`,
+  chu kỳ gửi qua `Push__PollSeconds`.
   Job bảo trì: `Jobs__Enabled` (mặc định `true`), `Jobs__IntervalSeconds` (60), thời hạn retention
   `Jobs__PairingSessionHours` (24), `Jobs__SyncEventDays` (7), `Jobs__NotificationDays` (30),
   `Jobs__DailySummaryDays` (180), `Jobs__CloudAuditDays` (365), `Jobs__SoftDeletedFamilyDays` (30).
-  Service account JSON **không** commit, không nằm trong image.
-- Migration: production **không** tự migrate khi start; chạy tường minh
-  `docker compose -f docker-compose.prod.yml run --rm api --migrate` trước khi đưa API mới lên.
-  `EDUFOCUS_CLOUD_AUTO_MIGRATE=true` chỉ dành cho dev.
-- HTTPS/HSTS tại Caddy + API; chỉ tin `X-Forwarded-For/Proto` khi `Cloud__TrustForwardedHeaders=true`
-  và API không publish port. Body request giới hạn 1 MB toàn cục, sync 64 KB; CORS không bật.
-- Log JSON ra stdout (rotation ở Docker), redaction `token`/`authorization`/FCM token; không log body.
-- Backup: `cloud/scripts/backup.sh` (pg_dump hằng ngày, giữ 7 bản, tùy chọn mã hóa gpg) và
-  `cloud/scripts/restore.sh`; quy trình chi tiết và biên bản diễn tập restore trong
-  [cloud-deploy.md](./cloud-deploy.md).
-- Health check `/healthz`; self-host: chủ máy chủ chịu trách nhiệm TLS, backup PostgreSQL, cập nhật
+  VAPID private key **không** commit, không nằm trong image; nếu `Push__Enabled=true` mà thiếu khóa,
+  subject hoặc allowlist thì API từ chối khởi động.
+- Migration: compose mặc định `EDUFOCUS_CLOUD_AUTO_MIGRATE=true` để deploy một lệnh; có thể đặt
+  `false` và chạy tường minh `docker compose run --rm api --migrate` trước khi đưa API mới lên.
+- HTTPS/HSTS tại Caddy + API; chỉ tin `X-Forwarded-For/Proto` khi `Cloud__TrustForwardedHeaders=true`.
+  Body request giới hạn 1 MB toàn cục, sync 64 KB; CORS không bật.
+- Log JSON ra stdout (rotation ở Docker), redaction `token`/`authorization`/push endpoint; không log body.
+- Backup: `cloud/scripts/backup.sh` (snapshot SQLite hằng ngày, giữ 7 bản, tùy chọn mã hóa gpg) và
+  `cloud/scripts/restore.sh`; quy trình chi tiết trong [cloud-deploy.md](./cloud-deploy.md).
+- Health check `/healthz`; self-host: chủ máy chủ chịu trách nhiệm TLS, backup SQLite, cập nhật
   image, và tuân thủ nghĩa vụ dữ liệu cá nhân tương ứng. Runbook đầy đủ:
   [cloud-deploy.md](./cloud-deploy.md).
 
 ## 9. Giới hạn đã biết
 
-- Push phụ thuộc FCM/Google; thiết bị không có Google Play Services sẽ không nhận được thông báo.
+- Push phụ thuộc distributor UnifiedPush (ví dụ ntfy) và kết nối Web Push; thiết bị chưa cài/chọn
+  distributor hoặc distributor mất kết nối sẽ không nhận được thông báo.
 - Độ trễ phụ thuộc mạng và chính sách tiết kiệm pin của Android; cảnh báo có thể đến muộn.
 - Cloud không có timeline chi tiết; app mobile chỉ hiển thị tổng hợp ngày và danh sách cảnh báo.
 - Không hỗ trợ đồng bộ hai chiều cấu hình blocklist từ điện thoại trong bản này.
+- SQLite phù hợp một instance API; không scale ngang nhiều replica cùng một file. Nếu cần HA/quy mô
+  lớn hơn, phải đổi sang database server (ví dụ PostgreSQL) và cập nhật migration/backup.
 - Nếu phụ huynh tự host, chất lượng dịch vụ và trách nhiệm pháp lý thuộc về họ.
 
 ## 10. Tài liệu liên quan
 
 - [ADR-20](./adr/ADR-20-optional-cloud-relay.md) — quyết định và đánh đổi.
 - [cloud-deploy.md](./cloud-deploy.md) — runbook triển khai, backup/restore, rollback, demo LAN.
-- [privacy-notice.md](./privacy-notice.md) — thông báo quyền riêng tư bản 2.0.
+- [privacy-notice.md](./privacy-notice.md) — thông báo quyền riêng tư bản 2.1.
 - [dpia.md](./dpia.md) — data map và đánh giá rủi ro bổ sung cho cloud.
 - [use_cases.md](./use_cases.md) — UC15–UC18.
-- [mobile/README.md](../mobile/README.md) — bốn màn hình, push FCM, ký APK và hướng dẫn cài.
+- [mobile/README.md](../mobile/README.md) — bốn màn hình, push UnifiedPush/ntfy, ký APK và hướng dẫn cài.
 - [phase8-e2e-checklist.md](./phase8-e2e-checklist.md) — ma trận E2E, kiểm tra dữ liệu/quyền riêng tư
   và demo script.
 - [system_architecture.md](./system_architecture.md) §10–§11 — vị trí cloud trong kiến trúc.

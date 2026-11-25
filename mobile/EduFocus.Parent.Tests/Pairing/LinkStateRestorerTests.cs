@@ -31,6 +31,19 @@ public sealed class LinkStateRestorerTests
     }
 
     [Fact]
+    public async Task Startup_removes_legacy_fcm_token_without_unlinking()
+    {
+        var (restorer, _, state, _, store) = Create(token: "efm_token");
+        store.Set("edufocus.parent.push_token", "old-fcm-token");
+
+        var linked = await restorer.RestoreAsync();
+
+        Assert.True(linked);
+        Assert.True(state.IsLinked);
+        Assert.Null(store.Get("edufocus.parent.push_token"));
+    }
+
+    [Fact]
     public async Task Missing_token_clears_link_metadata_but_keeps_server()
     {
         var (restorer, _, state, settings, store) = Create(token: null);

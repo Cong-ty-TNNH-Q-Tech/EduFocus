@@ -10,7 +10,8 @@ public sealed record ValidatedSyncEvent(
     DailySummaryPayload? DailySummary = null,
     AttentionAlertPayload? AttentionAlert = null,
     ProtectionOffPayload? ProtectionOff = null,
-    SecurityAlertPayload? SecurityAlert = null);
+    SecurityAlertPayload? SecurityAlert = null,
+    BlockedAttemptPayload? BlockedAttempt = null);
 
 public readonly record struct SyncValidationResult(
     ValidatedSyncEvent? Value,
@@ -49,6 +50,7 @@ public static class SyncPayloadValidator
         [SyncEventType.AttentionAlert] = ["kind", "localDate", "startedAtUtc", "durationSeconds"],
         [SyncEventType.ProtectionOff] = ["source", "localDate"],
         [SyncEventType.SecurityAlert] = ["kind", "localDate"],
+        [SyncEventType.BlockedAttempt] = ["localDate"],
     };
 
     private static readonly Dictionary<SyncEventType, string[]> RequiredFields = new()
@@ -57,6 +59,7 @@ public static class SyncPayloadValidator
         [SyncEventType.AttentionAlert] = ["kind", "localDate", "startedAtUtc", "durationSeconds"],
         [SyncEventType.ProtectionOff] = ["source", "localDate"],
         [SyncEventType.SecurityAlert] = ["kind", "localDate"],
+        [SyncEventType.BlockedAttempt] = ["localDate"],
     };
 
     public static SyncValidationResult Validate(SyncEventDto? dto, DateTimeOffset? nowUtc = null)
@@ -119,6 +122,7 @@ public static class SyncPayloadValidator
                 SyncEventType.AttentionAlert => ValidateAttentionAlert(dto.Payload, now),
                 SyncEventType.ProtectionOff => ValidateProtectionOff(dto.Payload, now),
                 SyncEventType.SecurityAlert => ValidateSecurityAlert(dto.Payload, now),
+                SyncEventType.BlockedAttempt => ValidateBlockedAttempt(dto.Payload, now),
                 _ => SyncValidationResult.Invalid("invalid_event", "Loại sự kiện không hợp lệ."),
             };
         }
@@ -256,6 +260,24 @@ public static class SyncPayloadValidator
         return SyncValidationResult.Valid(new ValidatedSyncEvent(
             SyncEventType.SecurityAlert,
             SecurityAlert: value));
+    }
+
+    private static SyncValidationResult ValidateBlockedAttempt(JsonElement payload, DateTimeOffset now)
+    {
+        var value = payload.Deserialize<BlockedAttemptPayload>(StrictOptions);
+        if (value is null)
+        {
+            return SyncValidationResult.Invalid("invalid_payload", "Payload không đúng định dạng.");
+        }
+
+        if (!IsLocalDateInRange(value.LocalDate, now))
+        {
+            return SyncValidationResult.Invalid("invalid_payload", "localDate nằm ngoài khoảng hợp lệ.");
+        }
+
+        return SyncValidationResult.Valid(new ValidatedSyncEvent(
+            SyncEventType.BlockedAttempt,
+            BlockedAttempt: value));
     }
 
     private static bool IsLocalDateInRange(DateOnly localDate, DateTimeOffset now)

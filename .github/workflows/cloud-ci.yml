@@ -24,20 +24,6 @@ jobs:
   build-test:
     name: Build and test
     runs-on: ubuntu-latest
-    services:
-      postgres:
-        image: postgres:16-alpine
-        env:
-          POSTGRES_DB: edufocus_cloud
-          POSTGRES_USER: edufocus
-          POSTGRES_PASSWORD: edufocus_ci
-        ports:
-          - 5432:5432
-        options: >-
-          --health-cmd "pg_isready -U edufocus -d edufocus_cloud"
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 10
     steps:
       - uses: actions/checkout@v4
 
@@ -52,8 +38,6 @@ jobs:
         run: dotnet build cloud/EduFocus.Cloud.slnx --configuration Release --no-restore
 
       - name: Test
-        env:
-          EDUFOCUS_CLOUD_TEST_DB: "Host=localhost;Port=5432;Database=edufocus_cloud;Username=edufocus;Password=edufocus_ci"
         run: dotnet test cloud/EduFocus.Cloud.slnx --configuration Release --no-build
 
   docker:
@@ -65,15 +49,12 @@ jobs:
 
       - uses: docker/setup-buildx-action@v3
 
-      - name: Validate production compose file
+      - name: Validate compose file
         working-directory: cloud
         env:
-          POSTGRES_DB: edufocus_cloud
-          POSTGRES_USER: edufocus
-          POSTGRES_PASSWORD: ci-placeholder
           EDUFOCUS_CLOUD_PUBLIC_URL: https://cloud.example.test
           EDUFOCUS_DOMAIN: cloud.example.test
-        run: docker compose -f docker-compose.prod.yml config --quiet
+        run: docker compose --profile tls config --quiet
 
       - name: Build image (no push)
         uses: docker/build-push-action@v6
@@ -88,7 +69,7 @@ jobs:
 
       - name: Verify image contains no secrets
         run: |
-          if docker run --rm --entrypoint sh edufocus-cloud-api:ci -c 'find /app \( -name ".env" -o -name "*service-account*.json" -o -name "google-services.json" \)' | grep -q .; then
+          if docker run --rm --entrypoint sh edufocus-cloud-api:ci -c 'find /app \( -name ".env" -o -name "*service-account*.json" -o -name "*.pfx" \)' | grep -q .; then
             echo "Secret-like file found inside the image." >&2
             exit 1
           fi

@@ -17,6 +17,9 @@ public enum SyncEventType
 
     [JsonStringEnumMemberName("security_alert")]
     SecurityAlert,
+
+    [JsonStringEnumMemberName("blocked_attempt")]
+    BlockedAttempt,
 }
 
 [JsonConverter(typeof(JsonStringEnumConverter<AttentionAlertKind>))]
@@ -108,3 +111,5 @@ public sealed record AttentionAlertPayload(
 public sealed record ProtectionOffPayload(ProtectionOffSource Source, DateOnly LocalDate);
 
 public sealed record SecurityAlertPayload(SecurityAlertKind Kind, DateOnly LocalDate);
+
+public sealed record BlockedAttemptPayload(DateOnly LocalDate);

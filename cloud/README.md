@@ -1,8 +1,8 @@
 # EduFocus Cloud (Phase 8)
 
 Backend tùy chọn cho cloud relay: ghép nối thiết bị, nhận sự kiện tổng hợp, gửi thông báo đẩy qua
-FCM và trả báo cáo tóm tắt cho app phụ huynh. Cloud **mặc định tắt** phía desktop; repo này không
-chứa secret và không chứa dữ liệu học tập.
+Web Push/UnifiedPush (ví dụ ntfy) và trả báo cáo tóm tắt cho app phụ huynh. Cloud **mặc định tắt**
+phía desktop; repo này không chứa secret và không chứa dữ liệu học tập.
 
 - Kiến trúc và API: [../docs/cloud-backend.md](../docs/cloud-backend.md)
 - Triển khai production (TLS, backup/restore, rollback, demo LAN): [../docs/cloud-deploy.md](../docs/cloud-deploy.md)
@@ -11,20 +11,20 @@ chứa secret và không chứa dữ liệu học tập.
 ## Yêu cầu
 
 - .NET 10 SDK (10.0.200+) để build/test.
-- Docker + Docker Compose để chạy PostgreSQL/API.
-- PostgreSQL 16 nếu chạy API trực tiếp, không qua Docker.
+- Docker + Docker Compose để chạy API. Backend dùng **SQLite** một file, không cần PostgreSQL.
 
 ## Chạy local bằng Docker Compose
 
 ```bash
 cd cloud
-cp .env.example .env        # đổi mật khẩu nếu không dùng máy dev
-docker compose up --build
+cp .env.example .env
+docker compose up --build -d
 curl http://localhost:8080/healthz
 ```
 
-`/healthz` trả `{"status":"healthy","checkedAtUtc":"..."}` khi API kết nối được PostgreSQL; trả
-`503` và `"unhealthy"` khi database không sẵn sàng.
+`/healthz` trả `{"status":"healthy","checkedAtUtc":"..."}` khi API mở được SQLite; trả `503` và
+`"unhealthy"` khi database không sẵn sàng. Database nằm trong volume `edufocus-data` tại
+`/data/edufocus.db`; migration tự chạy khi `EDUFOCUS_CLOUD_AUTO_MIGRATE=true` (mặc định).
 
 Để bật TLS bằng Caddy (tự xin chứng chỉ khi có domain công khai):
 
@@ -33,20 +33,21 @@ EDUFOCUS_DOMAIN=cloud.example.com docker compose --profile tls up -d
 ```
 
 Caddy lắng nghe 80/443 và reverse proxy tới `api:8080`. Với `localhost`, Caddy dùng chứng chỉ nội
-bộ; đặt `EDUFOCUS_CLOUD_PUBLIC_URL` đúng scheme/domain mà desktop và mobile sẽ gọi.
+bộ; đặt `EDUFOCUS_CLOUD_PUBLIC_URL` đúng scheme/domain mà desktop và mobile sẽ gọi. Khi dùng Caddy,
+giữ `API_BIND=127.0.0.1` và `CLOUD_TRUST_FORWARDED_HEADERS=true`.
 
 ## Chạy API trực tiếp
 
 ```bash
 cd cloud
-export ConnectionStrings__Postgres="Host=localhost;Port=5432;Database=edufocus_cloud;Username=edufocus;Password=edufocus_dev"
+export ConnectionStrings__Sqlite="Data Source=edufocus-cloud.db;Foreign Keys=True;Default Timeout=30"
 export EDUFOCUS_CLOUD_PUBLIC_URL="http://localhost:8080"
 dotnet run --project EduFocus.Cloud.Api
 ```
 
 Ở môi trường `Development`, nếu không có connection string, API dùng fallback
-`Host=localhost;Port=5432;Database=edufocus_cloud;Username=edufocus;Password=edufocus_dev`. Môi
-trường khác **bắt buộc** cấu hình `ConnectionStrings__Postgres`.
+`Data Source=edufocus-cloud.db;Foreign Keys=True;Default Timeout=30`. Môi trường khác **bắt buộc**
+cấu hình `ConnectionStrings__Sqlite`.
 
 ## Build và test
 
@@ -57,14 +58,10 @@ dotnet build EduFocus.Cloud.slnx -c Release
 dotnet test EduFocus.Cloud.slnx -c Release
 ```
 
-Test tích hợp database chỉ chạy khi đặt `EDUFOCUS_CLOUD_TEST_DB`:
+Test tích hợp tự tạo database SQLite tạm (không cần service ngoài). Có thể đặt
+`EDUFOCUS_CLOUD_TEST_DB` thành một connection string SQLite khác nếu muốn giữ lại file để kiểm tra.
 
-```bash
-EDUFOCUS_CLOUD_TEST_DB="Host=localhost;Port=5432;Database=edufocus_cloud_test;Username=edufocus;Password=edufocus_dev" \
-  dotnet test EduFocus.Cloud.slnx -c Release
-```
-
-Test này tạo lại schema từ migration, kiểm tra unique `(FamilyId, ClientEventId)`, upsert
+Test tạo lại schema từ migration, kiểm tra unique `(FamilyId, ClientEventId)`, upsert
 `DailySummaries`, partial unique index của pairing code, cascade delete, audit ẩn danh, luồng ghép
 nối đầy đủ qua HTTP (tạo phiên → claim → trạng thái → link → xoay/thu hồi token), ingest idempotent
 (áp dụng/trùng/từ chối, latest-wins, giới hạn batch) và rate limit 429.
@@ -73,15 +70,15 @@ nối đầy đủ qua HTTP (tạo phiên → claim → trạng thái → link �
 
 ```bash
 dotnet tool restore
-dotnet ef database update --project cloud/EduFocus.Cloud.Data --startup-project cloud/EduFocus.Cloud.Data
-dotnet ef migrations add <TenMigration> --project cloud/EduFocus.Cloud.Data --startup-project cloud/EduFocus.Cloud.Data --output-dir Migrations
+dotnet ef database update --project EduFocus.Cloud.Data --startup-project EduFocus.Cloud.Api
+dotnet ef migrations add <TenMigration> --project EduFocus.Cloud.Data --startup-project EduFocus.Cloud.Api --output-dir Migrations
 ```
 
-Startup chỉ tự chạy migration khi `EDUFOCUS_CLOUD_AUTO_MIGRATE=true`. Production dùng compose
-`docker-compose.prod.yml` và chạy migration tường minh trước khi deploy:
+Startup tự chạy migration khi `EDUFOCUS_CLOUD_AUTO_MIGRATE=true`. Với compose mặc định, biến này
+bật để deploy một lệnh; có thể đặt `false` và chạy migration tường minh trước khi rollout:
 
 ```bash
-docker compose -f docker-compose.prod.yml run --rm api --migrate
+docker compose run --rm api --migrate
 ```
 
 ## Cấu trúc
@@ -90,36 +87,39 @@ docker compose -f docker-compose.prod.yml run --rm api --migrate
 |---|---|
 | `EduFocus.Cloud.Api` | Minimal API nhóm `/v1`, `/healthz`, xác thực Bearer thiết bị, rate limit, Serilog JSON |
 | `EduFocus.Cloud.Contracts` | DTO/enum dùng chung cho API, desktop và mobile; JSON camelCase |
-| `EduFocus.Cloud.Data` | Entity, cấu hình EF Core 10 + Npgsql, `CloudDbContext`, migration `InitialCloudSchema` |
-| `EduFocus.Cloud.Tests` | xUnit: serialization contract, test tích hợp schema/pairing/rate limit tùy chọn |
+| `EduFocus.Cloud.Data` | Entity, cấu hình EF Core 10 + SQLite, `CloudDbContext`, migration `InitialCloudSchema` |
+| `EduFocus.Cloud.Tests` | xUnit: serialization contract, test tích hợp schema/pairing/rate limit |
 
 Đã có: pairing (`/v1/pairing`), xác thực token thiết bị (`efd_`/`efm_`), `/v1/link/status`,
 `/v1/devices`, `/v1/devices/token/rotate`, ingest `/v1/sync/events` (batch ≤50, ≤64 KB, idempotent,
-latest-wins), push FCM + preferences (#83) và các API đọc cho mobile (#84: báo cáo ngày, notifications
-có cursor, xóa thiết bị/gia đình).
+latest-wins), push Web Push/UnifiedPush + preferences (#83), `GET /v1/push/config` và các API đọc cho
+mobile (#84: báo cáo ngày, notifications có cursor, xóa thiết bị/gia đình).
 
 ## Biến môi trường
 
 | Biến | Bắt buộc | Mô tả |
 |---|---|---|
-| `ConnectionStrings__Postgres` | Production | Chuỗi kết nối PostgreSQL |
+| `ConnectionStrings__Sqlite` | Production | Chuỗi kết nối SQLite, ví dụ `Data Source=/data/edufocus.db;Foreign Keys=True` |
 | `EDUFOCUS_CLOUD_PUBLIC_URL` | Khuyến nghị | Base URL công khai dùng để tạo QR/pairing URI |
-| `EDUFOCUS_CLOUD_AUTO_MIGRATE` | Không | `true` để startup tự chạy migration; mặc định tắt |
+| `EDUFOCUS_CLOUD_AUTO_MIGRATE` | Không | `true` để startup tự chạy migration; compose mặc định bật |
 | `ASPNETCORE_ENVIRONMENT` | Không | `Development` bật OpenAPI và fallback DB |
 | `ASPNETCORE_URLS` | Không | Mặc định trong Docker là `http://+:8080` |
-| `Cloud__TrustForwardedHeaders` | Không | `true` khi chạy sau Caddy nội bộ; mặc định `false` |
-| `Push__Enabled`, `Push__ProjectId`, `Push__ServiceAccountPath` | Khi bật push | Cấu hình FCM |
+| `Cloud__TrustForwardedHeaders` | Không | `true` khi chạy sau Caddy nội bộ; mặc định compose là `true` |
+| `Push__Enabled`, `Push__VapidPublicKey`, `Push__VapidPrivateKey`, `Push__VapidSubject`, `Push__AllowedEndpointHosts__0` | Khi bật push | VAPID và host endpoint UnifiedPush/ntfy |
 | `Jobs__*`, `RateLimiting__*` | Không | Chu kỳ retention và giới hạn request |
-| `POSTGRES_DB`, `POSTGRES_USER`, `POSTGRES_PASSWORD` | Compose | Thông tin PostgreSQL |
+| `API_BIND`, `API_PORT` | Compose | Địa chỉ/port publish của API; mặc định `127.0.0.1:8080` |
 | `EDUFOCUS_DOMAIN` | Profile `tls` | Domain cho Caddy |
 
 ## Bảo mật
 
-- Không commit `.env`, service account FCM, keystore hay bất kỳ secret nào. `.env.example` chỉ chứa
+- Không commit `.env`, VAPID private key, keystore hay bất kỳ secret nào. `.env.example` chỉ chứa
   giá trị dev.
-- Log dùng Serilog JSON; enricher redacts `token`, `authorization`, `pushToken`, `fcmToken`, `code`,
-  `password`, `secret` và các tên tương tự. Không log body của pairing/ingest.
-- PostgreSQL không public; chỉ API trong cùng mạng Compose truy cập được.
+- Log dùng Serilog JSON; enricher redacts `token`, `authorization`, `endpoint`, `p256dh`, `auth`,
+  `code`, `password`, `secret` và các tên tương tự. Không log body của pairing/ingest.
+- Compose ánh xạ `PUSH_*` sang `Push__*`; thêm host allowlist thứ hai bằng
+  `Push__AllowedEndpointHosts__1`, v.v.
+- SQLite chỉ nằm trong volume Docker; API không publish port ra ngoài khi dùng Caddy (`API_BIND` mặc
+  định `127.0.0.1`). Volume cần được backup và bảo vệ.
 - API chỉ chấp nhận HTTPS khi chạy sau Caddy/reverse proxy; health check nội bộ dùng HTTP trong mạng
   Docker.
 - Token thiết bị đục 32 byte (`efd_`/`efm_`), server chỉ lưu SHA-256 hex, so sánh constant-time,
@@ -129,6 +129,6 @@ có cursor, xóa thiết bị/gia đình).
 
 ## CI
 
-`.github/workflows/cloud-ci.yml` chạy restore/build/test với PostgreSQL 16 service, build Docker
-image ở mọi PR (không push) và publish image lên GHCR khi tag hoặc chạy thủ công. Workflow này độc
-lập với CI desktop, không ảnh hưởng `EduFocus.slnx`.
+`.github/workflows/cloud-ci.yml` chạy restore/build/test trên SQLite tạm, build Docker image ở mọi
+PR (không push) và publish image lên GHCR khi tag hoặc chạy thủ công. Workflow này độc lập với CI
+desktop, không ảnh hưởng `EduFocus.slnx`.

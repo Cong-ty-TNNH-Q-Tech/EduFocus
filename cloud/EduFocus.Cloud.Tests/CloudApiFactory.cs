@@ -14,7 +14,7 @@ internal sealed class CloudApiFactory(
     protected override void ConfigureWebHost(IWebHostBuilder builder)
     {
         builder.UseEnvironment("Testing");
-        builder.UseSetting("ConnectionStrings:Postgres", connectionString);
+        builder.UseSetting("ConnectionStrings:Sqlite", connectionString);
         builder.UseSetting("Cloud:PublicBaseUrl", "https://cloud.test");
         builder.UseSetting("Jobs:Enabled", "false");
 

@@ -11,6 +11,7 @@ public sealed class PushNotificationPayloadTests
     [InlineData("attention_alert", PushNotificationType.AttentionAlert)]
     [InlineData("protection_off", PushNotificationType.ProtectionOff)]
     [InlineData("security_alert", PushNotificationType.SecurityAlert)]
+    [InlineData("blocked_attempt", PushNotificationType.BlockedAttempt)]
     public void Parses_all_backend_types(string rawType, PushNotificationType expected)
     {
         var parsed = PushNotificationPayloadParser.TryParse(

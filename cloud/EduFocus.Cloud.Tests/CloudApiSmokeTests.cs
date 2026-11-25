@@ -18,7 +18,7 @@ public sealed class CloudApiSmokeTests
     public async Task Api_boots_and_returns_coded_json_errors_without_database()
     {
         await using var factory = new CloudApiFactory(
-            "Host=localhost;Port=5999;Database=missing;Username=x;Password=x;Timeout=1");
+            "Data Source=missing/edufocus.db;Mode=ReadOnly;Default Timeout=1");
         using var client = factory.CreateClient();
 
         var root = await client.GetAsync("/v1/");

@@ -4,7 +4,6 @@ using EduFocus.Cloud.Data;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
-using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 
 #nullable disable
 
@@ -16,34 +15,30 @@ namespace EduFocus.Cloud.Data.Migrations
         protected override void BuildModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
-            modelBuilder
-                .HasAnnotation("ProductVersion", "10.0.4")
-                .HasAnnotation("Relational:MaxIdentifierLength", 63);
-
-            NpgsqlModelBuilderExtensions.UseIdentityByDefaultColumns(modelBuilder);
+            modelBuilder.HasAnnotation("ProductVersion", "10.0.3");
 
             modelBuilder.Entity("EduFocus.Cloud.Data.Entities.CloudAuditLog", b =>
                 {
                     b.Property<Guid>("Id")
-                        .HasColumnType("uuid");
+                        .HasColumnType("TEXT");
 
                     b.Property<string>("Action")
                         .IsRequired()
                         .HasMaxLength(64)
-                        .HasColumnType("character varying(64)");
+                        .HasColumnType("TEXT");
 
                     b.Property<Guid?>("ActorDeviceId")
-                        .HasColumnType("uuid");
+                        .HasColumnType("TEXT");
 
-                    b.Property<DateTimeOffset>("CreatedAtUtc")
-                        .HasColumnType("timestamp with time zone");
+                    b.Property<long>("CreatedAtUtc")
+                        .HasColumnType("INTEGER");
 
                     b.Property<Guid?>("FamilyId")
-                        .HasColumnType("uuid");
+                        .HasColumnType("TEXT");
 
                     b.Property<string>("MetadataJson")
                         .IsRequired()
-                        .HasColumnType("jsonb");
+                        .HasColumnType("TEXT");
 
                     b.HasKey("Id");
 
@@ -61,61 +56,61 @@ namespace EduFocus.Cloud.Data.Migrations
             modelBuilder.Entity("EduFocus.Cloud.Data.Entities.DailySummary", b =>
                 {
                     b.Property<Guid>("Id")
-                        .HasColumnType("uuid");
+                        .HasColumnType("TEXT");
 
                     b.Property<long>("AbsentSeconds")
-                        .HasColumnType("bigint");
+                        .HasColumnType("INTEGER");
 
                     b.Property<long>("ActiveSeconds")
-                        .HasColumnType("bigint");
+                        .HasColumnType("INTEGER");
 
                     b.Property<double?>("AttentionPercent")
-                        .HasColumnType("double precision");
+                        .HasColumnType("REAL");
 
                     b.Property<int>("BlockedAttempts")
-                        .HasColumnType("integer");
+                        .HasColumnType("INTEGER");
 
                     b.Property<double?>("CoveragePercent")
-                        .HasColumnType("double precision");
+                        .HasColumnType("REAL");
 
                     b.Property<Guid>("DesktopDeviceId")
-                        .HasColumnType("uuid");
+                        .HasColumnType("TEXT");
 
                     b.Property<long>("DistractedSeconds")
-                        .HasColumnType("bigint");
+                        .HasColumnType("INTEGER");
 
                     b.Property<long>("DrowsySeconds")
-                        .HasColumnType("bigint");
+                        .HasColumnType("INTEGER");
 
                     b.Property<Guid>("FamilyId")
-                        .HasColumnType("uuid");
+                        .HasColumnType("TEXT");
 
                     b.Property<long>("FocusedSeconds")
-                        .HasColumnType("bigint");
+                        .HasColumnType("INTEGER");
 
                     b.Property<long>("IdleSeconds")
-                        .HasColumnType("bigint");
+                        .HasColumnType("INTEGER");
 
                     b.Property<DateOnly>("LocalDate")
-                        .HasColumnType("date");
+                        .HasColumnType("TEXT");
 
                     b.Property<long>("MonitoredSeconds")
-                        .HasColumnType("bigint");
+                        .HasColumnType("INTEGER");
 
                     b.Property<long>("MonitoringEligibleSeconds")
-                        .HasColumnType("bigint");
+                        .HasColumnType("INTEGER");
 
                     b.Property<long>("OnlineClassSeconds")
-                        .HasColumnType("bigint");
+                        .HasColumnType("INTEGER");
 
                     b.Property<int>("SessionsCount")
-                        .HasColumnType("integer");
+                        .HasColumnType("INTEGER");
 
                     b.Property<long>("StudySeconds")
-                        .HasColumnType("bigint");
+                        .HasColumnType("INTEGER");
 
-                    b.Property<DateTimeOffset>("UpdatedAtUtc")
-                        .HasColumnType("timestamp with time zone");
+                    b.Property<long>("UpdatedAtUtc")
+                        .HasColumnType("INTEGER");
 
                     b.HasKey("Id");
 
@@ -141,38 +136,38 @@ namespace EduFocus.Cloud.Data.Migrations
             modelBuilder.Entity("EduFocus.Cloud.Data.Entities.Device", b =>
                 {
                     b.Property<Guid>("Id")
-                        .HasColumnType("uuid");
+                        .HasColumnType("TEXT");
 
                     b.Property<string>("AppVersion")
                         .HasMaxLength(32)
-                        .HasColumnType("character varying(32)");
+                        .HasColumnType("TEXT");
 
-                    b.Property<DateTimeOffset>("CreatedAtUtc")
-                        .HasColumnType("timestamp with time zone");
+                    b.Property<long>("CreatedAtUtc")
+                        .HasColumnType("INTEGER");
 
                     b.Property<string>("DisplayName")
                         .IsRequired()
                         .HasMaxLength(128)
-                        .HasColumnType("character varying(128)");
+                        .HasColumnType("TEXT");
 
                     b.Property<Guid>("FamilyId")
-                        .HasColumnType("uuid");
+                        .HasColumnType("TEXT");
 
                     b.Property<string>("Kind")
                         .IsRequired()
                         .HasMaxLength(16)
-                        .HasColumnType("character varying(16)");
+                        .HasColumnType("TEXT");
 
-                    b.Property<DateTimeOffset?>("LastSeenAtUtc")
-                        .HasColumnType("timestamp with time zone");
+                    b.Property<long?>("LastSeenAtUtc")
+                        .HasColumnType("INTEGER");
 
                     b.Property<string>("Platform")
                         .IsRequired()
                         .HasMaxLength(32)
-                        .HasColumnType("character varying(32)");
+                        .HasColumnType("TEXT");
 
-                    b.Property<DateTimeOffset?>("RevokedAtUtc")
-                        .HasColumnType("timestamp with time zone");
+                    b.Property<long?>("RevokedAtUtc")
+                        .HasColumnType("INTEGER");
 
                     b.HasKey("Id");
 
@@ -188,24 +183,24 @@ namespace EduFocus.Cloud.Data.Migrations
             modelBuilder.Entity("EduFocus.Cloud.Data.Entities.DeviceToken", b =>
                 {
                     b.Property<Guid>("Id")
-                        .HasColumnType("uuid");
+                        .HasColumnType("TEXT");
 
-                    b.Property<DateTimeOffset>("CreatedAtUtc")
-                        .HasColumnType("timestamp with time zone");
+                    b.Property<long>("CreatedAtUtc")
+                        .HasColumnType("INTEGER");
 
                     b.Property<Guid>("DeviceId")
-                        .HasColumnType("uuid");
+                        .HasColumnType("TEXT");
 
-                    b.Property<DateTimeOffset?>("LastUsedAtUtc")
-                        .HasColumnType("timestamp with time zone");
+                    b.Property<long?>("LastUsedAtUtc")
+                        .HasColumnType("INTEGER");
 
-                    b.Property<DateTimeOffset?>("RevokedAtUtc")
-                        .HasColumnType("timestamp with time zone");
+                    b.Property<long?>("RevokedAtUtc")
+                        .HasColumnType("INTEGER");
 
                     b.Property<string>("Scopes")
                         .IsRequired()
                         .HasMaxLength(128)
-                        .HasColumnType("character varying(128)");
+                        .HasColumnType("TEXT");
 
                     b.Property<string>("TokenHash")
                         .IsRequired()
@@ -227,18 +222,18 @@ namespace EduFocus.Cloud.Data.Migrations
             modelBuilder.Entity("EduFocus.Cloud.Data.Entities.Family", b =>
                 {
                     b.Property<Guid>("Id")
-                        .HasColumnType("uuid");
+                        .HasColumnType("TEXT");
 
-                    b.Property<DateTimeOffset>("CreatedAtUtc")
-                        .HasColumnType("timestamp with time zone");
+                    b.Property<long>("CreatedAtUtc")
+                        .HasColumnType("INTEGER");
 
-                    b.Property<DateTimeOffset?>("DeletedAtUtc")
-                        .HasColumnType("timestamp with time zone");
+                    b.Property<long?>("DeletedAtUtc")
+                        .HasColumnType("INTEGER");
 
                     b.Property<string>("TimeZoneId")
                         .IsRequired()
                         .HasMaxLength(64)
-                        .HasColumnType("character varying(64)");
+                        .HasColumnType("TEXT");
 
                     b.HasKey("Id");
 
@@ -248,39 +243,42 @@ namespace EduFocus.Cloud.Data.Migrations
             modelBuilder.Entity("EduFocus.Cloud.Data.Entities.NotificationPreference", b =>
                 {
                     b.Property<Guid>("FamilyId")
-                        .HasColumnType("uuid");
+                        .HasColumnType("TEXT");
 
                     b.Property<bool>("AttentionAlert")
-                        .HasColumnType("boolean");
+                        .HasColumnType("INTEGER");
+
+                    b.Property<bool>("BlockedAttempt")
+                        .HasColumnType("INTEGER");
 
                     b.Property<bool>("DailySummary")
-                        .HasColumnType("boolean");
+                        .HasColumnType("INTEGER");
 
                     b.Property<int>("DailySummaryMinutes")
-                        .HasColumnType("integer");
+                        .HasColumnType("INTEGER");
 
                     b.Property<bool>("ProtectionOff")
-                        .HasColumnType("boolean");
+                        .HasColumnType("INTEGER");
 
                     b.Property<int>("QuietEndMinutes")
-                        .HasColumnType("integer");
+                        .HasColumnType("INTEGER");
 
                     b.Property<int>("QuietStartMinutes")
-                        .HasColumnType("integer");
+                        .HasColumnType("INTEGER");
 
                     b.Property<bool>("SecurityAlert")
-                        .HasColumnType("boolean");
+                        .HasColumnType("INTEGER");
 
                     b.Property<bool>("SecurityAlertBypassQuietHours")
-                        .HasColumnType("boolean");
+                        .HasColumnType("INTEGER");
 
                     b.Property<string>("TimeZoneId")
                         .IsRequired()
                         .HasMaxLength(64)
-                        .HasColumnType("character varying(64)");
+                        .HasColumnType("TEXT");
 
-                    b.Property<DateTimeOffset>("UpdatedAtUtc")
-                        .HasColumnType("timestamp with time zone");
+                    b.Property<long>("UpdatedAtUtc")
+                        .HasColumnType("INTEGER");
 
                     b.HasKey("FamilyId");
 
@@ -293,44 +291,44 @@ namespace EduFocus.Cloud.Data.Migrations
             modelBuilder.Entity("EduFocus.Cloud.Data.Entities.NotificationRecord", b =>
                 {
                     b.Property<Guid>("Id")
-                        .HasColumnType("uuid");
+                        .HasColumnType("TEXT");
 
                     b.Property<int>("AttemptCount")
-                        .HasColumnType("integer");
+                        .HasColumnType("INTEGER");
 
                     b.Property<string>("Category")
                         .IsRequired()
                         .HasMaxLength(32)
-                        .HasColumnType("character varying(32)");
+                        .HasColumnType("TEXT");
 
-                    b.Property<DateTimeOffset>("CreatedAtUtc")
-                        .HasColumnType("timestamp with time zone");
+                    b.Property<long>("CreatedAtUtc")
+                        .HasColumnType("INTEGER");
 
                     b.Property<string>("DedupeKey")
                         .IsRequired()
                         .HasMaxLength(160)
-                        .HasColumnType("character varying(160)");
+                        .HasColumnType("TEXT");
 
                     b.Property<string>("FailureCode")
                         .HasMaxLength(64)
-                        .HasColumnType("character varying(64)");
+                        .HasColumnType("TEXT");
 
                     b.Property<Guid>("FamilyId")
-                        .HasColumnType("uuid");
+                        .HasColumnType("TEXT");
 
-                    b.Property<DateTimeOffset?>("LastAttemptAtUtc")
-                        .HasColumnType("timestamp with time zone");
+                    b.Property<long?>("LastAttemptAtUtc")
+                        .HasColumnType("INTEGER");
 
                     b.Property<DateOnly?>("LocalDate")
-                        .HasColumnType("date");
+                        .HasColumnType("TEXT");
 
-                    b.Property<DateTimeOffset?>("SentAtUtc")
-                        .HasColumnType("timestamp with time zone");
+                    b.Property<long?>("SentAtUtc")
+                        .HasColumnType("INTEGER");
 
                     b.Property<string>("Status")
                         .IsRequired()
                         .HasMaxLength(16)
-                        .HasColumnType("character varying(16)");
+                        .HasColumnType("TEXT");
 
                     b.HasKey("Id");
 
@@ -343,7 +341,7 @@ namespace EduFocus.Cloud.Data.Migrations
 
                     b.ToTable("Notifications", null, t =>
                         {
-                            t.HasCheckConstraint("CK_Notifications_Category", "\"Category\" IN ('DailySummary', 'AttentionAlert', 'ProtectionOff', 'SecurityAlert')");
+                            t.HasCheckConstraint("CK_Notifications_Category", "\"Category\" IN ('DailySummary', 'AttentionAlert', 'ProtectionOff', 'SecurityAlert', 'BlockedAttempt')");
 
                             t.HasCheckConstraint("CK_Notifications_Status", "\"Status\" IN ('Pending', 'Sent', 'Suppressed', 'Failed')");
                         });
@@ -352,33 +350,33 @@ namespace EduFocus.Cloud.Data.Migrations
             modelBuilder.Entity("EduFocus.Cloud.Data.Entities.PairingSession", b =>
                 {
                     b.Property<Guid>("Id")
-                        .HasColumnType("uuid");
+                        .HasColumnType("TEXT");
 
                     b.Property<int>("AttemptCount")
-                        .HasColumnType("integer");
+                        .HasColumnType("INTEGER");
 
-                    b.Property<DateTimeOffset?>("ClaimedAtUtc")
-                        .HasColumnType("timestamp with time zone");
+                    b.Property<long?>("ClaimedAtUtc")
+                        .HasColumnType("INTEGER");
 
                     b.Property<Guid?>("ClaimedByDeviceId")
-                        .HasColumnType("uuid");
+                        .HasColumnType("TEXT");
 
                     b.Property<string>("CodeHash")
                         .IsRequired()
                         .HasMaxLength(64)
                         .HasColumnType("char(64)");
 
-                    b.Property<DateTimeOffset>("CreatedAtUtc")
-                        .HasColumnType("timestamp with time zone");
+                    b.Property<long>("CreatedAtUtc")
+                        .HasColumnType("INTEGER");
 
                     b.Property<Guid>("DesktopDeviceId")
-                        .HasColumnType("uuid");
+                        .HasColumnType("TEXT");
 
-                    b.Property<DateTimeOffset>("ExpiresAtUtc")
-                        .HasColumnType("timestamp with time zone");
+                    b.Property<long>("ExpiresAtUtc")
+                        .HasColumnType("INTEGER");
 
                     b.Property<Guid>("FamilyId")
-                        .HasColumnType("uuid");
+                        .HasColumnType("TEXT");
 
                     b.HasKey("Id");
 
@@ -406,34 +404,44 @@ namespace EduFocus.Cloud.Data.Migrations
             modelBuilder.Entity("EduFocus.Cloud.Data.Entities.PushRegistration", b =>
                 {
                     b.Property<Guid>("Id")
-                        .HasColumnType("uuid");
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Auth")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("TEXT");
 
                     b.Property<Guid>("DeviceId")
-                        .HasColumnType("uuid");
+                        .HasColumnType("TEXT");
 
-                    b.Property<string>("FcmToken")
+                    b.Property<string>("Endpoint")
                         .IsRequired()
-                        .HasMaxLength(512)
-                        .HasColumnType("character varying(512)");
+                        .HasMaxLength(1000)
+                        .HasColumnType("TEXT");
 
-                    b.Property<DateTimeOffset?>("InvalidatedAtUtc")
-                        .HasColumnType("timestamp with time zone");
+                    b.Property<long?>("InvalidatedAtUtc")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("P256dh")
+                        .IsRequired()
+                        .HasMaxLength(128)
+                        .HasColumnType("TEXT");
 
                     b.Property<string>("Platform")
                         .IsRequired()
                         .HasMaxLength(32)
-                        .HasColumnType("character varying(32)");
+                        .HasColumnType("TEXT");
 
-                    b.Property<DateTimeOffset>("UpdatedAtUtc")
-                        .HasColumnType("timestamp with time zone");
+                    b.Property<long>("UpdatedAtUtc")
+                        .HasColumnType("INTEGER");
 
                     b.HasKey("Id");
 
                     b.HasIndex("DeviceId")
                         .HasDatabaseName("IX_PushRegistrations_DeviceId");
 
-                    b.HasIndex("FcmToken")
-                        .HasDatabaseName("IX_PushRegistrations_FcmToken");
+                    b.HasIndex("Endpoint")
+                        .HasDatabaseName("IX_PushRegistrations_Endpoint");
 
                     b.ToTable("PushRegistrations", (string)null);
                 });
@@ -441,31 +449,31 @@ namespace EduFocus.Cloud.Data.Migrations
             modelBuilder.Entity("EduFocus.Cloud.Data.Entities.SyncEvent", b =>
                 {
                     b.Property<Guid>("Id")
-                        .HasColumnType("uuid");
+                        .HasColumnType("TEXT");
 
                     b.Property<string>("ClientEventId")
                         .IsRequired()
                         .HasMaxLength(64)
-                        .HasColumnType("character varying(64)");
+                        .HasColumnType("TEXT");
 
                     b.Property<Guid>("FamilyId")
-                        .HasColumnType("uuid");
+                        .HasColumnType("TEXT");
 
-                    b.Property<DateTimeOffset?>("ProcessedAtUtc")
-                        .HasColumnType("timestamp with time zone");
+                    b.Property<long?>("ProcessedAtUtc")
+                        .HasColumnType("INTEGER");
 
-                    b.Property<DateTimeOffset>("ReceivedAtUtc")
-                        .HasColumnType("timestamp with time zone");
+                    b.Property<long>("ReceivedAtUtc")
+                        .HasColumnType("INTEGER");
 
                     b.Property<string>("Status")
                         .IsRequired()
                         .HasMaxLength(16)
-                        .HasColumnType("character varying(16)");
+                        .HasColumnType("TEXT");
 
                     b.Property<string>("Type")
                         .IsRequired()
                         .HasMaxLength(32)
-                        .HasColumnType("character varying(32)");
+                        .HasColumnType("TEXT");
 
                     b.HasKey("Id");
 
@@ -480,7 +488,7 @@ namespace EduFocus.Cloud.Data.Migrations
                         {
                             t.HasCheckConstraint("CK_SyncEvents_Status", "\"Status\" IN ('Pending', 'Processed', 'Rejected')");
 
-                            t.HasCheckConstraint("CK_SyncEvents_Type", "\"Type\" IN ('DailySummary', 'AttentionAlert', 'ProtectionOff', 'SecurityAlert')");
+                            t.HasCheckConstraint("CK_SyncEvents_Type", "\"Type\" IN ('DailySummary', 'AttentionAlert', 'ProtectionOff', 'SecurityAlert', 'BlockedAttempt')");
                         });
                 });
 

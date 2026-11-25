@@ -10,7 +10,8 @@ public static class CloudEventTypes
     public const string AttentionAlert = "attention_alert";
     public const string ProtectionOff = "protection_off";
     public const string SecurityAlert = "security_alert";
+    public const string BlockedAttempt = "blocked_attempt";
 
     public static bool IsKnown(string? type) =>
-        type is DailySummary or AttentionAlert or ProtectionOff or SecurityAlert;
+        type is DailySummary or AttentionAlert or ProtectionOff or SecurityAlert or BlockedAttempt;
 }

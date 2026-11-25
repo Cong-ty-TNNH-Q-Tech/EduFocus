@@ -12,7 +12,7 @@ internal sealed class NotificationRecordConfiguration : IEntityTypeConfiguration
         {
             table.HasCheckConstraint(
                 "CK_Notifications_Category",
-                "\"Category\" IN ('DailySummary', 'AttentionAlert', 'ProtectionOff', 'SecurityAlert')");
+                "\"Category\" IN ('DailySummary', 'AttentionAlert', 'ProtectionOff', 'SecurityAlert', 'BlockedAttempt')");
             table.HasCheckConstraint(
                 "CK_Notifications_Status",
                 "\"Status\" IN ('Pending', 'Sent', 'Suppressed', 'Failed')");

@@ -7,6 +7,7 @@ public sealed class NotificationPreference
     public bool DailySummary { get; set; } = true;
     public bool ProtectionOff { get; set; } = true;
     public bool SecurityAlert { get; set; } = true;
+    public bool BlockedAttempt { get; set; } = true;
     public bool SecurityAlertBypassQuietHours { get; set; } = true;
     public int QuietStartMinutes { get; set; } = 22 * 60;
     public int QuietEndMinutes { get; set; } = 6 * 60;

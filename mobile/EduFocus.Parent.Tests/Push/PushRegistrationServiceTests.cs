@@ -11,15 +11,18 @@ namespace EduFocus.Parent.Tests.Push;
 public sealed class PushRegistrationServiceTests
 {
     private const string BaseUrl = "https://cloud.example.com";
-    private const string FcmToken = "fcm-token-abcdef123456";
+    private const string Endpoint = "https://push.example.com/sub/device-1";
+    private const string P256dh = "BAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA";
+    private const string Auth = "AAAAAAAAAAAAAAAAAAAAAA";
+    private static readonly PushEndpointRegistration Registration = new(Endpoint, P256dh, Auth);
     private const string SuccessBody = "{\"updatedAtUtc\":\"2026-11-17T10:00:00Z\"}";
 
     [Fact]
-    public async Task Registration_posts_token_and_stores_it()
+    public async Task Registration_posts_endpoint_and_keys_then_stores_them()
     {
         var (service, handler, settings) = CreateService(_ => Success());
 
-        var registered = await service.RegisterAsync(FcmToken, "android", "0.1.0");
+        var registered = await service.RegisterAsync(Registration, "android", "0.1.0");
 
         Assert.True(registered);
         var request = Assert.Single(handler.Requests);
@@ -29,11 +32,13 @@ public sealed class PushRegistrationServiceTests
         Assert.Equal("efm_token", request.Headers.Authorization?.Parameter);
 
         var body = handler.RequestBodies[0];
-        Assert.Contains($"\"fcmToken\":\"{FcmToken}\"", body);
+        Assert.Contains($"\"endpoint\":\"{Endpoint}\"", body);
+        Assert.Contains($"\"p256dh\":\"{P256dh}\"", body);
+        Assert.Contains($"\"auth\":\"{Auth}\"", body);
         Assert.Contains("\"platform\":\"android\"", body);
         Assert.Contains("\"appVersion\":\"0.1.0\"", body);
 
-        Assert.Equal(FcmToken, settings.PushToken);
+        Assert.Equal(Endpoint, settings.PushEndpoint);
         Assert.Equal("0.1.0", settings.PushAppVersion);
     }
 
@@ -42,29 +47,29 @@ public sealed class PushRegistrationServiceTests
     {
         var (service, handler, settings) = CreateService(_ => Success(), linked: false);
 
-        Assert.False(await service.RegisterAsync(FcmToken, "android", "0.1.0"));
+        Assert.False(await service.RegisterAsync(Registration, "android", "0.1.0"));
         Assert.Empty(handler.Requests);
-        Assert.Null(settings.PushToken);
+        Assert.Null(settings.PushEndpoint);
     }
 
     [Fact]
-    public async Task Same_token_is_not_sent_twice()
+    public async Task Same_endpoint_is_not_sent_twice()
     {
         var (service, handler, _) = CreateService(_ => Success());
 
-        Assert.True(await service.RegisterAsync(FcmToken, "android", "0.1.0"));
-        Assert.True(await service.RegisterAsync(FcmToken, "android", "0.1.0"));
+        Assert.True(await service.RegisterAsync(Registration, "android", "0.1.0"));
+        Assert.True(await service.RegisterAsync(Registration, "android", "0.1.0"));
 
         Assert.Single(handler.Requests);
     }
 
     [Fact]
-    public async Task Force_resends_the_same_token()
+    public async Task Force_resends_the_same_endpoint()
     {
         var (service, handler, _) = CreateService(_ => Success());
 
-        Assert.True(await service.RegisterAsync(FcmToken, "android", "0.1.0"));
-        Assert.True(await service.RegisterAsync(FcmToken, "android", "0.1.0", force: true));
+        Assert.True(await service.RegisterAsync(Registration, "android", "0.1.0"));
+        Assert.True(await service.RegisterAsync(Registration, "android", "0.1.0", force: true));
 
         Assert.Equal(2, handler.Requests.Count);
     }
@@ -84,10 +89,10 @@ public sealed class PushRegistrationServiceTests
             },
             waits: waits);
 
-        Assert.True(await service.RegisterAsync(FcmToken, "android", "0.1.0"));
+        Assert.True(await service.RegisterAsync(Registration, "android", "0.1.0"));
         Assert.Equal(2, handler.Requests.Count);
         Assert.Equal(new[] { TimeSpan.FromSeconds(2) }, waits);
-        Assert.Equal(FcmToken, settings.PushToken);
+        Assert.Equal(Endpoint, settings.PushEndpoint);
     }
 
     [Fact]
@@ -98,12 +103,12 @@ public sealed class PushRegistrationServiceTests
             _ => HttpStubs.Json(HttpStatusCode.ServiceUnavailable, "{\"error\":{\"code\":\"unavailable\"}}"),
             waits: waits);
 
-        Assert.False(await service.RegisterAsync(FcmToken, "android", "0.1.0"));
+        Assert.False(await service.RegisterAsync(Registration, "android", "0.1.0"));
         Assert.Equal(3, handler.Requests.Count);
         Assert.Equal(
             new[] { TimeSpan.FromSeconds(2), TimeSpan.FromSeconds(5) },
             waits);
-        Assert.Null(settings.PushToken);
+        Assert.Null(settings.PushEndpoint);
     }
 
     [Fact]
@@ -116,7 +121,7 @@ public sealed class PushRegistrationServiceTests
         var expiredCount = 0;
         session.Expired += () => expiredCount++;
 
-        Assert.False(await service.RegisterAsync(FcmToken, "android", "0.1.0"));
+        Assert.False(await service.RegisterAsync(Registration, "android", "0.1.0"));
         Assert.Single(handler.Requests);
         Assert.Empty(waits);
         Assert.Equal(1, expiredCount);
@@ -134,7 +139,7 @@ public sealed class PushRegistrationServiceTests
         var expiredCount = 0;
         session.Expired += () => expiredCount++;
 
-        Assert.False(await service.RegisterAsync(FcmToken, "android", "0.1.0"));
+        Assert.False(await service.RegisterAsync(Registration, "android", "0.1.0"));
         Assert.Single(handler.Requests);
         Assert.Equal(0, expiredCount);
         Assert.True(state.IsLinked);
@@ -151,29 +156,50 @@ public sealed class PushRegistrationServiceTests
                 : Success(),
             waits: waits);
 
-        Assert.True(await service.RegisterAsync(FcmToken, "android", "0.1.0"));
+        Assert.True(await service.RegisterAsync(Registration, "android", "0.1.0"));
         Assert.Equal(2, handler.Requests.Count);
         Assert.Equal(new[] { TimeSpan.FromSeconds(30) }, waits);
     }
 
     [Theory]
-    [InlineData("")]
-    [InlineData("   ")]
-    [InlineData("bad\u0007token")]
-    public async Task Invalid_tokens_are_rejected_without_network(string token)
+    [InlineData("", P256dh, Auth)]
+    [InlineData("   ", P256dh, Auth)]
+    [InlineData("https://push.example.com/bad\u0007path", P256dh, Auth)]
+    [InlineData("http://push.example.com/sub/device", P256dh, Auth)]
+    [InlineData("https://user:pass@push.example.com/sub/device", P256dh, Auth)]
+    [InlineData("https://push.example.com/sub/device", "not-base64!", Auth)]
+    [InlineData("https://push.example.com/sub/device", "AAAA", Auth)]
+    [InlineData("https://push.example.com/sub/device", P256dh, "AAAA")]
+    public async Task Invalid_registrations_are_rejected_without_network(
+        string endpoint,
+        string p256dh,
+        string auth)
     {
         var (service, handler, _) = CreateService(_ => Success());
 
-        Assert.False(await service.RegisterAsync(token, "android", "0.1.0"));
+        Assert.False(await service.RegisterAsync(
+            new PushEndpointRegistration(endpoint, p256dh, auth),
+            "android",
+            "0.1.0"));
         Assert.Empty(handler.Requests);
     }
 
     [Fact]
-    public async Task Oversized_token_is_rejected_without_network()
+    public async Task Oversized_values_are_rejected_without_network()
     {
         var (service, handler, _) = CreateService(_ => Success());
 
-        Assert.False(await service.RegisterAsync(new string('x', 513), "android", "0.1.0"));
+        Assert.False(await service.RegisterAsync(
+            new PushEndpointRegistration(
+                "https://push.example.com/" + new string('x', 1001),
+                P256dh,
+                Auth),
+            "android",
+            "0.1.0"));
+        Assert.False(await service.RegisterAsync(
+            new PushEndpointRegistration(Endpoint, new string('A', 129), Auth),
+            "android",
+            "0.1.0"));
         Assert.Empty(handler.Requests);
     }
 

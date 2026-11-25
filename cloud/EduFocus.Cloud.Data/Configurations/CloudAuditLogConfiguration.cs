@@ -14,7 +14,7 @@ internal sealed class CloudAuditLogConfiguration : IEntityTypeConfiguration<Clou
         builder.Property(x => x.Id).ValueGeneratedNever();
 
         builder.Property(x => x.Action).HasMaxLength(64).IsRequired();
-        builder.Property(x => x.MetadataJson).HasColumnType("jsonb").IsRequired();
+        builder.Property(x => x.MetadataJson).IsRequired();
         builder.Property(x => x.CreatedAtUtc).IsRequired();
 
         builder.HasOne<Family>()

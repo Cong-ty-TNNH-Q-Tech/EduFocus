@@ -93,6 +93,27 @@ public sealed class NotificationPlannerTests
     }
 
     [Fact]
+    public void Blocked_attempts_dedupe_within_fifteen_minute_windows()
+    {
+        var validated = new ValidatedSyncEvent(
+            SyncEventType.BlockedAttempt,
+            BlockedAttempt: new BlockedAttemptPayload(LocalDate));
+
+        var first = NotificationPlanner.ForAlert(
+            validated, DateTimeOffset.Parse("2026-11-17T10:01:00Z"));
+        var sameWindow = NotificationPlanner.ForAlert(
+            validated, DateTimeOffset.Parse("2026-11-17T10:14:59Z"));
+        var nextWindow = NotificationPlanner.ForAlert(
+            validated, DateTimeOffset.Parse("2026-11-17T10:15:00Z"));
+
+        Assert.Equal("blocked_attempt:202611171000", first!.DedupeKey);
+        Assert.Equal(first.DedupeKey, sameWindow!.DedupeKey);
+        Assert.NotEqual(first.DedupeKey, nextWindow!.DedupeKey);
+        Assert.Equal(NotificationCategory.BlockedAttempt, first.Category);
+        Assert.Equal(LocalDate, first.LocalDate);
+    }
+
+    [Fact]
     public void Daily_summary_dedupes_per_family_and_date()
     {
         var planned = NotificationPlanner.DailySummary(LocalDate);

@@ -65,4 +65,38 @@ public sealed class BlockedAttemptRepositoryTests
         stored[1].ObservedVia.Should().Be(BlockedAttemptObservedVia.ProcessWatcher);
         stored[1].SessionId.Should().Be(session.Id);
     }
+
+    [Fact]
+    public async Task GetLatestWebAttemptCreatedAtUtcAsync_ignores_app_blocks_and_older_rows()
+    {
+        await using var db = new TempDatabase();
+        await db.CreateInitializer().InitializeAsync();
+
+        var now = new DateTime(2026, 11, 17, 9, 0, 0, DateTimeKind.Utc);
+        var repository = new SqliteBlockedAttemptRepository(db.ContextFactory);
+        await repository.AddAsync(BlockedAttempt.Record(
+            now.AddMinutes(1),
+            BlockedAttemptTargetType.Domain,
+            "chatgpt.com",
+            BlockedAttemptObservedVia.BlockPage,
+            createdAtUtc: now.AddMinutes(1)));
+        await repository.AddAsync(BlockedAttempt.Record(
+            now.AddMinutes(2),
+            BlockedAttemptTargetType.Url,
+            "https://www.facebook.com/feed",
+            BlockedAttemptObservedVia.Extension,
+            createdAtUtc: now.AddMinutes(2)));
+        await repository.AddAsync(BlockedAttempt.Record(
+            now.AddMinutes(5),
+            BlockedAttemptTargetType.App,
+            "discord",
+            BlockedAttemptObservedVia.ProcessWatcher,
+            createdAtUtc: now.AddMinutes(5)));
+
+        var latest = await repository.GetLatestWebAttemptCreatedAtUtcAsync(now);
+        latest.Should().Be(now.AddMinutes(2));
+
+        var afterLatest = await repository.GetLatestWebAttemptCreatedAtUtcAsync(now.AddMinutes(2));
+        afterLatest.Should().BeNull();
+    }
 }

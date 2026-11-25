@@ -18,16 +18,44 @@ using SyncEventType = EduFocus.Cloud.Contracts.Sync.SyncEventType;
 
 namespace EduFocus.Cloud.Tests;
 
-[Collection("Postgres")]
+[Collection("CloudDatabase")]
 public sealed class PushFlowTests
 {
     private const string TestDbVariable = "EDUFOCUS_CLOUD_TEST_DB";
     private const string TimeZone = "Asia/Ho_Chi_Minh";
+    private const string Endpoint1 = "https://push.example.com/sub/device-1";
+    private const string Endpoint2 = "https://push.example.com/sub/device-2";
+    private const string P256dh = "BAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA";
+    private const string Auth = "AAAAAAAAAAAAAAAAAAAAAA";
 
     private static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web)
     {
         Converters = { new JsonStringEnumConverter(JsonNamingPolicy.CamelCase) },
     };
+
+    [Fact]
+    public async Task Paired_mobile_can_read_push_config()
+    {
+        var connectionString = TestConnectionString();
+        if (connectionString is null)
+        {
+            return;
+        }
+
+        await ResetDatabaseAsync(connectionString);
+        await using var factory = new CloudApiFactory(connectionString);
+        using var anonymous = factory.CreateClient();
+        var paired = await PairAsync(anonymous);
+        using var mobile = CreateClient(factory, paired.MobileToken);
+
+        var config = await mobile.GetFromJsonAsync<PushConfigResponse>(
+            "/v1/push/config",
+            Json);
+
+        Assert.NotNull(config);
+        Assert.False(config.Enabled);
+        Assert.Null(config.VapidPublicKey);
+    }
 
     [Fact]
     public async Task Alert_is_pushed_as_data_only_message_and_marked_sent()
@@ -49,7 +77,7 @@ public sealed class PushFlowTests
 
         var register = await mobile.PostAsJsonAsync(
             "/v1/push/registrations",
-            new RegisterPushRequest("fcm-token-1", "android", "1.0.0"));
+            RegisterRequest());
         Assert.Equal(HttpStatusCode.OK, register.StatusCode);
 
         var occurredAt = DateTimeOffset.UtcNow;
@@ -71,14 +99,15 @@ public sealed class PushFlowTests
 
         var registration = await db.PushRegistrations.AsNoTracking().SingleAsync();
         Assert.Null(registration.InvalidatedAtUtc);
-        Assert.Equal("fcm-token-1", registration.FcmToken);
+        Assert.Equal(Endpoint1, registration.Endpoint);
 
         var message = Assert.Single(fake.Messages);
-        Assert.Equal("fcm-token-1", message.Token);
-        Assert.Equal(3, message.Data.Count);
-        Assert.Equal("attention_alert", message.Data["type"]);
-        Assert.Equal(LocalToday().ToString("yyyy-MM-dd"), message.Data["date"]);
-        Assert.Equal(notification.Id.ToString(), message.Data["notificationId"]);
+        var data = Assert.IsAssignableFrom<IReadOnlyDictionary<string, string>>(fake.Data);
+        Assert.Equal(Endpoint1, message.Endpoint);
+        Assert.Equal(3, data.Count);
+        Assert.Equal("attention_alert", data["type"]);
+        Assert.Equal(LocalToday().ToString("yyyy-MM-dd"), data["date"]);
+        Assert.Equal(notification.Id.ToString(), data["notificationId"]);
     }
 
     [Fact]
@@ -100,7 +129,7 @@ public sealed class PushFlowTests
         await PutPreferencesAsync(
             mobile,
             Preferences(quietStart: 0, quietEnd: 0, attentionAlert: false));
-        await RegisterAsync(mobile, "fcm-token-1");
+        await RegisterAsync(mobile);
 
         await IngestAsync(desktop, AttentionAlert("alert-1", DateTimeOffset.UtcNow));
         await DispatchAsync(factory);
@@ -133,7 +162,7 @@ public sealed class PushFlowTests
         var quietStart = (localMinutes + 1439) % 1440;
         var quietEnd = (localMinutes + 2) % 1440;
         await PutPreferencesAsync(mobile, Preferences(quietStart, quietEnd));
-        await RegisterAsync(mobile, "fcm-token-1");
+        await RegisterAsync(mobile);
 
         var now = DateTimeOffset.UtcNow;
         await IngestAsync(
@@ -152,8 +181,8 @@ public sealed class PushFlowTests
             .SingleAsync(n => n.Category == NotificationCategory.SecurityAlert);
         Assert.Equal(NotificationStatus.Sent, security.Status);
 
-        var message = Assert.Single(fake.Messages);
-        Assert.Equal("security_alert", message.Data["type"]);
+        Assert.Single(fake.Messages);
+        Assert.Equal("security_alert", fake.Data!["type"]);
     }
 
     [Fact]
@@ -214,7 +243,7 @@ public sealed class PushFlowTests
     }
 
     [Fact]
-    public async Task Invalid_token_is_invalidated_and_not_retried()
+    public async Task Invalid_endpoint_is_invalidated_and_not_retried()
     {
         var connectionString = TestConnectionString();
         if (connectionString is null)
@@ -231,7 +260,7 @@ public sealed class PushFlowTests
         using var desktop = CreateClient(factory, paired.DesktopToken);
         using var mobile = CreateClient(factory, paired.MobileToken);
         await PutPreferencesAsync(mobile, Preferences(quietStart: 0, quietEnd: 0));
-        await RegisterAsync(mobile, "fcm-bad-token");
+        await RegisterAsync(mobile, Endpoint2);
 
         await IngestAsync(desktop, SecurityAlert("security-1", DateTimeOffset.UtcNow));
         await DispatchAsync(factory);
@@ -240,7 +269,7 @@ public sealed class PushFlowTests
         {
             var notification = await db.Notifications.AsNoTracking().SingleAsync();
             Assert.Equal(NotificationStatus.Failed, notification.Status);
-            Assert.Equal("token_invalid", notification.FailureCode);
+            Assert.Equal("endpoint_invalid", notification.FailureCode);
             Assert.Equal(1, notification.AttemptCount);
 
             var registration = await db.PushRegistrations.AsNoTracking().SingleAsync();
@@ -271,7 +300,7 @@ public sealed class PushFlowTests
         using var desktop = CreateClient(factory, paired.DesktopToken);
         using var mobile = CreateClient(factory, paired.MobileToken);
         await PutPreferencesAsync(mobile, Preferences(quietStart: 0, quietEnd: 0));
-        await RegisterAsync(mobile, "fcm-token-1");
+        await RegisterAsync(mobile);
 
         await IngestAsync(desktop, SecurityAlert("security-1", DateTimeOffset.UtcNow));
 
@@ -324,16 +353,16 @@ public sealed class PushFlowTests
 
         var desktopRegistration = await desktop.PostAsJsonAsync(
             "/v1/push/registrations",
-            new RegisterPushRequest("fcm-token-1", "windows"));
+            new RegisterPushRequest(Endpoint1, P256dh, Auth, "windows"));
         Assert.Equal(HttpStatusCode.Forbidden, desktopRegistration.StatusCode);
 
-        await RegisterAsync(mobile, "fcm-token-1");
-        await RegisterAsync(mobile, "fcm-token-2");
+        await RegisterAsync(mobile, Endpoint1);
+        await RegisterAsync(mobile, Endpoint2);
 
         await using (var db = CreateContext(connectionString))
         {
             var registration = await db.PushRegistrations.AsNoTracking().SingleAsync();
-            Assert.Equal("fcm-token-2", registration.FcmToken);
+            Assert.Equal(Endpoint2, registration.Endpoint);
             Assert.Equal("android", registration.Platform);
         }
 
@@ -344,6 +373,7 @@ public sealed class PushFlowTests
         Assert.True(defaults.DailySummary);
         Assert.True(defaults.ProtectionOff);
         Assert.True(defaults.SecurityAlert);
+        Assert.True(defaults.BlockedAttempt);
         Assert.True(defaults.SecurityAlertBypassQuietHours);
         Assert.Equal(1320, defaults.QuietStartMinutes);
         Assert.Equal(360, defaults.QuietEndMinutes);
@@ -367,11 +397,12 @@ public sealed class PushFlowTests
         var update = await mobile.PutAsJsonAsync(
             "/v1/preferences",
             new UpdateNotificationPreferencesRequest(
-                false, true, false, true, 0, 0, 1200, "Asia/Tokyo", false));
+                false, true, false, true, 0, 0, 1200, "Asia/Tokyo", false, false));
         Assert.Equal(HttpStatusCode.OK, update.StatusCode);
         var updated = await update.Content.ReadFromJsonAsync<NotificationPreferencesDto>(Json);
         Assert.NotNull(updated);
         Assert.False(updated.AttentionAlert);
+        Assert.False(updated.BlockedAttempt);
         Assert.Equal("Asia/Tokyo", updated.TimeZoneId);
         Assert.Equal(1200, updated.DailySummaryMinutes);
 
@@ -399,8 +430,8 @@ public sealed class PushFlowTests
     private static CloudApiFactory CreateFactory(string connectionString, FakePushSender fake) =>
         new(connectionString, configureServices: services =>
         {
-            services.RemoveAll<IFcmPushSender>();
-            services.AddSingleton<IFcmPushSender>(fake);
+            services.RemoveAll<IPushSender>();
+            services.AddSingleton<IPushSender>(fake);
         });
 
     private static HttpClient CreateClient(CloudApiFactory factory, string token)
@@ -435,13 +466,16 @@ public sealed class PushFlowTests
         return new PairedFamily(session.DesktopToken, claimed.MobileToken);
     }
 
-    private static async Task RegisterAsync(HttpClient mobile, string token)
+    private static async Task RegisterAsync(HttpClient mobile, string? endpoint = null)
     {
         var response = await mobile.PostAsJsonAsync(
             "/v1/push/registrations",
-            new RegisterPushRequest(token, "android", "1.0.0"));
+            RegisterRequest(endpoint));
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
     }
+
+    private static RegisterPushRequest RegisterRequest(string? endpoint = null) =>
+        new(endpoint ?? Endpoint1, P256dh, Auth, "android", "1.0.0");
 
     private static async Task PutPreferencesAsync(
         HttpClient mobile,
@@ -540,42 +574,46 @@ public sealed class PushFlowTests
     }
 
     private static CloudDbContext CreateContext(string connectionString) =>
-        new(new DbContextOptionsBuilder<CloudDbContext>().UseNpgsql(connectionString).Options);
+            new(new DbContextOptionsBuilder<CloudDbContext>().UseSqlite(connectionString).Options);
 
     private sealed record PairedFamily(string DesktopToken, string MobileToken);
 }
 
-internal sealed class FakePushSender : IFcmPushSender
+internal sealed class FakePushSender : IPushSender
 {
-    private readonly Queue<Func<IReadOnlyList<PushMessage>, IReadOnlyList<PushSendResult>>> _behaviors = new();
+    private readonly Queue<Func<IReadOnlyList<PushTarget>, IReadOnlyList<PushSendResult>>> _behaviors = new();
 
-    public List<PushMessage> Messages { get; } = [];
+    public List<PushTarget> Messages { get; } = [];
+
+    public IReadOnlyDictionary<string, string>? Data { get; private set; }
 
     public int Calls { get; private set; }
 
     public void FailTransient(string code = "Unavailable") =>
-        _behaviors.Enqueue(messages => messages
-            .Select(m => new PushSendResult(m.Token, false, false, code))
+        _behaviors.Enqueue(targets => targets
+            .Select(t => new PushSendResult(t.Endpoint, false, false, code))
             .ToList());
 
     public void FailInvalid() =>
-        _behaviors.Enqueue(messages => messages
-            .Select(m => new PushSendResult(m.Token, false, true, "Unregistered"))
+        _behaviors.Enqueue(targets => targets
+            .Select(t => new PushSendResult(t.Endpoint, false, true, "Gone"))
             .ToList());
 
     public Task<IReadOnlyList<PushSendResult>> SendAsync(
-        IReadOnlyList<PushMessage> messages,
+        IReadOnlyList<PushTarget> targets,
+        IReadOnlyDictionary<string, string> data,
         CancellationToken cancellationToken)
     {
         Calls++;
-        Messages.AddRange(messages);
+        Messages.AddRange(targets);
+        Data = data;
 
         var behavior = _behaviors.Count > 0
             ? _behaviors.Dequeue()
-            : (Func<IReadOnlyList<PushMessage>, IReadOnlyList<PushSendResult>>)Succeed;
-        return Task.FromResult(behavior(messages));
+            : (Func<IReadOnlyList<PushTarget>, IReadOnlyList<PushSendResult>>)Succeed;
+        return Task.FromResult(behavior(targets));
     }
 
-    private static IReadOnlyList<PushSendResult> Succeed(IReadOnlyList<PushMessage> messages) =>
-        messages.Select(m => new PushSendResult(m.Token, true, false, null)).ToList();
+    private static IReadOnlyList<PushSendResult> Succeed(IReadOnlyList<PushTarget> targets) =>
+        targets.Select(t => new PushSendResult(t.Endpoint, true, false, null)).ToList();
 }

@@ -1,7 +1,7 @@
 # Tài liệu Use Case - EduFocus
 
 > **Trạng thái:** Thiết kế / đang chuyển đổi từ **Don't Be Lazy**.
-> **Phiên bản:** 2.1 — 2026-11-17 (bổ sung UC15–UC18 cho cloud relay tùy chọn, Phase 8)
+> **Phiên bản:** 2.2 — 2026-11-25 (push UnifiedPush/Web Push, bỏ FCM)
 
 ---
 
@@ -14,7 +14,7 @@
 | **Hệ thống (System)** | Scheduler, protection engine, activity tracker, attention monitor, retention job |
 | **Windows OS** | Nguồn sự kiện khởi động, sleep/resume, camera, foreground window |
 | **Ứng dụng phụ huynh (mobile)** | App Android của phụ huynh: ghép nối, nhận thông báo đẩy, xem báo cáo tóm tắt từ xa |
-| **Cloud backend (tùy chọn)** | Relay do phụ huynh bật: ghép nối, nhận sự kiện tổng hợp, gửi push qua FCM, lưu dữ liệu cloud |
+| **Cloud backend (tùy chọn)** | Relay do phụ huynh bật: ghép nối, nhận sự kiện tổng hợp, gửi push qua Web Push/UnifiedPush, lưu dữ liệu cloud |
 
 ---
 
@@ -1036,15 +1036,17 @@ nhất khiến dữ liệu rời khỏi máy tính.
 - Phụ huynh chọn "Thông báo cho điện thoại" trong Parent Mode.
 
 **Luồng chính**
-1. Desktop hiển thị giải thích ngắn: dữ liệu nào sẽ được gửi (bốn loại sự kiện tổng hợp), dữ liệu nào
-   không gửi, FCM/Google là bên thứ ba, thời hạn lưu cloud và cách ngắt/xóa; yêu cầu xác nhận đã đọc
-   privacy notice bản 2.0.
+1. Desktop hiển thị giải thích ngắn: dữ liệu nào sẽ được gửi (năm loại sự kiện tổng hợp), dữ liệu nào
+   không gửi, UnifiedPush distributor/ntfy là bên thứ ba, thời hạn lưu cloud và cách ngắt/xóa; yêu cầu
+   xác nhận đã đọc privacy notice bản 2.1.
 2. Hệ thống kiểm tra phiên Parent Mode còn hiệu lực; nếu không, yêu cầu PIN lại.
 3. Desktop gọi `POST /v1/pairing/sessions` tới cloud đã cấu hình, nhận `sessionId`, mã 8 ký tự và
    `expiresAtUtc` (10 phút). Desktop hiển thị QR `edufocus://pair?v=1&u=…&s=…&c=…` và mã nhập tay.
 4. Phụ huynh quét QR hoặc nhập mã trên app mobile.
-5. App mobile gọi `POST /v1/pairing/claim` kèm tên thiết bị, nền tảng và FCM token; backend kiểm tra
-   hash mã, giới hạn thử, tạo thiết bị mobile và phát token `efm_` (chỉ trả một lần).
+5. App mobile gọi `POST /v1/pairing/claim` kèm tên thiết bị, nền tảng; backend kiểm tra hash mã,
+   giới hạn thử, tạo thiết bị mobile và phát token `efm_` (chỉ trả một lần). App chọn UnifiedPush
+   distributor, lấy VAPID public key từ `GET /v1/push/config` và gửi endpoint/khóa Web Push qua
+   `POST /v1/push/registrations`.
 6. Desktop poll `GET /v1/pairing/sessions/{id}` thấy `Claimed`, nhận token `efd_` (chỉ trả một lần),
    lưu `familyId`, `deviceId`, token (DPAPI) và bật `CloudSyncEnabled = true`.
 7. Desktop bắt đầu outbox worker, gửi `daily_summary` hiện tại và các cảnh báo còn hiệu lực; UI hiển
@@ -1077,36 +1079,38 @@ nhất khiến dữ liệu rời khỏi máy tính.
 huynh ở ngoài nhà.
 
 **Tiền điều kiện**
-- Đã ghép nối (UC15); app mobile đã đăng ký FCM token.
+- Đã ghép nối (UC15); app mobile đã đăng ký UnifiedPush endpoint và khóa Web Push.
 - Preference thông báo cho phép loại cảnh báo tương ứng.
 
 **Trigger**
-- Desktop gửi `attention_alert`, `protection_off` hoặc `security_alert` qua outbox.
+- Desktop gửi `attention_alert`, `protection_off`, `security_alert` hoặc `blocked_attempt` qua outbox.
 
 **Luồng chính**
 1. Backend ingest sự kiện (idempotent theo `clientEventId`).
 2. Job thông báo kiểm tra preference, quiet hours theo múi giờ gia đình và dedupe
-   (`1/15 phút/loại` cho attention) rồi tạo bản ghi `Notification`.
-3. Nếu ngoài quiet hours, backend gửi FCM **data-only** `{type, date, notificationId}`.
-4. App nhận message, tải chi tiết cần thiết từ API (nếu đang mở) rồi dựng nội dung tiếng Việt chung,
-   ví dụ "EduFocus: có cập nhật mới cho hôm nay" hoặc "EduFocus: bảo vệ vừa được tắt".
+   (`1/15 phút/loại` cho attention và blocked attempt) rồi tạo bản ghi `Notification`.
+3. Nếu ngoài quiet hours, backend mã hóa payload `{type, date, notificationId}` theo RFC8291 và gửi
+   Web Push qua UnifiedPush endpoint (ví dụ ntfy).
+4. App nhận message, giải mã payload, tải chi tiết cần thiết từ API (nếu đang mở) rồi dựng nội dung
+   tiếng Việt chung, ví dụ "EduFocus: có cập nhật mới cho hôm nay" hoặc "EduFocus: bảo vệ vừa được tắt".
 5. Phụ huynh chạm thông báo → mở màn hình chi tiết (UC17).
-6. Nếu FCM trả token invalid, backend vô hiệu registration và app đăng ký lại ở lần mở kế tiếp.
+6. Nếu endpoint trả `404`/`410`, backend vô hiệu registration và app đăng ký lại ở lần mở kế tiếp.
 
 **Luồng thay thế**
 - **Trong quiet hours:** cảnh báo được giữ lại và gộp vào đầu khung thức; riêng `security_alert` mức
   cao có thể gửi ngay nếu phụ huynh bật "cảnh báo an toàn xuyên quiet hours".
 - **Thiếu quyền thông báo Android:** app hiển thị hướng dẫn bật quyền; backend vẫn lưu thông báo vào
   danh sách.
-- **Mất mạng khi nhận:** FCM giao lại khi có mạng; nội dung chung không chứa dữ liệu nhạy cảm.
+- **Mất mạng khi nhận:** distributor giao lại khi có mạng; nội dung đã mã hóa, không chứa dữ liệu
+  nhạy cảm trong body.
 
 **Ngoại lệ**
-- FCM lỗi tạm thời: retry có backoff; ghi audit lỗi, không chặn ingest.
-- Token FCM hết hạn: vô hiệu hóa, yêu cầu đăng ký lại; không gửi lặp vô hạn.
+- Web Push lỗi tạm thời (`429`/`5xx`): retry có backoff; ghi audit lỗi, không chặn ingest.
+- Endpoint hết hạn (`404`/`410`): vô hiệu hóa, yêu cầu đăng ký lại; không gửi lặp vô hạn.
 
 **Hậu điều kiện**
 - Thông báo được ghi log 30 ngày; phụ huynh thấy cảnh báo trên điện thoại hoặc trong danh sách.
-- Không có chi tiết học tập nào nằm trong payload FCM.
+- Không có chi tiết học tập nào nằm trong payload sau giải mã.
 
 **Business rules:** BR-34.
 

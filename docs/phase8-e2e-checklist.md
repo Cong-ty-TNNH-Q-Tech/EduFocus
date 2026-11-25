@@ -9,8 +9,9 @@ Tham chiếu: [mobile/README.md](../mobile/README.md),
 [privacy-notice.md](./privacy-notice.md), [dpia.md](./dpia.md),
 [security-e2e-checklist.md](./security-e2e-checklist.md) (desktop).
 
-> Quy tắc bằng chứng: không chụp/đính kèm token (`efd_`/`efm_`), mã ghép nối, FCM token, PIN,
-> mật khẩu hay tệp DB. Che các giá trị này trước khi chụp màn hình; log phải được lọc.
+> Quy tắc bằng chứng: không chụp/đính kèm token (`efd_`/`efm_`), mã ghép nối, UnifiedPush
+> endpoint/khóa Web Push, PIN, mật khẩu hay tệp DB. Che các giá trị này trước khi chụp màn hình; log
+> phải được lọc.
 
 ---
 
@@ -24,9 +25,9 @@ Tham chiếu: [mobile/README.md](../mobile/README.md),
 | Commit / tag mobile | `...` |
 | APK (tên + SHA-256) | `...` |
 | Backend staging (host HTTPS, không ghi secret) | `...` |
-| Phiên bản PostgreSQL / image backend | `...` |
-| Firebase project (không ghi khóa) | `...` |
-| Thiết bị 1 (model, Android, Play Services) | `...` |
+| Phiên bản image backend / SQLite | `...` |
+| VAPID/ntfy staging (không ghi khóa) | `...` |
+| Thiết bị 1 (model, Android, distributor) | `...` |
 | Thiết bị 2 (nếu test nhiều mobile) | `...` |
 | Windows desktop (bản, VM/thật) | `...` |
 | Kết quả tổng | `PASS / FAIL` |
@@ -37,17 +38,20 @@ Chạy lại toàn bộ sau mỗi thay đổi backend/desktop/mobile ảnh hư�
 
 ## 2. Chuẩn bị môi trường
 
-- [ ] Backend staging chạy bằng `cloud/docker-compose.prod.yml`, HTTPS hợp lệ, `/healthz` trả OK;
-      migration mới nhất đã chạy (`--migrate`).
-- [ ] `EDUFOCUS_CLOUD_AUTO_MIGRATE` không bật; PostgreSQL không publish port ra ngoài.
+- [ ] Backend staging chạy bằng `cloud/docker-compose.yml` với profile `tls`, HTTPS hợp lệ,
+      `/healthz` trả OK; migration mới nhất đã chạy.
+- [ ] `EDUFOCUS_CLOUD_AUTO_MIGRATE` đúng cấu hình; API không publish port ra ngoài (bind
+      `127.0.0.1`), không có database server/port công khai.
 - [ ] Desktop bản test đã cấu hình trỏ tới backend staging; cloud mặc định **tắt** trước khi bắt đầu.
-- [ ] APK release (hoặc debug có chữ ký test) cài trên thiết bị sạch; `google-services.json` của
-      đúng package `com.qtech.edufocus.parent` đã được inject khi build.
-- [ ] Thiết bị có Google Play Services, đăng nhập Play Store, đã bật thông báo cho app.
-- [ ] Firebase project bật FCM HTTP v1; service account của backend còn hiệu lực.
+- [ ] APK release (hoặc debug có chữ ký test) cài trên thiết bị sạch; package
+      `com.qtech.edufocus.parent` đúng.
+- [ ] Thiết bị đã cài một UnifiedPush distributor (ví dụ ntfy), đã chọn distributor và bật thông báo
+      cho app. Không cần Google Play Services.
+- [ ] Backend bật `PUSH_ENABLED=true`, VAPID public/private key và subject hợp lệ; allowlist chứa host
+      endpoint ntfy; `GET /v1/push/config` trả `enabled=true`.
 - [ ] Có tài khoản/thiết bị **family thứ hai** để test cô lập dữ liệu.
-- [ ] Công cụ: Fiddler/Charles hoặc proxy TLS trên desktop, `psql` read-only tới staging,
-      `apksigner`/`aapt2`, `adb` (tùy chọn), công cụ chỉnh giờ/quiet hours.
+- [ ] Công cụ: Fiddler/Charles hoặc proxy TLS trên desktop, `sqlite3` read-only tới file DB staging
+      (qua container), `apksigner`/`aapt2`, `adb` (tùy chọn), công cụ chỉnh giờ/quiet hours.
 - [ ] Điền sẵn privacy notice bản đang áp dụng và biết vị trí nút **Xóa dữ liệu trên cloud**.
 
 ---
@@ -96,16 +100,18 @@ Chuẩn bị: một điện thoại đã ghép nối; với test nhiều thiết
       chung, không chi tiết.
 - [ ] App **foreground** → banner Toast trong app, không thêm notification hệ thống; app
       **background/killed** → notification hệ thống.
-- [ ] Tắt từng loại trong app mobile (4 công tắc) → loại đó không còn push; các loại khác vẫn nhận.
+- [ ] `blocked_attempt`: mở một trang web bị chặn trên desktop (hoặc chèn bản ghi test) → nhận push;
+      bấm vào mở báo cáo đúng ngày; payload không có domain/URL.
+- [ ] Tắt từng loại trong app mobile (5 công tắc) → loại đó không còn push; các loại khác vẫn nhận.
       Bật lại → nhận lại.
 - [ ] Quiet hours bao phủ thời điểm hiện tại (ví dụ 00:00–23:59) → push thường bị `Suppressed`; riêng
       `security_alert` vẫn qua vì mặc định bỏ qua quiet hours. Đổi quiet hours → áp dụng ngay.
 - [ ] Tóm tắt ngày đặt giờ khác → job gửi đúng múi giờ gia đình (`Asia/Ho_Chi_Minh`).
 - [ ] Ghép hai điện thoại → cả hai nhận push; thu hồi một thiết bị → thiết bị đó không nhận nữa.
-- [ ] FCM token không hợp lệ (xóa app/đổi token) → backend đánh dấu registration invalid, không lỗi
-      dây chuyền; thiết bị hợp lệ còn lại vẫn nhận.
-- [ ] Payload FCM chỉ có `type`, `date`, `notificationId` (kiểm tra trong log debug của backend hoặc
-      FCM console, không chứa số liệu/tên/URL).
+- [ ] Endpoint không hợp lệ (gỡ app/đổi distributor) → backend nhận `404`/`410`, đánh dấu
+      registration invalid, không lỗi dây chuyền; thiết bị hợp lệ còn lại vẫn nhận.
+- [ ] Payload sau giải mã chỉ có `type`, `date`, `notificationId` (kiểm tra bằng debug app/test, không
+      chứa số liệu/tên/URL); body Web Push trên dây là ciphertext.
 
 ### 3.4. Báo cáo (UC17)
 
@@ -132,7 +138,8 @@ Chuẩn bị: một điện thoại đã ghép nối; với test nhiều thiết
 - [ ] Rate limit pairing/claim và các endpoint đọc: vượt ngưỡng → 429 kèm `Retry-After`; app hiển thị
       thông báo thân thiện, không retry vô hạn.
 - [ ] Backend chỉ phục vụ HTTPS; gọi HTTP bị redirect/từ chối. APK release không cho cleartext.
-- [ ] Grep log backend/desktop/mobile: không có token `efd_`/`efm_`, mã pairing, FCM token, mật khẩu.
+- [ ] Grep log backend/desktop/mobile: không có token `efd_`/`efm_`, mã pairing, endpoint/khóa Web
+      Push, mật khẩu.
 - [ ] Pairing code chỉ xuất hiện trong QR/chuỗi nhập, không bị ghi vào DB dạng thô (chỉ hash) và
       không nằm trong log.
 
@@ -143,7 +150,7 @@ Chuẩn bị: một điện thoại đã ghép nối; với test nhiều thiết
 - [ ] **Ngắt kết nối** trên desktop: outbox dừng gửi, token desktop bị thu hồi; mobile hiện 401 khi
       gọi API.
 - [ ] **Xóa dữ liệu trên cloud**: chỉ xác nhận khi gõ đúng `XÓA` (sai → không xóa); sau khi xóa,
-      gia đình/thiết bị/token/summary/notification/push registration không còn trong PostgreSQL.
+      gia đình/thiết bị/token/summary/notification/push registration không còn trong SQLite.
 - [ ] Sau khi xóa, token desktop và mobile cũ đều 401; desktop không tự tạo lại gia đình khi cloud tắt.
 - [ ] Audit cloud còn bản ghi ẩn danh (actor/kind/thời điểm), không chứa token hay dữ liệu học tập.
 - [ ] Xóa gia đình rồi ghép nối lại bằng mã mới → tạo family mới, không thấy dữ liệu cũ.
@@ -170,10 +177,10 @@ Chuẩn bị: một điện thoại đã ghép nối; với test nhiều thiết
 - [ ] `GET /v1/reports/daily`, `GET /v1/notifications`, `GET|PUT /v1/preferences` chỉ trả dữ liệu tổng hợp
       của đúng gia đình.
 
-### 4.2. PostgreSQL
+### 4.2. SQLite
 
-- [ ] Liệt kê schema (`\dt`, `\d+`): không có bảng/cột chứa URL, domain, window title, app, frame,
-      ảnh, mẫu hoạt động chi tiết.
+- [ ] Liệt kê schema (`sqlite3 /data/edufocus.db '.tables'`, `PRAGMA table_info(<table>)`): không có
+      bảng/cột chứa URL, domain, window title, app, frame, ảnh, mẫu hoạt động chi tiết.
 - [ ] `DeviceTokens.TokenHash` là hash 64 ký tự hex; không có cột lưu token thô `efd_`/`efm_`.
 - [ ] `PairingSessions` chỉ lưu hash mã và thời điểm hết hạn, không lưu mã thô.
 - [ ] `Notifications` chỉ chứa `Type`, `Category`, `LocalDate`, trạng thái gửi và dedupe key; payload
@@ -182,18 +189,18 @@ Chuẩn bị: một điện thoại đã ghép nối; với test nhiều thiết
 
 ### 4.3. Log
 
-- [ ] Backend JSON log: redaction `token`/`authorization`/FCM token hoạt động; không có body request.
-- [ ] Desktop log: không có token `efd_`, mã pairing, FCM token, nội dung payload.
-- [ ] Mobile: không log token `efm_`/FCM token (kiểm tra `adb logcat` khi ghép nối và nhận push).
+- [ ] Backend JSON log: redaction `token`/`authorization`/push endpoint hoạt động; không có body request.
+- [ ] Desktop log: không có token `efd_`, mã pairing, nội dung payload.
+- [ ] Mobile: không log token `efm_`, endpoint/khóa Web Push (kiểm tra `adb logcat` khi ghép nối và nhận push).
 
 ### 4.4. Tài liệu và APK
 
 - [ ] Privacy notice hiển thị/link **trước khi bật cloud lần đầu**; onboarding yêu cầu xác nhận.
-- [ ] Nội dung privacy notice và DPIA khớp dữ liệu thực tế (bốn loại sự kiện, retention, FCM/Google,
-      quyền xóa).
-- [ ] APK/repo không chứa keystore, mật khẩu, `google-services.json` thật:
-      `git ls-files | grep -Ei "keystore|jks|google-services"` không trả kết quả;
-      `unzip -l <apk> | grep -Ei "keystore|google-services"` không có.
+- [ ] Nội dung privacy notice và DPIA khớp dữ liệu thực tế (năm loại sự kiện, retention,
+      UnifiedPush/ntfy, quyền xóa).
+- [ ] APK/repo không chứa keystore, mật khẩu hay VAPID private key:
+      `git ls-files | grep -Ei "keystore|jks|vapid"` không trả kết quả;
+      `unzip -l <apk> | grep -Ei "keystore|jks"` không có.
 - [ ] APK được ký bằng certificate release; `apksigner verify` pass; SHA-256 khớp `SHA256SUMS.txt`.
 
 ---
@@ -202,11 +209,11 @@ Chuẩn bị: một điện thoại đã ghép nối; với test nhiều thiết
 
 ### Chuẩn bị trước (làm trước buổi demo)
 
-- [ ] Backend staging + PostgreSQL chạy ổn định; đã test `/healthz` và một request đọc.
+- [ ] Backend staging + SQLite volume chạy ổn định; đã test `/healthz` và một request đọc.
 - [ ] Desktop đã cài bản release, đăng nhập Parent Mode, có dữ liệu mẫu của ngày hôm nay.
-- [ ] Hai điện thoại Android đã cài APK, đăng nhập Google, đã bật thông báo; một điện thoại đã ghép nối
-      sẵn để dự phòng, một điện thoại sạch để demo ghép nối.
-- [ ] Firebase project hoạt động; đã gửi thử một push thành công trong vòng 24 giờ.
+- [ ] Hai điện thoại Android đã cài APK và distributor UnifiedPush, đã bật thông báo; một điện thoại
+      đã ghép nối sẵn để dự phòng, một điện thoại sạch để demo ghép nối.
+- [ ] Backend VAPID/ntfy hoạt động; đã gửi thử một push thành công trong vòng 24 giờ.
 - [ ] Mạng Wi-Fi ổn định; có 4G dự phòng cho điện thoại.
 - [ ] Chuẩn bị sẵn công cụ mô phỏng attention > 5 phút (cấu hình test hoặc script).
 - [ ] Video quay trước toàn bộ luồng để phát nếu push bị chậm.
@@ -227,8 +234,8 @@ Chuẩn bị: một điện thoại đã ghép nối; với test nhiều thiết
    cập nhật; outbox gửi lại không trùng.
 8. **8:30–9:30 — Xóa dữ liệu:** mobile → Cài đặt → Xóa dữ liệu trên cloud → gõ `XÓA`; app về Welcome;
    thử token cũ (hoặc mở lại app) → 401/không còn dữ liệu.
-9. **9:30–10:00 — Kết luận:** nhắc lại giới hạn (FCM/Google, cần mạng, chỉ dữ liệu tổng hợp, không
-   điều khiển từ xa) và cách tự host/xóa dữ liệu.
+9. **9:30–10:00 — Kết luận:** nhắc lại giới hạn (UnifiedPush/ntfy, cần mạng, chỉ dữ liệu tổng hợp,
+   không điều khiển từ xa) và cách tự host/xóa dữ liệu.
 
 ### Dự phòng khi sự cố
 
@@ -268,7 +275,8 @@ Chuẩn bị: một điện thoại đã ghép nối; với test nhiều thiết
 
 ## 7. Giới hạn đã biết (ghi trong README và privacy notice)
 
-- Push phụ thuộc FCM/Google; thiết bị không có Google Play Services hoặc bị tắt thông báo sẽ không nhận.
+- Push phụ thuộc distributor UnifiedPush (ví dụ ntfy); thiết bị chưa cài/chọn distributor hoặc bị tắt
+  thông báo sẽ không nhận.
 - Độ trễ push do mạng và chính sách pin Android; cảnh báo có thể đến muộn vài phút.
 - App mobile chỉ có dữ liệu desktop đã đồng bộ; mất mạng thì xem cache, không có timeline chi tiết.
 - Không điều khiển từ xa: không sửa blocklist, không bật/tắt Protection, không xem màn hình.
@@ -284,9 +292,9 @@ staging):
 
 - Parser QR/mã ghép nối, token storage, push payload parser/dedupe phía mobile.
 - API client, view model Tổng quan/Báo cáo/Thông báo/Cài đặt (loading, lỗi, cache, 401, định dạng
-  tiếng Việt), `ParentDataCache`, `SessionExpiryService`, `FamilyAdminService` — 148 test.
-- Backend: claim pairing, auth scope, idempotent ingest, read APIs, preferences/quiet hours, FCM
-  payload builder, cascade delete — `cloud/EduFocus.Cloud.Tests`.
+  tiếng Việt), `ParentDataCache`, `SessionExpiryService`, `FamilyAdminService` — 173 test.
+- Backend: claim pairing, auth scope, idempotent ingest, read APIs, preferences/quiet hours, Web Push
+  payload/endpoint validation, cascade delete — `cloud/EduFocus.Cloud.Tests`.
 - Release: `apksigner verify` + `aapt2 dump badging` + SHA-256 trong workflow mobile release.
 
 Phần **bắt buộc thủ công**: mọi mục trong §3 chạy trên staging + thiết bị thật, §4 chụp mạng/DB/log,

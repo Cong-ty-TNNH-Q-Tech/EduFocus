@@ -8,6 +8,7 @@ public enum PushNotificationType
     AttentionAlert,
     ProtectionOff,
     SecurityAlert,
+    BlockedAttempt,
 }
 
 public sealed record PushNotificationPayload(
@@ -17,10 +18,10 @@ public sealed record PushNotificationPayload(
     string DedupeKey);
 
 /// <summary>
-/// Backend sends data-only FCM messages with exactly the keys in
-/// <c>PushRules.BuildPushData</c>: type, date (yyyy-MM-dd) and notificationId.
-/// Anything else (unknown type, control characters) is dropped before it can
-/// reach a notification or a log.
+/// Backend sends encrypted Web Push messages whose decoded JSON has exactly the
+/// keys in <c>PushRules.BuildPushData</c>: type, date (yyyy-MM-dd) and
+/// notificationId. Anything else (unknown type, control characters) is dropped
+/// before it can reach a notification or a log.
 /// </summary>
 public static class PushNotificationPayloadParser
 {
@@ -78,6 +79,9 @@ public static class PushNotificationPayloadParser
             case "security_alert":
                 type = PushNotificationType.SecurityAlert;
                 return true;
+            case "blocked_attempt":
+                type = PushNotificationType.BlockedAttempt;
+                return true;
             default:
                 type = default;
                 return false;
@@ -90,6 +94,7 @@ public static class PushNotificationPayloadParser
         PushNotificationType.AttentionAlert => "attention_alert",
         PushNotificationType.ProtectionOff => "protection_off",
         PushNotificationType.SecurityAlert => "security_alert",
+        PushNotificationType.BlockedAttempt => "blocked_attempt",
         _ => throw new ArgumentOutOfRangeException(nameof(type)),
     };
 

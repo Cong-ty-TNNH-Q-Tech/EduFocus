@@ -19,7 +19,7 @@ public partial class SettingsPage : ContentPage
     {
         base.OnAppearing();
         _viewModel.Refresh();
-        _ = ServiceHelper.GetService<PushCoordinator>().SyncTokenAsync();
+        _ = ServiceHelper.GetService<PushCoordinator>().SyncEndpointAsync();
         _ = _viewModel.LoadDevicesAsync();
     }
 

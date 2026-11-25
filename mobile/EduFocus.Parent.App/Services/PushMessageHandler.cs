@@ -1,41 +1,44 @@
-#if FCM_ENABLED
+using System.Text.Json;
 using EduFocus.Parent.Core.Push;
 using EduFocus.Parent.Core.Settings;
-using Plugin.Firebase.CloudMessaging;
-using Plugin.Firebase.CloudMessaging.EventArgs;
 
 namespace EduFocus.Parent.App.Services;
 
 /// <summary>
-/// Entry point for plugin-delivered data messages. Messages are parsed and
+/// Entry point for decrypted UnifiedPush messages. Messages are parsed and
 /// deduplicated before display; unknown types and repeated notification ids
 /// are dropped silently.
 /// </summary>
 public sealed class PushMessageHandler(
     PushNotificationDedupe dedupe,
     PushNotificationPresenter presenter,
-    PushCoordinator coordinator,
     ParentSettingsStore settings)
 {
-    public void OnNotificationReceived(object? sender, FCMNotificationReceivedEventArgs e)
+    public void Handle(byte[] content)
     {
-        if (settings.DeviceId is null)
+        if (settings.DeviceId is null || content.Length == 0)
             return;
 
-        if (e.Notification?.Data is not { } data)
+        Dictionary<string, string>? data;
+        try
+        {
+            data = JsonSerializer.Deserialize<Dictionary<string, string>>(content);
+        }
+        catch (JsonException)
+        {
             return;
+        }
 
-        var payloadData = new Dictionary<string, string>(data, StringComparer.Ordinal);
-        if (!PushNotificationPayloadParser.TryParse(payloadData, out var payload) || payload is null)
+        if (data is null
+            || !PushNotificationPayloadParser.TryParse(data, out var payload)
+            || payload is null)
+        {
             return;
+        }
 
         if (!dedupe.TryRemember(payload.DedupeKey))
             return;
 
         presenter.Present(payload, AppLifecycleState.IsForeground);
     }
-
-    public void OnTokenChanged(object? sender, FCMTokenChangedEventArgs e) =>
-        _ = MainThread.InvokeOnMainThreadAsync(() => coordinator.SyncTokenAsync(force: true));
 }
-#endif

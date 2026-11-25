@@ -13,6 +13,7 @@ public sealed class NotificationItem
             NotificationKind.AttentionAlert => "Cảnh báo tập trung",
             NotificationKind.ProtectionOff => "Bảo vệ tạm tắt",
             NotificationKind.SecurityAlert => "Cảnh báo bảo mật",
+            NotificationKind.BlockedAttempt => "Truy cập bị chặn",
             _ => "Thông báo",
         };
         TimeText = VietnameseFormat.DateTimeLocal(notification.CreatedAtUtc, timeZone);
