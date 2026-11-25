@@ -474,6 +474,39 @@ public sealed class ReportServiceTests
         report.SessionCount.Should().Be(0);
     }
 
+    [Fact]
+    public async Task Cross_midnight_and_active_sessions_do_not_inflate_totals_or_past_empty_days()
+    {
+        var sessions = new FakeStudySessionRepository();
+        var samples = new FakeActivitySampleRepository();
+        var events = new FakeAttentionEventRepository();
+
+        // Active session started on Oct 30, still running on Oct 31.
+        var sessionStart = new DateTime(2026, 10, 30, 23, 30, 0, DateTimeKind.Utc);
+        var active = StudySession.Start(sessionStart, new DateOnly(2026, 10, 30), SessionTrigger.Manual, true);
+        active.AddCategorySeconds(ActivityCategory.Study, 1800, sessionStart.AddMinutes(30));
+        sessions.Sessions.Add(active);
+
+        var service = new ReportService(
+            sessions,
+            samples,
+            events,
+            new ManualTimeProvider(new DateTimeOffset(2026, 10, 31, 0, 15, 0, TimeSpan.Zero), TimeZoneInfo.Utc));
+
+        // Past empty days before Oct 30 must have null ActiveSessionStartedAtUtc.
+        var weekReport = await service.GetAsync(ReportPeriod.Week(new DateOnly(2026, 10, 31)));
+        weekReport.Days.Where(d => d.LocalDate < new DateOnly(2026, 10, 30))
+            .Should().OnlyContain(d => d.ActiveSessionStartedAtUtc == null);
+        weekReport.Days.Single(d => d.LocalDate == new DateOnly(2026, 10, 31)).ActiveSessionStartedAtUtc
+            .Should().Be(sessionStart);
+
+        // Single-day report for Oct 31: totals must match Oct 31 Days[0] (0, not Oct 30's 1800s).
+        var dayReport = await service.GetAsync(ReportPeriod.Day(new DateOnly(2026, 10, 31)));
+        dayReport.SessionCount.Should().Be(0);
+        dayReport.StudySeconds.Should().Be(0);
+        dayReport.Days[0].ActiveSessionStartedAtUtc.Should().Be(sessionStart);
+    }
+
     private static ReportActivitySample Sample(
         StudySession session,
         DateTime sampledAtUtc,

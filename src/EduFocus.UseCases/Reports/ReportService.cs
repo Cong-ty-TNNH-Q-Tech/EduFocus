@@ -84,10 +84,12 @@ public sealed class ReportService : IReportUseCase
         var sampleSessionIds = samples.Select(sample => sample.SessionId).ToHashSet();
         var eventSessionIds = events.Select(attentionEvent => attentionEvent.SessionId).ToHashSet();
 
+        var periodSessions = sessions.Where(s => s.StartLocalDate >= period.Start).ToList();
+        var todayLocal = DateOnly.FromDateTime(_timeProvider.GetLocalNow().DateTime);
         return new StudyReport
         {
             Period = period,
-            Days = BuildDays(period, sessions),
+            Days = BuildDays(period, sessions, todayLocal),
             AllSessionIds = sessionIds,
             Sessions = sessions
                 .OrderByDescending(session => session.StartedAtUtc)
@@ -96,20 +98,20 @@ public sealed class ReportService : IReportUseCase
             Timeline = BuildTimeline(samples, _timeProvider.LocalTimeZone, period),
             TopActivities = BuildTopActivities(samples, _timeProvider.LocalTimeZone, period),
             AttentionEvents = events,
-            SessionCount = sessions.Count,
-            ActiveSeconds = sessions.Sum(session => session.ActiveSeconds),
-            StudySeconds = sessions.Sum(session => session.StudySeconds),
-            DistractionSeconds = sessions.Sum(session => session.DistractionSeconds),
-            NeutralSeconds = sessions.Sum(session => session.NeutralSeconds),
-            OnlineClassSeconds = sessions.Sum(session => session.OnlineClassSeconds),
-            BlockedAttemptCount = sessions.Sum(session => session.BlockedAttemptCount),
-            FocusedSeconds = sessions.Sum(session => session.FocusedSeconds),
-            DistractedSeconds = sessions.Sum(session => session.DistractedSeconds),
-            AbsentSeconds = sessions.Sum(session => session.AbsentSeconds),
-            DrowsySeconds = sessions.Sum(session => session.DrowsySeconds),
-            CameraUnavailableSeconds = sessions.Sum(session => session.CameraUnavailableSeconds),
-            MonitoringEligibleSeconds = sessions.Sum(session => session.MonitoringEligibleSeconds),
-            ConfidenceAvg = WeightedConfidence(sessions),
+            SessionCount = periodSessions.Count,
+            ActiveSeconds = periodSessions.Sum(session => session.ActiveSeconds),
+            StudySeconds = periodSessions.Sum(session => session.StudySeconds),
+            DistractionSeconds = periodSessions.Sum(session => session.DistractionSeconds),
+            NeutralSeconds = periodSessions.Sum(session => session.NeutralSeconds),
+            OnlineClassSeconds = periodSessions.Sum(session => session.OnlineClassSeconds),
+            BlockedAttemptCount = periodSessions.Sum(session => session.BlockedAttemptCount),
+            FocusedSeconds = periodSessions.Sum(session => session.FocusedSeconds),
+            DistractedSeconds = periodSessions.Sum(session => session.DistractedSeconds),
+            AbsentSeconds = periodSessions.Sum(session => session.AbsentSeconds),
+            DrowsySeconds = periodSessions.Sum(session => session.DrowsySeconds),
+            CameraUnavailableSeconds = periodSessions.Sum(session => session.CameraUnavailableSeconds),
+            MonitoringEligibleSeconds = periodSessions.Sum(session => session.MonitoringEligibleSeconds),
+            ConfidenceAvg = WeightedConfidence(periodSessions),
             SessionsTruncated = sessions.Count > MaxDisplayedSessions,
             TimelineTruncated = timelineTruncated,
             AttentionEventsTruncated = eventsTruncated,
@@ -122,7 +124,8 @@ public sealed class ReportService : IReportUseCase
 
     private static IReadOnlyList<DailyStudySummary> BuildDays(
         ReportPeriod period,
-        IReadOnlyList<StudySession> sessions)
+        IReadOnlyList<StudySession> sessions,
+        DateOnly todayLocal)
     {
         var sessionsByDate = sessions
             .GroupBy(session => session.StartLocalDate)
@@ -136,7 +139,9 @@ public sealed class ReportService : IReportUseCase
 
             if (!sessionsByDate.TryGetValue(date, out var daySessions))
             {
-                var activeCrossDay = sessions.FirstOrDefault(s => s.IsActive);
+                var activeCrossDay = date == todayLocal
+                    ? sessions.FirstOrDefault(s => s.IsActive && s.StartLocalDate < date)
+                    : null;
                 days[index] = activeCrossDay is not null
                     ? DailyStudySummary.Empty(date) with { ActiveSessionStartedAtUtc = activeCrossDay.StartedAtUtc }
                     : DailyStudySummary.Empty(date);
