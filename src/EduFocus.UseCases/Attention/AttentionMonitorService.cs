@@ -620,15 +620,29 @@ public sealed class AttentionMonitorService : IAttentionMonitorUseCase, IAsyncDi
     {
         try
         {
-            if (eligible)
+            await _lifecycleGate.WaitAsync().ConfigureAwait(false);
+            try
             {
-                if (_running && !_pipeline.IsRunning)
-                    await _pipeline.StartAsync(CancellationToken.None).ConfigureAwait(false);
+                var shouldRun = _running
+                    && MonitoringEligibility.IsEligible(_monitoringEnabled, _monitorOnlyDuringClasses, _isOnlineClass);
+
+                if (shouldRun)
+                {
+                    if (!_pipeline.IsRunning)
+                        await _pipeline.StartAsync(CancellationToken.None).ConfigureAwait(false);
+                }
+                else if (_pipeline.IsRunning)
+                {
+                    await _pipeline.StopAsync(CancellationToken.None).ConfigureAwait(false);
+                }
             }
-            else if (_pipeline.IsRunning)
+            finally
             {
-                await _pipeline.StopAsync(CancellationToken.None).ConfigureAwait(false);
+                _lifecycleGate.Release();
             }
+        }
+        catch (ObjectDisposedException)
+        {
         }
         catch (Exception ex)
         {
