@@ -334,7 +334,28 @@
                                         </Border.Triggers>
                                         <Label Text="{Binding StatusText}"
                                                Style="{StaticResource PillLabel}"
-                                               TextColor="{AppThemeBinding Light={StaticResource Primary}, Dark=#5EEAD4}" />
+                                               TextColor="{AppThemeBinding Light={StaticResource Primary}, Dark=#5EEAD4}">
+                                            <Label.Triggers>
+                                                <DataTrigger TargetType="Label"
+                                                             Binding="{Binding StatusText}"
+                                                             Value="Gửi lỗi">
+                                                    <Setter Property="TextColor"
+                                                            Value="{AppThemeBinding Light={StaticResource Danger}, Dark=#FCA5A5}" />
+                                                </DataTrigger>
+                                                <DataTrigger TargetType="Label"
+                                                             Binding="{Binding StatusText}"
+                                                             Value="Bị tạm hoãn">
+                                                    <Setter Property="TextColor"
+                                                            Value="{AppThemeBinding Light={StaticResource Amber}, Dark={StaticResource AmberBright}}" />
+                                                </DataTrigger>
+                                                <DataTrigger TargetType="Label"
+                                                             Binding="{Binding StatusText}"
+                                                             Value="Đang chờ gửi">
+                                                    <Setter Property="TextColor"
+                                                            Value="{AppThemeBinding Light={StaticResource Blue}, Dark=#93C5FD}" />
+                                                </DataTrigger>
+                                            </Label.Triggers>
+                                        </Label>
                                     </Border>
                                 </Grid>
                             </Border>
