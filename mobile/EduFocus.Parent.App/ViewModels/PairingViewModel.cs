@@ -88,6 +88,13 @@ public sealed partial class PairingViewModel : ObservableObject
         if (string.IsNullOrWhiteSpace(CloudBaseUrl))
             CloudBaseUrl = _settings.CloudBaseUrl ?? _appState.CloudBaseUrl ?? string.Empty;
 
+        if (_prefillCode is null)
+        {
+            CodeInput = string.Empty;
+            SetStatus(string.Empty, false);
+        }
+
+        CameraPermissionDenied = false;
         OnPropertyChanged(nameof(LinkedBannerText));
     }
 
@@ -186,8 +193,10 @@ public sealed partial class PairingViewModel : ObservableObject
                 replaceExisting: replacing);
 
             IsScannerActive = false;
+            CameraPermissionDenied = false;
             _prefillSessionId = null;
             _prefillCode = null;
+            CodeInput = string.Empty;
             RefreshLinkedState();
             SetStatus($"Ghép nối thành công với {response.DesktopName}.", false);
             PairingSucceeded?.Invoke(this, EventArgs.Empty);
