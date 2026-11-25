@@ -775,11 +775,12 @@ public partial class App : Application
             // the synchronous ServiceProvider.Dispose() would throw.
             if (Services is { } services)
             {
-                // Dispose the WPF MediaPlayer on the UI thread before waiting on
-                // async container disposal so its Dispatcher never deadlocks.
+                // Dispose the WPF MediaPlayer and WinForms TrayIconService on the UI thread
+                // before waiting on async container disposal so thread-affine handles never deadlock or leak.
                 try
                 {
                     services.GetService<IFocusAudioPort>()?.Dispose();
+                    services.GetService<TrayIconService>()?.Dispose();
                 }
                 catch { }
 
