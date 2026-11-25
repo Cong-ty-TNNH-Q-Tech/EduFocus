@@ -3,235 +3,318 @@
              xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
              xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
              xmlns:vm="clr-namespace:EduFocus.Parent.App.ViewModels"
+             xmlns:toolkit="http://schemas.microsoft.com/dotnet/2022/maui/toolkit"
              x:DataType="vm:SettingsViewModel"
              Title="Cài đặt"
-             BackgroundColor="{AppThemeBinding Light=#F8FAFC, Dark=#0B1220}">
+             Shell.NavBarIsVisible="False"
+             SafeAreaEdges="Container">
     <ScrollView>
-        <VerticalStackLayout Padding="24,20,24,32" Spacing="16">
-            <Label Text="Cài đặt"
-                   FontSize="24"
-                   FontAttributes="Bold"
-                   TextColor="{AppThemeBinding Light={StaticResource TextLight}, Dark={StaticResource TextDark}}" />
+        <VerticalStackLayout Padding="20,18,20,28" Spacing="16">
 
-            <Border IsVisible="{Binding ShowWelcomeHint}"
-                    Padding="18"
-                    StrokeThickness="0"
-                    StrokeShape="RoundRectangle 16"
-                    BackgroundColor="{AppThemeBinding Light=#FFFFFF, Dark=#111827}">
-                <VerticalStackLayout Spacing="12">
-                    <Label Text="Chưa ghép nối"
-                           FontSize="17"
-                           FontAttributes="Bold"
-                           TextColor="{AppThemeBinding Light={StaticResource TextLight}, Dark={StaticResource TextDark}}" />
-                    <Label Text="Ghép nối với máy tính đang chạy EduFocus để nhận thông báo và báo cáo."
-                           FontSize="14"
-                           TextColor="{AppThemeBinding Light=#475569, Dark=#CBD5E1}" />
+            <VerticalStackLayout Spacing="2">
+                <Label Text="CÀI ĐẶT" Style="{StaticResource EyebrowLabel}" />
+                <Label Text="Cài đặt" Style="{StaticResource PageTitleLabel}" />
+                <Label Text="Quản lý kết nối, thông báo và thiết bị trong gia đình."
+                       Style="{StaticResource CaptionLabel}"
+                       Margin="0,3,0,0" />
+            </VerticalStackLayout>
+
+            <!-- Not linked -->
+            <Border IsVisible="{Binding ShowWelcomeHint}" Style="{StaticResource CardBorder}" Padding="20">
+                <VerticalStackLayout Spacing="16">
+                    <Border Style="{StaticResource IconBadge}" WidthRequest="46" HeightRequest="46"
+                            StrokeShape="RoundRectangle 15">
+                        <Image Source="icon_phone.png" WidthRequest="22" HeightRequest="22"
+                               Aspect="AspectFit">
+                            <Image.Behaviors>
+                                <toolkit:IconTintColorBehavior TintColor="{StaticResource Primary}" />
+                            </Image.Behaviors>
+                        </Image>
+                    </Border>
+                    <VerticalStackLayout Spacing="4">
+                        <Label Text="Chưa ghép nối" Style="{StaticResource SectionLabel}" />
+                        <Label Text="Ghép nối với máy tính đang chạy EduFocus để nhận thông báo và báo cáo tổng hợp."
+                               Style="{StaticResource BodyLabel}" />
+                    </VerticalStackLayout>
                     <Button Text="Ghép nối với máy tính"
                             Clicked="OnPairClicked"
-                            BackgroundColor="{StaticResource Primary}"
-                            TextColor="White"
-                            CornerRadius="12"
-                            HeightRequest="46" />
+                            Style="{StaticResource PrimaryButton}" />
                 </VerticalStackLayout>
             </Border>
 
-            <Border IsVisible="{Binding IsLinked}"
-                    Padding="18"
-                    StrokeThickness="0"
-                    StrokeShape="RoundRectangle 16"
-                    BackgroundColor="{AppThemeBinding Light=#FFFFFF, Dark=#111827}">
-                <VerticalStackLayout Spacing="10">
-                    <Label Text="Đã ghép nối"
-                           FontSize="17"
-                           FontAttributes="Bold"
-                           TextColor="{AppThemeBinding Light=#0F766E, Dark=#5EEAD4}" />
-                    <Label Text="{Binding DesktopName, StringFormat='Máy tính: {0}'}"
-                           FontSize="14"
-                           TextColor="{AppThemeBinding Light=#334155, Dark=#CBD5E1}" />
-                    <Label Text="{Binding ServerHostText, StringFormat='Máy chủ: {0}'}"
-                           FontSize="13"
-                           TextColor="{AppThemeBinding Light=#64748B, Dark=#94A3B8}" />
-                    <Label Text="{Binding ConnectionStatusText}"
-                           FontSize="13"
-                           TextColor="{AppThemeBinding Light=#0F766E, Dark=#5EEAD4}" />
+            <!-- Linked hero -->
+            <Border IsVisible="{Binding IsLinked}" Style="{StaticResource HeroBorder}">
+                <VerticalStackLayout Spacing="16">
+                    <Grid ColumnDefinitions="Auto,*" ColumnSpacing="12">
+                        <Border WidthRequest="44" HeightRequest="44" StrokeThickness="0"
+                                StrokeShape="RoundRectangle 14" BackgroundColor="#26FFFFFF">
+                            <Image Source="icon_devices.png" WidthRequest="22" HeightRequest="22"
+                                   Aspect="AspectFit" HorizontalOptions="Center" VerticalOptions="Center">
+                                <Image.Behaviors>
+                                    <toolkit:IconTintColorBehavior TintColor="White" />
+                                </Image.Behaviors>
+                            </Image>
+                        </Border>
+                        <VerticalStackLayout Grid.Column="1" Spacing="1" VerticalOptions="Center">
+                            <Label Text="ĐÃ GHÉP NỐI"
+                                   FontSize="10.5"
+                                   FontAttributes="Bold"
+                                   CharacterSpacing="1.4"
+                                   TextColor="#CCFFFFFF" />
+                            <Label Text="{Binding DesktopName}"
+                                   FontSize="20"
+                                   FontAttributes="Bold"
+                                   TextColor="White" />
+                            <Label Text="{Binding ServerHostText, StringFormat='Máy chủ: {0}'}"
+                                   FontSize="11.5"
+                                   TextColor="#CCFFFFFF" />
+                        </VerticalStackLayout>
+                    </Grid>
 
-                    <Button Text="Ghép nối lại"
-                            Clicked="OnPairClicked"
-                            BackgroundColor="Transparent"
-                            TextColor="{StaticResource Primary}"
-                            BorderColor="{StaticResource Primary}"
-                            BorderWidth="1"
-                            CornerRadius="12"
-                            HeightRequest="44"
-                            Margin="0,6,0,0" />
+                    <Border StrokeThickness="0" StrokeShape="RoundRectangle 999"
+                            BackgroundColor="#26FFFFFF" Padding="10,5"
+                            HorizontalOptions="Start">
+                        <HorizontalStackLayout Spacing="6">
+                            <BoxView WidthRequest="6" HeightRequest="6" CornerRadius="3"
+                                     Color="#86EFAC" VerticalOptions="Center" />
+                            <Label Text="{Binding ConnectionStatusText}"
+                                   FontSize="11.5"
+                                   FontAttributes="Bold"
+                                   TextColor="White" />
+                        </HorizontalStackLayout>
+                    </Border>
 
-                    <Button Text="Ngắt kết nối"
-                            Clicked="OnUnlinkClicked"
-                            IsEnabled="{Binding IsNotBusy}"
-                            BackgroundColor="Transparent"
-                            TextColor="{AppThemeBinding Light=#B91C1C, Dark=#FCA5A5}"
-                            BorderColor="{AppThemeBinding Light=#FCA5A5, Dark=#7F1D1D}"
-                            BorderWidth="1"
-                            CornerRadius="12"
-                            HeightRequest="44" />
+                    <Grid ColumnDefinitions="*,*" ColumnSpacing="10">
+                        <Button Text="Ghép nối lại"
+                                Clicked="OnPairClicked"
+                                IsEnabled="{Binding IsNotBusy}"
+                                BackgroundColor="#26FFFFFF"
+                                TextColor="White"
+                                BorderColor="#40FFFFFF"
+                                BorderWidth="1"
+                                CornerRadius="12"
+                                HeightRequest="42"
+                                FontSize="13"
+                                FontAttributes="Bold" />
+                        <Button Grid.Column="1"
+                                Text="Ngắt kết nối"
+                                Clicked="OnUnlinkClicked"
+                                IsEnabled="{Binding IsNotBusy}"
+                                BackgroundColor="Transparent"
+                                TextColor="White"
+                                BorderColor="#4DFFFFFF"
+                                BorderWidth="1"
+                                CornerRadius="12"
+                                HeightRequest="42"
+                                FontSize="13" />
+                    </Grid>
                 </VerticalStackLayout>
             </Border>
 
             <ActivityIndicator IsRunning="{Binding IsBusy}"
                                IsVisible="{Binding IsBusy}"
-                               Color="{StaticResource Primary}"
                                HorizontalOptions="Center" />
 
-            <Border Padding="18"
-                    StrokeThickness="0"
-                    StrokeShape="RoundRectangle 16"
-                    BackgroundColor="{AppThemeBinding Light=#FFFFFF, Dark=#111827}">
-                <VerticalStackLayout Spacing="6">
-                    <Label Text="Điện thoại này"
-                           FontSize="17"
-                           FontAttributes="Bold"
-                           TextColor="{AppThemeBinding Light={StaticResource TextLight}, Dark={StaticResource TextDark}}" />
-                    <Label Text="{Binding DeviceNameText}"
-                           FontSize="14"
-                           TextColor="{AppThemeBinding Light=#334155, Dark=#CBD5E1}" />
-                    <Label Text="{Binding PlatformText}"
-                           FontSize="13"
-                           TextColor="{AppThemeBinding Light=#64748B, Dark=#94A3B8}" />
-                    <Label Text="{Binding AppVersionText, StringFormat='Phiên bản ứng dụng: {0}'}"
-                           FontSize="13"
-                           TextColor="{AppThemeBinding Light=#64748B, Dark=#94A3B8}" />
+            <!-- This phone -->
+            <Border Style="{StaticResource CardBorder}">
+                <VerticalStackLayout Spacing="14">
+                    <Grid ColumnDefinitions="Auto,*" ColumnSpacing="12">
+                        <Border Style="{StaticResource IconBadge}" WidthRequest="36" HeightRequest="36"
+                                StrokeShape="RoundRectangle 12"
+                                BackgroundColor="{AppThemeBinding Light={StaticResource BlueSoft}, Dark={StaticResource BlueSoftDark}}">
+                            <Image Source="icon_phone.png" WidthRequest="18" HeightRequest="18"
+                                   Aspect="AspectFit">
+                                <Image.Behaviors>
+                                    <toolkit:IconTintColorBehavior TintColor="{AppThemeBinding Light={StaticResource Blue}, Dark=#93C5FD}" />
+                                </Image.Behaviors>
+                            </Image>
+                        </Border>
+                        <VerticalStackLayout Grid.Column="1" Spacing="1" VerticalOptions="Center">
+                            <Label Text="Điện thoại này" Style="{StaticResource SectionLabel}" />
+                            <Label Text="{Binding DeviceNameText}" Style="{StaticResource CaptionLabel}" />
+                        </VerticalStackLayout>
+                    </Grid>
+
+                    <BoxView HeightRequest="1"
+                             Color="{AppThemeBinding Light={StaticResource BorderLight}, Dark={StaticResource BorderDark}}" />
+
+                    <Grid ColumnDefinitions="*,Auto" RowDefinitions="Auto,Auto" RowSpacing="8">
+                        <Label Text="Nền tảng" Style="{StaticResource MetricLabel}" VerticalOptions="Center" />
+                        <Label Grid.Column="1" Text="{Binding PlatformText}" FontSize="13"
+                               HorizontalTextAlignment="End" VerticalOptions="Center" />
+                        <Label Grid.Row="1" Text="Phiên bản ứng dụng"
+                               Style="{StaticResource MetricLabel}" VerticalOptions="Center" />
+                        <Label Grid.Row="1" Grid.Column="1" Text="{Binding AppVersionText}"
+                               FontSize="13" HorizontalTextAlignment="End" VerticalOptions="Center" />
+                    </Grid>
                 </VerticalStackLayout>
             </Border>
 
-            <Border IsVisible="{Binding IsLinked}"
-                    Padding="18"
-                    StrokeThickness="0"
-                    StrokeShape="RoundRectangle 16"
-                    BackgroundColor="{AppThemeBinding Light=#FFFFFF, Dark=#111827}">
-                <VerticalStackLayout Spacing="10">
-                    <Label Text="Thông báo đẩy"
-                           FontSize="17"
-                           FontAttributes="Bold"
-                           TextColor="{AppThemeBinding Light={StaticResource TextLight}, Dark={StaticResource TextDark}}" />
-                    <Label Text="{Binding NotificationStatusText}"
-                           FontSize="14"
-                           TextColor="{AppThemeBinding Light=#475569, Dark=#CBD5E1}" />
-
+            <!-- Notifications -->
+            <Border IsVisible="{Binding IsLinked}" Style="{StaticResource CardBorder}">
+                <VerticalStackLayout Spacing="14">
+                    <Grid ColumnDefinitions="Auto,*" ColumnSpacing="12">
+                        <Border Style="{StaticResource IconBadge}" WidthRequest="36" HeightRequest="36"
+                                StrokeShape="RoundRectangle 12"
+                                BackgroundColor="{AppThemeBinding Light={StaticResource AmberSoft}, Dark={StaticResource AmberSoftDark}}">
+                            <Image Source="icon_bell.png" WidthRequest="18" HeightRequest="18"
+                                   Aspect="AspectFit">
+                                <Image.Behaviors>
+                                    <toolkit:IconTintColorBehavior TintColor="{AppThemeBinding Light={StaticResource Amber}, Dark=#FCD34D}" />
+                                </Image.Behaviors>
+                            </Image>
+                        </Border>
+                        <VerticalStackLayout Grid.Column="1" Spacing="1" VerticalOptions="Center">
+                            <Label Text="Thông báo đẩy" Style="{StaticResource SectionLabel}" />
+                            <Label Text="{Binding NotificationStatusText}" Style="{StaticResource CaptionLabel}" />
+                        </VerticalStackLayout>
+                    </Grid>
                     <Button Text="Bật thông báo"
                             IsVisible="{Binding ShowEnableNotifications}"
                             Clicked="OnEnableNotificationsClicked"
-                            BackgroundColor="{StaticResource Primary}"
-                            TextColor="White"
-                            CornerRadius="12"
-                            HeightRequest="44" />
+                            Style="{StaticResource SecondaryButton}" />
                 </VerticalStackLayout>
             </Border>
 
-            <Border IsVisible="{Binding IsLinked}"
-                    Padding="18"
-                    StrokeThickness="0"
-                    StrokeShape="RoundRectangle 16"
-                    BackgroundColor="{AppThemeBinding Light=#FFFFFF, Dark=#111827}">
-                <VerticalStackLayout Spacing="10">
-                    <Label Text="Thiết bị trong gia đình"
-                           FontSize="17"
-                           FontAttributes="Bold"
-                           TextColor="{AppThemeBinding Light={StaticResource TextLight}, Dark={StaticResource TextDark}}" />
-                    <ActivityIndicator IsRunning="{Binding IsLoadingDevices}"
-                                       IsVisible="{Binding IsLoadingDevices}"
-                                       Color="{StaticResource Primary}"
-                                       HorizontalOptions="Start" />
+            <!-- Family devices -->
+            <Border IsVisible="{Binding IsLinked}" Style="{StaticResource CardBorder}">
+                <VerticalStackLayout Spacing="14">
+                    <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="12">
+                        <Border Style="{StaticResource IconBadge}" WidthRequest="36" HeightRequest="36"
+                                StrokeShape="RoundRectangle 12">
+                            <Image Source="icon_devices.png" WidthRequest="18" HeightRequest="18"
+                                   Aspect="AspectFit">
+                                <Image.Behaviors>
+                                    <toolkit:IconTintColorBehavior TintColor="{StaticResource Primary}" />
+                                </Image.Behaviors>
+                            </Image>
+                        </Border>
+                        <VerticalStackLayout Grid.Column="1" Spacing="1" VerticalOptions="Center">
+                            <Label Text="Thiết bị trong gia đình" Style="{StaticResource SectionLabel}" />
+                            <Label Text="Thu hồi thiết bị không còn sử dụng." Style="{StaticResource CaptionLabel}" />
+                        </VerticalStackLayout>
+                        <ActivityIndicator Grid.Column="2"
+                                           IsRunning="{Binding IsLoadingDevices}"
+                                           IsVisible="{Binding IsLoadingDevices}"
+                                           VerticalOptions="Center" />
+                    </Grid>
+
                     <Label Text="{Binding DevicesStatus}"
                            IsVisible="{Binding HasDevicesStatus}"
-                           FontSize="13"
-                           TextColor="{AppThemeBinding Light=#B91C1C, Dark=#FCA5A5}" />
-                    <VerticalStackLayout Spacing="14"
+                           FontSize="12.5"
+                           TextColor="{AppThemeBinding Light={StaticResource Danger}, Dark=#FCA5A5}" />
+
+                    <VerticalStackLayout Spacing="8"
                                          BindableLayout.ItemsSource="{Binding Devices}">
                         <BindableLayout.ItemTemplate>
                             <DataTemplate x:DataType="vm:SettingsDeviceItem">
-                                <Grid ColumnDefinitions="*,Auto" ColumnSpacing="12">
-                                    <VerticalStackLayout Spacing="2">
-                                        <Label Text="{Binding Name}"
-                                               FontSize="14"
-                                               FontAttributes="Bold"
-                                               TextColor="{AppThemeBinding Light={StaticResource TextLight}, Dark={StaticResource TextDark}}" />
-                                        <Label Text="{Binding MetaText}"
-                                               FontSize="13"
-                                               TextColor="{AppThemeBinding Light=#64748B, Dark=#94A3B8}" />
-                                        <Label Text="{Binding LastSeenText}"
-                                               FontSize="12"
-                                               TextColor="{AppThemeBinding Light=#94A3B8, Dark=#64748B}" />
-                                    </VerticalStackLayout>
-                                    <Button Grid.Column="1"
-                                            Text="Thu hồi"
-                                            IsVisible="{Binding CanRevoke}"
-                                            Clicked="OnRevokeDeviceClicked"
-                                            BackgroundColor="Transparent"
-                                            TextColor="{AppThemeBinding Light=#B91C1C, Dark=#FCA5A5}"
-                                            BorderColor="{AppThemeBinding Light=#FCA5A5, Dark=#7F1D1D}"
-                                            BorderWidth="1"
-                                            CornerRadius="10"
-                                            HeightRequest="36"
-                                            Padding="12,0"
-                                            VerticalOptions="Center" />
-                                </Grid>
+                                <Border Style="{StaticResource SoftCardBorder}" Padding="12">
+                                    <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="10">
+                                        <Border WidthRequest="32" HeightRequest="32" StrokeThickness="0"
+                                                StrokeShape="RoundRectangle 10"
+                                                BackgroundColor="{AppThemeBinding Light=#E7F0F0, Dark=#22303F}">
+                                            <Image Source="icon_devices.png" WidthRequest="16" HeightRequest="16"
+                                                   Aspect="AspectFit" HorizontalOptions="Center" VerticalOptions="Center">
+                                                <Image.Behaviors>
+                                                    <toolkit:IconTintColorBehavior TintColor="{AppThemeBinding Light={StaticResource TextSecondaryLight}, Dark={StaticResource TextSecondaryDark}}" />
+                                                </Image.Behaviors>
+                                            </Image>
+                                        </Border>
+                                        <VerticalStackLayout Grid.Column="1" Spacing="1" VerticalOptions="Center">
+                                            <Label Text="{Binding Name}" FontSize="13.5" FontAttributes="Bold" />
+                                            <Label Text="{Binding MetaText}" Style="{StaticResource CaptionLabel}" />
+                                            <Label Text="{Binding LastSeenText}" Style="{StaticResource CaptionLabel}" />
+                                        </VerticalStackLayout>
+                                        <Button Grid.Column="2"
+                                                Text="Thu hồi"
+                                                IsVisible="{Binding CanRevoke}"
+                                                Clicked="OnRevokeDeviceClicked"
+                                                Style="{StaticResource SmallDangerButton}"
+                                                VerticalOptions="Center" />
+                                    </Grid>
+                                </Border>
                             </DataTemplate>
                         </BindableLayout.ItemTemplate>
                     </VerticalStackLayout>
+
+                    <Label Text="Chưa có thiết bị nào khác trong gia đình."
+                           IsVisible="{Binding HasDevices, Converter={StaticResource InverseBool}}"
+                           Style="{StaticResource CaptionLabel}" />
                 </VerticalStackLayout>
             </Border>
 
-            <Border IsVisible="{Binding IsLinked}"
-                    Padding="18"
-                    StrokeThickness="0"
-                    StrokeShape="RoundRectangle 16"
-                    BackgroundColor="{AppThemeBinding Light=#FFFFFF, Dark=#111827}">
-                <VerticalStackLayout Spacing="8">
-                    <Label Text="Dữ liệu trên cloud"
-                           FontSize="15"
-                           FontAttributes="Bold"
-                           TextColor="{AppThemeBinding Light={StaticResource TextLight}, Dark={StaticResource TextDark}}" />
-                    <Label Text="Xóa vĩnh viễn dữ liệu học tập và liên kết của gia đình trên cloud. Không thể hoàn tác."
-                           FontSize="13"
-                           TextColor="{AppThemeBinding Light=#475569, Dark=#CBD5E1}" />
-                    <Button Text="Xóa dữ liệu trên cloud"
-                            Clicked="OnDeleteCloudDataClicked"
-                            IsEnabled="{Binding IsNotBusy}"
-                            BackgroundColor="Transparent"
-                            TextColor="{AppThemeBinding Light=#B91C1C, Dark=#FCA5A5}"
-                            BorderColor="{AppThemeBinding Light=#FCA5A5, Dark=#7F1D1D}"
-                            BorderWidth="1"
-                            CornerRadius="12"
-                            HeightRequest="44"
-                            Margin="0,4,0,0" />
-                </VerticalStackLayout>
+            <!-- Privacy -->
+            <Border Style="{StaticResource CardBorder}" Padding="16">
+                <Border.GestureRecognizers>
+                    <TapGestureRecognizer Tapped="OnPrivacyTapped" />
+                </Border.GestureRecognizers>
+                <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="12">
+                    <Border Style="{StaticResource IconBadge}" WidthRequest="36" HeightRequest="36"
+                            StrokeShape="RoundRectangle 12"
+                            BackgroundColor="{AppThemeBinding Light={StaticResource VioletSoft}, Dark={StaticResource VioletSoftDark}}">
+                        <Image Source="icon_lock.png" WidthRequest="18" HeightRequest="18"
+                               Aspect="AspectFit">
+                            <Image.Behaviors>
+                                <toolkit:IconTintColorBehavior TintColor="{AppThemeBinding Light={StaticResource Violet}, Dark=#C4B5FD}" />
+                            </Image.Behaviors>
+                        </Image>
+                    </Border>
+                    <VerticalStackLayout Grid.Column="1" Spacing="1" VerticalOptions="Center">
+                        <Label Text="Quyền riêng tư" Style="{StaticResource CardTitleLabel}" />
+                        <Label Text="Xem chính sách quyền riêng tư" Style="{StaticResource CaptionLabel}" />
+                    </VerticalStackLayout>
+                    <Image Grid.Column="2" Source="icon_chevron_right.png"
+                           WidthRequest="16" HeightRequest="16" Aspect="AspectFit"
+                           VerticalOptions="Center">
+                        <Image.Behaviors>
+                            <toolkit:IconTintColorBehavior TintColor="{AppThemeBinding Light={StaticResource TextTertiaryLight}, Dark={StaticResource TextTertiaryDark}}" />
+                        </Image.Behaviors>
+                    </Image>
+                </Grid>
             </Border>
 
-            <Border Padding="18"
-                    StrokeThickness="0"
-                    StrokeShape="RoundRectangle 16"
-                    BackgroundColor="{AppThemeBinding Light=#FFFFFF, Dark=#111827}">
-                <VerticalStackLayout Spacing="8">
-                    <Label Text="Quyền riêng tư"
-                           FontSize="15"
-                           FontAttributes="Bold"
-                           TextColor="{AppThemeBinding Light={StaticResource TextLight}, Dark={StaticResource TextDark}}" />
-                    <Label Text="Xem chính sách quyền riêng tư"
-                           FontSize="14"
-                           TextColor="{StaticResource Primary}"
-                           TextDecorations="Underline">
-                        <Label.GestureRecognizers>
-                            <TapGestureRecognizer Tapped="OnPrivacyTapped" />
-                        </Label.GestureRecognizers>
-                    </Label>
-                </VerticalStackLayout>
-            </Border>
+            <!-- Danger zone -->
+            <VerticalStackLayout IsVisible="{Binding IsLinked}" Spacing="10" Margin="0,6,0,0">
+                <Label Text="VÙNG NGUY HIỂM"
+                       Style="{StaticResource EyebrowLabel}"
+                       TextColor="{AppThemeBinding Light={StaticResource Danger}, Dark=#FCA5A5}"
+                       Margin="2,0" />
+                <Border Style="{StaticResource CardBorder}"
+                        Stroke="{AppThemeBinding Light=#FAD1D1, Dark=#4A2225}"
+                        BackgroundColor="{AppThemeBinding Light=#FFF7F7, Dark=#1B1012}">
+                    <VerticalStackLayout Spacing="12">
+                        <Grid ColumnDefinitions="Auto,*" ColumnSpacing="12">
+                            <Border Style="{StaticResource IconBadge}" WidthRequest="36" HeightRequest="36"
+                                    StrokeShape="RoundRectangle 12"
+                                    BackgroundColor="{AppThemeBinding Light={StaticResource DangerSoft}, Dark={StaticResource DangerSoftDark}}">
+                                <Image Source="icon_trash.png" WidthRequest="18" HeightRequest="18"
+                                       Aspect="AspectFit">
+                                    <Image.Behaviors>
+                                        <toolkit:IconTintColorBehavior TintColor="{AppThemeBinding Light={StaticResource Danger}, Dark=#FCA5A5}" />
+                                    </Image.Behaviors>
+                                </Image>
+                            </Border>
+                            <VerticalStackLayout Grid.Column="1" Spacing="3" VerticalOptions="Center">
+                                <Label Text="Xóa dữ liệu trên cloud" Style="{StaticResource CardTitleLabel}" />
+                                <Label Text="Xóa vĩnh viễn dữ liệu học tập và liên kết của gia đình trên cloud. Không thể hoàn tác."
+                                       Style="{StaticResource CaptionLabel}" />
+                            </VerticalStackLayout>
+                        </Grid>
+                        <Button Text="Xóa dữ liệu trên cloud"
+                                Clicked="OnDeleteCloudDataClicked"
+                                IsEnabled="{Binding IsNotBusy}"
+                                Style="{StaticResource DangerButton}" />
+                        <ActivityIndicator IsRunning="{Binding IsDeletingCloudData}"
+                                           IsVisible="{Binding IsDeletingCloudData}"
+                                           HorizontalOptions="Center" />
+                    </VerticalStackLayout>
+                </Border>
+            </VerticalStackLayout>
 
-            <Label Text="EduFocus Phụ huynh"
-                   FontSize="12"
+            <Label Text="EduFocus Phụ huynh · Riêng tư từ thiết kế"
+                   Style="{StaticResource CaptionLabel}"
                    HorizontalOptions="Center"
-                   TextColor="{AppThemeBinding Light=#94A3B8, Dark=#64748B}"
-                   Margin="0,12,0,0" />
+                   Margin="0,8,0,0" />
         </VerticalStackLayout>
     </ScrollView>
 </ContentPage>

@@ -23,12 +23,16 @@ public sealed partial class ReportsViewModel(
     [ObservableProperty] private bool _hasDays;
     [ObservableProperty] private bool _showEmptyState;
     [ObservableProperty] private string _rangeText = string.Empty;
+    [ObservableProperty] private string _totalStudyText = "—";
+    [ObservableProperty] private string _averageStudyText = "—";
     [ObservableProperty] private bool _hasSelection;
     [ObservableProperty] private string _selectedDateText = string.Empty;
     [ObservableProperty] private string _selectedStudyText = "—";
     [ObservableProperty] private string _selectedAttentionText = "—";
     [ObservableProperty] private string _selectedCoverageText = "—";
     [ObservableProperty] private string _selectedBlockedText = "—";
+    [ObservableProperty] private double _selectedAttentionPercentValue;
+    [ObservableProperty] private double _selectedCoveragePercentValue;
     [ObservableProperty] private bool _selectedShowCoverageWarning;
 
     public bool HasError => ErrorMessage.Length > 0;
@@ -72,6 +76,8 @@ public sealed partial class ReportsViewModel(
         SelectedAttentionText = item.AttentionText;
         SelectedCoverageText = item.CoverageText;
         SelectedBlockedText = item.BlockedText;
+        SelectedAttentionPercentValue = Fraction(item.Summary.AttentionPercent);
+        SelectedCoveragePercentValue = Fraction(item.Summary.CoveragePercent);
         SelectedShowCoverageWarning = item.ShowCoverageWarning;
         HasSelection = true;
     }
@@ -148,6 +154,12 @@ public sealed partial class ReportsViewModel(
             .ToList();
         HasDays = Days.Count > 0;
         ShowEmptyState = !HasDays;
+        TotalStudyText = ordered.Count == 0
+            ? "—"
+            : VietnameseFormat.Duration(ordered.Sum(s => s.StudySeconds));
+        AverageStudyText = ordered.Count == 0
+            ? "—"
+            : VietnameseFormat.Duration((long)Math.Round(ordered.Average(s => (double)s.StudySeconds)));
 
         var selection =
             (focusDate is { } focus ? Days.FirstOrDefault(d => d.Date == focus) : null)
@@ -163,10 +175,15 @@ public sealed partial class ReportsViewModel(
             SelectedAttentionText = "—";
             SelectedCoverageText = "—";
             SelectedBlockedText = "—";
+            SelectedAttentionPercentValue = 0;
+            SelectedCoveragePercentValue = 0;
             SelectedShowCoverageWarning = false;
             return;
         }
 
         Select(selection);
     }
+
+    private static double Fraction(double? percent) =>
+        percent is { } value ? Math.Clamp(value / 100d, 0d, 1d) : 0d;
 }

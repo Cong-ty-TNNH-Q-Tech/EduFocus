@@ -2,55 +2,135 @@
 <ContentPage x:Class="EduFocus.Parent.App.Views.PrivacyPage"
              xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
              xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+             xmlns:toolkit="http://schemas.microsoft.com/dotnet/2022/maui/toolkit"
              Title="Quyền riêng tư"
              Shell.TabBarIsVisible="False"
-             BackgroundColor="{AppThemeBinding Light=#F8FAFC, Dark=#0B1220}">
+             Shell.NavBarIsVisible="False"
+             SafeAreaEdges="Container">
     <ScrollView>
-        <VerticalStackLayout Padding="24,20,24,32" Spacing="14">
-            <Label Text="Quyền riêng tư trên điện thoại"
-                   FontSize="22"
-                   FontAttributes="Bold"
-                   TextColor="{AppThemeBinding Light={StaticResource TextLight}, Dark={StaticResource TextDark}}" />
+        <VerticalStackLayout Padding="20,16,20,28" Spacing="16">
 
-            <Label FontSize="14"
-                   TextColor="{AppThemeBinding Light=#334155, Dark=#CBD5E1}"
-                   Text="Ứng dụng EduFocus Phụ huynh chỉ nhận thông báo đẩy và báo cáo tổng hợp từ máy tính đã được phụ huynh ghép nối. Ứng dụng không điều khiển từ xa việc bảo vệ của máy học sinh." />
+            <Button Text="← Quay lại"
+                    Clicked="OnBackClicked"
+                    Style="{StaticResource GhostButton}"
+                    HorizontalOptions="Start" />
 
-            <Label Text="Dữ liệu được lưu trên điện thoại"
-                   FontSize="16"
-                   FontAttributes="Bold"
-                   TextColor="{AppThemeBinding Light={StaticResource TextLight}, Dark={StaticResource TextDark}}" />
-            <Label FontSize="14"
-                   TextColor="{AppThemeBinding Light=#334155, Dark=#CBD5E1}"
-                   Text="• Mã truy cập cloud được lưu trong SecureStorage của hệ điều hành và không hiển thị ở bất kỳ màn hình nào.&#10;• Địa chỉ máy chủ, tên máy tính và múi giờ được lưu trong Preferences (không phải bí mật).&#10;• Ứng dụng không lưu ảnh camera; camera chỉ đọc mã QR khi bạn chủ động bật." />
+            <VerticalStackLayout Spacing="2">
+                <Label Text="QUYỀN RIÊNG TƯ" Style="{StaticResource EyebrowLabel}" />
+                <Label Text="Riêng tư trên điện thoại" Style="{StaticResource PageTitleLabel}" />
+            </VerticalStackLayout>
 
-            <Label Text="Dữ liệu nhận từ cloud"
-                   FontSize="16"
-                   FontAttributes="Bold"
-                   TextColor="{AppThemeBinding Light={StaticResource TextLight}, Dark={StaticResource TextDark}}" />
-            <Label FontSize="14"
-                   TextColor="{AppThemeBinding Light=#334155, Dark=#CBD5E1}"
-                   Text="Chỉ các sự kiện tổng hợp: thời lượng tập trung/xao nhãng/vắng mặt, số lần cố truy cập bị chặn và tóm tắt báo cáo theo ngày. Không có URL, tiêu đề cửa sổ, tên ứng dụng, hình ảnh hay dữ liệu sinh trắc học." />
+            <Border Style="{StaticResource HeroBorder}" Padding="20">
+                <Grid ColumnDefinitions="Auto,*" ColumnSpacing="14">
+                    <Border WidthRequest="44" HeightRequest="44" StrokeThickness="0"
+                            StrokeShape="RoundRectangle 14" BackgroundColor="#26FFFFFF"
+                            VerticalOptions="Start">
+                        <Image Source="icon_lock.png" WidthRequest="22" HeightRequest="22"
+                               Aspect="AspectFit" HorizontalOptions="Center" VerticalOptions="Center">
+                            <Image.Behaviors>
+                                <toolkit:IconTintColorBehavior TintColor="White" />
+                            </Image.Behaviors>
+                        </Image>
+                    </Border>
+                    <VerticalStackLayout Grid.Column="1" Spacing="4">
+                        <Label Text="Riêng tư từ thiết kế"
+                               FontSize="17"
+                               FontAttributes="Bold"
+                               TextColor="White" />
+                        <Label Text="Ứng dụng chỉ nhận thông báo đẩy và báo cáo tổng hợp từ máy tính đã được phụ huynh ghép nối. Không điều khiển từ xa việc bảo vệ của máy học sinh."
+                               FontSize="13"
+                               LineHeight="1.4"
+                               TextColor="#D9FFFFFF" />
+                    </VerticalStackLayout>
+                </Grid>
+            </Border>
 
-            <Label Text="Thông báo đẩy"
-                   FontSize="16"
-                   FontAttributes="Bold"
-                   TextColor="{AppThemeBinding Light={StaticResource TextLight}, Dark={StaticResource TextDark}}" />
-            <Label FontSize="14"
-                   TextColor="{AppThemeBinding Light=#334155, Dark=#CBD5E1}"
-                   Text="Thông báo được vận chuyển qua Firebase Cloud Messaging của Google; nội dung chỉ gồm loại sự kiện và ngày, không chứa chi tiết học tập. Không có quảng cáo, telemetry hay bán dữ liệu." />
+            <Border Style="{StaticResource CardBorder}">
+                <VerticalStackLayout Spacing="12">
+                    <Grid ColumnDefinitions="Auto,*" ColumnSpacing="12">
+                        <Border Style="{StaticResource IconBadge}" WidthRequest="36" HeightRequest="36"
+                                StrokeShape="RoundRectangle 12">
+                            <Image Source="icon_phone.png" WidthRequest="18" HeightRequest="18"
+                                   Aspect="AspectFit">
+                                <Image.Behaviors>
+                                    <toolkit:IconTintColorBehavior TintColor="{StaticResource Primary}" />
+                                </Image.Behaviors>
+                            </Image>
+                        </Border>
+                        <Label Grid.Column="1" Text="Dữ liệu được lưu trên điện thoại"
+                               Style="{StaticResource SectionLabel}" VerticalOptions="Center" />
+                    </Grid>
+                    <Label Style="{StaticResource BodyLabel}"
+                           Text="• Mã truy cập cloud được lưu trong SecureStorage của hệ điều hành và không hiển thị ở bất kỳ màn hình nào.&#10;• Địa chỉ máy chủ, tên máy tính và múi giờ được lưu trong Preferences (không phải bí mật).&#10;• Ứng dụng không lưu ảnh camera; camera chỉ đọc mã QR khi bạn chủ động bật." />
+                </VerticalStackLayout>
+            </Border>
 
-            <Label Text="Thời hạn và xóa dữ liệu"
-                   FontSize="16"
-                   FontAttributes="Bold"
-                   TextColor="{AppThemeBinding Light={StaticResource TextLight}, Dark={StaticResource TextDark}}" />
-            <Label FontSize="14"
-                   TextColor="{AppThemeBinding Light=#334155, Dark=#CBD5E1}"
-                   Text="Dữ liệu cloud được giữ 24 giờ đến 365 ngày tùy loại. Phụ huynh có thể ngắt kết nối và xóa dữ liệu cloud trong Parent Mode của máy tính. Ngắt kết nối trên điện thoại cũng xóa mã truy cập khỏi thiết bị." />
+            <Border Style="{StaticResource CardBorder}">
+                <VerticalStackLayout Spacing="12">
+                    <Grid ColumnDefinitions="Auto,*" ColumnSpacing="12">
+                        <Border Style="{StaticResource IconBadge}" WidthRequest="36" HeightRequest="36"
+                                StrokeShape="RoundRectangle 12"
+                                BackgroundColor="{AppThemeBinding Light={StaticResource BlueSoft}, Dark={StaticResource BlueSoftDark}}">
+                            <Image Source="icon_cloud.png" WidthRequest="18" HeightRequest="18"
+                                   Aspect="AspectFit">
+                                <Image.Behaviors>
+                                    <toolkit:IconTintColorBehavior TintColor="{AppThemeBinding Light={StaticResource Blue}, Dark=#93C5FD}" />
+                                </Image.Behaviors>
+                            </Image>
+                        </Border>
+                        <Label Grid.Column="1" Text="Dữ liệu nhận từ cloud"
+                               Style="{StaticResource SectionLabel}" VerticalOptions="Center" />
+                    </Grid>
+                    <Label Style="{StaticResource BodyLabel}"
+                           Text="Chỉ các sự kiện tổng hợp: thời lượng tập trung/xao nhãng/vắng mặt, số lần cố truy cập bị chặn và tóm tắt báo cáo theo ngày. Không có URL, tiêu đề cửa sổ, tên ứng dụng, hình ảnh hay dữ liệu sinh trắc học." />
+                </VerticalStackLayout>
+            </Border>
 
-            <Label Text="Thông báo đầy đủ và kênh liên hệ nằm trong Parent Mode → Quyền riêng tư trên máy tính. Báo cáo riêng tư/bảo mật gửi qua GitHub Security Advisories của dự án EduFocus."
-                   FontSize="13"
-                   TextColor="{AppThemeBinding Light=#64748B, Dark=#94A3B8}" />
+            <Border Style="{StaticResource CardBorder}">
+                <VerticalStackLayout Spacing="12">
+                    <Grid ColumnDefinitions="Auto,*" ColumnSpacing="12">
+                        <Border Style="{StaticResource IconBadge}" WidthRequest="36" HeightRequest="36"
+                                StrokeShape="RoundRectangle 12"
+                                BackgroundColor="{AppThemeBinding Light={StaticResource AmberSoft}, Dark={StaticResource AmberSoftDark}}">
+                            <Image Source="icon_bell.png" WidthRequest="18" HeightRequest="18"
+                                   Aspect="AspectFit">
+                                <Image.Behaviors>
+                                    <toolkit:IconTintColorBehavior TintColor="{AppThemeBinding Light={StaticResource Amber}, Dark=#FCD34D}" />
+                                </Image.Behaviors>
+                            </Image>
+                        </Border>
+                        <Label Grid.Column="1" Text="Thông báo đẩy"
+                               Style="{StaticResource SectionLabel}" VerticalOptions="Center" />
+                    </Grid>
+                    <Label Style="{StaticResource BodyLabel}"
+                           Text="Thông báo được vận chuyển qua Firebase Cloud Messaging của Google; nội dung chỉ gồm loại sự kiện và ngày, không chứa chi tiết học tập. Không có quảng cáo, telemetry hay bán dữ liệu." />
+                </VerticalStackLayout>
+            </Border>
+
+            <Border Style="{StaticResource CardBorder}">
+                <VerticalStackLayout Spacing="12">
+                    <Grid ColumnDefinitions="Auto,*" ColumnSpacing="12">
+                        <Border Style="{StaticResource IconBadge}" WidthRequest="36" HeightRequest="36"
+                                StrokeShape="RoundRectangle 12"
+                                BackgroundColor="{AppThemeBinding Light={StaticResource VioletSoft}, Dark={StaticResource VioletSoftDark}}">
+                            <Image Source="icon_trash.png" WidthRequest="18" HeightRequest="18"
+                                   Aspect="AspectFit">
+                                <Image.Behaviors>
+                                    <toolkit:IconTintColorBehavior TintColor="{AppThemeBinding Light={StaticResource Violet}, Dark=#C4B5FD}" />
+                                </Image.Behaviors>
+                            </Image>
+                        </Border>
+                        <Label Grid.Column="1" Text="Thời hạn và xóa dữ liệu"
+                               Style="{StaticResource SectionLabel}" VerticalOptions="Center" />
+                    </Grid>
+                    <Label Style="{StaticResource BodyLabel}"
+                           Text="Dữ liệu cloud được giữ 24 giờ đến 365 ngày tùy loại. Phụ huynh có thể ngắt kết nối và xóa dữ liệu cloud trong Parent Mode của máy tính. Ngắt kết nối trên điện thoại cũng xóa mã truy cập khỏi thiết bị." />
+                </VerticalStackLayout>
+            </Border>
+
+            <Label Style="{StaticResource CaptionLabel}"
+                   Margin="2,4,2,0"
+                   Text="Thông báo đầy đủ và kênh liên hệ nằm trong Parent Mode → Quyền riêng tư trên máy tính. Báo cáo riêng tư/bảo mật gửi qua GitHub Security Advisories của dự án EduFocus." />
         </VerticalStackLayout>
     </ScrollView>
 </ContentPage>

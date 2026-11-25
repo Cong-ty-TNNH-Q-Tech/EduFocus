@@ -26,6 +26,9 @@ public sealed class OverviewViewModelTests
         Assert.Equal("2", viewModel.BlockedText);
         Assert.Equal("82,5%", viewModel.AttentionText);
         Assert.Equal("96,0%", viewModel.CoverageText);
+        Assert.Equal(0.825, viewModel.AttentionPercentValue, 6);
+        Assert.Equal(0.96, viewModel.CoveragePercentValue, 6);
+        Assert.Equal("Chào buổi sáng", viewModel.GreetingText);
         Assert.False(viewModel.ShowCoverageWarning);
         Assert.Equal("Cập nhật lúc 17:30 17/11/2026", viewModel.LastUpdatedText);
         Assert.StartsWith("Hôm nay, Thứ Ba", viewModel.TodayText);
@@ -43,6 +46,8 @@ public sealed class OverviewViewModelTests
 
         Assert.Equal("—", viewModel.AttentionText);
         Assert.Equal("—", viewModel.CoverageText);
+        Assert.Equal(0, viewModel.AttentionPercentValue);
+        Assert.Equal(0, viewModel.CoveragePercentValue);
         Assert.False(viewModel.ShowCoverageWarning);
     }
 

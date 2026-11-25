@@ -2,64 +2,174 @@
 <ContentPage x:Class="EduFocus.Parent.App.Views.WelcomePage"
              xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
              xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+             xmlns:toolkit="http://schemas.microsoft.com/dotnet/2022/maui/toolkit"
              Title="EduFocus Phụ huynh"
              Shell.TabBarIsVisible="False"
-             BackgroundColor="{AppThemeBinding Light=#F8FAFC, Dark=#0B1220}">
-    <ScrollView>
-        <VerticalStackLayout Padding="28,56,28,32" Spacing="18">
-            <Label Text="EduFocus Phụ huynh"
-                   FontSize="30"
-                   FontAttributes="Bold"
-                   TextColor="{AppThemeBinding Light={StaticResource TextLight}, Dark={StaticResource TextDark}}" />
-            <Label Text="Nhận thông báo và xem báo cáo tổng hợp về việc học của con trên điện thoại."
-                   FontSize="16"
-                   TextColor="{AppThemeBinding Light=#475569, Dark=#CBD5E1}" />
+             Shell.NavBarIsVisible="False"
+             SafeAreaEdges="Container">
+    <Grid RowDefinitions="*,Auto">
+        <ScrollView>
+            <VerticalStackLayout Padding="24,24,24,16" Spacing="22">
 
-            <Border Margin="0,8,0,0"
-                    Padding="18"
-                    StrokeThickness="0"
-                    StrokeShape="RoundRectangle 16"
-                    BackgroundColor="{AppThemeBinding Light=#FFFFFF, Dark=#111827}">
-                <VerticalStackLayout Spacing="10">
-                    <Label Text="Chỉ dữ liệu tổng hợp được gửi lên cloud"
-                           FontSize="16"
-                           FontAttributes="Bold"
-                           TextColor="{AppThemeBinding Light={StaticResource TextLight}, Dark={StaticResource TextDark}}" />
-                    <Label Text="• Thời lượng tập trung, xao nhãng, vắng mặt theo ngày"
-                           FontSize="14"
-                           TextColor="{AppThemeBinding Light=#475569, Dark=#CBD5E1}" />
-                    <Label Text="• Số lần cố truy cập bị chặn và tóm tắt báo cáo"
-                           FontSize="14"
-                           TextColor="{AppThemeBinding Light=#475569, Dark=#CBD5E1}" />
-                    <Label Text="• Không gửi URL, tiêu đề cửa sổ, tên ứng dụng hay dữ liệu camera"
-                           FontSize="14"
-                           TextColor="{AppThemeBinding Light=#475569, Dark=#CBD5E1}" />
+                <Border Style="{StaticResource HeroBorder}" Padding="22">
+                    <VerticalStackLayout Spacing="20">
+                        <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="12">
+                            <Border WidthRequest="48"
+                                    HeightRequest="48"
+                                    StrokeThickness="0"
+                                    StrokeShape="RoundRectangle 15"
+                                    BackgroundColor="#2EFFFFFF">
+                                <Label Text="E"
+                                       FontSize="22"
+                                       FontAttributes="Bold"
+                                       TextColor="White"
+                                       HorizontalOptions="Center"
+                                       VerticalOptions="Center" />
+                            </Border>
+                            <VerticalStackLayout Grid.Column="1" Spacing="0" VerticalOptions="Center">
+                                <Label Text="EduFocus"
+                                       FontSize="18"
+                                       FontAttributes="Bold"
+                                       TextColor="White" />
+                                <Label Text="PHỤ HUYNH"
+                                       FontSize="10"
+                                       CharacterSpacing="1.8"
+                                       TextColor="#CCFFFFFF" />
+                            </VerticalStackLayout>
+                            <Border Grid.Column="2"
+                                    StrokeThickness="0"
+                                    StrokeShape="RoundRectangle 999"
+                                    BackgroundColor="#26FFFFFF"
+                                    Padding="10,5"
+                                    VerticalOptions="Center">
+                                <Label Text="Bản 2.0"
+                                       FontSize="10"
+                                       FontAttributes="Bold"
+                                       TextColor="White" />
+                            </Border>
+                        </Grid>
+
+                        <VerticalStackLayout Spacing="10">
+                            <Label Text="Yên tâm đồng hành cùng việc học của con"
+                                   FontSize="27"
+                                   FontAttributes="Bold"
+                                   LineHeight="1.18"
+                                   TextColor="White" />
+                            <Label Text="Theo dõi báo cáo tổng hợp và nhận cảnh báo quan trọng ngay trên điện thoại — riêng tư, gọn nhẹ và không làm phiền."
+                                   FontSize="14"
+                                   LineHeight="1.45"
+                                   TextColor="#D9FFFFFF" />
+                        </VerticalStackLayout>
+
+                        <HorizontalStackLayout Spacing="8">
+                            <Border StrokeThickness="0" StrokeShape="RoundRectangle 999"
+                                    BackgroundColor="#26FFFFFF" Padding="10,5">
+                                <Label Text="Không quảng cáo" FontSize="11" FontAttributes="Bold"
+                                       TextColor="White" />
+                            </Border>
+                            <Border StrokeThickness="0" StrokeShape="RoundRectangle 999"
+                                    BackgroundColor="#26FFFFFF" Padding="10,5">
+                                <Label Text="Không theo dõi" FontSize="11" FontAttributes="Bold"
+                                       TextColor="White" />
+                            </Border>
+                        </HorizontalStackLayout>
+                    </VerticalStackLayout>
+                </Border>
+
+                <VerticalStackLayout Spacing="12">
+                    <Label Text="VÌ SAO CHỌN EDUFOCUS" Style="{StaticResource EyebrowLabel}" Margin="4,0" />
+
+                    <Border Style="{StaticResource CardBorder}" Padding="18">
+                        <VerticalStackLayout Spacing="18">
+                            <Grid ColumnDefinitions="Auto,*" ColumnSpacing="14">
+                                <Border Style="{StaticResource IconBadge}">
+                                    <Image Source="icon_shield.png" WidthRequest="20" HeightRequest="20"
+                                           Aspect="AspectFit">
+                                        <Image.Behaviors>
+                                            <toolkit:IconTintColorBehavior TintColor="{StaticResource Primary}" />
+                                        </Image.Behaviors>
+                                    </Image>
+                                </Border>
+                                <VerticalStackLayout Grid.Column="1" Spacing="3" VerticalOptions="Center">
+                                    <Label Text="Chỉ dữ liệu tổng hợp" Style="{StaticResource CardTitleLabel}" />
+                                    <Label Text="Thời lượng học, mức tập trung và số lần bị chặn theo ngày."
+                                           Style="{StaticResource BodyLabel}" />
+                                </VerticalStackLayout>
+                            </Grid>
+
+                            <BoxView HeightRequest="1"
+                                     Color="{AppThemeBinding Light={StaticResource BorderLight}, Dark={StaticResource BorderDark}}" />
+
+                            <Grid ColumnDefinitions="Auto,*" ColumnSpacing="14">
+                                <Border Style="{StaticResource IconBadge}"
+                                        BackgroundColor="{AppThemeBinding Light={StaticResource AmberSoft}, Dark={StaticResource AmberSoftDark}}">
+                                    <Image Source="icon_bell.png" WidthRequest="20" HeightRequest="20"
+                                           Aspect="AspectFit">
+                                        <Image.Behaviors>
+                                            <toolkit:IconTintColorBehavior TintColor="{AppThemeBinding Light={StaticResource Amber}, Dark=#FCD34D}" />
+                                        </Image.Behaviors>
+                                    </Image>
+                                </Border>
+                                <VerticalStackLayout Grid.Column="1" Spacing="3" VerticalOptions="Center">
+                                    <Label Text="Cảnh báo kịp thời" Style="{StaticResource CardTitleLabel}" />
+                                    <Label Text="Nhận thông báo khi con cần chú ý, kèm giờ yên tĩnh linh hoạt."
+                                           Style="{StaticResource BodyLabel}" />
+                                </VerticalStackLayout>
+                            </Grid>
+
+                            <BoxView HeightRequest="1"
+                                     Color="{AppThemeBinding Light={StaticResource BorderLight}, Dark={StaticResource BorderDark}}" />
+
+                            <Grid ColumnDefinitions="Auto,*" ColumnSpacing="14">
+                                <Border Style="{StaticResource IconBadge}"
+                                        BackgroundColor="{AppThemeBinding Light={StaticResource BlueSoft}, Dark={StaticResource BlueSoftDark}}">
+                                    <Image Source="icon_lock.png" WidthRequest="20" HeightRequest="20"
+                                           Aspect="AspectFit">
+                                        <Image.Behaviors>
+                                            <toolkit:IconTintColorBehavior TintColor="{AppThemeBinding Light={StaticResource Blue}, Dark=#93C5FD}" />
+                                        </Image.Behaviors>
+                                    </Image>
+                                </Border>
+                                <VerticalStackLayout Grid.Column="1" Spacing="3" VerticalOptions="Center">
+                                    <Label Text="Riêng tư từ thiết kế" Style="{StaticResource CardTitleLabel}" />
+                                    <Label Text="Không gửi URL, tiêu đề cửa sổ, tên ứng dụng hay dữ liệu camera."
+                                           Style="{StaticResource BodyLabel}" />
+                                </VerticalStackLayout>
+                            </Grid>
+                        </VerticalStackLayout>
+                    </Border>
                 </VerticalStackLayout>
-            </Border>
 
+                <Border Style="{StaticResource SoftCardBorder}" Padding="16">
+                    <Grid ColumnDefinitions="Auto,*" ColumnSpacing="12">
+                        <Image Source="icon_sparkles.png" WidthRequest="18" HeightRequest="18"
+                               Aspect="AspectFit" VerticalOptions="Start" Margin="0,1,0,0">
+                            <Image.Behaviors>
+                                <toolkit:IconTintColorBehavior TintColor="{AppThemeBinding Light={StaticResource Primary}, Dark=#5EEAD4}" />
+                            </Image.Behaviors>
+                        </Image>
+                        <Label Grid.Column="1"
+                               Text="Bạn cần máy tính đang chạy EduFocus và đã tạo mã trong Parent Mode → Điện thoại."
+                               Style="{StaticResource CaptionLabel}" />
+                    </Grid>
+                </Border>
+            </VerticalStackLayout>
+        </ScrollView>
+
+        <VerticalStackLayout Grid.Row="1" Padding="24,10,24,18" Spacing="8">
             <Button Text="Ghép nối với máy tính"
                     Clicked="OnPairClicked"
-                    HeightRequest="50"
-                    CornerRadius="14"
-                    FontSize="16"
-                    FontAttributes="Bold"
-                    BackgroundColor="{StaticResource Primary}"
-                    TextColor="White" />
-
-            <Label Text="Bạn cần máy tính đang chạy EduFocus và đã tạo mã trong Parent Mode → Điện thoại."
-                   FontSize="13"
-                   TextColor="{AppThemeBinding Light=#64748B, Dark=#94A3B8}" />
-
+                    Style="{StaticResource PrimaryButton}" />
             <Label Text="Chính sách quyền riêng tư"
-                   FontSize="14"
-                   TextDecorations="Underline"
-                   TextColor="{StaticResource Primary}"
+                   FontSize="12.5"
+                   FontAttributes="Bold"
+                   TextColor="{AppThemeBinding Light={StaticResource Primary}, Dark=#5EEAD4}"
                    HorizontalOptions="Center"
-                   Margin="0,12,0,0">
+                   Padding="8,6">
                 <Label.GestureRecognizers>
                     <TapGestureRecognizer Tapped="OnPrivacyTapped" />
                 </Label.GestureRecognizers>
             </Label>
         </VerticalStackLayout>
-    </ScrollView>
+    </Grid>
 </ContentPage>

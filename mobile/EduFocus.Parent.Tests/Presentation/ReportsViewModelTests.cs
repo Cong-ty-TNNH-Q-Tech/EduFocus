@@ -32,6 +32,10 @@ public sealed class ReportsViewModelTests
         Assert.True(viewModel.HasSelection);
         Assert.Contains("17/11", viewModel.SelectedDateText);
         Assert.Equal("2 giờ 15 phút", viewModel.SelectedStudyText);
+        Assert.Equal("6 giờ 45 phút", viewModel.TotalStudyText);
+        Assert.Equal("2 giờ 15 phút", viewModel.AverageStudyText);
+        Assert.Equal(0.825, viewModel.SelectedAttentionPercentValue, 6);
+        Assert.Equal(0.96, viewModel.SelectedCoveragePercentValue, 6);
     }
 
     [Fact]

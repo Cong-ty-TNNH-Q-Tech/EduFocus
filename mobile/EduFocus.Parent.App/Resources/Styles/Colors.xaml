@@ -1,0 +1,68 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<ResourceDictionary xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml">
+
+    <!-- Brand -->
+    <Color x:Key="Primary">#0F766E</Color>
+    <Color x:Key="PrimaryDark">#115E59</Color>
+    <Color x:Key="PrimaryLight">#14B8A6</Color>
+    <Color x:Key="PrimaryInk">#0B5F58</Color>
+    <Color x:Key="PrimarySoft">#D9F3EF</Color>
+    <Color x:Key="PrimarySoftDark">#123B37</Color>
+    <Color x:Key="OnPrimary">#FFFFFF</Color>
+
+    <!-- Accents -->
+    <Color x:Key="Blue">#2563EB</Color>
+    <Color x:Key="BlueSoft">#E3EDFF</Color>
+    <Color x:Key="BlueSoftDark">#13294B</Color>
+    <Color x:Key="Violet">#7C3AED</Color>
+    <Color x:Key="VioletSoft">#F0E9FF</Color>
+    <Color x:Key="VioletSoftDark">#2A1B4A</Color>
+    <Color x:Key="Amber">#B45309</Color>
+    <Color x:Key="AmberBright">#F59E0B</Color>
+    <Color x:Key="AmberSoft">#FEF3C7</Color>
+    <Color x:Key="AmberSoftDark">#3B2F10</Color>
+    <Color x:Key="Danger">#DC2626</Color>
+    <Color x:Key="DangerSoft">#FEE2E2</Color>
+    <Color x:Key="DangerSoftDark">#3B1618</Color>
+    <Color x:Key="Success">#059669</Color>
+    <Color x:Key="SuccessSoft">#D1FAE5</Color>
+    <Color x:Key="SuccessSoftDark">#0D2E24</Color>
+
+    <!-- Light neutrals -->
+    <Color x:Key="BackgroundLight">#F3F7F7</Color>
+    <Color x:Key="SurfaceLight">#FFFFFF</Color>
+    <Color x:Key="SurfaceAltLight">#F0F5F5</Color>
+    <Color x:Key="BorderLight">#E2EAEA</Color>
+    <Color x:Key="TextLight">#0F172A</Color>
+    <Color x:Key="TextSecondaryLight">#475569</Color>
+    <Color x:Key="TextTertiaryLight">#8A99A8</Color>
+
+    <!-- Dark neutrals -->
+    <Color x:Key="BackgroundDark">#070D16</Color>
+    <Color x:Key="SurfaceDark">#101827</Color>
+    <Color x:Key="SurfaceAltDark">#1A2435</Color>
+    <Color x:Key="BorderDark">#233044</Color>
+    <Color x:Key="TextDark">#F8FAFC</Color>
+    <Color x:Key="TextSecondaryDark">#CBD5E1</Color>
+    <Color x:Key="TextTertiaryDark">#7C8BA1</Color>
+
+    <!-- Gradients -->
+    <LinearGradientBrush x:Key="HeroGradient" StartPoint="0,0" EndPoint="1,1">
+        <GradientStop Color="#0A4F4A" Offset="0.0" />
+        <GradientStop Color="#0F766E" Offset="0.55" />
+        <GradientStop Color="#14B8A6" Offset="1.0" />
+    </LinearGradientBrush>
+
+    <LinearGradientBrush x:Key="BrandGradient" StartPoint="0,0" EndPoint="1,1">
+        <GradientStop Color="#115E59" Offset="0.0" />
+        <GradientStop Color="#14B8A6" Offset="1.0" />
+    </LinearGradientBrush>
+
+    <Shadow x:Key="CardShadow"
+            Brush="#1A0F172A"
+            Offset="0,6"
+            Radius="16"
+            Opacity="0.55" />
+
+</ResourceDictionary>

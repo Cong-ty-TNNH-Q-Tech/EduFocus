@@ -4,18 +4,26 @@
        xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
        xmlns:views="clr-namespace:EduFocus.Parent.App.Views"
        Title="EduFocus Phụ huynh"
-       FlyoutBehavior="Disabled">
+       FlyoutBehavior="Disabled"
+       Shell.TabBarBackgroundColor="{AppThemeBinding Light=#FFFFFF, Dark=#0B1220}"
+       Shell.TabBarForegroundColor="{AppThemeBinding Light={StaticResource Primary}, Dark=#5EEAD4}"
+       Shell.TabBarTitleColor="{AppThemeBinding Light={StaticResource Primary}, Dark=#5EEAD4}"
+       Shell.TabBarUnselectedColor="{AppThemeBinding Light=#94A3B8, Dark=#64748B}">
     <TabBar>
         <ShellContent Title="Tổng quan"
+                      Icon="tab_overview.png"
                       Route="overview"
                       ContentTemplate="{DataTemplate views:OverviewPage}" />
         <ShellContent Title="Báo cáo"
+                      Icon="tab_reports.png"
                       Route="reports"
                       ContentTemplate="{DataTemplate views:ReportsPage}" />
         <ShellContent Title="Thông báo"
+                      Icon="tab_notifications.png"
                       Route="notifications"
                       ContentTemplate="{DataTemplate views:NotificationsPage}" />
         <ShellContent Title="Cài đặt"
+                      Icon="tab_settings.png"
                       Route="settings"
                       ContentTemplate="{DataTemplate views:SettingsPage}" />
     </TabBar>

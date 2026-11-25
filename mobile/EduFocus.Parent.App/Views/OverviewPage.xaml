@@ -3,209 +3,320 @@
              xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
              xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
              xmlns:vm="clr-namespace:EduFocus.Parent.Core.Presentation;assembly=EduFocus.Parent.Core"
+             xmlns:toolkit="http://schemas.microsoft.com/dotnet/2022/maui/toolkit"
              x:DataType="vm:OverviewViewModel"
              Title="Tổng quan"
-             BackgroundColor="{AppThemeBinding Light=#F8FAFC, Dark=#0B1220}">
+             Shell.NavBarIsVisible="False"
+             SafeAreaEdges="Container">
     <RefreshView IsRefreshing="{Binding IsRefreshing}"
                  Command="{Binding RefreshCommand}">
         <ScrollView>
-            <VerticalStackLayout Padding="20,16,20,32" Spacing="14">
-                <Label Text="Tổng quan"
-                       FontSize="24"
-                       FontAttributes="Bold"
-                       TextColor="{AppThemeBinding Light={StaticResource TextLight}, Dark={StaticResource TextDark}}" />
-                <Label Text="{Binding TodayText}"
-                       FontSize="14"
-                       TextColor="{AppThemeBinding Light=#64748B, Dark=#94A3B8}" />
+            <VerticalStackLayout Padding="20,18,20,28" Spacing="16">
+
+                <Grid ColumnDefinitions="*,Auto">
+                    <VerticalStackLayout Spacing="2">
+                        <Label Text="{Binding GreetingText}" Style="{StaticResource EyebrowLabel}" />
+                        <Label Text="Tổng quan hôm nay" Style="{StaticResource PageTitleLabel}" />
+                        <Label Text="{Binding TodayText}" Style="{StaticResource CaptionLabel}"
+                               Margin="0,3,0,0" />
+                    </VerticalStackLayout>
+                    <Border Grid.Column="1"
+                            WidthRequest="46"
+                            HeightRequest="46"
+                            StrokeThickness="0"
+                            StrokeShape="RoundRectangle 15"
+                            Background="{StaticResource BrandGradient}"
+                            VerticalOptions="Start">
+                        <Label Text="E"
+                               FontSize="20"
+                               FontAttributes="Bold"
+                               TextColor="White"
+                               HorizontalOptions="Center"
+                               VerticalOptions="Center" />
+                    </Border>
+                </Grid>
 
                 <Border IsVisible="{Binding IsShowingCachedData}"
-                        Padding="12"
+                        Style="{StaticResource CardBorder}"
+                        Padding="14"
                         StrokeThickness="0"
-                        StrokeShape="RoundRectangle 12"
-                        BackgroundColor="{AppThemeBinding Light=#FEF3C7, Dark=#78350F}">
-                    <Label Text="{Binding CachedBannerText}"
-                           FontSize="13"
-                           TextColor="{AppThemeBinding Light=#92400E, Dark=#FDE68A}" />
+                        BackgroundColor="{AppThemeBinding Light={StaticResource AmberSoft}, Dark={StaticResource AmberSoftDark}}">
+                    <Grid ColumnDefinitions="Auto,*" ColumnSpacing="10">
+                        <Image Source="icon_alert.png" WidthRequest="18" HeightRequest="18"
+                               Aspect="AspectFit" VerticalOptions="Center">
+                            <Image.Behaviors>
+                                <toolkit:IconTintColorBehavior TintColor="{AppThemeBinding Light={StaticResource Amber}, Dark=#FCD34D}" />
+                            </Image.Behaviors>
+                        </Image>
+                        <Label Grid.Column="1"
+                               Text="{Binding CachedBannerText}"
+                               FontSize="12.5"
+                               TextColor="{AppThemeBinding Light=#92400E, Dark=#FDE68A}"
+                               VerticalOptions="Center" />
+                    </Grid>
                 </Border>
 
                 <Border IsVisible="{Binding HasError}"
-                        Padding="14"
+                        Style="{StaticResource CardBorder}"
+                        Padding="16"
                         StrokeThickness="0"
-                        StrokeShape="RoundRectangle 14"
-                        BackgroundColor="{AppThemeBinding Light=#FEE2E2, Dark=#7F1D1D}">
-                    <VerticalStackLayout Spacing="10">
-                        <Label Text="{Binding ErrorMessage}"
-                               FontSize="13"
-                               TextColor="{AppThemeBinding Light=#991B1B, Dark=#FECACA}" />
+                        BackgroundColor="{AppThemeBinding Light={StaticResource DangerSoft}, Dark={StaticResource DangerSoftDark}}">
+                    <VerticalStackLayout Spacing="12">
+                        <Grid ColumnDefinitions="Auto,*" ColumnSpacing="10">
+                            <Image Source="icon_alert.png" WidthRequest="18" HeightRequest="18"
+                                   Aspect="AspectFit" VerticalOptions="Start" Margin="0,1,0,0">
+                                <Image.Behaviors>
+                                    <toolkit:IconTintColorBehavior TintColor="{AppThemeBinding Light={StaticResource Danger}, Dark=#FCA5A5}" />
+                                </Image.Behaviors>
+                            </Image>
+                            <Label Grid.Column="1"
+                                   Text="{Binding ErrorMessage}"
+                                   FontSize="12.5"
+                                   LineHeight="1.35"
+                                   TextColor="{AppThemeBinding Light=#991B1B, Dark=#FECACA}" />
+                        </Grid>
                         <Button Text="Thử lại"
                                 Command="{Binding RefreshCommand}"
-                                BackgroundColor="{StaticResource Primary}"
-                                TextColor="White"
-                                CornerRadius="10"
-                                HeightRequest="40"
-                                HorizontalOptions="Start" />
+                                Style="{StaticResource PrimaryButton}"
+                                HeightRequest="42"
+                                HorizontalOptions="Start"
+                                Padding="18,0" />
                     </VerticalStackLayout>
                 </Border>
 
                 <ActivityIndicator IsRunning="{Binding IsLoading}"
                                    IsVisible="{Binding IsLoading}"
-                                   Color="{StaticResource Primary}"
-                                   HorizontalOptions="Center" />
+                                   HorizontalOptions="Center"
+                                   Margin="0,8" />
 
-                <VerticalStackLayout IsVisible="{Binding HasSummary}" Spacing="14">
-                    <Grid ColumnDefinitions="*,*"
-                          RowDefinitions="Auto,Auto,Auto"
-                          ColumnSpacing="12"
-                          RowSpacing="12">
-                        <Border Grid.Row="0"
-                                Grid.Column="0"
-                                Padding="14"
-                                StrokeThickness="0"
-                                StrokeShape="RoundRectangle 14"
-                                BackgroundColor="{AppThemeBinding Light=#FFFFFF, Dark=#111827}">
-                            <VerticalStackLayout Spacing="4">
-                                <Label Text="Thời gian học"
-                                       FontSize="12"
-                                       TextColor="{AppThemeBinding Light=#64748B, Dark=#94A3B8}" />
+                <Border Style="{StaticResource HeroBorder}">
+                    <VerticalStackLayout Spacing="16">
+                        <Grid ColumnDefinitions="*,Auto" ColumnSpacing="10">
+                            <VerticalStackLayout Spacing="2">
+                                <Label Text="THỜI GIAN HỌC HÔM NAY"
+                                       FontSize="10.5"
+                                       FontAttributes="Bold"
+                                       CharacterSpacing="1.4"
+                                       TextColor="#CCFFFFFF" />
                                 <Label Text="{Binding StudyTimeText}"
-                                       FontSize="19"
-                                       FontAttributes="Bold"
-                                       TextColor="{AppThemeBinding Light={StaticResource TextLight}, Dark={StaticResource TextDark}}" />
+                                       Style="{StaticResource HeroTitleLabel}" />
                             </VerticalStackLayout>
-                        </Border>
+                            <Border Grid.Column="1"
+                                    StrokeThickness="0"
+                                    StrokeShape="RoundRectangle 999"
+                                    BackgroundColor="#26FFFFFF"
+                                    Padding="11,6"
+                                    VerticalOptions="Start">
+                                <HorizontalStackLayout Spacing="4">
+                                    <Label Text="{Binding SessionsText}"
+                                           FontSize="13"
+                                           FontAttributes="Bold"
+                                           TextColor="White" />
+                                    <Label Text="phiên"
+                                           FontSize="11"
+                                           TextColor="#D9FFFFFF"
+                                           VerticalOptions="End"
+                                           Margin="0,0,0,1" />
+                                </HorizontalStackLayout>
+                            </Border>
+                        </Grid>
 
-                        <Border Grid.Row="0"
-                                Grid.Column="1"
-                                Padding="14"
-                                StrokeThickness="0"
-                                StrokeShape="RoundRectangle 14"
-                                BackgroundColor="{AppThemeBinding Light=#FFFFFF, Dark=#111827}">
-                            <VerticalStackLayout Spacing="4">
-                                <Label Text="Thời gian hoạt động"
-                                       FontSize="12"
-                                       TextColor="{AppThemeBinding Light=#64748B, Dark=#94A3B8}" />
-                                <Label Text="{Binding ActiveTimeText}"
-                                       FontSize="19"
-                                       FontAttributes="Bold"
-                                       TextColor="{AppThemeBinding Light={StaticResource TextLight}, Dark={StaticResource TextDark}}" />
-                            </VerticalStackLayout>
-                        </Border>
-
-                        <Border Grid.Row="1"
-                                Grid.Column="0"
-                                Padding="14"
-                                StrokeThickness="0"
-                                StrokeShape="RoundRectangle 14"
-                                BackgroundColor="{AppThemeBinding Light=#FFFFFF, Dark=#111827}">
-                            <VerticalStackLayout Spacing="4">
-                                <Label Text="Lớp học online"
-                                       FontSize="12"
-                                       TextColor="{AppThemeBinding Light=#64748B, Dark=#94A3B8}" />
-                                <Label Text="{Binding OnlineClassTimeText}"
-                                       FontSize="19"
-                                       FontAttributes="Bold"
-                                       TextColor="{AppThemeBinding Light={StaticResource TextLight}, Dark={StaticResource TextDark}}" />
-                            </VerticalStackLayout>
-                        </Border>
-
-                        <Border Grid.Row="1"
-                                Grid.Column="1"
-                                Padding="14"
-                                StrokeThickness="0"
-                                StrokeShape="RoundRectangle 14"
-                                BackgroundColor="{AppThemeBinding Light=#FFFFFF, Dark=#111827}">
-                            <VerticalStackLayout Spacing="4">
-                                <Label Text="Số phiên học"
-                                       FontSize="12"
-                                       TextColor="{AppThemeBinding Light=#64748B, Dark=#94A3B8}" />
-                                <Label Text="{Binding SessionsText}"
-                                       FontSize="19"
-                                       FontAttributes="Bold"
-                                       TextColor="{AppThemeBinding Light={StaticResource TextLight}, Dark={StaticResource TextDark}}" />
-                            </VerticalStackLayout>
-                        </Border>
-
-                        <Border Grid.Row="2"
-                                Grid.Column="0"
-                                Grid.ColumnSpan="2"
-                                Padding="14"
-                                StrokeThickness="0"
-                                StrokeShape="RoundRectangle 14"
-                                BackgroundColor="{AppThemeBinding Light=#FFFFFF, Dark=#111827}">
+                        <VerticalStackLayout Spacing="6">
                             <Grid ColumnDefinitions="*,Auto">
-                                <Label Text="Số lần bị chặn"
-                                       FontSize="13"
-                                       VerticalOptions="Center"
-                                       TextColor="{AppThemeBinding Light=#475569, Dark=#CBD5E1}" />
+                                <Label Text="Mức độ tập trung" Style="{StaticResource HeroCaptionLabel}" />
                                 <Label Grid.Column="1"
-                                       Text="{Binding BlockedText}"
-                                       FontSize="19"
+                                       Text="{Binding AttentionText}"
+                                       FontSize="12"
                                        FontAttributes="Bold"
-                                       TextColor="{AppThemeBinding Light={StaticResource TextLight}, Dark={StaticResource TextDark}}" />
+                                       TextColor="White" />
                             </Grid>
-                        </Border>
-                    </Grid>
+                            <ProgressBar Progress="{Binding AttentionPercentValue}"
+                                         ProgressColor="White"
+                                         BackgroundColor="#3DFFFFFF"
+                                         HeightRequest="7" />
+                        </VerticalStackLayout>
 
-                    <Border Padding="16"
-                            StrokeThickness="0"
-                            StrokeShape="RoundRectangle 16"
-                            BackgroundColor="{AppThemeBinding Light=#FFFFFF, Dark=#111827}">
+                        <Grid ColumnDefinitions="Auto,*" ColumnSpacing="6"
+                              IsVisible="{Binding HasSummary}">
+                            <Label Text="Cập nhật" Style="{StaticResource HeroCaptionLabel}" />
+                            <Label Grid.Column="1"
+                                   Text="{Binding LastUpdatedText}"
+                                   Style="{StaticResource HeroCaptionLabel}"
+                                   HorizontalTextAlignment="End" />
+                        </Grid>
+                    </VerticalStackLayout>
+                </Border>
+
+                <Grid ColumnDefinitions="*,*"
+                      RowDefinitions="Auto,Auto"
+                      ColumnSpacing="12"
+                      RowSpacing="12"
+                      IsVisible="{Binding HasSummary}">
+
+                    <Border Grid.Row="0" Grid.Column="0" Style="{StaticResource CardBorder}" Padding="14">
                         <VerticalStackLayout Spacing="10">
-                            <Label Text="Mức độ tập trung"
-                                   FontSize="15"
-                                   FontAttributes="Bold"
-                                   TextColor="{AppThemeBinding Light={StaticResource TextLight}, Dark={StaticResource TextDark}}" />
-                            <Grid ColumnDefinitions="*,*">
-                                <VerticalStackLayout Spacing="2">
-                                    <Label Text="Tập trung"
-                                           FontSize="12"
-                                           TextColor="{AppThemeBinding Light=#64748B, Dark=#94A3B8}" />
-                                    <Label Text="{Binding AttentionText}"
-                                           FontSize="26"
-                                           FontAttributes="Bold"
-                                           TextColor="{StaticResource Primary}" />
-                                </VerticalStackLayout>
-                                <VerticalStackLayout Grid.Column="1" Spacing="2">
-                                    <Label Text="Độ phủ dữ liệu"
-                                           FontSize="12"
-                                           TextColor="{AppThemeBinding Light=#64748B, Dark=#94A3B8}" />
-                                    <Label Text="{Binding CoverageText}"
-                                           FontSize="26"
-                                           FontAttributes="Bold"
-                                           TextColor="{AppThemeBinding Light={StaticResource TextLight}, Dark={StaticResource TextDark}}" />
-                                </VerticalStackLayout>
-                            </Grid>
-                            <Label Text="Dữ liệu chưa đủ tin cậy"
-                                   IsVisible="{Binding ShowCoverageWarning}"
-                                   FontSize="13"
-                                   FontAttributes="Bold"
-                                   TextColor="{AppThemeBinding Light=#B45309, Dark=#FBBF24}" />
+                            <Border Style="{StaticResource IconBadge}"
+                                    WidthRequest="34"
+                                    HeightRequest="34"
+                                    StrokeShape="RoundRectangle 11"
+                                    BackgroundColor="{AppThemeBinding Light={StaticResource BlueSoft}, Dark={StaticResource BlueSoftDark}}">
+                                <Image Source="icon_activity.png" WidthRequest="18" HeightRequest="18"
+                                       Aspect="AspectFit">
+                                    <Image.Behaviors>
+                                        <toolkit:IconTintColorBehavior TintColor="{AppThemeBinding Light={StaticResource Blue}, Dark=#93C5FD}" />
+                                    </Image.Behaviors>
+                                </Image>
+                            </Border>
+                            <VerticalStackLayout Spacing="1">
+                                <Label Text="Thời gian hoạt động" Style="{StaticResource MetricLabel}" />
+                                <Label Text="{Binding ActiveTimeText}" Style="{StaticResource MetricValueLabel}" />
+                            </VerticalStackLayout>
                         </VerticalStackLayout>
                     </Border>
 
-                    <Label Text="{Binding LastUpdatedText}"
-                           FontSize="12"
-                           HorizontalOptions="Center"
-                           TextColor="{AppThemeBinding Light=#94A3B8, Dark=#64748B}" />
-                </VerticalStackLayout>
+                    <Border Grid.Row="0" Grid.Column="1" Style="{StaticResource CardBorder}" Padding="14">
+                        <VerticalStackLayout Spacing="10">
+                            <Border Style="{StaticResource IconBadge}"
+                                    WidthRequest="34"
+                                    HeightRequest="34"
+                                    StrokeShape="RoundRectangle 11"
+                                    BackgroundColor="{AppThemeBinding Light={StaticResource VioletSoft}, Dark={StaticResource VioletSoftDark}}">
+                                <Image Source="icon_video.png" WidthRequest="18" HeightRequest="18"
+                                       Aspect="AspectFit">
+                                    <Image.Behaviors>
+                                        <toolkit:IconTintColorBehavior TintColor="{AppThemeBinding Light={StaticResource Violet}, Dark=#C4B5FD}" />
+                                    </Image.Behaviors>
+                                </Image>
+                            </Border>
+                            <VerticalStackLayout Spacing="1">
+                                <Label Text="Lớp học online" Style="{StaticResource MetricLabel}" />
+                                <Label Text="{Binding OnlineClassTimeText}" Style="{StaticResource MetricValueLabel}" />
+                            </VerticalStackLayout>
+                        </VerticalStackLayout>
+                    </Border>
 
-                <Border IsVisible="{Binding ShowEmptyState}"
-                        Padding="20"
-                        StrokeThickness="0"
-                        StrokeShape="RoundRectangle 16"
-                        BackgroundColor="{AppThemeBinding Light=#FFFFFF, Dark=#111827}">
-                    <VerticalStackLayout Spacing="6">
+                    <Border Grid.Row="1" Grid.Column="0" Style="{StaticResource CardBorder}" Padding="14">
+                        <VerticalStackLayout Spacing="10">
+                            <Border Style="{StaticResource IconBadge}"
+                                    WidthRequest="34"
+                                    HeightRequest="34"
+                                    StrokeShape="RoundRectangle 11"
+                                    BackgroundColor="{AppThemeBinding Light={StaticResource AmberSoft}, Dark={StaticResource AmberSoftDark}}">
+                                <Image Source="icon_layers.png" WidthRequest="18" HeightRequest="18"
+                                       Aspect="AspectFit">
+                                    <Image.Behaviors>
+                                        <toolkit:IconTintColorBehavior TintColor="{AppThemeBinding Light={StaticResource Amber}, Dark=#FCD34D}" />
+                                    </Image.Behaviors>
+                                </Image>
+                            </Border>
+                            <VerticalStackLayout Spacing="1">
+                                <Label Text="Số phiên học" Style="{StaticResource MetricLabel}" />
+                                <Label Text="{Binding SessionsText}" Style="{StaticResource MetricValueLabel}" />
+                            </VerticalStackLayout>
+                        </VerticalStackLayout>
+                    </Border>
+
+                    <Border Grid.Row="1" Grid.Column="1" Style="{StaticResource CardBorder}" Padding="14">
+                        <VerticalStackLayout Spacing="10">
+                            <Border Style="{StaticResource IconBadge}"
+                                    WidthRequest="34"
+                                    HeightRequest="34"
+                                    StrokeShape="RoundRectangle 11"
+                                    BackgroundColor="{AppThemeBinding Light={StaticResource DangerSoft}, Dark={StaticResource DangerSoftDark}}">
+                                <Image Source="icon_shield.png" WidthRequest="18" HeightRequest="18"
+                                       Aspect="AspectFit">
+                                    <Image.Behaviors>
+                                        <toolkit:IconTintColorBehavior TintColor="{AppThemeBinding Light={StaticResource Danger}, Dark=#FCA5A5}" />
+                                    </Image.Behaviors>
+                                </Image>
+                            </Border>
+                            <VerticalStackLayout Spacing="1">
+                                <Label Text="Số lần bị chặn" Style="{StaticResource MetricLabel}" />
+                                <Label Text="{Binding BlockedText}" Style="{StaticResource MetricValueLabel}" />
+                            </VerticalStackLayout>
+                        </VerticalStackLayout>
+                    </Border>
+                </Grid>
+
+                <Border Style="{StaticResource CardBorder}"
+                        IsVisible="{Binding HasSummary}">
+                    <VerticalStackLayout Spacing="14">
+                        <Grid ColumnDefinitions="*,Auto">
+                            <Label Text="Chất lượng tập trung" Style="{StaticResource SectionLabel}" />
+                            <Border Grid.Column="1"
+                                    Style="{StaticResource PillBorder}"
+                                    BackgroundColor="{AppThemeBinding Light={StaticResource PrimarySoft}, Dark={StaticResource PrimarySoftDark}}">
+                                <Label Text="Tổng quan ngày"
+                                       Style="{StaticResource PillLabel}"
+                                       TextColor="{AppThemeBinding Light={StaticResource Primary}, Dark=#5EEAD4}" />
+                            </Border>
+                        </Grid>
+
+                        <Grid ColumnDefinitions="*,*" ColumnSpacing="18">
+                            <VerticalStackLayout Spacing="6">
+                                <Label Text="Tập trung" Style="{StaticResource MetricLabel}" />
+                                <Label Text="{Binding AttentionText}"
+                                       FontSize="23"
+                                       FontAttributes="Bold"
+                                       TextColor="{AppThemeBinding Light={StaticResource Primary}, Dark=#5EEAD4}" />
+                                <ProgressBar Progress="{Binding AttentionPercentValue}"
+                                             Style="{StaticResource MetricProgress}" />
+                            </VerticalStackLayout>
+                            <VerticalStackLayout Grid.Column="1" Spacing="6">
+                                <Label Text="Độ phủ dữ liệu" Style="{StaticResource MetricLabel}" />
+                                <Label Text="{Binding CoverageText}"
+                                       FontSize="23"
+                                       FontAttributes="Bold"
+                                       TextColor="{AppThemeBinding Light={StaticResource Blue}, Dark=#93C5FD}" />
+                                <ProgressBar Progress="{Binding CoveragePercentValue}"
+                                             Style="{StaticResource MetricProgress}"
+                                             ProgressColor="{AppThemeBinding Light={StaticResource Blue}, Dark=#93C5FD}" />
+                            </VerticalStackLayout>
+                        </Grid>
+
+                        <HorizontalStackLayout Spacing="7" IsVisible="{Binding ShowCoverageWarning}">
+                            <Image Source="icon_alert.png" WidthRequest="15" HeightRequest="15"
+                                   Aspect="AspectFit" VerticalOptions="Center">
+                                <Image.Behaviors>
+                                    <toolkit:IconTintColorBehavior TintColor="{AppThemeBinding Light={StaticResource Amber}, Dark=#FCD34D}" />
+                                </Image.Behaviors>
+                            </Image>
+                            <Label Text="Dữ liệu chưa đủ tin cậy"
+                                   FontSize="12.5"
+                                   FontAttributes="Bold"
+                                   TextColor="{AppThemeBinding Light={StaticResource Amber}, Dark=#FCD34D}"
+                                   VerticalOptions="Center" />
+                        </HorizontalStackLayout>
+                    </VerticalStackLayout>
+                </Border>
+
+                <Border IsVisible="{Binding ShowEmptyState}" Style="{StaticResource CardBorder}" Padding="22">
+                    <VerticalStackLayout Spacing="12" HorizontalOptions="Center">
+                        <Border WidthRequest="52" HeightRequest="52" StrokeThickness="0"
+                                StrokeShape="RoundRectangle 16"
+                                BackgroundColor="{AppThemeBinding Light={StaticResource PrimarySoft}, Dark={StaticResource PrimarySoftDark}}">
+                            <Image Source="icon_database.png" WidthRequest="24" HeightRequest="24"
+                                   Aspect="AspectFit" HorizontalOptions="Center" VerticalOptions="Center">
+                                <Image.Behaviors>
+                                    <toolkit:IconTintColorBehavior TintColor="{AppThemeBinding Light={StaticResource Primary}, Dark=#5EEAD4}" />
+                                </Image.Behaviors>
+                            </Image>
+                        </Border>
                         <Label Text="Chưa có dữ liệu hôm nay"
                                FontSize="15"
                                FontAttributes="Bold"
-                               HorizontalOptions="Center"
-                               TextColor="{AppThemeBinding Light={StaticResource TextLight}, Dark={StaticResource TextDark}}" />
+                               HorizontalTextAlignment="Center" />
                         <Label Text="Dữ liệu sẽ xuất hiện sau khi máy tính gửi báo cáo tổng hợp."
-                               FontSize="13"
+                               Style="{StaticResource CaptionLabel}"
                                HorizontalTextAlignment="Center"
-                               TextColor="{AppThemeBinding Light=#64748B, Dark=#94A3B8}" />
+                               MaxLines="3" />
                     </VerticalStackLayout>
                 </Border>
+
+                <Label Text="Kéo xuống để cập nhật"
+                       Style="{StaticResource CaptionLabel}"
+                       HorizontalOptions="Center"
+                       Margin="0,2,0,0" />
             </VerticalStackLayout>
         </ScrollView>
     </RefreshView>

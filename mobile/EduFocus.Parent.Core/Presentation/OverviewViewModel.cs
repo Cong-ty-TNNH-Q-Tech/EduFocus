@@ -19,6 +19,7 @@ public sealed partial class OverviewViewModel(
     [ObservableProperty] private string _cachedBannerText = string.Empty;
     [ObservableProperty] private bool _hasSummary;
     [ObservableProperty] private bool _showEmptyState;
+    [ObservableProperty] private string _greetingText = string.Empty;
     [ObservableProperty] private string _todayText = string.Empty;
     [ObservableProperty] private string _studyTimeText = "—";
     [ObservableProperty] private string _activeTimeText = "—";
@@ -27,6 +28,8 @@ public sealed partial class OverviewViewModel(
     [ObservableProperty] private string _blockedText = "—";
     [ObservableProperty] private string _attentionText = "—";
     [ObservableProperty] private string _coverageText = "—";
+    [ObservableProperty] private double _attentionPercentValue;
+    [ObservableProperty] private double _coveragePercentValue;
     [ObservableProperty] private bool _showCoverageWarning;
     [ObservableProperty] private string _lastUpdatedText = string.Empty;
 
@@ -65,7 +68,9 @@ public sealed partial class OverviewViewModel(
             IsLoading = true;
 
         var zone = FamilyCalendar.Resolve(appState.TimeZone);
-        var today = FamilyCalendar.Today(clock?.Invoke() ?? DateTimeOffset.UtcNow, appState.TimeZone);
+        var now = clock?.Invoke() ?? DateTimeOffset.UtcNow;
+        var today = FamilyCalendar.Today(now, appState.TimeZone);
+        GreetingText = Greeting(TimeZoneInfo.ConvertTime(now, zone));
         TodayText = $"Hôm nay, {VietnameseFormat.DateLong(today)}";
         ErrorMessage = string.Empty;
 
@@ -125,6 +130,8 @@ public sealed partial class OverviewViewModel(
             BlockedText = "—";
             AttentionText = "—";
             CoverageText = "—";
+            AttentionPercentValue = 0;
+            CoveragePercentValue = 0;
             ShowCoverageWarning = false;
             LastUpdatedText = string.Empty;
             return;
@@ -137,8 +144,21 @@ public sealed partial class OverviewViewModel(
         BlockedText = summary.BlockedAttempts.ToString(CultureInfo.InvariantCulture);
         AttentionText = VietnameseFormat.Percent(summary.AttentionPercent);
         CoverageText = VietnameseFormat.Percent(summary.CoveragePercent);
+        AttentionPercentValue = Fraction(summary.AttentionPercent);
+        CoveragePercentValue = Fraction(summary.CoveragePercent);
         ShowCoverageWarning = summary.CoveragePercent is { } coverage && coverage < 50;
         LastUpdatedText =
             $"Cập nhật lúc {VietnameseFormat.DateTimeLocal(summary.GeneratedAtUtc, zone)}";
     }
+
+    private static double Fraction(double? percent) =>
+        percent is { } value ? Math.Clamp(value / 100d, 0d, 1d) : 0d;
+
+    private static string Greeting(DateTimeOffset localNow) => localNow.Hour switch
+    {
+        < 11 => "Chào buổi sáng",
+        < 14 => "Chào buổi trưa",
+        < 18 => "Chào buổi chiều",
+        _ => "Chào buổi tối",
+    };
 }

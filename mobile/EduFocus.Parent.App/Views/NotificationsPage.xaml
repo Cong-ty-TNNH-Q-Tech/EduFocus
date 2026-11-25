@@ -3,153 +3,240 @@
              xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
              xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
              xmlns:vm="clr-namespace:EduFocus.Parent.Core.Presentation;assembly=EduFocus.Parent.Core"
+             xmlns:toolkit="http://schemas.microsoft.com/dotnet/2022/maui/toolkit"
              x:DataType="vm:NotificationsViewModel"
              Title="Thông báo"
-             BackgroundColor="{AppThemeBinding Light=#F8FAFC, Dark=#0B1220}">
+             Shell.NavBarIsVisible="False"
+             SafeAreaEdges="Container">
     <RefreshView IsRefreshing="{Binding IsRefreshing}"
                  Command="{Binding RefreshCommand}">
         <ScrollView>
-            <VerticalStackLayout Padding="20,16,20,32" Spacing="14">
-                <Label Text="Thông báo"
-                       FontSize="24"
-                       FontAttributes="Bold"
-                       TextColor="{AppThemeBinding Light={StaticResource TextLight}, Dark={StaticResource TextDark}}" />
+            <VerticalStackLayout Padding="20,18,20,28" Spacing="16">
+
+                <VerticalStackLayout Spacing="2">
+                    <Label Text="THÔNG BÁO" Style="{StaticResource EyebrowLabel}" />
+                    <Label Text="Trung tâm thông báo" Style="{StaticResource PageTitleLabel}" />
+                    <Label Text="Chọn loại cảnh báo bạn muốn nhận và xem lại lịch sử."
+                           Style="{StaticResource CaptionLabel}"
+                           Margin="0,3,0,0" />
+                </VerticalStackLayout>
 
                 <Border IsVisible="{Binding IsShowingCachedData}"
-                        Padding="12"
+                        Style="{StaticResource CardBorder}"
+                        Padding="14"
                         StrokeThickness="0"
-                        StrokeShape="RoundRectangle 12"
-                        BackgroundColor="{AppThemeBinding Light=#FEF3C7, Dark=#78350F}">
-                    <Label Text="{Binding CachedBannerText}"
-                           FontSize="13"
-                           TextColor="{AppThemeBinding Light=#92400E, Dark=#FDE68A}" />
+                        BackgroundColor="{AppThemeBinding Light={StaticResource AmberSoft}, Dark={StaticResource AmberSoftDark}}">
+                    <Grid ColumnDefinitions="Auto,*" ColumnSpacing="10">
+                        <Image Source="icon_alert.png" WidthRequest="18" HeightRequest="18"
+                               Aspect="AspectFit" VerticalOptions="Center">
+                            <Image.Behaviors>
+                                <toolkit:IconTintColorBehavior TintColor="{AppThemeBinding Light={StaticResource Amber}, Dark=#FCD34D}" />
+                            </Image.Behaviors>
+                        </Image>
+                        <Label Grid.Column="1"
+                               Text="{Binding CachedBannerText}"
+                               FontSize="12.5"
+                               TextColor="{AppThemeBinding Light=#92400E, Dark=#FDE68A}"
+                               VerticalOptions="Center" />
+                    </Grid>
                 </Border>
 
                 <Border IsVisible="{Binding HasError}"
-                        Padding="14"
+                        Style="{StaticResource CardBorder}"
+                        Padding="16"
                         StrokeThickness="0"
-                        StrokeShape="RoundRectangle 14"
-                        BackgroundColor="{AppThemeBinding Light=#FEE2E2, Dark=#7F1D1D}">
-                    <VerticalStackLayout Spacing="10">
-                        <Label Text="{Binding ErrorMessage}"
-                               FontSize="13"
-                               TextColor="{AppThemeBinding Light=#991B1B, Dark=#FECACA}" />
+                        BackgroundColor="{AppThemeBinding Light={StaticResource DangerSoft}, Dark={StaticResource DangerSoftDark}}">
+                    <VerticalStackLayout Spacing="12">
+                        <Grid ColumnDefinitions="Auto,*" ColumnSpacing="10">
+                            <Image Source="icon_alert.png" WidthRequest="18" HeightRequest="18"
+                                   Aspect="AspectFit" VerticalOptions="Start" Margin="0,1,0,0">
+                                <Image.Behaviors>
+                                    <toolkit:IconTintColorBehavior TintColor="{AppThemeBinding Light={StaticResource Danger}, Dark=#FCA5A5}" />
+                                </Image.Behaviors>
+                            </Image>
+                            <Label Grid.Column="1"
+                                   Text="{Binding ErrorMessage}"
+                                   FontSize="12.5"
+                                   LineHeight="1.35"
+                                   TextColor="{AppThemeBinding Light=#991B1B, Dark=#FECACA}" />
+                        </Grid>
                         <Button Text="Thử lại"
                                 Command="{Binding RefreshCommand}"
-                                BackgroundColor="{StaticResource Primary}"
-                                TextColor="White"
-                                CornerRadius="10"
-                                HeightRequest="40"
-                                HorizontalOptions="Start" />
+                                Style="{StaticResource PrimaryButton}"
+                                HeightRequest="42"
+                                HorizontalOptions="Start"
+                                Padding="18,0" />
                     </VerticalStackLayout>
                 </Border>
 
                 <ActivityIndicator IsRunning="{Binding IsLoading}"
                                    IsVisible="{Binding IsLoading}"
-                                   Color="{StaticResource Primary}"
-                                   HorizontalOptions="Center" />
+                                   HorizontalOptions="Center"
+                                   Margin="0,8" />
 
-                <Border Padding="16"
-                        StrokeThickness="0"
-                        StrokeShape="RoundRectangle 16"
-                        BackgroundColor="{AppThemeBinding Light=#FFFFFF, Dark=#111827}">
-                    <VerticalStackLayout Spacing="12">
-                        <Label Text="Tùy chọn thông báo"
-                               FontSize="15"
-                               FontAttributes="Bold"
-                               TextColor="{AppThemeBinding Light={StaticResource TextLight}, Dark={StaticResource TextDark}}" />
-
-                        <Grid ColumnDefinitions="*,Auto" RowDefinitions="Auto">
-                            <Label Text="Cảnh báo tập trung"
-                                   VerticalOptions="Center"
-                                   FontSize="14"
-                                   TextColor="{AppThemeBinding Light=#334155, Dark=#CBD5E1}" />
-                            <Switch Grid.Column="1"
-                                    IsToggled="{Binding AttentionAlert}"
-                                    IsEnabled="{Binding CanEditPreferences}"
-                                    OnColor="{StaticResource Primary}" />
-                        </Grid>
-                        <Grid ColumnDefinitions="*,Auto">
-                            <Label Text="Tổng kết ngày"
-                                   VerticalOptions="Center"
-                                   FontSize="14"
-                                   TextColor="{AppThemeBinding Light=#334155, Dark=#CBD5E1}" />
-                            <Switch Grid.Column="1"
-                                    IsToggled="{Binding DailySummary}"
-                                    IsEnabled="{Binding CanEditPreferences}"
-                                    OnColor="{StaticResource Primary}" />
-                        </Grid>
-                        <Grid ColumnDefinitions="*,Auto">
-                            <Label Text="Bảo vệ tạm tắt"
-                                   VerticalOptions="Center"
-                                   FontSize="14"
-                                   TextColor="{AppThemeBinding Light=#334155, Dark=#CBD5E1}" />
-                            <Switch Grid.Column="1"
-                                    IsToggled="{Binding ProtectionOff}"
-                                    IsEnabled="{Binding CanEditPreferences}"
-                                    OnColor="{StaticResource Primary}" />
-                        </Grid>
-                        <Grid ColumnDefinitions="*,Auto">
-                            <Label Text="Cảnh báo bảo mật"
-                                   VerticalOptions="Center"
-                                   FontSize="14"
-                                   TextColor="{AppThemeBinding Light=#334155, Dark=#CBD5E1}" />
-                            <Switch Grid.Column="1"
-                                    IsToggled="{Binding SecurityAlert}"
-                                    IsEnabled="{Binding CanEditPreferences}"
-                                    OnColor="{StaticResource Primary}" />
-                        </Grid>
-
-                        <BoxView HeightRequest="1"
-                                 Color="{AppThemeBinding Light=#E2E8F0, Dark=#1F2937}" />
-
-                        <Label Text="Giờ yên tĩnh"
-                               FontSize="13"
-                               FontAttributes="Bold"
-                               TextColor="{AppThemeBinding Light=#475569, Dark=#CBD5E1}" />
-                        <Grid ColumnDefinitions="*,*" ColumnSpacing="12">
-                            <VerticalStackLayout Spacing="2">
-                                <Label Text="Bắt đầu"
-                                       FontSize="12"
-                                       TextColor="{AppThemeBinding Light=#64748B, Dark=#94A3B8}" />
-                                <TimePicker Time="{Binding QuietStart, Mode=TwoWay}"
-                                            Format="HH:mm"
-                                            IsEnabled="{Binding CanEditPreferences}"
-                                            TextColor="{AppThemeBinding Light={StaticResource TextLight}, Dark={StaticResource TextDark}}" />
-                            </VerticalStackLayout>
-                            <VerticalStackLayout Grid.Column="1" Spacing="2">
-                                <Label Text="Kết thúc"
-                                       FontSize="12"
-                                       TextColor="{AppThemeBinding Light=#64748B, Dark=#94A3B8}" />
-                                <TimePicker Time="{Binding QuietEnd, Mode=TwoWay}"
-                                            Format="HH:mm"
-                                            IsEnabled="{Binding CanEditPreferences}"
-                                            TextColor="{AppThemeBinding Light={StaticResource TextLight}, Dark={StaticResource TextDark}}" />
+                <Border Style="{StaticResource CardBorder}">
+                    <VerticalStackLayout Spacing="16">
+                        <Grid ColumnDefinitions="Auto,*" ColumnSpacing="12">
+                            <Border Style="{StaticResource IconBadge}">
+                                <Image Source="icon_bell.png" WidthRequest="20" HeightRequest="20"
+                                       Aspect="AspectFit">
+                                    <Image.Behaviors>
+                                        <toolkit:IconTintColorBehavior TintColor="{StaticResource Primary}" />
+                                    </Image.Behaviors>
+                                </Image>
+                            </Border>
+                            <VerticalStackLayout Grid.Column="1" Spacing="3" VerticalOptions="Center">
+                                <Label Text="Tùy chọn thông báo" Style="{StaticResource SectionLabel}" />
+                                <Label Text="Chỉ nhận những gì hữu ích với gia đình bạn."
+                                       Style="{StaticResource CaptionLabel}" />
                             </VerticalStackLayout>
                         </Grid>
 
-                        <VerticalStackLayout Spacing="2">
-                            <Label Text="Giờ tổng kết ngày"
-                                   FontSize="12"
-                                   TextColor="{AppThemeBinding Light=#64748B, Dark=#94A3B8}" />
-                            <TimePicker Time="{Binding DailySummaryTime, Mode=TwoWay}"
-                                        Format="HH:mm"
+                        <VerticalStackLayout Spacing="14">
+                            <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="12">
+                                <Image Source="icon_target.png" WidthRequest="19" HeightRequest="19"
+                                       Aspect="AspectFit" VerticalOptions="Center">
+                                    <Image.Behaviors>
+                                        <toolkit:IconTintColorBehavior TintColor="{AppThemeBinding Light={StaticResource Primary}, Dark=#5EEAD4}" />
+                                    </Image.Behaviors>
+                                </Image>
+                                <VerticalStackLayout Grid.Column="1" Spacing="1" VerticalOptions="Center">
+                                    <Label Text="Cảnh báo tập trung" Style="{StaticResource CardTitleLabel}" />
+                                    <Label Text="Khi mức tập trung xuống thấp bất thường."
+                                           Style="{StaticResource CaptionLabel}" />
+                                </VerticalStackLayout>
+                                <Switch Grid.Column="2"
+                                        IsToggled="{Binding AttentionAlert}"
                                         IsEnabled="{Binding CanEditPreferences}"
-                                        TextColor="{AppThemeBinding Light={StaticResource TextLight}, Dark={StaticResource TextDark}}" />
+                                        VerticalOptions="Center" />
+                            </Grid>
+
+                            <BoxView HeightRequest="1"
+                                     Color="{AppThemeBinding Light={StaticResource BorderLight}, Dark={StaticResource BorderDark}}" />
+
+                            <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="12">
+                                <Image Source="icon_clock.png" WidthRequest="19" HeightRequest="19"
+                                       Aspect="AspectFit" VerticalOptions="Center">
+                                    <Image.Behaviors>
+                                        <toolkit:IconTintColorBehavior TintColor="{AppThemeBinding Light={StaticResource Blue}, Dark=#93C5FD}" />
+                                    </Image.Behaviors>
+                                </Image>
+                                <VerticalStackLayout Grid.Column="1" Spacing="1" VerticalOptions="Center">
+                                    <Label Text="Tổng kết ngày" Style="{StaticResource CardTitleLabel}" />
+                                    <Label Text="Tóm tắt ngắn gọn vào cuối mỗi ngày."
+                                           Style="{StaticResource CaptionLabel}" />
+                                </VerticalStackLayout>
+                                <Switch Grid.Column="2"
+                                        IsToggled="{Binding DailySummary}"
+                                        IsEnabled="{Binding CanEditPreferences}"
+                                        VerticalOptions="Center" />
+                            </Grid>
+
+                            <BoxView HeightRequest="1"
+                                     Color="{AppThemeBinding Light={StaticResource BorderLight}, Dark={StaticResource BorderDark}}" />
+
+                            <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="12">
+                                <Image Source="icon_shield.png" WidthRequest="19" HeightRequest="19"
+                                       Aspect="AspectFit" VerticalOptions="Center">
+                                    <Image.Behaviors>
+                                        <toolkit:IconTintColorBehavior TintColor="{AppThemeBinding Light={StaticResource Amber}, Dark=#FCD34D}" />
+                                    </Image.Behaviors>
+                                </Image>
+                                <VerticalStackLayout Grid.Column="1" Spacing="1" VerticalOptions="Center">
+                                    <Label Text="Bảo vệ tạm tắt" Style="{StaticResource CardTitleLabel}" />
+                                    <Label Text="Khi chế độ bảo vệ trên máy tính được tắt."
+                                           Style="{StaticResource CaptionLabel}" />
+                                </VerticalStackLayout>
+                                <Switch Grid.Column="2"
+                                        IsToggled="{Binding ProtectionOff}"
+                                        IsEnabled="{Binding CanEditPreferences}"
+                                        VerticalOptions="Center" />
+                            </Grid>
+
+                            <BoxView HeightRequest="1"
+                                     Color="{AppThemeBinding Light={StaticResource BorderLight}, Dark={StaticResource BorderDark}}" />
+
+                            <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="12">
+                                <Image Source="icon_lock.png" WidthRequest="19" HeightRequest="19"
+                                       Aspect="AspectFit" VerticalOptions="Center">
+                                    <Image.Behaviors>
+                                        <toolkit:IconTintColorBehavior TintColor="{AppThemeBinding Light={StaticResource Danger}, Dark=#FCA5A5}" />
+                                    </Image.Behaviors>
+                                </Image>
+                                <VerticalStackLayout Grid.Column="1" Spacing="1" VerticalOptions="Center">
+                                    <Label Text="Cảnh báo bảo mật" Style="{StaticResource CardTitleLabel}" />
+                                    <Label Text="Thay đổi quan trọng về kết nối và quyền truy cập."
+                                           Style="{StaticResource CaptionLabel}" />
+                                </VerticalStackLayout>
+                                <Switch Grid.Column="2"
+                                        IsToggled="{Binding SecurityAlert}"
+                                        IsEnabled="{Binding CanEditPreferences}"
+                                        VerticalOptions="Center" />
+                            </Grid>
                         </VerticalStackLayout>
+
+                        <Border Style="{StaticResource SoftCardBorder}">
+                            <VerticalStackLayout Spacing="12">
+                                <Grid ColumnDefinitions="Auto,*" ColumnSpacing="10">
+                                    <Image Source="icon_moon.png" WidthRequest="18" HeightRequest="18"
+                                           Aspect="AspectFit" VerticalOptions="Center">
+                                        <Image.Behaviors>
+                                            <toolkit:IconTintColorBehavior TintColor="{AppThemeBinding Light={StaticResource Violet}, Dark=#C4B5FD}" />
+                                        </Image.Behaviors>
+                                    </Image>
+                                    <VerticalStackLayout Grid.Column="1" Spacing="1">
+                                        <Label Text="Giờ yên tĩnh" Style="{StaticResource CardTitleLabel}" />
+                                        <Label Text="Không gửi thông báo trong khung giờ này."
+                                               Style="{StaticResource CaptionLabel}" />
+                                    </VerticalStackLayout>
+                                </Grid>
+
+                                <Grid ColumnDefinitions="*,*" ColumnSpacing="10">
+                                    <VerticalStackLayout Spacing="4">
+                                        <Label Text="Bắt đầu" Style="{StaticResource CaptionLabel}" />
+                                        <Border Style="{StaticResource InputBorder}" Padding="12,0">
+                                            <TimePicker Time="{Binding QuietStart, Mode=TwoWay}"
+                                                        Format="HH:mm"
+                                                        IsEnabled="{Binding CanEditPreferences}" />
+                                        </Border>
+                                    </VerticalStackLayout>
+                                    <VerticalStackLayout Grid.Column="1" Spacing="4">
+                                        <Label Text="Kết thúc" Style="{StaticResource CaptionLabel}" />
+                                        <Border Style="{StaticResource InputBorder}" Padding="12,0">
+                                            <TimePicker Time="{Binding QuietEnd, Mode=TwoWay}"
+                                                        Format="HH:mm"
+                                                        IsEnabled="{Binding CanEditPreferences}" />
+                                        </Border>
+                                    </VerticalStackLayout>
+                                </Grid>
+                            </VerticalStackLayout>
+                        </Border>
+
+                        <Grid ColumnDefinitions="*,Auto" ColumnSpacing="12">
+                            <VerticalStackLayout Spacing="1" VerticalOptions="Center">
+                                <Label Text="Giờ tổng kết ngày" Style="{StaticResource CardTitleLabel}" />
+                                <Label Text="Thời điểm gửi báo cáo tổng kết."
+                                       Style="{StaticResource CaptionLabel}" />
+                            </VerticalStackLayout>
+                            <Border Grid.Column="1"
+                                    Style="{StaticResource InputBorder}"
+                                    Padding="12,0"
+                                    WidthRequest="112">
+                                <TimePicker Time="{Binding DailySummaryTime, Mode=TwoWay}"
+                                            Format="HH:mm"
+                                            IsEnabled="{Binding CanEditPreferences}" />
+                            </Border>
+                        </Grid>
 
                         <Button Text="Lưu tùy chọn"
                                 Command="{Binding SavePreferencesCommand}"
                                 IsEnabled="{Binding CanEditPreferences}"
-                                BackgroundColor="{StaticResource Primary}"
-                                TextColor="White"
-                                CornerRadius="12"
-                                HeightRequest="44" />
+                                Style="{StaticResource PrimaryButton}" />
 
                         <Label Text="{Binding PreferencesStatus}"
                                IsVisible="{Binding HasPreferencesStatus}"
-                               FontSize="13"
-                               TextColor="{AppThemeBinding Light=#475569, Dark=#CBD5E1}">
+                               FontSize="12.5"
+                               TextColor="{AppThemeBinding Light={StaticResource TextSecondaryLight}, Dark={StaticResource TextSecondaryDark}}">
                             <Label.Triggers>
                                 <DataTrigger TargetType="Label"
                                              Binding="{Binding PreferencesStatusIsError}"
@@ -162,30 +249,94 @@
                     </VerticalStackLayout>
                 </Border>
 
-                <Label Text="Lịch sử thông báo"
-                       FontSize="15"
-                       FontAttributes="Bold"
-                       TextColor="{AppThemeBinding Light={StaticResource TextLight}, Dark={StaticResource TextDark}}" />
+                <Grid ColumnDefinitions="*,Auto" Margin="2,4,0,0">
+                    <Label Text="Lịch sử thông báo" Style="{StaticResource SectionLabel}" />
+                    <Label Grid.Column="1"
+                           Text="Mới nhất trước"
+                           Style="{StaticResource CaptionLabel}"
+                           VerticalOptions="Center" />
+                </Grid>
 
                 <VerticalStackLayout BindableLayout.ItemsSource="{Binding Items}" Spacing="8">
                     <BindableLayout.ItemTemplate>
                         <DataTemplate x:DataType="vm:NotificationItem">
-                            <Border Padding="14"
-                                    StrokeThickness="0"
-                                    StrokeShape="RoundRectangle 14"
-                                    BackgroundColor="{AppThemeBinding Light=#FFFFFF, Dark=#111827}">
-                                <VerticalStackLayout Spacing="2">
-                                    <Label Text="{Binding CategoryText}"
-                                           FontSize="14"
-                                           FontAttributes="Bold"
-                                           TextColor="{AppThemeBinding Light={StaticResource TextLight}, Dark={StaticResource TextDark}}" />
-                                    <Label Text="{Binding TimeText}"
-                                           FontSize="12"
-                                           TextColor="{AppThemeBinding Light=#64748B, Dark=#94A3B8}" />
-                                    <Label Text="{Binding StatusText}"
-                                           FontSize="11"
-                                           TextColor="{AppThemeBinding Light=#94A3B8, Dark=#64748B}" />
-                                </VerticalStackLayout>
+                            <Border Style="{StaticResource CardBorder}" Padding="14">
+                                <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="12">
+                                    <Border WidthRequest="36"
+                                            HeightRequest="36"
+                                            StrokeThickness="0"
+                                            StrokeShape="RoundRectangle 12"
+                                            BackgroundColor="{AppThemeBinding Light={StaticResource PrimarySoft}, Dark={StaticResource PrimarySoftDark}}">
+                                        <Border.Triggers>
+                                            <DataTrigger TargetType="Border"
+                                                         Binding="{Binding CategoryText}"
+                                                         Value="Cảnh báo tập trung">
+                                                <Setter Property="BackgroundColor"
+                                                        Value="{AppThemeBinding Light={StaticResource AmberSoft}, Dark={StaticResource AmberSoftDark}}" />
+                                            </DataTrigger>
+                                            <DataTrigger TargetType="Border"
+                                                         Binding="{Binding CategoryText}"
+                                                         Value="Tổng kết ngày">
+                                                <Setter Property="BackgroundColor"
+                                                        Value="{AppThemeBinding Light={StaticResource BlueSoft}, Dark={StaticResource BlueSoftDark}}" />
+                                            </DataTrigger>
+                                            <DataTrigger TargetType="Border"
+                                                         Binding="{Binding CategoryText}"
+                                                         Value="Cảnh báo bảo mật">
+                                                <Setter Property="BackgroundColor"
+                                                        Value="{AppThemeBinding Light={StaticResource DangerSoft}, Dark={StaticResource DangerSoftDark}}" />
+                                            </DataTrigger>
+                                        </Border.Triggers>
+                                        <Image Source="icon_bell.png" WidthRequest="17" HeightRequest="17"
+                                               Aspect="AspectFit" HorizontalOptions="Center" VerticalOptions="Center">
+                                            <Image.Behaviors>
+                                                <toolkit:IconTintColorBehavior TintColor="{AppThemeBinding Light={StaticResource Primary}, Dark=#5EEAD4}" />
+                                            </Image.Behaviors>
+                                        </Image>
+                                    </Border>
+
+                                    <VerticalStackLayout Grid.Column="1" Spacing="2" VerticalOptions="Center">
+                                        <Label Text="{Binding CategoryText}"
+                                               FontSize="14"
+                                               FontAttributes="Bold" />
+                                        <Label Text="{Binding TimeText}"
+                                               Style="{StaticResource CaptionLabel}" />
+                                    </VerticalStackLayout>
+
+                                    <Border Grid.Column="2"
+                                            Style="{StaticResource PillBorder}"
+                                            Padding="8,4"
+                                            VerticalOptions="Center">
+                                        <Border.Triggers>
+                                            <DataTrigger TargetType="Border"
+                                                         Binding="{Binding StatusText}"
+                                                         Value="">
+                                                <Setter Property="IsVisible" Value="False" />
+                                            </DataTrigger>
+                                            <DataTrigger TargetType="Border"
+                                                         Binding="{Binding StatusText}"
+                                                         Value="Gửi lỗi">
+                                                <Setter Property="BackgroundColor"
+                                                        Value="{AppThemeBinding Light={StaticResource DangerSoft}, Dark={StaticResource DangerSoftDark}}" />
+                                            </DataTrigger>
+                                            <DataTrigger TargetType="Border"
+                                                         Binding="{Binding StatusText}"
+                                                         Value="Bị tạm hoãn">
+                                                <Setter Property="BackgroundColor"
+                                                        Value="{AppThemeBinding Light={StaticResource AmberSoft}, Dark={StaticResource AmberSoftDark}}" />
+                                            </DataTrigger>
+                                            <DataTrigger TargetType="Border"
+                                                         Binding="{Binding StatusText}"
+                                                         Value="Đang chờ gửi">
+                                                <Setter Property="BackgroundColor"
+                                                        Value="{AppThemeBinding Light={StaticResource BlueSoft}, Dark={StaticResource BlueSoftDark}}" />
+                                            </DataTrigger>
+                                        </Border.Triggers>
+                                        <Label Text="{Binding StatusText}"
+                                               Style="{StaticResource PillLabel}"
+                                               TextColor="{AppThemeBinding Light={StaticResource Primary}, Dark=#5EEAD4}" />
+                                    </Border>
+                                </Grid>
                             </Border>
                         </DataTemplate>
                     </BindableLayout.ItemTemplate>
@@ -194,33 +345,31 @@
                 <Button Text="Tải thêm"
                         IsVisible="{Binding CanLoadMore}"
                         Command="{Binding LoadMoreCommand}"
-                        BackgroundColor="Transparent"
-                        TextColor="{StaticResource Primary}"
-                        BorderColor="{StaticResource Primary}"
-                        BorderWidth="1"
-                        CornerRadius="12"
-                        HeightRequest="44" />
+                        Style="{StaticResource SecondaryButton}" />
 
                 <ActivityIndicator IsRunning="{Binding IsLoadingMore}"
                                    IsVisible="{Binding IsLoadingMore}"
-                                   Color="{StaticResource Primary}"
                                    HorizontalOptions="Center" />
 
-                <Border IsVisible="{Binding ShowEmptyState}"
-                        Padding="20"
-                        StrokeThickness="0"
-                        StrokeShape="RoundRectangle 16"
-                        BackgroundColor="{AppThemeBinding Light=#FFFFFF, Dark=#111827}">
-                    <VerticalStackLayout Spacing="6">
+                <Border IsVisible="{Binding ShowEmptyState}" Style="{StaticResource CardBorder}" Padding="22">
+                    <VerticalStackLayout Spacing="12" HorizontalOptions="Center">
+                        <Border WidthRequest="52" HeightRequest="52" StrokeThickness="0"
+                                StrokeShape="RoundRectangle 16"
+                                BackgroundColor="{AppThemeBinding Light={StaticResource PrimarySoft}, Dark={StaticResource PrimarySoftDark}}">
+                            <Image Source="icon_bell.png" WidthRequest="24" HeightRequest="24"
+                                   Aspect="AspectFit" HorizontalOptions="Center" VerticalOptions="Center">
+                                <Image.Behaviors>
+                                    <toolkit:IconTintColorBehavior TintColor="{AppThemeBinding Light={StaticResource Primary}, Dark=#5EEAD4}" />
+                                </Image.Behaviors>
+                            </Image>
+                        </Border>
                         <Label Text="Chưa có thông báo"
                                FontSize="15"
                                FontAttributes="Bold"
-                               HorizontalOptions="Center"
-                               TextColor="{AppThemeBinding Light={StaticResource TextLight}, Dark={StaticResource TextDark}}" />
+                               HorizontalTextAlignment="Center" />
                         <Label Text="Cảnh báo và tổng kết ngày sẽ xuất hiện ở đây."
-                               FontSize="13"
-                               HorizontalTextAlignment="Center"
-                               TextColor="{AppThemeBinding Light=#64748B, Dark=#94A3B8}" />
+                               Style="{StaticResource CaptionLabel}"
+                               HorizontalTextAlignment="Center" />
                     </VerticalStackLayout>
                 </Border>
             </VerticalStackLayout>
