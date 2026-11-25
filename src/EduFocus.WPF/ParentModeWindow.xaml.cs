@@ -29,7 +29,6 @@ public partial class ParentModeWindow : Window
         Closed += OnClosed;
         PreviewMouseDown += OnPreviewUserInput;
         PreviewKeyDown += OnPreviewUserInput;
-        Closed += OnClosed;
     }
 
     private async void OnLoaded(object sender, RoutedEventArgs e)
