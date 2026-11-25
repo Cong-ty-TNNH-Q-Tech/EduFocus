@@ -564,10 +564,10 @@ public sealed class ProtectionEngine : IProtectionEnginePort, IAsyncDisposable
 
         var domains = effective
             .Where(rule => rule.RuleType == RuleType.Domain
-                && rule.Effect == BlockRuleEffect.Block
-                && !allowedDomains.Contains(rule.NormalizedValue)
-                && !ProtectedDomains.IsProtected(DomainName.Parse(rule.NormalizedValue)))
-            .Select(rule => rule.NormalizedValue)
+                && rule.Effect == BlockRuleEffect.Block)
+            .SelectMany(ExpandBlockedDomainHosts)
+            .Where(host => !allowedDomains.Contains(host)
+                && !ProtectedDomains.IsProtected(DomainName.Parse(host)))
             .Distinct(StringComparer.Ordinal)
             .OrderBy(value => value, StringComparer.Ordinal)
             .Take(MaxDomains)
@@ -590,6 +590,17 @@ public sealed class ProtectionEngine : IProtectionEnginePort, IAsyncDisposable
             .ToArray();
 
         return new EffectiveRules(domains, blockedApps, allowedApps, extensionRules);
+    }
+
+    private static IEnumerable<string> ExpandBlockedDomainHosts(BlockRule rule)
+    {
+        yield return rule.NormalizedValue;
+
+        if (rule.MatchType == RuleMatchType.Suffix
+            && !rule.NormalizedValue.StartsWith("www.", StringComparison.Ordinal))
+        {
+            yield return "www." + rule.NormalizedValue;
+        }
     }
 
     private void OnBlockPageHit(BlockPageHit hit)

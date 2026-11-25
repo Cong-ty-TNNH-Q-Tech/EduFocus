@@ -70,6 +70,24 @@ public sealed class ProtectionEngineTests
     }
 
     [Fact]
+    public async Task Domain_suffix_rule_includes_www_subdomain_for_hosts_and_block_page()
+    {
+        _rules.Rules.Add(BlockRule.Create(
+            RuleType.Domain,
+            RuleMatchType.Suffix,
+            "youtube.com",
+            BlockRuleCategory.Custom,
+            BlockRuleEffect.Block,
+            new DateTime(2026, 11, 1, 0, 0, 0, DateTimeKind.Utc)));
+        await using var engine = CreateEngine();
+
+        await engine.ApplyAsync();
+
+        _page.Domains.Should().Equal("www.youtube.com", "youtube.com");
+        _hosts.Applied.Should().Equal("www.youtube.com", "youtube.com");
+    }
+
+    [Fact]
     public async Task Apply_returns_warning_when_block_page_port_is_busy()
     {
         _rules.Rules.Add(Rule(RuleType.Domain, "chatgpt.com"));
