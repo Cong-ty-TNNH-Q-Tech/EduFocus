@@ -21,7 +21,6 @@ public sealed class BlockRuleService : IBlockRuleUseCase
     private readonly ICorrelationContext _correlation;
     private readonly IAppLogger _logger;
     private readonly TimeProvider _timeProvider;
-    private readonly IBrowserExtensionBridge _browserBridge;
     private readonly IProtectionUseCase? _protection;
     private readonly IActivityUseCase? _activity;
 
@@ -32,7 +31,6 @@ public sealed class BlockRuleService : IBlockRuleUseCase
         ICorrelationContext correlation,
         IAppLogger logger,
         TimeProvider timeProvider,
-        IBrowserExtensionBridge browserBridge,
         IProtectionUseCase? protection = null,
         IActivityUseCase? activity = null)
     {
@@ -42,7 +40,6 @@ public sealed class BlockRuleService : IBlockRuleUseCase
         _correlation = correlation ?? throw new ArgumentNullException(nameof(correlation));
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
         _timeProvider = timeProvider ?? throw new ArgumentNullException(nameof(timeProvider));
-        _browserBridge = browserBridge ?? throw new ArgumentNullException(nameof(browserBridge));
         _protection = protection;
         _activity = activity;
     }
@@ -84,7 +81,6 @@ public sealed class BlockRuleService : IBlockRuleUseCase
             now,
             cancellationToken);
 
-        await RefreshBrowserRulesAsync(now, cancellationToken);
         await RefreshActiveEnforcementAsync(cancellationToken);
 
         return new BlockRuleOperationResult(Changed: true, ToInfo(rule));
@@ -127,7 +123,6 @@ public sealed class BlockRuleService : IBlockRuleUseCase
             now,
             cancellationToken);
 
-        await RefreshBrowserRulesAsync(now, cancellationToken);
         await RefreshActiveEnforcementAsync(cancellationToken);
 
         return new BlockRuleOperationResult(Changed: true, ToInfo(candidate));
@@ -154,7 +149,6 @@ public sealed class BlockRuleService : IBlockRuleUseCase
             now,
             cancellationToken);
 
-        await RefreshBrowserRulesAsync(now, cancellationToken);
         await RefreshActiveEnforcementAsync(cancellationToken);
 
         return true;
@@ -196,28 +190,6 @@ public sealed class BlockRuleService : IBlockRuleUseCase
                     LogCategories.Session,
                     $"Could not refresh activity tracking rules ({ex.GetType().Name}).");
             }
-        }
-    }
-
-    private async Task RefreshBrowserRulesAsync(DateTime nowUtc, CancellationToken cancellationToken)
-    {
-        if (!_browserBridge.IsRunning)
-            return;
-
-        try
-        {
-            var rules = await _rules.ListAsync(cancellationToken);
-            await _browserBridge.UpdateRulesAsync(rules, nowUtc, cancellationToken);
-        }
-        catch (OperationCanceledException)
-        {
-            throw;
-        }
-        catch (Exception ex)
-        {
-            _logger.Warning(
-                LogCategories.Protection,
-                $"Could not refresh browser extension rules ({ex.GetType().Name}).");
         }
     }
 

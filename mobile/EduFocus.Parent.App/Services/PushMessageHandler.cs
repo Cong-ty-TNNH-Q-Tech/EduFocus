@@ -12,7 +12,8 @@ namespace EduFocus.Parent.App.Services;
 public sealed class PushMessageHandler(
     PushNotificationDedupe dedupe,
     PushNotificationPresenter presenter,
-    ParentSettingsStore settings)
+    ParentSettingsStore settings,
+    PushEventHub pushEvents)
 {
     public void Handle(byte[] content)
     {
@@ -40,5 +41,6 @@ public sealed class PushMessageHandler(
             return;
 
         presenter.Present(payload, AppLifecycleState.IsForeground);
+        pushEvents.Publish(payload);
     }
 }

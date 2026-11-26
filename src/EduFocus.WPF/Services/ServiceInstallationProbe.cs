@@ -16,7 +16,8 @@ public static class ServiceInstallationProbe
     {
         try
         {
-            using var key = Registry.LocalMachine.OpenSubKey(ServiceIdentity.InstallRegistryPath);
+            using var baseKey = RegistryKey.OpenBaseKey(RegistryHive.LocalMachine, RegistryView.Registry64);
+            using var key = baseKey.OpenSubKey(ServiceIdentity.InstallRegistryPath);
             var value = key?.GetValue(ServiceIdentity.ServiceModeValueName);
 
             return value switch

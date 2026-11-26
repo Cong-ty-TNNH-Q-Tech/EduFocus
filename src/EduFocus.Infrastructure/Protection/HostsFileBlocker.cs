@@ -251,7 +251,7 @@ public sealed class HostsFileBlocker : IHostsFileBlocker
             Directory.CreateDirectory(_backupDirectory);
             var backupPath = NextBackupPath();
             await File.WriteAllBytesAsync(backupPath, cleanBytes, cancellationToken).ConfigureAwait(false);
-            await SaveJournalAsync(new HostsJournal(_hostsPath, backupPath, DateTimeOffset.UtcNow))
+            await SaveJournalAsync(new HostsJournal(_hostsPath, backupPath, DateTimeOffset.UtcNow), cancellationToken)
                 .ConfigureAwait(false);
             return backupPath;
         }
@@ -368,7 +368,11 @@ public sealed class HostsFileBlocker : IHostsFileBlocker
                 try
                 {
                     await File.WriteAllBytesAsync(tempPath, bytes, cancellationToken).ConfigureAwait(false);
-                    File.Move(tempPath, _hostsPath, overwrite: true);
+                    if (File.Exists(_hostsPath))
+                        File.Replace(tempPath, _hostsPath, destinationBackupFileName: null, ignoreMetadataErrors: true);
+                    else
+                        File.Move(tempPath, _hostsPath, overwrite: true);
+
                     return;
                 }
                 catch (IOException) when (attempt < _writeAttempts)
@@ -461,19 +465,44 @@ public sealed class HostsFileBlocker : IHostsFileBlocker
 
     private async Task<HostsJournal?> LoadJournalAsync()
     {
+        if (IsReparsePoint(_backupDirectory) || IsReparsePoint(_journalPath))
+        {
+            _logger.Warning(
+                LogCategories.Protection,
+                "The hosts backup directory or journal is a reparse point; ignoring journal.");
+            return null;
+        }
+
         if (!File.Exists(_journalPath))
             return null;
 
         try
         {
             var json = await File.ReadAllTextAsync(_journalPath).ConfigureAwait(false);
-            return JsonSerializer.Deserialize<HostsJournal>(json);
+            var journal = JsonSerializer.Deserialize<HostsJournal>(json);
+            if (journal is null || string.IsNullOrWhiteSpace(journal.BackupPath))
+                return null;
+
+            var backupPath = Path.GetFullPath(journal.BackupPath);
+            if (!IsInsideBackupDirectory(backupPath) || IsReparsePoint(backupPath))
+            {
+                _logger.Warning(
+                    LogCategories.Protection,
+                    "The hosts backup journal points outside the EduFocus backup directory or through a reparse point; ignoring journal.");
+                return null;
+            }
+
+            return journal with { BackupPath = backupPath };
         }
         catch (OperationCanceledException)
         {
             throw;
         }
-        catch (Exception ex) when (ex is JsonException or IOException or UnauthorizedAccessException)
+        catch (Exception ex) when (ex is JsonException
+                                       or IOException
+                                       or UnauthorizedAccessException
+                                       or ArgumentException
+                                       or NotSupportedException)
         {
             _logger.Warning(
                 LogCategories.Protection,
@@ -482,8 +511,20 @@ public sealed class HostsFileBlocker : IHostsFileBlocker
         }
     }
 
-    private Task SaveJournalAsync(HostsJournal journal) =>
-        File.WriteAllTextAsync(_journalPath, JsonSerializer.Serialize(journal));
+    private async Task SaveJournalAsync(HostsJournal journal, CancellationToken cancellationToken)
+    {
+        var tempPath = $"{_journalPath}.{Guid.NewGuid():N}.tmp";
+        try
+        {
+            var json = JsonSerializer.Serialize(journal);
+            await File.WriteAllTextAsync(tempPath, json, cancellationToken).ConfigureAwait(false);
+            File.Move(tempPath, _journalPath, overwrite: true);
+        }
+        finally
+        {
+            TryDelete(tempPath);
+        }
+    }
 
     private bool DeleteJournalBestEffort()
     {
@@ -552,15 +593,103 @@ public sealed class HostsFileBlocker : IHostsFileBlocker
         }
     }
 
-    private static bool ContainsBlockSection(string text) =>
-        text.Contains(StartMarker, StringComparison.Ordinal)
-        || text.Contains(EndMarker, StringComparison.Ordinal);
+    private static bool IsReparsePoint(string path)
+    {
+        try
+        {
+            return Path.Exists(path)
+                && File.GetAttributes(path).HasFlag(FileAttributes.ReparsePoint);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or NotSupportedException)
+        {
+            return true;
+        }
+    }
+
+    private static bool ContainsBlockSection(string text)
+    {
+        var (lines, _, _) = SplitLines(text);
+        foreach (var line in lines)
+        {
+            var trimmed = line.AsSpan().Trim(" \t");
+            if (trimmed.SequenceEqual(StartMarker.AsSpan()) || trimmed.SequenceEqual(EndMarker.AsSpan()))
+                return true;
+        }
+
+        return false;
+    }
 
     private static string RemoveBlockSection(string text)
     {
-        if (!ContainsBlockSection(text))
+        var (lines, newline, endsWithNewline) = SplitLines(text);
+        var hasMarker = false;
+        foreach (var line in lines)
+        {
+            var trimmed = line.AsSpan().Trim(" \t");
+            if (trimmed.SequenceEqual(StartMarker.AsSpan()) || trimmed.SequenceEqual(EndMarker.AsSpan()))
+            {
+                hasMarker = true;
+                break;
+            }
+        }
+
+        if (!hasMarker)
             return text;
 
+        var kept = new List<string>(lines.Count);
+        for (var i = 0; i < lines.Count; i++)
+        {
+            var trimmed = lines[i].AsSpan().Trim(" \t");
+            if (trimmed.SequenceEqual(StartMarker.AsSpan()))
+            {
+                var endIndex = -1;
+                for (var j = i + 1; j < lines.Count; j++)
+                {
+                    if (lines[j].AsSpan().Trim(" \t").SequenceEqual(EndMarker.AsSpan()))
+                    {
+                        endIndex = j;
+                        break;
+                    }
+                }
+
+                if (endIndex >= 0)
+                {
+                    i = endIndex;
+                    continue;
+                }
+
+                // Unmatched StartMarker: skip contiguous EduFocus loopback entries
+                // without deleting unrelated user lines down to EOF.
+                while (i + 1 < lines.Count && IsEduFocusEntryLine(lines[i + 1]))
+                    i++;
+                continue;
+            }
+
+            if (trimmed.SequenceEqual(EndMarker.AsSpan()))
+                continue;
+
+            kept.Add(lines[i]);
+        }
+
+        if (kept.Count == 0)
+            return string.Empty;
+
+        var result = string.Join(newline, kept);
+        return endsWithNewline ? result + newline : result;
+    }
+
+    private static bool IsEduFocusEntryLine(string line)
+    {
+        var trimmed = line.AsSpan().Trim(" \t");
+        if (trimmed.IsEmpty)
+            return true;
+
+        return trimmed.StartsWith("127.0.0.1 ".AsSpan(), StringComparison.Ordinal)
+            || trimmed.StartsWith("::1 ".AsSpan(), StringComparison.Ordinal);
+    }
+
+    private static (List<string> Lines, string Newline, bool EndsWithNewline) SplitLines(string text)
+    {
         var newline = DetectNewline(text);
         var endsWithNewline = text.EndsWith('\n');
         var lines = new List<string>();
@@ -570,35 +699,7 @@ public sealed class HostsFileBlocker : IHostsFileBlocker
         if (endsWithNewline && lines.Count > 0)
             lines.RemoveAt(lines.Count - 1);
 
-        var kept = new List<string>(lines.Count);
-        var inBlock = false;
-        foreach (var line in lines)
-        {
-            var trimmed = line.AsSpan().Trim(" \t");
-            if (!inBlock && trimmed.SequenceEqual(StartMarker.AsSpan()))
-            {
-                inBlock = true;
-                continue;
-            }
-
-            if (inBlock)
-            {
-                if (trimmed.SequenceEqual(EndMarker.AsSpan()))
-                    inBlock = false;
-                continue;
-            }
-
-            if (trimmed.SequenceEqual(EndMarker.AsSpan()))
-                continue;
-
-            kept.Add(line);
-        }
-
-        if (kept.Count == 0)
-            return string.Empty;
-
-        var result = string.Join(newline, kept);
-        return endsWithNewline ? result + newline : result;
+        return (lines, newline, endsWithNewline);
     }
 
     private bool IsLockedByAnotherProcess()

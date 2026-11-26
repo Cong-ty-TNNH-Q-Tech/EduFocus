@@ -7,6 +7,7 @@ using EduFocus.Cloud.Contracts.Common;
 using EduFocus.Cloud.Contracts.Family;
 using EduFocus.Cloud.Contracts.Json;
 using EduFocus.Cloud.Data;
+using EduFocus.Cloud.Data.Entities;
 using Microsoft.EntityFrameworkCore;
 
 namespace EduFocus.Cloud.Api.Families;
@@ -30,13 +31,26 @@ public static class FamilyEndpoints
         PushStreamRegistry streams,
         CancellationToken cancellationToken)
     {
+        if (httpContext.User.DeviceKind() != DeviceKind.Mobile)
+        {
+            return ApiResults.Forbidden("Chỉ thiết bị phụ huynh mới có quyền xóa dữ liệu gia đình.");
+        }
+
+        if (!httpContext.Request.HasJsonContentType())
+        {
+            return ApiResults.Error(
+                StatusCodes.Status415UnsupportedMediaType,
+                "unsupported_media_type",
+                "Định dạng nội dung không được hỗ trợ.");
+        }
+
         DeleteFamilyRequest? request;
         try
         {
             request = await httpContext.Request.ReadFromJsonAsync<DeleteFamilyRequest>(
                 ApiJson.Options, cancellationToken);
         }
-        catch (JsonException)
+        catch (Exception exception) when (exception is JsonException or BadHttpRequestException)
         {
             return ApiResults.InvalidRequest("Body không đúng định dạng JSON.");
         }

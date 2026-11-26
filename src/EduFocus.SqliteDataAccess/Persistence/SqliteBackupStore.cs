@@ -123,8 +123,6 @@ public sealed class SqliteBackupStore
             ? TrySnapshotCurrentDatabase(databasePath, key)
             : null;
 
-        DeleteSideFiles(databasePath);
-
         var temporaryPath = Path.Combine(
             databaseDirectory,
             $".{Path.GetFileName(databasePath)}.{Guid.NewGuid():N}.restore");
@@ -143,6 +141,7 @@ public sealed class SqliteBackupStore
                     "The copied backup failed the integrity check. Nothing was restored and the existing database was kept.");
             }
 
+            SqliteConnection.ClearAllPools();
             File.Move(temporaryPath, databasePath, overwrite: true);
         }
         catch (Exception ex) when (IsFileAccessFailure(ex))
@@ -339,7 +338,7 @@ public sealed class SqliteBackupStore
         SqliteConnection.ClearPool(connection);
     }
 
-    private bool CheckIntegrity(string path, DatabaseEncryptionKey? key)
+    private bool CheckIntegrity(string path, DatabaseEncryptionKey? key, bool readOnly = true)
     {
         if (!File.Exists(path))
             return false;
@@ -347,7 +346,9 @@ public sealed class SqliteBackupStore
         try
         {
             using var connection = new SqliteConnection(
-                BuildConnectionString(Path.GetFullPath(path), SqliteOpenMode.ReadWrite));
+                BuildConnectionString(
+                    Path.GetFullPath(path),
+                    readOnly ? SqliteOpenMode.ReadOnly : SqliteOpenMode.ReadWrite));
 
             connection.Open();
 

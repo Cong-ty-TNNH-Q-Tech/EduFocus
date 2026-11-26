@@ -74,7 +74,7 @@ public sealed class BrowserDnsPolicy : IBrowserDnsPolicyPort
         lock (_gate)
         {
             var failed = false;
-            var pending = new List<(BrowserDnsPolicyTarget Target, RegistryView View)>();
+            var pending = new List<(BrowserDnsPolicyTarget Target, RegistryView View, bool CreatedBackup)>();
 
             // Back up every view before changing any policy. Some Windows
             // builds expose the same physical key through both views; writing
@@ -86,8 +86,8 @@ public sealed class BrowserDnsPolicy : IBrowserDnsPolicyPort
                     try
                     {
                         using var root = RegistryKey.OpenBaseKey(_options.Hive, view);
-                        EnsureBackup(root, target, view);
-                        pending.Add((target, view));
+                        var createdBackup = EnsureBackup(root, target, view);
+                        pending.Add((target, view, createdBackup));
                     }
                     catch (Exception ex) when (ex is not OperationCanceledException)
                     {
@@ -98,7 +98,7 @@ public sealed class BrowserDnsPolicy : IBrowserDnsPolicyPort
             }
 
             var applied = 0;
-            foreach (var (target, view) in pending)
+            foreach (var (target, view, createdBackup) in pending)
             {
                 try
                 {
@@ -110,6 +110,17 @@ public sealed class BrowserDnsPolicy : IBrowserDnsPolicyPort
                 {
                     failed = true;
                     LogFailure("disable", target, view, ex);
+                    if (createdBackup)
+                    {
+                        try
+                        {
+                            using var root = RegistryKey.OpenBaseKey(_options.Hive, view);
+                            root.DeleteSubKeyTree(GetBackupPath(target, view), throwOnMissingSubKey: false);
+                        }
+                        catch (Exception cleanupEx) when (cleanupEx is not OperationCanceledException)
+                        {
+                        }
+                    }
                 }
             }
 
@@ -183,7 +194,7 @@ public sealed class BrowserDnsPolicy : IBrowserDnsPolicyPort
             $"Could not {action} the Secure DNS policy for {target.Name} ({view}): " +
             $"{exception.GetType().Name}.");
 
-    private void EnsureBackup(
+    private bool EnsureBackup(
         RegistryKey root,
         BrowserDnsPolicyTarget target,
         RegistryView view)
@@ -191,10 +202,9 @@ public sealed class BrowserDnsPolicy : IBrowserDnsPolicyPort
         var backupPath = GetBackupPath(target, view);
         using (var existing = root.OpenSubKey(backupPath, writable: false))
         {
-            // The original value is already recorded. Re-applying must not
-            // overwrite that backup with our own "off" value.
-            if (existing is not null)
-                return;
+            // The original value is already recorded when Existed (written last) is present.
+            if (existing is not null && existing.GetValue(BackupExistedValue) is not null)
+                return false;
         }
 
         var exists = false;
@@ -239,13 +249,16 @@ public sealed class BrowserDnsPolicy : IBrowserDnsPolicyPort
 
         using var backup = root.CreateSubKey(backupPath, writable: true)
             ?? throw new InvalidOperationException($"Cannot create the policy backup '{backupPath}'.");
+
+        if (exists)
+        {
+            backup.SetValue(BackupKindValue, (int)kind, RegistryValueKind.DWord);
+            backup.SetValue(BackupDataValue, previous!, RegistryValueKind.String);
+        }
+
+        // Write Existed last as the commit marker so partial backups are re-created.
         backup.SetValue(BackupExistedValue, exists ? 1 : 0, RegistryValueKind.DWord);
-
-        if (!exists)
-            return;
-
-        backup.SetValue(BackupKindValue, (int)kind, RegistryValueKind.DWord);
-        backup.SetValue(BackupDataValue, previous!, RegistryValueKind.String);
+        return true;
     }
 
     private bool RestoreCore(BrowserDnsPolicyTarget target, RegistryView view)
@@ -262,15 +275,21 @@ public sealed class BrowserDnsPolicy : IBrowserDnsPolicyPort
             if (backup is null)
                 return false;
 
-            existed = Convert.ToInt32(
-                backup.GetValue(BackupExistedValue, 0),
-                CultureInfo.InvariantCulture) == 1;
+            var existedRaw = backup.GetValue(BackupExistedValue);
+            if (existedRaw is null)
+                return false;
+
+            existed = Convert.ToInt32(existedRaw, CultureInfo.InvariantCulture) == 1;
 
             if (existed)
             {
                 kind = (RegistryValueKind)Convert.ToInt32(
                     backup.GetValue(BackupKindValue, (int)RegistryValueKind.String),
                     CultureInfo.InvariantCulture);
+                if (kind is not (RegistryValueKind.String or RegistryValueKind.ExpandString))
+                    throw new InvalidOperationException(
+                        $"The browser Secure DNS policy backup has unsupported kind {kind}.");
+
                 previous = backup.GetValue(BackupDataValue) as string
                     ?? throw new InvalidOperationException(
                         "The browser Secure DNS policy backup has no value.");

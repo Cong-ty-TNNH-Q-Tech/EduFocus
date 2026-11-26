@@ -65,17 +65,11 @@
                            RebootPrompt="no"
                            Timeout="30"
                            TerminateProcess="1"/>
-    <util:CloseApplication Target="EduFocus.NativeHost.exe"
-                           Description="EduFocus browser native host will be closed so the installer can continue."
-                           CloseMessage="no"
-                           ElevatedCloseMessage="no"
-                           RebootPrompt="no"
-                           Timeout="10"
-                           TerminateProcess="1"/>
 
     <!-- Keep user data unless the uninstall dialog (or a silent uninstall with
-         DELETEUSERDATA=1) asks for deletion. -->
-    <Property Id="DELETEUSERDATA" Value="0" Secure="yes"/>
+         DELETEUSERDATA=1) asks for deletion. Leave unset by default so MSI
+         renders the checkbox unchecked. -->
+    <Property Id="DELETEUSERDATA" Secure="yes"/>
 
     <Feature Id="Main" Title="EduFocus" Level="1">
       <ComponentGroupRef Id="AppFiles"/>
@@ -112,34 +106,10 @@
                   Impersonate="no"
                   Return="ignore"/>
 
-    <!-- Registers the manifest with Chrome/Edge under HKLM (native messaging
-         is best effort: a registration failure never blocks installation or
-         uninstall). The manifest is written next to the host so it always
-         points at the actual install directory. -->
-    <CustomAction Id="RegisterNativeMessagingHost"
-                  FileRef="NativeHostExeFile"
-                  ExeCommand="--register --scope machine --manifest-dir &quot;[INSTALLFOLDER]native-host&quot;"
-                  Execute="deferred"
-                  Impersonate="no"
-                  Return="ignore"/>
-
-    <CustomAction Id="UnregisterNativeMessagingHost"
-                  FileRef="NativeHostExeFile"
-                  ExeCommand="--unregister --scope machine --manifest-dir &quot;[INSTALLFOLDER]native-host&quot;"
-                  Execute="deferred"
-                  Impersonate="no"
-                  Return="ignore"/>
-
     <InstallExecuteSequence>
       <Custom Action="PrepareDataDirectory"
               After="InstallFiles"
               Condition='NOT REMOVE~="ALL"'/>
-      <Custom Action="RegisterNativeMessagingHost"
-              After="InstallFiles"
-              Condition='NOT REMOVE~="ALL"'/>
-      <Custom Action="UnregisterNativeMessagingHost"
-              Before="RemoveFiles"
-              Condition='REMOVE~="ALL"'/>
       <Custom Action="UninstallWatchdogKeepData"
               After="StopServices"
               Condition='REMOVE~="ALL" AND (NOT UPGRADINGPRODUCTCODE) AND DELETEUSERDATA&lt;&gt;"1"'/>

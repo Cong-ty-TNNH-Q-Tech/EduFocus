@@ -1,3 +1,4 @@
+using System.Net;
 using EduFocus.Cloud.Api.Push;
 
 namespace EduFocus.Cloud.Tests;
@@ -5,7 +6,7 @@ namespace EduFocus.Cloud.Tests;
 public sealed class PushEndpointValidatorTests
 {
     private const string Endpoint = "https://push.example.com/sub/device-1";
-    private const string P256dh = "BAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA";
+    private const string P256dh = "BAne4XPEmYu3KTOfxo4SXY2xZ3fRLQQ6QANsm9tBChPE2BifuZZqNZJIGf_kWIzIeGXB95zCJvAHNjR3-sOVZaw";
     private const string Auth = "AAAAAAAAAAAAAAAAAAAAAA";
     private static readonly string[] AllowedHosts = ["push.example.com"];
 
@@ -102,9 +103,58 @@ public sealed class PushEndpointValidatorTests
     [InlineData("push.example.com?x=1", false)]
     [InlineData("push.example.com#fragment", false)]
     [InlineData("push.example.com:notaport", false)]
+    [InlineData("user:pass@push.example.com", false)]
     public void Validates_allowed_host_entries(string value, bool expected)
     {
         Assert.Equal(expected, PushEndpointValidator.IsValidAllowedHost(value));
+    }
+
+    [Fact]
+    public void Rejects_off_curve_p256dh_and_vapid_public_key()
+    {
+        var offCurve = "BAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA";
+
+        Assert.False(TryValidate(Endpoint, offCurve, Auth));
+        Assert.False(PushEndpointValidator.IsValidVapidPublicKey(offCurve));
+        Assert.True(PushEndpointValidator.IsValidVapidPublicKey(P256dh));
+    }
+
+    [Fact]
+    public void Enforces_default_443_port_when_allowed_host_omits_port()
+    {
+        Assert.False(PushEndpointValidator.TryValidateRegistration(
+            "https://push.example.com:8443/sub/device-1",
+            P256dh,
+            Auth,
+            AllowedHosts,
+            enforceAllowedHosts: true,
+            out _,
+            out _,
+            out _));
+
+        Assert.True(PushEndpointValidator.TryValidateRegistration(
+            "https://push.example.com:8443/sub/device-1",
+            P256dh,
+            Auth,
+            ["push.example.com:8443"],
+            enforceAllowedHosts: true,
+            out _,
+            out _,
+            out _));
+    }
+
+    [Theory]
+    [InlineData("127.0.0.1", true)]
+    [InlineData("10.0.0.1", true)]
+    [InlineData("172.16.0.1", true)]
+    [InlineData("192.168.1.1", true)]
+    [InlineData("169.254.169.254", true)]
+    [InlineData("::1", true)]
+    [InlineData("fc00::1", true)]
+    [InlineData("8.8.8.8", false)]
+    public void Filters_disallowed_web_push_destination_ips(string ip, bool expectedDisallowed)
+    {
+        Assert.Equal(expectedDisallowed, WebPushSender.IsDisallowedIpAddress(IPAddress.Parse(ip)));
     }
 
     private static bool TryValidate(string endpoint, string p256dh, string auth) =>

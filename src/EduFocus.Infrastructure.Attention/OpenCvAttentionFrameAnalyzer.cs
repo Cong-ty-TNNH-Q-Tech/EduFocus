@@ -103,7 +103,8 @@ public sealed class OpenCvAttentionFrameAnalyzer : IAttentionFrameAnalyzer
         if (region.Width <= 0 || region.Height <= 0)
             return null;
 
-        using var roi = new Mat(gray, region).Clone();
+        using var sub = new Mat(gray, region);
+        using var roi = sub.Clone();
         roi.GetArray(out byte[] pixels);
         if (pixels.Length == 0)
             return null;

@@ -168,6 +168,7 @@ public sealed class PairingService(
         settings.ClearPushEndpoint();
         settings.PushVapidPublicKey = null;
         settings.PushAppVersion = null;
+        settings.PushWebSocketEnabled = false;
 
         // Retire the replaced device only now that the new link is active.
         // Uses the old token explicitly so the new link is never touched.

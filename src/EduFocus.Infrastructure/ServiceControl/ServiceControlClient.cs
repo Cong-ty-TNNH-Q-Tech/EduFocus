@@ -104,7 +104,8 @@ public sealed class ServiceControlClient : IProtectionUseCase, IServiceControlCl
             ".",
             _options.PipeName,
             PipeDirection.InOut,
-            PipeOptions.Asynchronous);
+            PipeOptions.Asynchronous,
+            System.Security.Principal.TokenImpersonationLevel.Anonymous);
 
         using (var connectTimeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken))
         {

@@ -1,6 +1,7 @@
 using System.Reflection;
 using EduFocus.Ports.DTOs;
 using EduFocus.Ports.Inbound;
+using EduFocus.Ports.Outbound.Services;
 using EduFocus.Ports.Protection;
 using EduFocus.Ports.Security;
 using EduFocus.Ports.ServiceControl;
@@ -28,18 +29,21 @@ public sealed class ServiceCommandHandler : IServiceControlHandler
     private readonly ServiceRequestAuthorizer _authorizer;
     private readonly ServiceRuntimeStatus _runtimeStatus;
     private readonly TimeProvider _timeProvider;
+    private readonly IAppLogger? _logger;
     private readonly string _version;
 
     public ServiceCommandHandler(
         IProtectionUseCase protection,
         ServiceRequestAuthorizer authorizer,
         ServiceRuntimeStatus runtimeStatus,
-        TimeProvider timeProvider)
+        TimeProvider timeProvider,
+        IAppLogger? logger = null)
     {
         _protection = protection ?? throw new ArgumentNullException(nameof(protection));
         _authorizer = authorizer ?? throw new ArgumentNullException(nameof(authorizer));
         _runtimeStatus = runtimeStatus ?? throw new ArgumentNullException(nameof(runtimeStatus));
         _timeProvider = timeProvider ?? throw new ArgumentNullException(nameof(timeProvider));
+        _logger = logger;
         _version = typeof(ServiceCommandHandler).Assembly
             .GetCustomAttribute<AssemblyInformationalVersionAttribute>()?
             .InformationalVersion
@@ -109,11 +113,15 @@ public sealed class ServiceCommandHandler : IServiceControlHandler
         {
             return ServiceControlResponse.Failure(ServiceControlErrorCode.Unauthorized, UnauthorizedMessage);
         }
-        catch (ProtectionEngineException)
+        catch (ProtectionEngineException ex)
         {
+            _logger?.Error(
+                LogCategories.Protection,
+                $"Service control command '{request.Command}' failed in protection engine.",
+                ex);
             return ServiceControlResponse.Failure(ServiceControlErrorCode.EngineError, EngineErrorMessage);
         }
-        catch (InvalidOperationException)
+        catch (OnboardingIncompleteException)
         {
             return ServiceControlResponse.Failure(
                 ServiceControlErrorCode.SettingsMissing,
@@ -123,8 +131,12 @@ public sealed class ServiceCommandHandler : IServiceControlHandler
         {
             throw;
         }
-        catch (Exception)
+        catch (Exception ex)
         {
+            _logger?.Error(
+                LogCategories.Protection,
+                $"Service control command '{request.Command}' failed unexpectedly.",
+                ex);
             return ServiceControlResponse.Failure(ServiceControlErrorCode.InternalError, InternalErrorMessage);
         }
     }

@@ -6,6 +6,7 @@ using EduFocus.Ports.Inbound;
 using EduFocus.Ports.Outbound.Persistence;
 using EduFocus.Ports.Outbound.Services;
 using EduFocus.Ports.Protection;
+using EduFocus.Ports.Security;
 
 namespace EduFocus.UseCases.Protection;
 
@@ -123,7 +124,7 @@ public sealed class ProtectionService : IProtectionUseCase
         var now = UtcNow();
 
         var settings = await _settings.GetAsync(cancellationToken)
-            ?? throw new InvalidOperationException(SettingsMissing);
+            ?? throw new OnboardingIncompleteException(SettingsMissing);
 
         var active = await _sessions.GetActiveAsync(cancellationToken);
 
@@ -177,9 +178,12 @@ public sealed class ProtectionService : IProtectionUseCase
         }
         catch
         {
-            await TryStopAttentionAsync();
-            await TryStopActivityAsync();
-            await TryStopHeartbeatAsync();
+            if (createdSession || !wasEnabled)
+            {
+                await TryStopAttentionAsync();
+                await TryStopActivityAsync();
+                await TryStopHeartbeatAsync();
+            }
 
             if (createdSession)
                 await TryAbortSessionAsync(active!);
@@ -248,7 +252,7 @@ public sealed class ProtectionService : IProtectionUseCase
         var now = UtcNow();
 
         var settings = await _settings.GetAsync(cancellationToken)
-            ?? throw new InvalidOperationException(SettingsMissing);
+            ?? throw new OnboardingIncompleteException(SettingsMissing);
 
         var active = await _sessions.GetActiveAsync(cancellationToken);
         var overrideToClear = clearScheduleOverride && settings.ScheduleOverrideUntilUtc is not null;
@@ -298,7 +302,33 @@ public sealed class ProtectionService : IProtectionUseCase
                     endedAt = active.LastHeartbeatAtUtc;
                 if (endedAt < active.UpdatedAtUtc)
                     endedAt = active.UpdatedAtUtc;
+            }
 
+            now = endedAt;
+            var settingsNow = now < settings.UpdatedAtUtc ? settings.UpdatedAtUtc : now;
+
+            if (wasEnabled)
+            {
+                if (overrideUntil is { } until && until > settingsNow)
+                {
+                    settings.DisableProtectionWithScheduleOverride(until, settingsNow);
+                    description = $"{description} Schedule override until {until:u}.";
+                }
+                else
+                {
+                    settings.DisableProtection(settingsNow);
+                }
+
+                await _settings.UpdateAsync(settings, cancellationToken);
+            }
+            else if (overrideToClear)
+            {
+                settings.ClearScheduleOverride(settingsNow);
+                await _settings.UpdateAsync(settings, cancellationToken);
+            }
+
+            if (active is not null)
+            {
                 active.Complete(endedAt);
 
                 try
@@ -319,29 +349,8 @@ public sealed class ProtectionService : IProtectionUseCase
                 await _sessions.UpdateAsync(active, cancellationToken);
             }
 
-            now = endedAt;
-            var settingsNow = now < settings.UpdatedAtUtc ? settings.UpdatedAtUtc : now;
-
             if (wasEnabled)
-            {
-                if (overrideUntil is { } until && until > settingsNow)
-                {
-                    settings.DisableProtectionWithScheduleOverride(until, settingsNow);
-                    description = $"{description} Schedule override until {until:u}.";
-                }
-                else
-                {
-                    settings.DisableProtection(settingsNow);
-                }
-
-                await _settings.UpdateAsync(settings, cancellationToken);
                 await WriteAuditAsync(actor, AuditEventType.ProtectionOff, description, settingsNow, cancellationToken);
-            }
-            else if (overrideToClear)
-            {
-                settings.ClearScheduleOverride(settingsNow);
-                await _settings.UpdateAsync(settings, cancellationToken);
-            }
         }
         catch
         {

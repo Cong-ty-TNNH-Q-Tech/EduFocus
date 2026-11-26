@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using EduFocus.Ports.Outbound.Services;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
@@ -176,8 +177,8 @@ public sealed class SqliteDatabaseInitializer
         var directory = Path.GetDirectoryName(Path.GetFullPath(_options.DatabasePath))
             ?? throw new InvalidOperationException("The database path has no parent directory.");
         var lockPath = Path.Combine(directory, InitializationLockFileName);
-        var deadline = DateTime.UtcNow.Add(InitializationLockTimeout);
-        IOException? lastError = null;
+        var startedAt = Stopwatch.GetTimestamp();
+        Exception? lastError = null;
 
         while (true)
         {
@@ -191,14 +192,15 @@ public sealed class SqliteDatabaseInitializer
                     FileAccess.ReadWrite,
                     FileShare.None,
                     bufferSize: 1,
-                    FileOptions.DeleteOnClose);
+                    FileOptions.None);
             }
-            catch (IOException ex) when (DateTime.UtcNow < deadline)
+            catch (Exception ex) when ((ex is IOException or UnauthorizedAccessException)
+                && Stopwatch.GetElapsedTime(startedAt) < InitializationLockTimeout)
             {
                 lastError = ex;
                 await Task.Delay(250, cancellationToken).ConfigureAwait(false);
             }
-            catch (IOException ex)
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
             {
                 _logger.Error(
                     LogCategories.Database,
@@ -296,7 +298,13 @@ public sealed class SqliteDatabaseInitializer
                 BuildConnectionString(databasePath, SqliteOpenMode.ReadWriteCreate)))
             {
                 source.Open();
-                ExecuteNonQuery(source, "PRAGMA wal_checkpoint(TRUNCATE);");
+                using (var checkpoint = source.CreateCommand())
+                {
+                    checkpoint.CommandText = "PRAGMA wal_checkpoint(TRUNCATE);";
+                    using var reader = checkpoint.ExecuteReader();
+                    if (reader.Read() && !reader.IsDBNull(0) && reader.GetInt32(0) != 0)
+                        throw new SqliteBackupException("The plaintext database WAL is busy and could not be checkpointed.");
+                }
                 SqliteCipher.ExportEncrypted(source, temporaryPath, key);
             }
 
@@ -304,7 +312,6 @@ public sealed class SqliteDatabaseInitializer
                 throw new SqliteBackupException("The encrypted copy failed the integrity check.");
 
             SqliteConnection.ClearAllPools();
-            DeleteSideFiles(databasePath);
             File.Move(temporaryPath, databasePath, overwrite: true);
             DeleteSideFiles(databasePath);
         }

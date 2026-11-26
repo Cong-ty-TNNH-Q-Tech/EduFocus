@@ -208,6 +208,35 @@ public sealed class CertificateAuthorityTests : IDisposable
         messages.Should().NotContain("PRIVATE KEY");
     }
 
+    [Fact]
+    public async Task Root_file_with_wrong_subject_is_rejected_and_regenerated()
+    {
+        if (!OperatingSystem.IsWindows())
+            return;
+
+        Directory.CreateDirectory(_directory);
+        using var attackerKey = ECDsa.Create(ECCurve.NamedCurves.nistP256);
+        var request = new CertificateRequest("CN=Evil Root, O=Attacker", attackerKey, HashAlgorithmName.SHA256);
+        request.CertificateExtensions.Add(new X509BasicConstraintsExtension(true, true, 0, true));
+        request.CertificateExtensions.Add(new X509KeyUsageExtension(X509KeyUsageFlags.KeyCertSign | X509KeyUsageFlags.CrlSign, true));
+        using var evilRoot = request.CreateSelfSigned(DateTimeOffset.UtcNow.AddDays(-1), DateTimeOffset.UtcNow.AddDays(30));
+
+        var pfx = evilRoot.Export(X509ContentType.Pfx);
+        var protectedBytes = ProtectedData.Protect(pfx, Encoding.UTF8.GetBytes("EduFocus.CertificateAuthority.v1"), DataProtectionScope.LocalMachine);
+        var magic = "EDUCA1"u8.ToArray();
+        var blob = new byte[magic.Length + protectedBytes.Length];
+        magic.CopyTo(blob, 0);
+        protectedBytes.CopyTo(blob, magic.Length);
+        File.WriteAllBytes(Path.Combine(_directory, CertificateAuthorityOptions.RootFileName), blob);
+
+        using var authority = CreateAuthority();
+        var result = await authority.EnsureTrustedAsync();
+
+        result.Ready.Should().BeTrue();
+        _trustStore.Certificates.Values.Should().ContainSingle(c => c.Subject.Contains("EduFocus Local Blocking CA"));
+        _trustStore.Certificates.ContainsKey(evilRoot.Thumbprint).Should().BeFalse();
+    }
+
     public void Dispose()
     {
         try

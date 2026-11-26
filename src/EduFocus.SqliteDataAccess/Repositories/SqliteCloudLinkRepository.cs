@@ -33,8 +33,13 @@ public sealed class SqliteCloudLinkRepository : ICloudLinkRepository
         ArgumentNullException.ThrowIfNull(link);
 
         await using var context = _contextFactory.CreateDbContext();
+        await using var transaction = await context.Database.BeginTransactionAsync(cancellationToken);
+        if (await context.CloudLinks.AnyAsync(cancellationToken))
+            throw new InvalidOperationException("Cloud link row already exists.");
+
         context.CloudLinks.Add(link);
         await context.SaveChangesAsync(cancellationToken);
+        await transaction.CommitAsync(cancellationToken);
     }
 
     public async Task UpdateAsync(CloudLink link, CancellationToken cancellationToken = default)

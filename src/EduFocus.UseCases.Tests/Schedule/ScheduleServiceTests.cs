@@ -1,7 +1,10 @@
 using EduFocus.Domain.Entities;
 using EduFocus.Domain.Enums;
 using EduFocus.Ports.DTOs;
+using EduFocus.Ports.Outbound.Cloud;
 using EduFocus.Ports.Security;
+using EduFocus.UseCases.Cloud;
+using EduFocus.UseCases.Schedule;
 using EduFocus.UseCases.Tests.TestSupport;
 using FluentAssertions;
 
@@ -367,6 +370,45 @@ public sealed class ScheduleServiceTests
 
         atEnd.Overview.ActiveWindow.Should().BeNull();
         atEnd.Overview.ProtectionEnabled.Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task Clock_jump_enqueues_security_alert_immediately_when_producer_is_configured()
+    {
+        var harness = CreateActiveSchedule(out _);
+        var links = new FakeCloudLinkRepository
+        {
+            Stored = CloudTestData.Linked(harness.Clock.GetUtcNow().UtcDateTime.AddDays(-1)),
+        };
+        var outbox = new FakeCloudOutboxRepository();
+        var sink = new RecordingCloudEventSink();
+        var producer = new CloudSecurityAlertProducer(
+            harness.Audits,
+            links,
+            outbox,
+            sink,
+            harness.Logger,
+            harness.Clock);
+        var service = new ScheduleService(
+            harness.ScheduleWindows,
+            harness.Settings,
+            harness.Protection,
+            harness.Session,
+            harness.Audits,
+            harness.Correlation,
+            harness.Logger,
+            harness.Clock,
+            harness.Monotonic,
+            producer);
+
+        await service.EvaluateAsync();
+        harness.Clock.Advance(TimeSpan.FromHours(2));
+        harness.Monotonic.Ticks += TimeSpan.FromSeconds(30);
+
+        var jump = await service.EvaluateAsync();
+
+        jump.ClockJumpDetected.Should().BeTrue();
+        sink.Enqueued.Should().ContainSingle(e => e.Type == CloudEventTypes.SecurityAlert);
     }
 
     private static readonly DateTime WindowEnd = new(2026, 10, 29, 9, 0, 0, DateTimeKind.Utc);

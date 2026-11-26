@@ -1,3 +1,5 @@
+using System.Security.Cryptography;
+using System.Text;
 using EduFocus.Cloud.Api.Auth;
 using EduFocus.Cloud.Api.Common;
 using EduFocus.Cloud.Api.Options;
@@ -196,7 +198,9 @@ public static class PairingEndpoints
                 return ApiResults.PairingUnavailable();
             }
 
-            if (session.CodeHash != codeHash)
+            if (!CryptographicOperations.FixedTimeEquals(
+                    Encoding.UTF8.GetBytes(session.CodeHash),
+                    Encoding.UTF8.GetBytes(codeHash)))
             {
                 await IncrementAttemptAsync(db, session.Id, cancellationToken);
                 return ApiResults.PairingUnavailable();
@@ -227,7 +231,7 @@ public static class PairingEndpoints
         var family = await db.Families
             .AsNoTracking()
             .FirstOrDefaultAsync(f => f.Id == session.FamilyId, cancellationToken);
-        if (desktop is null || family is null || family.DeletedAtUtc is not null)
+        if (desktop is null || desktop.RevokedAtUtc is not null || family is null || family.DeletedAtUtc is not null)
         {
             return ApiResults.PairingUnavailable();
         }

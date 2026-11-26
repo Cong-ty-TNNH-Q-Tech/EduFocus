@@ -64,10 +64,14 @@ public sealed class ServiceControlServer : IAsyncDisposable
             if (_cts is not null)
                 return;
 
+            var initialListener = OperatingSystem.IsWindows()
+                ? CreateListener(firstInstance: true)
+                : null;
+
             var cts = new CancellationTokenSource();
             _cts = cts;
             _running = true;
-            _acceptLoop = Task.Run(() => AcceptLoopAsync(cts.Token), CancellationToken.None);
+            _acceptLoop = Task.Run(() => AcceptLoopAsync(cts.Token, cts, initialListener), CancellationToken.None);
 
             _logger.Info(LogCategories.Protection, "Protection service control pipe started.");
         }
@@ -151,10 +155,14 @@ public sealed class ServiceControlServer : IAsyncDisposable
         _connectionSlots.Dispose();
     }
 
-    private async Task AcceptLoopAsync(CancellationToken cancellationToken)
+    private async Task AcceptLoopAsync(
+        CancellationToken cancellationToken,
+        CancellationTokenSource ownerCts,
+        NamedPipeServerStream? initialListener)
     {
-        NamedPipeServerStream? pending = null;
+        var pending = initialListener;
         var slotAcquired = false;
+        var failureStreak = 0;
 
         try
         {
@@ -165,19 +173,27 @@ public sealed class ServiceControlServer : IAsyncDisposable
 
                 try
                 {
-                    pending = CreateListener();
+                    pending ??= CreateListener(firstInstance: false);
                     await pending.WaitForConnectionAsync(cancellationToken).ConfigureAwait(false);
+                    failureStreak = 0;
                 }
-                catch (IOException ex) when (!cancellationToken.IsCancellationRequested)
+                catch (OperationCanceledException)
+                {
+                    throw;
+                }
+                catch (Exception ex) when (!cancellationToken.IsCancellationRequested)
                 {
                     pending?.Dispose();
                     pending = null;
                     _connectionSlots.Release();
                     slotAcquired = false;
+
+                    var delayMs = Math.Min(2000, 50 * (1 << Math.Min(failureStreak, 5)));
+                    failureStreak++;
                     _logger.Warning(
                         LogCategories.Protection,
-                        $"Transient pipe listener error ({ex.GetType().Name}); retrying.");
-                    await Task.Delay(TimeSpan.FromMilliseconds(50), cancellationToken).ConfigureAwait(false);
+                        $"Transient pipe listener error ({ex.GetType().Name}); retrying in {delayMs} ms.");
+                    await Task.Delay(TimeSpan.FromMilliseconds(delayMs), cancellationToken).ConfigureAwait(false);
                     continue;
                 }
 
@@ -203,11 +219,30 @@ public sealed class ServiceControlServer : IAsyncDisposable
         }
         catch (Exception ex)
         {
-            _running = false;
             _logger.Error(LogCategories.Protection, "Service control pipe listener failed.", ex);
         }
         finally
         {
+            _running = false;
+            if (!cancellationToken.IsCancellationRequested)
+            {
+                if (_stateGate.Wait(0))
+                {
+                    try
+                    {
+                        if (ReferenceEquals(_cts, ownerCts))
+                        {
+                            _cts = null;
+                            _acceptLoop = null;
+                        }
+                    }
+                    finally
+                    {
+                        _stateGate.Release();
+                    }
+                }
+            }
+
             if (slotAcquired)
             {
                 try
@@ -284,7 +319,7 @@ public sealed class ServiceControlServer : IAsyncDisposable
                         ServiceControlResponse.Failure(
                             ServiceControlErrorCode.InternalError,
                             "Yêu cầu điều khiển không hợp lệ."),
-                        serverToken).ConfigureAwait(false);
+                        requestTimeout.Token).ConfigureAwait(false);
                     return;
                 }
                 catch (JsonException)
@@ -295,7 +330,7 @@ public sealed class ServiceControlServer : IAsyncDisposable
                         ServiceControlResponse.Failure(
                             ServiceControlErrorCode.InternalError,
                             "Yêu cầu điều khiển không hợp lệ."),
-                        serverToken).ConfigureAwait(false);
+                        requestTimeout.Token).ConfigureAwait(false);
                     return;
                 }
 
@@ -306,7 +341,7 @@ public sealed class ServiceControlServer : IAsyncDisposable
                         ServiceControlResponse.Failure(
                             ServiceControlErrorCode.InternalError,
                             "Yêu cầu điều khiển không hợp lệ."),
-                        serverToken).ConfigureAwait(false);
+                        requestTimeout.Token).ConfigureAwait(false);
                     return;
                 }
 
@@ -356,15 +391,17 @@ public sealed class ServiceControlServer : IAsyncDisposable
     private async Task TryWriteAsync(
         NamedPipeServerStream pipe,
         ServiceControlResponse response,
-        CancellationToken cancellationToken)
+        CancellationToken serverToken)
     {
+        using var writeTimeout = CancellationTokenSource.CreateLinkedTokenSource(serverToken);
+        writeTimeout.CancelAfter(_options.RequestTimeout);
         try
         {
             var payload = JsonSerializer.SerializeToUtf8Bytes(response, ServiceControlFraming.JsonOptions);
             if (payload.Length > ServiceControlProtocol.MaxResponseBytes)
                 return;
 
-            await ServiceControlFraming.WriteAsync(pipe, payload, cancellationToken).ConfigureAwait(false);
+            await ServiceControlFraming.WriteAsync(pipe, payload, writeTimeout.Token).ConfigureAwait(false);
         }
         catch (OperationCanceledException)
         {
@@ -377,9 +414,11 @@ public sealed class ServiceControlServer : IAsyncDisposable
         }
     }
 
-    private NamedPipeServerStream CreateListener()
+    private NamedPipeServerStream CreateListener(bool firstInstance)
     {
         var pipeOptions = PipeOptions.Asynchronous | PipeOptions.WriteThrough;
+        if (firstInstance)
+            pipeOptions |= PipeOptions.FirstPipeInstance;
         var inputBuffer = ServiceControlProtocol.MaxRequestBytes;
         var outputBuffer = ServiceControlProtocol.MaxResponseBytes;
 

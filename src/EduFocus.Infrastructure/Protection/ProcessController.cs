@@ -4,7 +4,11 @@ using System.Runtime.Versioning;
 
 namespace EduFocus.Infrastructure.Protection;
 
-public sealed record ProcessSnapshot(int ProcessId, string ProcessName, bool HasMainWindow);
+public sealed record ProcessSnapshot(
+    int ProcessId,
+    string ProcessName,
+    bool HasMainWindow,
+    DateTime? StartTimeUtc = null);
 
 /// <summary>
 /// Thin seam over process enumeration and termination so the watcher can be
@@ -19,13 +23,28 @@ public interface IProcessController
         TimeSpan timeout,
         CancellationToken cancellationToken = default);
 
+    Task<bool> CloseMainWindowAsync(
+        int processId,
+        TimeSpan timeout,
+        DateTime? expectedStartTimeUtc,
+        string? expectedProcessName,
+        CancellationToken cancellationToken = default) =>
+        CloseMainWindowAsync(processId, timeout, cancellationToken);
+
     void KillProcessTree(int processId);
+
+    void KillProcessTree(
+        int processId,
+        DateTime? expectedStartTimeUtc,
+        string? expectedProcessName) =>
+        KillProcessTree(processId);
 }
 
 [SupportedOSPlatform("windows")]
 public sealed class WindowsProcessController : IProcessController
 {
     private static readonly bool IsServiceSession = DetectServiceSession();
+    private static readonly TimeSpan StartTimeTolerance = TimeSpan.FromSeconds(2);
 
     public IReadOnlyList<ProcessSnapshot> GetProcesses()
     {
@@ -44,13 +63,23 @@ public sealed class WindowsProcessController : IProcessController
                     if (string.IsNullOrWhiteSpace(name))
                         continue;
 
+                    DateTime? startTimeUtc = null;
+                    try
+                    {
+                        startTimeUtc = process.StartTime.ToUniversalTime();
+                    }
+                    catch (Exception ex) when (ex is InvalidOperationException or Win32Exception or NotSupportedException)
+                    {
+                    }
+
                     var hasMainWindow = process.MainWindowHandle != IntPtr.Zero ||
                         (IsServiceSession && IsInteractiveUserSession(process));
 
                     snapshots.Add(new ProcessSnapshot(
                         process.Id,
                         name,
-                        hasMainWindow));
+                        hasMainWindow,
+                        startTimeUtc));
                 }
                 catch (InvalidOperationException) { }
                 catch (Win32Exception) { }
@@ -85,11 +114,22 @@ public sealed class WindowsProcessController : IProcessController
         }
     }
 
+    public Task<bool> CloseMainWindowAsync(
+        int processId,
+        TimeSpan timeout,
+        CancellationToken cancellationToken = default) =>
+        CloseMainWindowAsync(processId, timeout, expectedStartTimeUtc: null, expectedProcessName: null, cancellationToken);
+
     public async Task<bool> CloseMainWindowAsync(
         int processId,
         TimeSpan timeout,
+        DateTime? expectedStartTimeUtc,
+        string? expectedProcessName,
         CancellationToken cancellationToken = default)
     {
+        if (IsServiceSession)
+            return false;
+
         Process process;
         try
         {
@@ -108,6 +148,9 @@ public sealed class WindowsProcessController : IProcessController
         {
             try
             {
+                if (!VerifyProcessIdentity(process, expectedStartTimeUtc, expectedProcessName))
+                    return true;
+
                 if (process.MainWindowHandle == IntPtr.Zero)
                     return false;
 
@@ -142,9 +185,65 @@ public sealed class WindowsProcessController : IProcessController
         }
     }
 
-    public void KillProcessTree(int processId)
+    public void KillProcessTree(int processId) =>
+        KillProcessTree(processId, expectedStartTimeUtc: null, expectedProcessName: null);
+
+    public void KillProcessTree(
+        int processId,
+        DateTime? expectedStartTimeUtc,
+        string? expectedProcessName)
     {
-        using var process = Process.GetProcessById(processId);
-        process.Kill(entireProcessTree: true);
+        Process process;
+        try
+        {
+            process = Process.GetProcessById(processId);
+        }
+        catch (ArgumentException)
+        {
+            return;
+        }
+        catch (InvalidOperationException)
+        {
+            return;
+        }
+
+        using (process)
+        {
+            if (!VerifyProcessIdentity(process, expectedStartTimeUtc, expectedProcessName))
+                return;
+
+            process.Kill(entireProcessTree: true);
+        }
+    }
+
+    private static bool VerifyProcessIdentity(
+        Process process,
+        DateTime? expectedStartTimeUtc,
+        string? expectedProcessName)
+    {
+        if (process.HasExited)
+            return false;
+
+        if (!string.IsNullOrWhiteSpace(expectedProcessName)
+            && !string.Equals(process.ProcessName, expectedProcessName, StringComparison.OrdinalIgnoreCase))
+        {
+            return false;
+        }
+
+        if (expectedStartTimeUtc.HasValue)
+        {
+            try
+            {
+                var actual = process.StartTime.ToUniversalTime();
+                if ((actual - expectedStartTimeUtc.Value.ToUniversalTime()).Duration() > StartTimeTolerance)
+                    return false;
+            }
+            catch (Exception ex) when (ex is InvalidOperationException or Win32Exception or NotSupportedException)
+            {
+                return false;
+            }
+        }
+
+        return true;
     }
 }

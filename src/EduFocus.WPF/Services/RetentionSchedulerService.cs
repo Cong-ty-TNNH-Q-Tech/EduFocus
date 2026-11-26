@@ -47,13 +47,19 @@ public sealed class RetentionSchedulerService : IDisposable
 
     private async void OnTimerTick(object? sender, EventArgs e)
     {
-        var now = DateTime.Now;
-        var today = DateOnly.FromDateTime(now);
+        try
+        {
+            var now = DateTime.Now;
+            var today = DateOnly.FromDateTime(now);
 
-        if (now.Hour < DailyHour || _lastRunLocalDate == today)
-            return;
+            if (now.Hour < DailyHour || _lastRunLocalDate == today)
+                return;
 
-        await RunAsync(force: false);
+            await RunAsync(force: false);
+        }
+        catch (Exception)
+        {
+        }
     }
 
     private async Task RunAsync(bool force)

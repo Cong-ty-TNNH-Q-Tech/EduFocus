@@ -79,7 +79,10 @@ public static class SyncPayloadValidator
             return SyncValidationResult.Invalid("invalid_event", "Mã sự kiện không hợp lệ.");
         }
 
-        if (dto.OccurredAtUtc.Year < 2000)
+        var minOccurredAt = dto.Type == SyncEventType.DailySummary
+            ? now.AddDays(-32)
+            : now.AddDays(-(AlertLocalDatePastDays + 1));
+        if (dto.OccurredAtUtc < minOccurredAt || dto.OccurredAtUtc > now + MaxFutureSkew)
         {
             return SyncValidationResult.Invalid("invalid_event", "Thời điểm sự kiện không hợp lệ.");
         }
@@ -140,7 +143,7 @@ public static class SyncPayloadValidator
             return SyncValidationResult.Invalid("invalid_payload", "Payload không đúng định dạng.");
         }
 
-        if (summary.GeneratedAtUtc.Year < 2000 || summary.GeneratedAtUtc > now + MaxFutureSkew)
+        if (summary.GeneratedAtUtc < now.AddDays(-32) || summary.GeneratedAtUtc > now + MaxFutureSkew)
         {
             return SyncValidationResult.Invalid("invalid_payload", "generatedAtUtc không hợp lệ.");
         }
@@ -204,7 +207,7 @@ public static class SyncPayloadValidator
             return SyncValidationResult.Invalid("invalid_payload", "localDate nằm ngoài khoảng hợp lệ.");
         }
 
-        if (alert.StartedAtUtc.Year < 2000)
+        if (alert.StartedAtUtc < now.AddDays(-(AlertLocalDatePastDays + 1)) || alert.StartedAtUtc > now + MaxFutureSkew)
         {
             return SyncValidationResult.Invalid("invalid_payload", "startedAtUtc không hợp lệ.");
         }

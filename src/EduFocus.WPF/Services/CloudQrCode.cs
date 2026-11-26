@@ -21,7 +21,8 @@ public static class CloudQrCode
         {
             using var generator = new QRCodeGenerator();
             using var data = generator.CreateQrCode(payload, QRCodeGenerator.ECCLevel.Q);
-            var png = new PngByteQRCode(data).GetGraphic(PixelsPerModule);
+            using var qrCode = new PngByteQRCode(data);
+            var png = qrCode.GetGraphic(PixelsPerModule);
 
             using var stream = new MemoryStream(png);
             var image = new BitmapImage();

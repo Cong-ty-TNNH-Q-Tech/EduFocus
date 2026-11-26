@@ -542,17 +542,19 @@ public sealed class CloudLinkService : ICloudLinkUseCase
 
     private static bool TryGetBaseUrl(CloudLink link, out Uri baseUrl)
     {
-        baseUrl = null!;
-
-        if (string.IsNullOrWhiteSpace(link.CloudBaseUrl)
-            || !Uri.TryCreate(link.CloudBaseUrl, UriKind.Absolute, out var uri)
-            || (uri.Scheme != Uri.UriSchemeHttps && uri.Scheme != Uri.UriSchemeHttp))
+        if (CloudUrlPolicy.TryNormalize(
+                link.CloudBaseUrl,
+                AllowInsecureDevelopmentEndpoints,
+                out var normalized,
+                out _)
+            && normalized is not null)
         {
-            return false;
+            baseUrl = normalized;
+            return true;
         }
 
-        baseUrl = uri;
-        return true;
+        baseUrl = null!;
+        return false;
     }
 
     private static CloudLinkedDevice ToDto(CloudRemoteDevice device) =>

@@ -12,6 +12,9 @@ public class DomainNameTests
     [InlineData("https://user:pass@www.example.com:8443/Path", "www.example.com")]
     [InlineData("sub.example.com:443", "sub.example.com")]
     [InlineData("münchen.de", "xn--mnchen-3ya.de")]
+    [InlineData("tiktok.com/@john.doe", "tiktok.com")]
+    [InlineData("tiktok.com/@creator", "tiktok.com")]
+    [InlineData("evil.com/?email=a@accounts.google.com", "evil.com")]
     public void Parse_NormalizesHost(string input, string expected)
     {
         DomainName.Parse(input).Value.Should().Be(expected);

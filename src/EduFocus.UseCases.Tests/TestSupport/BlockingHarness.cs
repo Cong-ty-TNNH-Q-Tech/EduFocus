@@ -15,12 +15,10 @@ internal sealed class BlockingHarness
         Session = new ParentSessionState(Clock);
         Catalog = catalog ?? BuiltInRuleCatalog.Default;
         Seed = CreateSeedService(Catalog);
-        Service = new BlockRuleService(Rules, Session, Audits, Correlation, Logger, Clock, BrowserBridge);
+        Service = new BlockRuleService(Rules, Session, Audits, Correlation, Logger, Clock);
     }
 
     public FakeBlockRuleRepository Rules { get; } = new();
-
-    public FakeBrowserExtensionBridge BrowserBridge { get; } = new();
 
     public RecordingAuditLogRepository Audits { get; } = new();
 

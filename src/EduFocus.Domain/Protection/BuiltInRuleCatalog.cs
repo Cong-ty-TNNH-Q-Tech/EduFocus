@@ -3,8 +3,7 @@ using EduFocus.Domain.Enums;
 namespace EduFocus.Domain.Protection;
 
 /// <summary>
-/// A default rule shipped with the application (BA §6.1, F04). URL path rules
-/// ship disabled because they need the browser extension.
+/// A default rule shipped with the application (BA §6.1, F04).
 /// </summary>
 public sealed record BuiltInRuleDefinition(
     RuleType RuleType,
@@ -59,15 +58,6 @@ public sealed class BuiltInRuleCatalog
         BuiltInRuleDefinition Allow(string value) =>
             new(RuleType.Domain, value, BlockRuleCategory.Study, BlockRuleEffect.Allow);
 
-        BuiltInRuleDefinition BlockPath(string value) =>
-            new(
-                RuleType.Url,
-                value,
-                BlockRuleCategory.Social,
-                BlockRuleEffect.Block,
-                RuleMatchType.Contains,
-                IsEnabledByDefault: false);
-
         return
         [
             Block("chatgpt.com", BlockRuleCategory.Chatbot),
@@ -91,13 +81,7 @@ public sealed class BuiltInRuleCatalog
             Allow("accounts.google.com"),
             Allow("login.microsoftonline.com"),
             Allow("login.live.com"),
-            Allow("zoom.us"),
-
-            BlockPath("https://www.youtube.com/shorts/"),
-            BlockPath("https://m.youtube.com/shorts/"),
-            BlockPath("https://www.facebook.com/reel/"),
-            BlockPath("https://www.instagram.com/reel/"),
-            BlockPath("https://www.instagram.com/reels/")
+            Allow("zoom.us")
         ];
     }
 }

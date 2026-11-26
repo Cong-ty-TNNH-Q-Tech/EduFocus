@@ -84,7 +84,7 @@ public sealed class WindowsWatchdogProcessController : IWatchdogProcessPort
 
     public bool TryKill(long processId, DateTime processStartedAtUtc)
     {
-        if (!IsProcessAlive(processId, processStartedAtUtc))
+        if (processId is <= 0 or > int.MaxValue)
             return false;
 
         Process process;
@@ -94,13 +94,20 @@ public sealed class WindowsWatchdogProcessController : IWatchdogProcessPort
         }
         catch (Exception ex) when (ex is ArgumentException or InvalidOperationException)
         {
-            return true;
+            return false;
         }
 
         using (process)
         {
             try
             {
+                if (process.HasExited)
+                    return false;
+
+                var started = process.StartTime.ToUniversalTime();
+                if ((started - processStartedAtUtc.ToUniversalTime()).Duration() > StartTimeTolerance)
+                    return false;
+
                 process.Kill(entireProcessTree: true);
                 return process.WaitForExit(KillWait);
             }

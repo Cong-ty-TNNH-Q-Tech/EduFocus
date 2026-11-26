@@ -240,6 +240,102 @@ public sealed class MaintenanceJobTests
         }
     }
 
+    [Fact]
+    public async Task Retention_removes_orphan_unclaimed_families_revoked_tokens_and_invalidated_push_registrations()
+    {
+        var connectionString = TestConnectionString();
+        if (connectionString is null)
+        {
+            return;
+        }
+
+        await ResetDatabaseAsync(connectionString);
+        var active = await SeedFamilyAsync(connectionString);
+        await SeedSummaryAsync(connectionString, active, Today);
+
+        var orphanFamilyId = Guid.NewGuid();
+        var orphanDesktopId = Guid.NewGuid();
+        var revokedTokenId = Guid.NewGuid();
+        var invalidatedPushId = Guid.NewGuid();
+
+        await using (var db = CreateContext(connectionString))
+        {
+            db.Families.Add(new Family
+            {
+                Id = orphanFamilyId,
+                CreatedAtUtc = Now.AddHours(-48),
+                TimeZoneId = TimeZone,
+            });
+            db.Devices.Add(new Device
+            {
+                Id = orphanDesktopId,
+                FamilyId = orphanFamilyId,
+                Kind = DeviceKind.Desktop,
+                DisplayName = "Orphan PC",
+                Platform = "windows",
+                CreatedAtUtc = Now.AddHours(-48),
+            });
+            db.PairingSessions.Add(new PairingSession
+            {
+                Id = Guid.NewGuid(),
+                FamilyId = orphanFamilyId,
+                DesktopDeviceId = orphanDesktopId,
+                CodeHash = Guid.NewGuid().ToString("N") + Guid.NewGuid().ToString("N")[..32],
+                CreatedAtUtc = Now.AddHours(-48),
+                ExpiresAtUtc = Now.AddHours(-25),
+            });
+
+            var mobileId = Guid.NewGuid();
+            db.Devices.Add(new Device
+            {
+                Id = mobileId,
+                FamilyId = active.FamilyId,
+                Kind = DeviceKind.Mobile,
+                DisplayName = "Parent Phone",
+                Platform = "android",
+                CreatedAtUtc = Now.AddDays(-40),
+            });
+            db.DeviceTokens.Add(new DeviceToken
+            {
+                Id = revokedTokenId,
+                DeviceId = active.DesktopDeviceId,
+                TokenHash = Guid.NewGuid().ToString("N") + Guid.NewGuid().ToString("N")[..32],
+                Scopes = "sync",
+                CreatedAtUtc = Now.AddDays(-40),
+                RevokedAtUtc = Now.AddDays(-31),
+            });
+            db.PushRegistrations.Add(new PushRegistration
+            {
+                Id = invalidatedPushId,
+                DeviceId = mobileId,
+                Endpoint = "https://push.example.com/sub/old",
+                P256dh = "BAne4XPEmYu3KTOfxo4SXY2xZ3fRLQQ6QANsm9tBChPE2BifuZZqNZJIGf_kWIzIeGXB95zCJvAHNjR3-sOVZaw",
+                Auth = "AAAAAAAAAAAAAAAAAAAAAA",
+                Platform = "android",
+                UpdatedAtUtc = Now.AddDays(-40),
+                InvalidatedAtUtc = Now.AddDays(-31),
+            });
+
+            await db.SaveChangesAsync();
+        }
+
+        await using (var db = CreateContext(connectionString))
+        {
+            var result = await CreateService(db).RunAsync(CancellationToken.None);
+            Assert.Equal(1, result.Deleted.OrphanFamilies);
+            Assert.Equal(1, result.Deleted.RevokedTokens);
+            Assert.Equal(1, result.Deleted.InvalidatedPushRegistrations);
+        }
+
+        await using (var db = CreateContext(connectionString))
+        {
+            Assert.False(await db.Families.AnyAsync(f => f.Id == orphanFamilyId));
+            Assert.True(await db.Families.AnyAsync(f => f.Id == active.FamilyId));
+            Assert.False(await db.DeviceTokens.AnyAsync(t => t.Id == revokedTokenId));
+            Assert.False(await db.PushRegistrations.AnyAsync(p => p.Id == invalidatedPushId));
+        }
+    }
+
     private static CloudMaintenanceService CreateService(CloudDbContext db, DateTimeOffset? now = null) =>
         new(
             db,

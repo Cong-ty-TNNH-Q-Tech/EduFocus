@@ -11,6 +11,12 @@ namespace EduFocus.Infrastructure.Export;
 public sealed class LocalCsvExportStore : ICsvExportStore
 {
     private static readonly UTF8Encoding Utf8WithBom = new(encoderShouldEmitUTF8Identifier: true);
+    private static readonly HashSet<string> ReservedDeviceNames = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "CON", "PRN", "AUX", "NUL",
+        "COM1", "COM2", "COM3", "COM4", "COM5", "COM6", "COM7", "COM8", "COM9",
+        "LPT1", "LPT2", "LPT3", "LPT4", "LPT5", "LPT6", "LPT7", "LPT8", "LPT9"
+    };
 
     private readonly CsvExportOptions _options;
 
@@ -28,7 +34,10 @@ public sealed class LocalCsvExportStore : ICsvExportStore
         ArgumentNullException.ThrowIfNull(content);
 
         if (!string.Equals(fileName, Path.GetFileName(fileName), StringComparison.Ordinal)
-            || fileName.IndexOfAny(Path.GetInvalidFileNameChars()) >= 0)
+            || fileName.IndexOfAny(Path.GetInvalidFileNameChars()) >= 0
+            || fileName is "." or ".."
+            || fileName[^1] is '.' or ' '
+            || ReservedDeviceNames.Contains(Path.GetFileNameWithoutExtension(fileName)))
         {
             throw new ArgumentException("The export name must be a plain file name.", nameof(fileName));
         }
@@ -39,29 +48,55 @@ public sealed class LocalCsvExportStore : ICsvExportStore
 
         Directory.CreateDirectory(directory);
 
-        var path = Path.Combine(directory, fileName);
-        var suffix = 2;
-
-        while (File.Exists(path))
-        {
-            if (suffix > 1_000)
-                throw new IOException("Could not create a unique CSV export file.");
-
-            path = Path.Combine(directory, AddSuffix(fileName, suffix++));
-        }
-
+        string? claimedPath = null;
+        FileStream? stream = null;
         try
         {
-            await File.WriteAllTextAsync(path, content, Utf8WithBom, cancellationToken)
-                .ConfigureAwait(false);
+            var suffix = 2;
+            var candidate = Path.Combine(directory, fileName);
+
+            while (true)
+            {
+                try
+                {
+                    stream = new FileStream(
+                        candidate,
+                        FileMode.CreateNew,
+                        FileAccess.Write,
+                        FileShare.None,
+                        bufferSize: 4096,
+                        useAsync: true);
+                    claimedPath = candidate;
+                    break;
+                }
+                catch (IOException) when (File.Exists(candidate))
+                {
+                    if (suffix > 1_000)
+                        throw new IOException("Could not create a unique CSV export file.");
+
+                    candidate = Path.Combine(directory, AddSuffix(fileName, suffix++));
+                }
+            }
+
+            await using (stream)
+            await using (var writer = new StreamWriter(stream, Utf8WithBom, bufferSize: 4096, leaveOpen: true))
+            {
+                await writer.WriteAsync(content.AsMemory(), cancellationToken).ConfigureAwait(false);
+                await writer.FlushAsync(cancellationToken).ConfigureAwait(false);
+            }
+
+            return claimedPath;
         }
         catch
         {
-            TryDelete(path);
+            if (stream is not null)
+                await stream.DisposeAsync().ConfigureAwait(false);
+
+            if (claimedPath is not null)
+                TryDelete(claimedPath);
+
             throw;
         }
-
-        return path;
     }
 
     private static string AddSuffix(string fileName, int suffix)

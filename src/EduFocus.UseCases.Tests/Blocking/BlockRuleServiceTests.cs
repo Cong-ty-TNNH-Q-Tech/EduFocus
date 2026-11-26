@@ -87,37 +87,6 @@ public sealed class BlockRuleServiceTests
     }
 
     [Fact]
-    public async Task Toggle_refreshes_browser_rules_when_bridge_is_running()
-    {
-        var harness = new BlockingHarness();
-        await harness.Seed.EnsureSeededAsync();
-        harness.Authenticate();
-        var chatgpt = harness.Rules.Rules.Single(rule => rule.NormalizedValue == "chatgpt.com");
-
-        await harness.Service.SetEnabledAsync(chatgpt.Id.Value, false);
-
-        harness.BrowserBridge.UpdateCalls.Should().Be(1);
-        harness.BrowserBridge.LastRules.Should().Contain(rule => rule.Id == chatgpt.Id);
-        harness.BrowserBridge.LastRules.Single(rule => rule.Id == chatgpt.Id)
-            .IsEnabled.Should().BeFalse();
-        harness.BrowserBridge.LastNowUtc.Should().Be(BlockingHarness.Start.UtcDateTime);
-    }
-
-    [Fact]
-    public async Task Toggle_skips_browser_refresh_when_bridge_is_not_running()
-    {
-        var harness = new BlockingHarness();
-        await harness.Seed.EnsureSeededAsync();
-        harness.Authenticate();
-        harness.BrowserBridge.IsRunning = false;
-        var chatgpt = harness.Rules.Rules.Single(rule => rule.NormalizedValue == "chatgpt.com");
-
-        await harness.Service.SetEnabledAsync(chatgpt.Id.Value, false);
-
-        harness.BrowserBridge.UpdateCalls.Should().Be(0);
-    }
-
-    [Fact]
     public async Task Toggle_unknown_rule_throws()
     {
         var harness = new BlockingHarness();
@@ -129,7 +98,7 @@ public sealed class BlockRuleServiceTests
     }
 
     [Fact]
-    public async Task AddCustom_creates_rule_audits_and_refreshes_browser_bridge()
+    public async Task AddCustom_creates_rule_and_audits_it()
     {
         var harness = new BlockingHarness();
         harness.Authenticate();
@@ -145,7 +114,7 @@ public sealed class BlockRuleServiceTests
         result.Rule.Value.Should().Be("example-game.com");
         result.Rule.IsBuiltIn.Should().BeFalse();
         result.Rule.IsEnabled.Should().BeTrue();
-        harness.BrowserBridge.UpdateCalls.Should().Be(1);
+        harness.Audits.Entries.Should().ContainSingle();
     }
 
     [Fact]

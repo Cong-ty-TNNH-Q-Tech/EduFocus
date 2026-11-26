@@ -114,24 +114,16 @@ public sealed partial class BlocklistViewModel : ObservableObject
         var rawValue = NewRuleValue?.Trim() ?? string.Empty;
         if (rawValue.Length == 0)
         {
-            SetStatus("Vui lòng nhập tên miền, tên ứng dụng hoặc URL.", true);
+            SetStatus("Vui lòng nhập tên miền hoặc tên ứng dụng.", true);
             return;
         }
 
-        var ruleType = NewRuleTypeIndex switch
-        {
-            1 => RuleType.App,
-            2 => RuleType.Url,
-            _ => RuleType.Domain
-        };
+        var ruleType = NewRuleTypeIndex == 1 ? RuleType.App : RuleType.Domain;
 
         var effect = NewRuleEffectIndex == 1 ? BlockRuleEffect.Allow : BlockRuleEffect.Block;
-        var matchType = ruleType switch
-        {
-            RuleType.Domain => RuleMatchType.Suffix,
-            RuleType.Url => RuleMatchType.Contains,
-            _ => RuleMatchType.Exact
-        };
+        var matchType = ruleType == RuleType.Domain
+            ? RuleMatchType.Suffix
+            : RuleMatchType.Exact;
 
         IsBusy = true;
         try
@@ -156,7 +148,7 @@ public sealed partial class BlocklistViewModel : ObservableObject
         {
             SetStatus(ex.Message.Contains("Essential study", StringComparison.OrdinalIgnoreCase)
                 ? "Không thể chặn tên miền học tập và đăng nhập thiết yếu."
-                : "Giá trị rule không hợp lệ. Vui lòng kiểm tra lại định dạng tên miền, ứng dụng hoặc URL.",
+                : "Giá trị rule không hợp lệ. Vui lòng kiểm tra lại định dạng tên miền hoặc ứng dụng.",
                 true);
         }
         catch (InvalidOperationException ex)
@@ -264,10 +256,13 @@ public sealed class BlockRuleRow
         var state = info.IsEnabled ? "Đang bật" : "Đang tắt";
         DetailText = $"{effect} · {SourceText} · {state}";
 
-        if (info.EnforcementStatus == EnforcementStatus.NotEnforced)
+        if (info.EnforcementStatus == EnforcementStatus.NotEnforced
+            || info.RuleType == RuleType.Url
+            || (info.RuleType == RuleType.Domain && info.MatchType == RuleMatchType.Contains)
+            || (info.RuleType == RuleType.App && info.MatchType != RuleMatchType.Exact))
+        {
             DetailText += " · Chưa được hỗ trợ";
-        else if (info.RuleType == RuleType.Url || info.MatchType != RuleMatchType.Exact)
-            DetailText += " · Cần extension trình duyệt";
+        }
     }
 
     public Guid Id { get; }

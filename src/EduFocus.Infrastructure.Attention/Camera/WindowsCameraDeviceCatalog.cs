@@ -11,7 +11,7 @@ namespace EduFocus.Infrastructure.Attention.Camera;
 public sealed class WindowsCameraDeviceCatalog : ICameraDeviceCatalog
 {
     private const string Query =
-        "SELECT PNPDeviceID, Name FROM Win32_PnPEntity WHERE PNPClass = 'Camera' OR PNPClass = 'Image'";
+        "SELECT PNPDeviceID, Name FROM Win32_PnPEntity WHERE Status = 'OK' AND PNPClass = 'Camera'";
 
     public IReadOnlyList<CameraDeviceInfo> ListDevices()
     {

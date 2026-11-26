@@ -335,4 +335,28 @@ public sealed class SqliteStudySessionRepository : IStudySessionRepository
 
         return affected > 0;
     }
+
+    public async Task<bool> SetMonitoringEnabledAsync(
+        StudySessionId sessionId,
+        bool monitoringEnabled,
+        DateTime nowUtc,
+        CancellationToken cancellationToken = default)
+    {
+        if (nowUtc.Kind != DateTimeKind.Utc)
+            throw new ArgumentException("The timestamp must be UTC.", nameof(nowUtc));
+
+        await using var context = _contextFactory.CreateDbContext();
+
+        var affected = await context.StudySessions
+            .Where(x => x.Id == sessionId && x.Status == StudySessionStatus.Active)
+            .ExecuteUpdateAsync(
+                setters => setters
+                    .SetProperty(x => x.MonitoringEnabled, monitoringEnabled)
+                    .SetProperty(
+                        x => x.UpdatedAtUtc,
+                        x => x.UpdatedAtUtc < nowUtc ? nowUtc : x.UpdatedAtUtc),
+                cancellationToken);
+
+        return affected > 0;
+    }
 }

@@ -1,8 +1,10 @@
+using System.Security.Cryptography;
+
 namespace EduFocus.Cloud.Api.Push;
 
 /// <summary>
 /// Validates UnifiedPush subscriptions before they are stored or used. Web Push
-/// endpoints must be HTTPS and, when push is enabled, match the configured
+/// endpoints must be HTTPS and, when configured or enabled, match the
 /// host allowlist to prevent the API from becoming an SSRF proxy.
 /// </summary>
 public static class PushEndpointValidator
@@ -52,10 +54,10 @@ public static class PushEndpointValidator
         TryParseAllowedHost(value, out _, out _);
 
     public static bool IsValidVapidPublicKey(string? value) =>
-        TryDecodeBase64Url(value, 65, firstByte: 0x04);
+        TryDecodeBase64Url(value, 65, firstByte: 0x04, out var bytes) && IsValidP256Point(bytes);
 
     public static bool IsValidVapidPrivateKey(string? value) =>
-        TryDecodeBase64Url(value, 32, firstByte: null);
+        TryDecodeBase64Url(value, 32, firstByte: null, out _);
 
     private static bool IsEndpointAllowed(Uri uri, IReadOnlyList<string> allowedHosts)
     {
@@ -93,6 +95,7 @@ public static class PushEndpointValidator
         }
 
         if (!Uri.TryCreate("https://" + trimmed, UriKind.Absolute, out var uri)
+            || !string.IsNullOrEmpty(uri.UserInfo)
             || uri.AbsolutePath != "/"
             || uri.Query.Length > 0
             || uri.Fragment.Length > 0
@@ -102,18 +105,51 @@ public static class PushEndpointValidator
         }
 
         host = uri.Host;
-        port = uri.IsDefaultPort ? null : uri.Port;
+        port = uri.Port;
         return true;
     }
 
     private static bool IsValidP256dh(string value) =>
-        TryDecodeBase64Url(value, 65, firstByte: 0x04);
+        TryDecodeBase64Url(value, 65, firstByte: 0x04, out var bytes) && IsValidP256Point(bytes);
 
     private static bool IsValidAuth(string value) =>
-        TryDecodeBase64Url(value, 16, firstByte: null);
+        TryDecodeBase64Url(value, 16, firstByte: null, out _);
 
-    private static bool TryDecodeBase64Url(string? value, int expectedLength, byte? firstByte)
+    private static bool IsValidP256Point(ReadOnlySpan<byte> uncompressedPoint)
     {
+        if (uncompressedPoint.Length != 65 || uncompressedPoint[0] != 0x04)
+        {
+            return false;
+        }
+
+        try
+        {
+            var parameters = new ECParameters
+            {
+                Curve = ECCurve.NamedCurves.nistP256,
+                Q = new ECPoint
+                {
+                    X = uncompressedPoint[1..33].ToArray(),
+                    Y = uncompressedPoint[33..65].ToArray(),
+                },
+            };
+            using var ecdsa = ECDsa.Create(parameters);
+            return true;
+        }
+        catch (Exception exception) when (
+            exception is CryptographicException or PlatformNotSupportedException or ArgumentException)
+        {
+            return false;
+        }
+    }
+
+    private static bool TryDecodeBase64Url(
+        string? value,
+        int expectedLength,
+        byte? firstByte,
+        out byte[] decoded)
+    {
+        decoded = [];
         if (string.IsNullOrEmpty(value)
             || value.Length > 512
             || value.Any(ch => !char.IsAsciiLetterOrDigit(ch) && ch is not '-' and not '_'))
@@ -132,8 +168,14 @@ public static class PushEndpointValidator
         try
         {
             var bytes = Convert.FromBase64String(padded);
-            return bytes.Length == expectedLength
-                && (firstByte is null || bytes[0] == firstByte.Value);
+            if (bytes.Length != expectedLength
+                || (firstByte is not null && bytes[0] != firstByte.Value))
+            {
+                return false;
+            }
+
+            decoded = bytes;
+            return true;
         }
         catch (FormatException)
         {

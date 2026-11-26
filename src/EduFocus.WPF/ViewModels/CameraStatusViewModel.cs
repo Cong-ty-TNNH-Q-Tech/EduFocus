@@ -32,6 +32,7 @@ public sealed partial class CameraStatusViewModel : ObservableObject, IDisposabl
     private readonly IAuditLogRepository? _auditLogs;
     private readonly ICorrelationContext? _correlation;
     private int _previewGeneration;
+    private CancellationTokenSource? _checkCts;
 
     [ObservableProperty] private CameraSessionState _state = CameraSessionState.Off;
     [ObservableProperty] private string _statusText = "Camera đang tắt.";
@@ -111,7 +112,20 @@ public sealed partial class CameraStatusViewModel : ObservableObject, IDisposabl
         };
     }
 
-    public void Dispose() => _camera.StateChanged -= OnCameraStateChanged;
+    public void Dispose()
+    {
+        _camera.StateChanged -= OnCameraStateChanged;
+        _checkCts?.Cancel();
+        _checkCts?.Dispose();
+        _checkCts = null;
+    }
+
+    public void CancelCheck()
+    {
+        _previewGeneration++;
+        PreviewImage = null;
+        _checkCts?.Cancel();
+    }
 
     [RelayCommand]
     private async Task RunCheckAsync()
@@ -123,12 +137,16 @@ public sealed partial class CameraStatusViewModel : ObservableObject, IDisposabl
         SetFeedback("Đang kiểm tra camera trong vài giây...", false);
 
         var generation = ++_previewGeneration;
+        _checkCts?.Cancel();
+        _checkCts?.Dispose();
+        var cts = new CancellationTokenSource();
+        _checkCts = cts;
 
         try
         {
             var preview = new Progress<CameraPreviewFrame>(
                 frame => ShowPreviewFrame(frame, generation));
-            var result = await _checkFactory().RunAsync(preview: preview);
+            var result = await _checkFactory().RunAsync(preview: preview, cancellationToken: cts.Token);
             var guidance = CameraGuidance.Describe(
                 result,
                 _platform.SupportsMultiAppCamera,
@@ -140,6 +158,9 @@ public sealed partial class CameraStatusViewModel : ObservableObject, IDisposabl
                     : $"{CameraGuidance.Summary(result)} {guidance}",
                 !result.IsReady);
         }
+        catch (OperationCanceledException)
+        {
+        }
         catch (Exception ex)
         {
             _logger.Error(LogCategories.Attention, "The camera check failed unexpectedly.", ex);
@@ -147,6 +168,9 @@ public sealed partial class CameraStatusViewModel : ObservableObject, IDisposabl
         }
         finally
         {
+            if (ReferenceEquals(_checkCts, cts))
+                _checkCts = null;
+            cts.Dispose();
             _previewGeneration++;
             PreviewImage = null;
             IsBusy = false;

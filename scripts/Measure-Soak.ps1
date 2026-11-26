@@ -1,4 +1,4 @@
-#requires -Version 5.1
+﻿#requires -Version 5.1
 <#
 .SYNOPSIS
 Samples a running EduFocus process for a soak run and reports CPU, RAM,
@@ -146,6 +146,7 @@ $deadline = $startedAt.AddHours($DurationHours)
 $records = New-Object System.Collections.Generic.List[object]
 $restartCount = 0
 $missingSamples = 0
+$lastSampleMissing = $false
 $previousCpu = $process.TotalProcessorTime
 $previousAt = Get-Date
 $lastPid = $process.Id
@@ -168,18 +169,20 @@ while ((Get-Date) -lt $deadline) {
 
     if (-not $process) {
         $missingSamples++
+        $lastSampleMissing = $true
         if ((-not $AllowRestarts) -and $missingSamples -ge 3) {
             throw "Process disappeared during the soak run."
         }
         continue
     }
 
+    $lastSampleMissing = $false
     $elapsedSeconds = [math]::Max(($now - $previousAt).TotalSeconds, 0.001)
-    if ($sampleIndex -gt 0 -and $process.Id -ne $lastPid) {
+    if ($process.Id -ne $lastPid) {
         $restartCount++
-        $cpuDelta = $process.TotalProcessorTime.TotalSeconds
+        $cpuDelta = [math]::Max($process.TotalProcessorTime.TotalSeconds, 0.0)
     } else {
-        $cpuDelta = ($process.TotalProcessorTime - $previousCpu).TotalSeconds
+        $cpuDelta = [math]::Max(($process.TotalProcessorTime - $previousCpu).TotalSeconds, 0.0)
     }
 
     $lastPid = $process.Id
@@ -232,6 +235,13 @@ $p95WorkingSet = Get-Percentile $workingSets 0.95
 $peakWorkingSet = ($workingSets | Measure-Object -Maximum).Maximum
 
 $failures = New-Object System.Collections.Generic.List[string]
+if ($lastSampleMissing) {
+    $failures.Add("The process was not running at the end of the soak.")
+}
+$maxAllowedMissing = [math]::Max(3, [math]::Floor(($records.Count + $missingSamples) * 0.1))
+if ($missingSamples -gt $maxAllowedMissing) {
+    $failures.Add("The process was missing for $missingSamples sample(s), above the $maxAllowedMissing threshold.")
+}
 if (-not $AllowRestarts -and $restartCount -gt 0) {
     $failures.Add("The process restarted $restartCount time(s) during the soak.")
 }

@@ -82,19 +82,32 @@ public sealed class PushStreamConnection
 
     public async Task CloseAsync()
     {
+        var acquired = false;
         try
         {
             if (Socket.State is WebSocketState.Open or WebSocketState.CloseReceived)
             {
                 using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(2));
-                await Socket.CloseOutputAsync(
-                    WebSocketCloseStatus.NormalClosure,
-                    "closed",
-                    timeout.Token);
+                await _sendLock.WaitAsync(timeout.Token);
+                acquired = true;
+                if (Socket.State is WebSocketState.Open or WebSocketState.CloseReceived)
+                {
+                    await Socket.CloseOutputAsync(
+                        WebSocketCloseStatus.NormalClosure,
+                        "closed",
+                        timeout.Token);
+                }
             }
         }
         catch
         {
+        }
+        finally
+        {
+            if (acquired)
+            {
+                _sendLock.Release();
+            }
         }
     }
 }
@@ -117,7 +130,7 @@ public sealed class PushStreamRegistry(ILogger<PushStreamRegistry> logger)
                     continue;
                 }
 
-                _ = existing.CloseAsync();
+                existing.Abort();
                 return connection;
             }
 
@@ -172,22 +185,23 @@ public sealed class PushStreamRegistry(ILogger<PushStreamRegistry> logger)
         }
 
         var payload = JsonSerializer.SerializeToUtf8Bytes(data);
-        var results = new List<PushStreamSendResult>(connections.Count);
-        foreach (var connection in connections)
-        {
-            var success = await connection.TrySendAsync(payload, cancellationToken);
-            if (!success)
+        var tasks = connections
+            .Select(async connection =>
             {
-                Unregister(connection);
-                connection.Abort();
-                logger.LogInformation(
-                    "Push stream connection for device {DeviceId} was removed.",
-                    connection.DeviceId);
-            }
+                var success = await connection.TrySendAsync(payload, cancellationToken);
+                if (!success)
+                {
+                    Unregister(connection);
+                    connection.Abort();
+                    logger.LogInformation(
+                        "Push stream connection for device {DeviceId} was removed.",
+                        connection.DeviceId);
+                }
 
-            results.Add(new PushStreamSendResult(connection.DeviceId, success));
-        }
+                return new PushStreamSendResult(connection.DeviceId, success);
+            })
+            .ToArray();
 
-        return results;
+        return await Task.WhenAll(tasks);
     }
 }

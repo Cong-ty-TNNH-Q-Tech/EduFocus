@@ -93,8 +93,11 @@ public sealed class PrivacySettingsService : IPrivacySettingsUseCase
                 if (active is not null && active.MonitoringEnabled != current.MonitoringEnabled)
                 {
                     var sessionNow = now < active.UpdatedAtUtc ? active.UpdatedAtUtc : now;
-                    active.SetMonitoringEnabled(current.MonitoringEnabled, sessionNow);
-                    await _sessions.UpdateAsync(active, cancellationToken).ConfigureAwait(false);
+                    await _sessions.SetMonitoringEnabledAsync(
+                        active.Id,
+                        current.MonitoringEnabled,
+                        sessionNow,
+                        cancellationToken).ConfigureAwait(false);
                 }
             }
 

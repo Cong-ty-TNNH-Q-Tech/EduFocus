@@ -14,22 +14,43 @@ public sealed class WindowsRootCertificateTrustStore : ICertificateTrustStore
     public IReadOnlyList<string> FindThumbprintsBySubject(string subjectDistinguishedName)
     {
         using var store = OpenStore(OpenFlags.ReadOnly);
+        var certificates = store.Certificates;
+        X509Certificate2Collection? matches = null;
+        try
+        {
+            matches = certificates.Find(
+                X509FindType.FindBySubjectDistinguishedName,
+                subjectDistinguishedName,
+                validOnly: false);
 
-        return store.Certificates
-            .Find(X509FindType.FindBySubjectDistinguishedName, subjectDistinguishedName, validOnly: false)
-            .Select(certificate => certificate.Thumbprint)
-            .Where(thumbprint => !string.IsNullOrEmpty(thumbprint))
-            .Distinct(StringComparer.OrdinalIgnoreCase)
-            .ToArray();
+            return matches
+                .Select(certificate => certificate.Thumbprint)
+                .Where(thumbprint => !string.IsNullOrEmpty(thumbprint))
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToArray();
+        }
+        finally
+        {
+            DisposeCollection(matches);
+            DisposeCollection(certificates);
+        }
     }
 
     public bool Contains(string thumbprint)
     {
         using var store = OpenStore(OpenFlags.ReadOnly);
-
-        return store.Certificates
-            .Find(X509FindType.FindByThumbprint, thumbprint, validOnly: false)
-            .Count > 0;
+        var certificates = store.Certificates;
+        X509Certificate2Collection? matches = null;
+        try
+        {
+            matches = certificates.Find(X509FindType.FindByThumbprint, thumbprint, validOnly: false);
+            return matches.Count > 0;
+        }
+        finally
+        {
+            DisposeCollection(matches);
+            DisposeCollection(certificates);
+        }
     }
 
     public void Add(X509Certificate2 certificate)
@@ -50,9 +71,28 @@ public sealed class WindowsRootCertificateTrustStore : ICertificateTrustStore
             return;
 
         using var store = OpenStore(OpenFlags.ReadWrite);
-        var matches = store.Certificates.Find(X509FindType.FindByThumbprint, thumbprint, validOnly: false);
-        foreach (var certificate in matches)
-            store.Remove(certificate);
+        var certificates = store.Certificates;
+        X509Certificate2Collection? matches = null;
+        try
+        {
+            matches = certificates.Find(X509FindType.FindByThumbprint, thumbprint, validOnly: false);
+            foreach (var certificate in matches)
+                store.Remove(certificate);
+        }
+        finally
+        {
+            DisposeCollection(matches);
+            DisposeCollection(certificates);
+        }
+    }
+
+    private static void DisposeCollection(X509Certificate2Collection? collection)
+    {
+        if (collection is null)
+            return;
+
+        foreach (var certificate in collection)
+            certificate.Dispose();
     }
 
     private static X509Store OpenStore(OpenFlags flags)

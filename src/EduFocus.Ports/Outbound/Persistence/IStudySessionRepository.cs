@@ -94,4 +94,14 @@ public interface IStudySessionRepository
         double? confidence,
         DateTime nowUtc,
         CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Updates <see cref="StudySession.MonitoringEnabled"/> on an Active session
+    /// with a targeted write so concurrent heartbeats and counters are preserved.
+    /// </summary>
+    Task<bool> SetMonitoringEnabledAsync(
+        StudySessionId sessionId,
+        bool monitoringEnabled,
+        DateTime nowUtc,
+        CancellationToken cancellationToken = default);
 }

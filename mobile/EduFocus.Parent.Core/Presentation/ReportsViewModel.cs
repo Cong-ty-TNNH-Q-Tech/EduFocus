@@ -103,7 +103,14 @@ public sealed partial class ReportsViewModel(
                 return;
             }
 
+            var familyId = appState.FamilyId;
             var days = await data.GetDailyAsync(from, today);
+            if (!appState.IsLinked || appState.FamilyId != familyId)
+            {
+                ApplyDays([], today, focusDate);
+                return;
+            }
+
             cache.SaveDaily(days);
             IsShowingCachedData = false;
             CachedBannerText = string.Empty;
@@ -115,7 +122,7 @@ public sealed partial class ReportsViewModel(
                 await session.HandleUnauthorizedAsync();
 
             ErrorMessage = CloudErrors.Describe(exception);
-            if (cache.TryGetDaily(out var cached, out var savedAt))
+            if (appState.IsLinked && cache.TryGetDaily(out var cached, out var savedAt))
             {
                 IsShowingCachedData = true;
                 CachedBannerText =

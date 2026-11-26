@@ -28,22 +28,41 @@ public partial class OnboardingWindow : Window
 
     private async void OnLoaded(object sender, RoutedEventArgs e)
     {
-        await _viewModel.LoadCommand.ExecuteAsync(null);
+        try
+        {
+            await _viewModel.LoadCommand.ExecuteAsync(null);
 
-        if (IsLoaded)
-            FocusCurrentStep();
+            if (IsLoaded)
+                FocusCurrentStep();
+        }
+        catch (Exception)
+        {
+            // ViewModel handles and logs operational errors cleanly.
+        }
     }
 
     private void OnClosed(object? sender, EventArgs e)
     {
+        _viewModel.HandleWindowClosed();
         _viewModel.PasswordBoxesShouldClear -= OnPasswordBoxesShouldClear;
         _viewModel.CloseRequested -= OnCloseRequested;
         _viewModel.Completed -= OnCompleted;
         _viewModel.PropertyChanged -= ViewModel_PropertyChanged;
-        _viewModel.HandleWindowClosed();
     }
 
-    private void OnCompleted(object? sender, EventArgs e) => DialogResult = true;
+    private void OnCompleted(object? sender, EventArgs e)
+    {
+        if (!IsLoaded)
+            return;
+
+        try
+        {
+            DialogResult = true;
+        }
+        catch (InvalidOperationException)
+        {
+        }
+    }
 
     private void OnCloseRequested(object? sender, EventArgs e) => Close();
 
@@ -52,10 +71,14 @@ public partial class OnboardingWindow : Window
         PinBox.Clear();
         ConfirmPinBox.Clear();
         ResumePinBox.Clear();
+        ResumeRecoveryCodeBox.Clear();
     }
 
     private void OpenPrivacyNotice_OnClick(object sender, RoutedEventArgs e) =>
         new PrivacyNoticeWindow { Owner = this }.ShowDialog();
+
+    private void ResumeRecoveryCodeBox_OnPasswordChanged(object sender, RoutedEventArgs e) =>
+        _viewModel.ResumeRecoveryCode = ResumeRecoveryCodeBox.Password;
 
     private void PinBox_OnPasswordChanged(object sender, RoutedEventArgs e) =>
         _viewModel.Pin = PinBox.Password;

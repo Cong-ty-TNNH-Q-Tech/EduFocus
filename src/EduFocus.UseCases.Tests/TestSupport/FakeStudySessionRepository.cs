@@ -221,6 +221,21 @@ internal sealed class FakeStudySessionRepository : IStudySessionRepository
         return Task.FromResult(true);
     }
 
+    public Task<bool> SetMonitoringEnabledAsync(
+        StudySessionId sessionId,
+        bool monitoringEnabled,
+        DateTime nowUtc,
+        CancellationToken cancellationToken = default)
+    {
+        var session = Sessions.SingleOrDefault(x => x.Id == sessionId && x.IsActive);
+        if (session is null)
+            return Task.FromResult(false);
+
+        var stamp = nowUtc < session.UpdatedAtUtc ? session.UpdatedAtUtc : nowUtc;
+        session.SetMonitoringEnabled(monitoringEnabled, stamp);
+        return Task.FromResult(true);
+    }
+
     public readonly record struct HeartbeatCall(
         StudySessionId SessionId,
         DateTime HeartbeatAtUtc,

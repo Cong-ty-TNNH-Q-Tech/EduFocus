@@ -39,11 +39,11 @@ public sealed class ProcessWatchdogCommandRunner : IWatchdogCommandRunner
         using var process = Process.Start(startInfo)
             ?? throw new InvalidOperationException($"'{fileName}' could not be started.");
 
-        var stdout = process.StandardOutput.ReadToEndAsync(cancellationToken);
-        var stderr = process.StandardError.ReadToEndAsync(cancellationToken);
-
         using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         timeout.CancelAfter(Timeout);
+
+        var stdout = process.StandardOutput.ReadToEndAsync(timeout.Token);
+        var stderr = process.StandardError.ReadToEndAsync(timeout.Token);
 
         try
         {
@@ -58,6 +58,15 @@ public sealed class ProcessWatchdogCommandRunner : IWatchdogCommandRunner
             catch
             {
                 // The process may have exited between the timeout and the kill.
+            }
+
+            try
+            {
+                await Task.WhenAll(stdout, stderr).ConfigureAwait(false);
+            }
+            catch
+            {
+                // Expected when cancelled/timed out or killed.
             }
 
             throw;

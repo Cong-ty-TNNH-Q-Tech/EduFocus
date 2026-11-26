@@ -32,8 +32,13 @@ public sealed class SqliteAppSettingsRepository : IAppSettingsRepository
         ArgumentNullException.ThrowIfNull(settings);
 
         await using var context = _contextFactory.CreateDbContext();
+        await using var transaction = await context.Database.BeginTransactionAsync(cancellationToken);
+        if (await context.AppSettings.AnyAsync(cancellationToken))
+            throw new InvalidOperationException("Application settings are already initialized.");
+
         context.AppSettings.Add(settings);
         await context.SaveChangesAsync(cancellationToken);
+        await transaction.CommitAsync(cancellationToken);
     }
 
     public async Task UpdateAsync(AppSettings settings, CancellationToken cancellationToken = default)

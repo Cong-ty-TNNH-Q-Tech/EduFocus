@@ -39,6 +39,7 @@ public sealed partial class CloudLinkViewModel : ObservableObject
     private DateTimeOffset? _lastPollAtUtc;
     private DateTime? _pairingExpiresAtUtc;
     private Guid? _qrSessionId;
+    private long _operationGeneration;
     private bool _windowOpen;
     private bool _sectionVisible;
     private bool _refreshing;
@@ -155,6 +156,7 @@ public sealed partial class CloudLinkViewModel : ObservableObject
 
     public void HandleWindowClosed()
     {
+        _operationGeneration++;
         _windowOpen = false;
         _sectionVisible = false;
         _lastPollAtUtc = null;
@@ -187,7 +189,7 @@ public sealed partial class CloudLinkViewModel : ObservableObject
         if (_pairingExpiresAtUtc is not null)
             UpdatePairingState();
 
-        if (!IsCloudEnabled || IsLinked || _refreshing)
+        if (!IsCloudEnabled || IsLinked || _refreshing || IsBusy)
             return;
 
         var now = _timeProvider.GetUtcNow();
@@ -266,6 +268,7 @@ public sealed partial class CloudLinkViewModel : ObservableObject
             return;
         }
 
+        var generation = ++_operationGeneration;
         IsBusy = true;
         SetStatus(
             deleteCloudData
@@ -284,7 +287,7 @@ public sealed partial class CloudLinkViewModel : ObservableObject
                     : "Đã ngắt kết nối cloud. Dữ liệu học tập trên máy này không bị ảnh hưởng.",
                 false);
 
-            await RefreshCoreAsync(showBusy: false).ConfigureAwait(true);
+            await RefreshCoreAsync(showBusy: false, expectedGeneration: generation).ConfigureAwait(true);
         }
         catch (ParentAuthorizationException)
         {
@@ -298,7 +301,7 @@ public sealed partial class CloudLinkViewModel : ObservableObject
                 LogCategories.Cloud,
                 $"Cloud unlink failed ('{ex.Code}'); the link was kept for retry.");
             SetStatus(ex.Message, true);
-            await RefreshCoreAsync(showBusy: false).ConfigureAwait(true);
+            await RefreshCoreAsync(showBusy: false, expectedGeneration: generation).ConfigureAwait(true);
         }
         catch (Exception ex)
         {
@@ -347,18 +350,26 @@ public sealed partial class CloudLinkViewModel : ObservableObject
             return;
         }
 
+        var generation = ++_operationGeneration;
         IsBusy = true;
         SetStatus("Đang tạo mã ghép nối...", false);
 
         try
         {
             var snapshot = await _links.GetStatusAsync().ConfigureAwait(true);
+            if (generation != _operationGeneration)
+                return;
+
             if (!snapshot.HasConsent)
                 await _links.AcceptConsentAsync().ConfigureAwait(true);
+            if (generation != _operationGeneration)
+                return;
 
             var pairing = await _links
                 .EnableAsync(new CloudLinkOptions(baseUrl!.ToString().TrimEnd('/'), desktopName))
                 .ConfigureAwait(true);
+            if (generation != _operationGeneration)
+                return;
 
             IsCloudEnabled = true;
             IsLinked = false;
@@ -394,7 +405,7 @@ public sealed partial class CloudLinkViewModel : ObservableObject
         {
             _logger.Error(LogCategories.Cloud, "Creating the cloud pairing session failed unexpectedly.", ex);
             SetStatus(
-                "Không thể bật kết nối cloud lúc này. Kiểm tra mạng và địa chỉ máy chủ rồi thử lại.",
+                "Không thể bật kết nối cloud lúc này. Kiểm tra kết nối mạng rồi thử lại.",
                 true);
         }
         finally
@@ -403,7 +414,7 @@ public sealed partial class CloudLinkViewModel : ObservableObject
         }
     }
 
-    private async Task RefreshCoreAsync(bool showBusy)
+    private async Task RefreshCoreAsync(bool showBusy, long? expectedGeneration = null)
     {
         if (showBusy)
         {
@@ -413,16 +424,23 @@ public sealed partial class CloudLinkViewModel : ObservableObject
             IsBusy = true;
         }
 
+        var generation = expectedGeneration ?? _operationGeneration;
         try
         {
             var snapshot = await _links.GetStatusAsync().ConfigureAwait(true);
             var outboxStatus = _outbox is not null
                 ? await _outbox.GetStatusAsync().ConfigureAwait(true)
                 : null;
+            if (generation != _operationGeneration)
+                return;
+
             ApplySnapshot(snapshot, outboxStatus);
         }
         catch (Exception ex)
         {
+            if (generation != _operationGeneration)
+                return;
+
             if (showBusy)
             {
                 _logger.Error(LogCategories.Cloud, "Could not read the cloud link status.", ex);
@@ -444,13 +462,14 @@ public sealed partial class CloudLinkViewModel : ObservableObject
 
     private async Task PollAsync()
     {
-        if (_refreshing)
+        if (_refreshing || IsBusy)
             return;
 
+        var generation = _operationGeneration;
         _refreshing = true;
         try
         {
-            await RefreshCoreAsync(showBusy: false).ConfigureAwait(true);
+            await RefreshCoreAsync(showBusy: false, expectedGeneration: generation).ConfigureAwait(true);
         }
         finally
         {

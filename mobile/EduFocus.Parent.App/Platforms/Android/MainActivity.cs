@@ -31,11 +31,15 @@ public class MainActivity : MauiAppCompatActivity
     {
         base.OnCreate(savedInstanceState);
 
-        PairingDeepLink.Handle(Intent?.DataString);
-        HandlePushIntent(Intent);
+        if (savedInstanceState is null
+            && (Intent?.Flags.HasFlag(ActivityFlags.LaunchedFromHistory) != true))
+        {
+            PairingDeepLink.Handle(Intent?.DataString);
+            HandlePushIntent(Intent);
 #if DEBUG
-        HandleDemoPush(Intent);
+            HandleDemoPush(Intent);
 #endif
+        }
     }
 
     protected override void OnNewIntent(Intent? intent)

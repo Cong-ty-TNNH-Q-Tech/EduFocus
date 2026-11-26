@@ -21,8 +21,6 @@ public sealed partial class SettingsViewModel(
     [ObservableProperty] private bool _isLinked;
     [ObservableProperty] private bool _isBusy;
     [ObservableProperty] private string _desktopName = string.Empty;
-    [ObservableProperty] private string _serverUrl = string.Empty;
-    [ObservableProperty] private string _serverHostText = "—";
     [ObservableProperty] private string _deviceNameText = string.Empty;
     [ObservableProperty] private string _platformText = string.Empty;
     [ObservableProperty] private string _appVersionText = string.Empty;
@@ -36,6 +34,24 @@ public sealed partial class SettingsViewModel(
     [ObservableProperty] private bool _isDeletingCloudData;
 
     public event EventHandler? Unlinked;
+
+    private bool _subscribedWssState;
+
+    private void EnsureWssStateSubscription()
+    {
+        if (_subscribedWssState)
+            return;
+
+        _subscribedWssState = true;
+        WssPushService.StateChanged += OnWssStateChanged;
+    }
+
+    private void OnWssStateChanged() =>
+        MainThread.BeginInvokeOnMainThread(() =>
+        {
+            PushDistributorReady = WssPushService.IsRunning
+                || unifiedPush.GetAvailability() == UnifiedPushAvailability.Ready;
+        });
 
     public bool IsNotBusy => !IsBusy;
 
@@ -90,10 +106,9 @@ public sealed partial class SettingsViewModel(
 
     public void Refresh()
     {
+        EnsureWssStateSubscription();
         IsLinked = appState.IsLinked;
         DesktopName = appState.DesktopName ?? settings.DesktopName ?? string.Empty;
-        ServerUrl = appState.CloudBaseUrl ?? settings.CloudBaseUrl ?? string.Empty;
-        ServerHostText = MaskServer(ServerUrl);
         DeviceNameText = string.IsNullOrWhiteSpace(DeviceInfo.Current.Name)
             ? "Điện thoại phụ huynh"
             : DeviceInfo.Current.Name;
@@ -188,6 +203,7 @@ public sealed partial class SettingsViewModel(
         try
         {
             await admin.DeleteFamilyAsync(FamilyAdminService.DeleteConfirmation);
+            coordinator.OnUnlinked();
             Refresh();
             return true;
         }
@@ -228,16 +244,5 @@ public sealed partial class SettingsViewModel(
         {
             IsBusy = false;
         }
-    }
-
-    private static string MaskServer(string? url)
-    {
-        if (string.IsNullOrWhiteSpace(url))
-            return "—";
-
-        if (!Uri.TryCreate(url, UriKind.Absolute, out var uri))
-            return url;
-
-        return uri.IsDefaultPort ? uri.Host : $"{uri.Host}:{uri.Port}";
     }
 }

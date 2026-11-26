@@ -16,7 +16,7 @@ public class BuiltInRuleCatalogTests
         var catalog = BuiltInRuleCatalog.Default;
 
         catalog.Version.Should().Be(BuiltInRuleCatalog.CurrentVersion);
-        catalog.Rules.Should().HaveCount(26);
+        catalog.Rules.Should().HaveCount(21);
 
         foreach (var definition in catalog.Rules)
         {
@@ -26,22 +26,6 @@ public class BuiltInRuleCatalogTests
             rule.EnforcementStatus.Should().Be(EnforcementStatus.Enforced);
             rule.IsEffective(Now).Should().Be(definition.IsEnabledByDefault);
         }
-    }
-
-    [Fact]
-    public void Default_catalog_ships_disabled_url_path_rules_for_the_extension()
-    {
-        var pathRules = BuiltInRuleCatalog.Default.Rules
-            .Where(rule => rule.RuleType == RuleType.Url)
-            .ToList();
-
-        pathRules.Should().NotBeEmpty();
-        pathRules.Should().OnlyContain(rule =>
-            !rule.IsEnabledByDefault
-            && rule.Effect == BlockRuleEffect.Block
-            && rule.MatchType == RuleMatchType.Contains);
-
-        pathRules.Select(rule => rule.Value).Should().Contain("https://www.youtube.com/shorts/");
     }
 
     [Fact]

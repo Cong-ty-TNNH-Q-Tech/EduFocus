@@ -33,10 +33,12 @@ public sealed class CloudSyncWorker : ICloudOutboxNotifier, IDisposable
     private readonly SemaphoreSlim _gate = new(1, 1);
     private readonly SemaphoreSlim _signal = new(0, 1);
     private readonly object _lifecycleLock = new();
+    private readonly bool _allowInsecureDevelopmentEndpoints;
 
     private CancellationTokenSource? _cts;
     private DateTime? _authFailedAtUtc;
     private bool _failureAudited;
+    private bool _disposed;
 
     public CloudSyncWorker(
         ICloudLinkRepository links,
@@ -45,7 +47,8 @@ public sealed class CloudSyncWorker : ICloudOutboxNotifier, IDisposable
         IAuditLogRepository auditLogs,
         ICorrelationContext correlation,
         IAppLogger logger,
-        TimeProvider timeProvider)
+        TimeProvider timeProvider,
+        bool? allowInsecureDevelopmentEndpoints = null)
     {
         _links = links ?? throw new ArgumentNullException(nameof(links));
         _outbox = outbox ?? throw new ArgumentNullException(nameof(outbox));
@@ -54,13 +57,19 @@ public sealed class CloudSyncWorker : ICloudOutboxNotifier, IDisposable
         _correlation = correlation ?? throw new ArgumentNullException(nameof(correlation));
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
         _timeProvider = timeProvider ?? throw new ArgumentNullException(nameof(timeProvider));
+        _allowInsecureDevelopmentEndpoints = allowInsecureDevelopmentEndpoints ??
+#if DEBUG
+            true;
+#else
+            false;
+#endif
     }
 
     public void Start()
     {
         lock (_lifecycleLock)
         {
-            if (_cts is not null)
+            if (_disposed || _cts is not null)
                 return;
 
             _cts = new CancellationTokenSource();
@@ -71,6 +80,9 @@ public sealed class CloudSyncWorker : ICloudOutboxNotifier, IDisposable
 
     public void NotifyNewEvent()
     {
+        if (Volatile.Read(ref _disposed))
+            return;
+
         try
         {
             _signal.Release();
@@ -78,6 +90,9 @@ public sealed class CloudSyncWorker : ICloudOutboxNotifier, IDisposable
         catch (SemaphoreFullException)
         {
             // A pending wake-up already exists; the loop coalesces signals.
+        }
+        catch (ObjectDisposedException)
+        {
         }
     }
 
@@ -114,7 +129,8 @@ public sealed class CloudSyncWorker : ICloudOutboxNotifier, IDisposable
                 return;
 
             if (!Uri.TryCreate(link.CloudBaseUrl, UriKind.Absolute, out var baseUrl)
-                || (baseUrl.Scheme != Uri.UriSchemeHttps && baseUrl.Scheme != Uri.UriSchemeHttp))
+                || !string.IsNullOrEmpty(baseUrl.UserInfo)
+                || !CloudSyncClient.IsAllowedCloudEndpoint(baseUrl, _allowInsecureDevelopmentEndpoints))
             {
                 await RecordLinkErrorAsync(link, "Địa chỉ cloud không hợp lệ.", cancellationToken)
                     .ConfigureAwait(false);
@@ -134,16 +150,31 @@ public sealed class CloudSyncWorker : ICloudOutboxNotifier, IDisposable
         CancellationTokenSource? cts;
         lock (_lifecycleLock)
         {
+            if (_disposed)
+                return;
+
+            _disposed = true;
             cts = _cts;
             _cts = null;
         }
 
-        if (cts is null)
-            return;
-
         // Exiting never waits for a final flush.
-        cts.Cancel();
-        NotifyNewEvent();
+        if (cts is not null)
+        {
+            cts.Cancel();
+            cts.Dispose();
+        }
+
+        try
+        {
+            _signal.Release();
+        }
+        catch (SemaphoreFullException)
+        {
+        }
+        catch (ObjectDisposedException)
+        {
+        }
     }
 
     private async Task RunLoopAsync(CancellationToken token)
@@ -188,14 +219,48 @@ public sealed class CloudSyncWorker : ICloudOutboxNotifier, IDisposable
             if (batch.Count == 0)
                 return;
 
+            var validItems = new List<CloudOutboxEvent>(batch.Count);
+            var events = new List<CloudSyncEvent>(batch.Count);
+            var invalidIds = new List<Guid>();
+
+            foreach (var item in batch)
+            {
+                if (TryToSyncEvent(item, out var syncEvent))
+                {
+                    validItems.Add(item);
+                    events.Add(syncEvent!);
+                }
+                else
+                {
+                    invalidIds.Add(item.Id);
+                }
+            }
+
+            if (invalidIds.Count > 0)
+            {
+                await _outbox
+                    .MarkFailedAsync(invalidIds, UtcNow(), "invalid_payload", cancellationToken)
+                    .ConfigureAwait(false);
+                _logger.Warning(
+                    LogCategories.Cloud,
+                    $"Marked {invalidIds.Count} malformed cloud outbox event(s) as failed.");
+            }
+
+            if (validItems.Count == 0)
+            {
+                if (batch.Count < CloudOutboxLimits.BatchSize)
+                    return;
+
+                continue;
+            }
+
             try
             {
-                var events = batch.Select(ToSyncEvent).ToList();
                 var result = await _sync
                     .SendEventsAsync(baseUrl, link.DesktopToken!, events, cancellationToken)
                     .ConfigureAwait(false);
 
-                await ApplyResultsAsync(batch, result, cancellationToken).ConfigureAwait(false);
+                await ApplyResultsAsync(validItems, result, cancellationToken).ConfigureAwait(false);
                 var syncedAt = UtcNow(link);
                 var recorded = await _links
                     .TryRecordSyncAsync(link.DesktopToken!, syncedAt, syncedAt, cancellationToken)
@@ -208,7 +273,7 @@ public sealed class CloudSyncWorker : ICloudOutboxNotifier, IDisposable
             }
             catch (CloudSyncException ex)
             {
-                await HandleFailureAsync(link, batch, ex, cancellationToken).ConfigureAwait(false);
+                await HandleFailureAsync(link, validItems, ex, cancellationToken).ConfigureAwait(false);
                 return;
             }
 
@@ -299,6 +364,8 @@ public sealed class CloudSyncWorker : ICloudOutboxNotifier, IDisposable
             var delay = exception.RetryAfter is { } retryAfter && retryAfter > TimeSpan.Zero
                 ? retryAfter
                 : DefaultRateLimitDelay;
+            if (delay > MaxBackoff)
+                delay = MaxBackoff;
             await _outbox
                 .ScheduleRetryAsync(
                     batch.Select(item => item.Id).ToList(),
@@ -331,22 +398,22 @@ public sealed class CloudSyncWorker : ICloudOutboxNotifier, IDisposable
             $"Cloud sync failed ({exception.Code}); {batch.Count} event(s) kept for retry.");
     }
 
-    private Task ScheduleRetryAsync(
+    private async Task ScheduleRetryAsync(
         IReadOnlyList<CloudOutboxEvent> items,
         string? reason,
         DateTime now,
         CancellationToken cancellationToken)
     {
-        var retries = items
-            .GroupBy(item => BackoffFor(item.AttemptCount))
-            .Select(group => _outbox.ScheduleRetryAsync(
-                group.Select(item => item.Id).ToList(),
-                now + group.Key,
-                reason,
-                cancellationToken))
-            .ToList();
-
-        return Task.WhenAll(retries);
+        foreach (var group in items.GroupBy(item => BackoffFor(item.AttemptCount)))
+        {
+            await _outbox
+                .ScheduleRetryAsync(
+                    group.Select(item => item.Id).ToList(),
+                    now + group.Key,
+                    reason,
+                    cancellationToken)
+                .ConfigureAwait(false);
+        }
     }
 
     private async Task AuditFailureOnceAsync(
@@ -388,14 +455,32 @@ public sealed class CloudSyncWorker : ICloudOutboxNotifier, IDisposable
             .ConfigureAwait(false);
     }
 
-    private static CloudSyncEvent ToSyncEvent(CloudOutboxEvent item)
+    private static bool TryToSyncEvent(CloudOutboxEvent item, out CloudSyncEvent? syncEvent)
     {
-        using var document = JsonDocument.Parse(item.PayloadJson);
-        return new CloudSyncEvent(
-            item.ClientEventId,
-            item.Type,
-            new DateTimeOffset(DateTime.SpecifyKind(item.CreatedAtUtc, DateTimeKind.Utc)),
-            document.RootElement.Clone());
+        syncEvent = null;
+        if (item.Type is not (CloudEventTypes.DailySummary
+            or CloudEventTypes.AttentionAlert
+            or CloudEventTypes.ProtectionOff
+            or CloudEventTypes.SecurityAlert
+            or CloudEventTypes.BlockedAttempt))
+        {
+            return false;
+        }
+
+        try
+        {
+            using var document = JsonDocument.Parse(item.PayloadJson);
+            syncEvent = new CloudSyncEvent(
+                item.ClientEventId,
+                item.Type,
+                new DateTimeOffset(DateTime.SpecifyKind(item.CreatedAtUtc, DateTimeKind.Utc)),
+                document.RootElement.Clone());
+            return true;
+        }
+        catch (JsonException)
+        {
+            return false;
+        }
     }
 
     private static TimeSpan BackoffFor(int attemptCount)

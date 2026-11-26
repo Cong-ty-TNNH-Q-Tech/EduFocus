@@ -57,28 +57,79 @@ public static class ReportEndpoints
 
         var days = summaries
             .GroupBy(s => s.LocalDate)
-            .Select(group => group.First())
-            .OrderBy(s => s.LocalDate)
-            .Select(s => new DailySummaryDto(
-                s.LocalDate,
-                family.TimeZoneId,
-                s.UpdatedAtUtc,
-                s.SessionsCount,
-                s.ActiveSeconds,
-                s.StudySeconds,
-                s.IdleSeconds,
-                s.OnlineClassSeconds,
-                s.MonitoringEligibleSeconds,
-                s.MonitoredSeconds,
-                s.FocusedSeconds,
-                s.DistractedSeconds,
-                s.AbsentSeconds,
-                s.DrowsySeconds,
-                s.BlockedAttempts,
-                s.AttentionPercent,
-                s.CoveragePercent))
+            .OrderBy(group => group.Key)
+            .Select(group => AggregateDay(group, family.TimeZoneId))
             .ToList();
 
         return Results.Ok(days);
+    }
+
+    private static DailySummaryDto AggregateDay(
+        IGrouping<DateOnly, EduFocus.Cloud.Data.Entities.DailySummary> group,
+        string timeZoneId)
+    {
+        var list = group.ToList();
+        if (list.Count == 1)
+        {
+            var single = list[0];
+            return new DailySummaryDto(
+                single.LocalDate,
+                timeZoneId,
+                single.UpdatedAtUtc,
+                single.SessionsCount,
+                single.ActiveSeconds,
+                single.StudySeconds,
+                single.IdleSeconds,
+                single.OnlineClassSeconds,
+                single.MonitoringEligibleSeconds,
+                single.MonitoredSeconds,
+                single.FocusedSeconds,
+                single.DistractedSeconds,
+                single.AbsentSeconds,
+                single.DrowsySeconds,
+                single.BlockedAttempts,
+                single.AttentionPercent,
+                single.CoveragePercent);
+        }
+
+        var updatedAtUtc = list.Max(s => s.UpdatedAtUtc);
+        var sessionsCount = list.Sum(s => s.SessionsCount);
+        var activeSeconds = list.Sum(s => s.ActiveSeconds);
+        var studySeconds = list.Sum(s => s.StudySeconds);
+        var idleSeconds = list.Sum(s => s.IdleSeconds);
+        var onlineClassSeconds = list.Sum(s => s.OnlineClassSeconds);
+        var monitoringEligibleSeconds = list.Sum(s => s.MonitoringEligibleSeconds);
+        var monitoredSeconds = list.Sum(s => s.MonitoredSeconds);
+        var focusedSeconds = list.Sum(s => s.FocusedSeconds);
+        var distractedSeconds = list.Sum(s => s.DistractedSeconds);
+        var absentSeconds = list.Sum(s => s.AbsentSeconds);
+        var drowsySeconds = list.Sum(s => s.DrowsySeconds);
+        var blockedAttempts = list.Sum(s => s.BlockedAttempts);
+
+        double? attentionPercent = monitoredSeconds > 0
+            ? Math.Round((focusedSeconds * 100.0) / monitoredSeconds, 1)
+            : null;
+        double? coveragePercent = monitoringEligibleSeconds > 0
+            ? Math.Round((monitoredSeconds * 100.0) / monitoringEligibleSeconds, 1)
+            : null;
+
+        return new DailySummaryDto(
+            group.Key,
+            timeZoneId,
+            updatedAtUtc,
+            sessionsCount,
+            activeSeconds,
+            studySeconds,
+            idleSeconds,
+            onlineClassSeconds,
+            monitoringEligibleSeconds,
+            monitoredSeconds,
+            focusedSeconds,
+            distractedSeconds,
+            absentSeconds,
+            drowsySeconds,
+            blockedAttempts,
+            attentionPercent,
+            coveragePercent);
     }
 }

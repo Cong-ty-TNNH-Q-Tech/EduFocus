@@ -180,7 +180,19 @@ public sealed class FocusAudioPlayer : IFocusAudioPort
             return path;
 
         var wave = ProceduralAmbientAudio.CreateWave(preset);
-        File.WriteAllBytes(path, wave);
+        var tempPath = $"{path}.{Guid.NewGuid():N}.tmp";
+        try
+        {
+            File.WriteAllBytes(tempPath, wave);
+            File.Move(tempPath, path, overwrite: true);
+        }
+        finally
+        {
+            if (File.Exists(tempPath))
+            {
+                try { File.Delete(tempPath); } catch { }
+            }
+        }
 
         _logger.Info(
             LogCategories.UI,

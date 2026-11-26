@@ -24,6 +24,7 @@ internal static class TestDatabase
 
     public static async Task ResetAsync(string? connectionString = null)
     {
+        Microsoft.Data.Sqlite.SqliteConnection.ClearAllPools();
         await using var db = CreateContext(connectionString);
         await db.Database.EnsureDeletedAsync();
         await db.Database.MigrateAsync();
@@ -34,7 +35,7 @@ internal static class TestDatabase
         var directory = Path.Combine(Path.GetTempPath(), "edufocus-cloud-tests");
         Directory.CreateDirectory(directory);
         return $"Data Source={Path.Combine(directory, $"cloud-{Guid.NewGuid():N}.db")};" +
-            "Foreign Keys=True;Default Timeout=30";
+            "Foreign Keys=True;Default Timeout=30;Pooling=False";
     }
 
     private static void DeleteFiles()

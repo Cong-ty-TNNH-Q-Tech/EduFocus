@@ -1,5 +1,6 @@
 using System.Net;
 using System.Net.Http.Json;
+using System.Security.Claims;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using EduFocus.Cloud.Api.Auth;
@@ -64,27 +65,25 @@ public sealed class RateLimitTests
     }
 
     [Fact]
-    public void Token_key_normalizes_scheme_casing_and_whitespace()
+    public void Token_key_partitions_authenticated_requests_by_verified_device_id()
     {
-        var (token, _) = DeviceTokenService.Create(DeviceKind.Desktop);
+        var deviceId = Guid.NewGuid().ToString();
+        var identity = new ClaimsIdentity(
+            [new Claim("device_id", deviceId)],
+            DeviceAuthenticationDefaults.Scheme);
+        var context = ContextWithAuth($"Bearer ignored-token-value", IPAddress.Parse("203.0.113.10"));
+        context.User = new ClaimsPrincipal(identity);
 
-        var canonical = RateLimitSetup.TokenKey(ContextWithAuth($"Bearer {token}"));
-        var lowercase = RateLimitSetup.TokenKey(ContextWithAuth($"bearer {token}"));
-        var uppercase = RateLimitSetup.TokenKey(ContextWithAuth($"BEARER {token}"));
-        var extraSpaces = RateLimitSetup.TokenKey(ContextWithAuth($"Bearer   {token}  "));
-
-        Assert.StartsWith("token:", canonical);
-        Assert.Equal(canonical, lowercase);
-        Assert.Equal(canonical, uppercase);
-        Assert.Equal(canonical, extraSpaces);
+        Assert.Equal($"device:{deviceId}", RateLimitSetup.TokenKey(context));
     }
 
     [Theory]
     [InlineData("")]
     [InlineData("x-random-header")]
     [InlineData("Bearer not-a-valid-device-token")]
+    [InlineData("Bearer efd_AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA")]
     [InlineData("Basic dXNlcjpwYXNz")]
-    public void Garbage_or_invalid_authorization_headers_share_client_ip_partition(string header)
+    public void Unauthenticated_or_forged_authorization_headers_share_client_ip_partition(string header)
     {
         var key = RateLimitSetup.TokenKey(ContextWithAuth(header, IPAddress.Parse("203.0.113.10")));
         Assert.Equal("anonymous:203.0.113.10", key);

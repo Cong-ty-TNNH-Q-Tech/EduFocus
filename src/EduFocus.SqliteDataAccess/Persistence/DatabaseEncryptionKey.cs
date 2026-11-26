@@ -85,7 +85,23 @@ public sealed class DatabaseEncryptionKey
         }
     }
 
-    private byte[] CreateRawKey() => Encoding.ASCII.GetBytes($"x'{Convert.ToHexString(_bytes)}'");
+    private byte[] CreateRawKey()
+    {
+        const string hexDigits = "0123456789ABCDEF";
+        var buffer = new byte[2 + (_bytes.Length * 2) + 1];
+        buffer[0] = (byte)'x';
+        buffer[1] = (byte)'\'';
+
+        for (var i = 0; i < _bytes.Length; i++)
+        {
+            var b = _bytes[i];
+            buffer[2 + (i * 2)] = (byte)hexDigits[b >> 4];
+            buffer[2 + (i * 2) + 1] = (byte)hexDigits[b & 0x0F];
+        }
+
+        buffer[^1] = (byte)'\'';
+        return buffer;
+    }
 
     public static DatabaseEncryptionKey CreateRandom() =>
         new(RandomNumberGenerator.GetBytes(SizeBytes));

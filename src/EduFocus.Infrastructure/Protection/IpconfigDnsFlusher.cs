@@ -10,7 +10,8 @@ public sealed class IpconfigDnsFlusher : IDnsFlusher
 
     public async Task FlushAsync(CancellationToken cancellationToken = default)
     {
-        var startInfo = new ProcessStartInfo("ipconfig", "/flushdns")
+        var ipconfigPath = Path.Combine(Environment.SystemDirectory, "ipconfig.exe");
+        var startInfo = new ProcessStartInfo(ipconfigPath, "/flushdns")
         {
             CreateNoWindow = true,
             UseShellExecute = false

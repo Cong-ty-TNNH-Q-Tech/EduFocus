@@ -270,10 +270,17 @@ public sealed class StudySessionHeartbeatService : IStudySessionHeartbeatUseCase
                     elapsed += tick - _lastTick;
                 _lastTick = tick;
             }
+
+            if (elapsed > TimeSpan.Zero && elapsed <= _options.MaxActiveDelta)
+            {
+                var floored = TimeSpan.FromSeconds(Math.Floor(elapsed.TotalSeconds));
+                _unbeatedElapsed = elapsed - floored;
+                elapsed = floored;
+            }
         }
 
         var seconds = elapsed > TimeSpan.Zero && elapsed <= _options.MaxActiveDelta
-            ? (int)Math.Floor(elapsed.TotalSeconds)
+            ? (int)elapsed.TotalSeconds
             : 0;
 
         // A failed write keeps its seconds so the next beat retries them, but

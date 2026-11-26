@@ -24,14 +24,21 @@ public sealed class PushDispatchService(
         var cutoff4 = now - PushRules.RetryBackoff(4);
         var cutoff5 = now - PushRules.RetryBackoff(5);
 
+        var noTransportExpiryCutoff = now.AddHours(-24);
+
         var candidates = await db.Notifications
             .Where(n => n.Status == NotificationStatus.Pending
+                && (n.FailureCode != "no_transport"
+                    || n.LastAttemptAtUtc == null
+                    || n.CreatedAtUtc <= noTransportExpiryCutoff)
                 && (n.LastAttemptAtUtc == null
-                    || (n.AttemptCount <= 1 && n.LastAttemptAtUtc <= cutoff1)
-                    || (n.AttemptCount == 2 && n.LastAttemptAtUtc <= cutoff2)
-                    || (n.AttemptCount == 3 && n.LastAttemptAtUtc <= cutoff3)
-                    || (n.AttemptCount == 4 && n.LastAttemptAtUtc <= cutoff4)
-                    || (n.AttemptCount >= 5 && n.LastAttemptAtUtc <= cutoff5)))
+                    || (n.FailureCode == "no_transport" && n.CreatedAtUtc <= noTransportExpiryCutoff)
+                    || (n.FailureCode != "no_transport"
+                        && ((n.AttemptCount <= 1 && n.LastAttemptAtUtc <= cutoff1)
+                            || (n.AttemptCount == 2 && n.LastAttemptAtUtc <= cutoff2)
+                            || (n.AttemptCount == 3 && n.LastAttemptAtUtc <= cutoff3)
+                            || (n.AttemptCount == 4 && n.LastAttemptAtUtc <= cutoff4)
+                            || (n.AttemptCount >= 5 && n.LastAttemptAtUtc <= cutoff5)))))
             .OrderBy(n => n.CreatedAtUtc)
             .Take(settings.BatchSize)
             .ToListAsync(cancellationToken);
@@ -40,6 +47,7 @@ public sealed class PushDispatchService(
         foreach (var notification in candidates)
         {
             if (notification.LastAttemptAtUtc is { } lastAttempt
+                && !(notification.FailureCode == "no_transport" && notification.CreatedAtUtc <= noTransportExpiryCutoff)
                 && now < lastAttempt + PushRules.RetryBackoff(notification.AttemptCount))
             {
                 continue;
@@ -121,13 +129,16 @@ public sealed class PushDispatchService(
                         && d.RevokedAtUtc == null,
                     cancellationToken))
             {
-                if (notification.FailureCode != "no_transport"
-                    || notification.LastAttemptAtUtc is not null)
+                if (notification.CreatedAtUtc <= now.AddHours(-24))
                 {
-                    notification.FailureCode = "no_transport";
-                    notification.LastAttemptAtUtc = null;
+                    Suppress(notification, "no_transport_expired");
                     await db.SaveChangesAsync(cancellationToken);
+                    return;
                 }
+
+                notification.FailureCode = "no_transport";
+                notification.LastAttemptAtUtc = now;
+                await db.SaveChangesAsync(cancellationToken);
 
                 return;
             }

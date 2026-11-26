@@ -1,18 +1,21 @@
 using System.Globalization;
 using EduFocus.Parent.App.Services;
 using EduFocus.Parent.Core.Presentation;
+using EduFocus.Parent.Core.Push;
 
 namespace EduFocus.Parent.App.Views;
 
 public partial class ReportsPage : ContentPage, IQueryAttributable
 {
     private readonly ReportsViewModel _viewModel;
+    private readonly PushEventHub _pushEvents;
     private DateOnly? _pendingDate;
 
     public ReportsPage()
     {
         InitializeComponent();
         _viewModel = ServiceHelper.GetService<ReportsViewModel>();
+        _pushEvents = ServiceHelper.GetService<PushEventHub>();
         BindingContext = _viewModel;
     }
 
@@ -35,8 +38,18 @@ public partial class ReportsPage : ContentPage, IQueryAttributable
     protected override void OnAppearing()
     {
         base.OnAppearing();
+        _pushEvents.Received += OnPushReceived;
         _ = LoadPendingAsync();
     }
+
+    protected override void OnDisappearing()
+    {
+        _pushEvents.Received -= OnPushReceived;
+        base.OnDisappearing();
+    }
+
+    private void OnPushReceived(PushNotificationPayload payload) =>
+        MainThread.BeginInvokeOnMainThread(() => _ = _viewModel.LoadAsync());
 
     private Task LoadPendingAsync()
     {

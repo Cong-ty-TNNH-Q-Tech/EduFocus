@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.Globalization;
 using System.Runtime.Versioning;
 using System.Security.AccessControl;
@@ -34,13 +35,18 @@ public sealed class LocalCertificateAuthority : ILocalCertificateAuthority, IDis
     private static readonly byte[] DpapiEntropy = Encoding.UTF8.GetBytes("EduFocus.CertificateAuthority.v1");
     private const string ServerAuthenticationOid = "1.3.6.1.5.5.7.3.1";
 
+    private const int MaxRetiredLeaves = 64;
+    private static readonly TimeSpan RetiredLeafDelay = TimeSpan.FromSeconds(30);
+
     private readonly CertificateAuthorityOptions _options;
     private readonly ICertificateTrustStore _trustStore;
     private readonly IAppLogger _logger;
     private readonly string _rootFilePath;
     private readonly X500DistinguishedName _rootSubject;
-    private readonly Dictionary<string, X509Certificate2> _leaves = new(StringComparer.Ordinal);
-    private readonly List<X509Certificate2> _retiredLeaves = [];
+    private readonly Dictionary<string, LinkedListNode<(string Name, X509Certificate2 Cert)>> _leaves =
+        new(StringComparer.Ordinal);
+    private readonly LinkedList<(string Name, X509Certificate2 Cert)> _leafOrder = new();
+    private readonly Queue<(X509Certificate2 Cert, long RetiredTimestamp)> _retiredLeaves = new();
     private readonly SemaphoreSlim _trustGate = new(1, 1);
     private readonly object _sync = new();
 
@@ -181,25 +187,39 @@ public sealed class LocalCertificateAuthority : ILocalCertificateAuthority, IDis
 
         lock (_sync)
         {
-            if (_leaves.TryGetValue(name, out var cached))
-            {
-                if (cached.NotAfter.ToUniversalTime() > DateTime.UtcNow.Add(_options.LeafRenewBefore))
-                    return cached;
+            if (_disposed)
+                return null;
 
-                _retiredLeaves.Add(cached);
+            var nowTimestamp = Stopwatch.GetTimestamp();
+            PruneRetiredLeavesLocked(nowTimestamp);
+
+            if (_leaves.TryGetValue(name, out var node))
+            {
+                var cached = node.Value.Cert;
+                if (cached.NotAfter.ToUniversalTime() > DateTime.UtcNow.Add(_options.LeafRenewBefore))
+                {
+                    _leafOrder.Remove(node);
+                    _leafOrder.AddFirst(node);
+                    return cached;
+                }
+
                 _leaves.Remove(name);
+                _leafOrder.Remove(node);
+                RetireLeafLocked(cached, nowTimestamp);
             }
 
             try
             {
-                if (_leaves.Count >= _options.MaxCachedLeaves)
+                while (_leaves.Count >= _options.MaxCachedLeaves && _leafOrder.Last is { } tail)
                 {
-                    _retiredLeaves.AddRange(_leaves.Values);
-                    _leaves.Clear();
+                    _leafOrder.RemoveLast();
+                    _leaves.Remove(tail.Value.Name);
+                    RetireLeafLocked(tail.Value.Cert, nowTimestamp);
                 }
 
                 var leaf = IssueLeaf(name);
-                _leaves[name] = leaf;
+                var inserted = _leafOrder.AddFirst((name, leaf));
+                _leaves[name] = inserted;
                 return leaf;
             }
             catch (Exception ex)
@@ -225,18 +245,39 @@ public sealed class LocalCertificateAuthority : ILocalCertificateAuthority, IDis
             _disposed = true;
             _ready = false;
 
-            foreach (var leaf in _leaves.Values)
-                leaf.Dispose();
+            foreach (var entry in _leafOrder)
+                entry.Cert.Dispose();
 
             _leaves.Clear();
+            _leafOrder.Clear();
 
-            foreach (var leaf in _retiredLeaves)
-                leaf.Dispose();
-
-            _retiredLeaves.Clear();
+            while (_retiredLeaves.Count > 0)
+                _retiredLeaves.Dequeue().Cert.Dispose();
 
             _root?.Dispose();
             _root = null;
+        }
+
+        _trustGate.Dispose();
+    }
+
+    private void RetireLeafLocked(X509Certificate2 cert, long timestamp)
+    {
+        _retiredLeaves.Enqueue((cert, timestamp));
+        while (_retiredLeaves.Count > MaxRetiredLeaves)
+            _retiredLeaves.Dequeue().Cert.Dispose();
+    }
+
+    private void PruneRetiredLeavesLocked(long nowTimestamp)
+    {
+        while (_retiredLeaves.Count > 0)
+        {
+            var (cert, retiredAt) = _retiredLeaves.Peek();
+            if (Stopwatch.GetElapsedTime(retiredAt, nowTimestamp) < RetiredLeafDelay)
+                break;
+
+            _retiredLeaves.Dequeue();
+            cert.Dispose();
         }
     }
 
@@ -244,22 +285,25 @@ public sealed class LocalCertificateAuthority : ILocalCertificateAuthority, IDis
     {
         lock (_sync)
         {
-            foreach (var leaf in _retiredLeaves)
-                leaf.Dispose();
-
-            _retiredLeaves.Clear();
+            while (_retiredLeaves.Count > 0)
+                _retiredLeaves.Dequeue().Cert.Dispose();
         }
     }
 
     private X509Certificate2 GetOrCreateRoot()
     {
-        if (_root is not null)
-            return _root;
-
         lock (_sync)
         {
+            ObjectDisposedException.ThrowIf(_disposed, this);
+
             if (_root is not null)
-                return _root;
+            {
+                if (_root.NotAfter.ToUniversalTime() > DateTime.UtcNow.Add(_options.RootRenewBefore))
+                    return _root;
+
+                _root.Dispose();
+                _root = null;
+            }
 
             _root = TryLoadRoot() ?? CreateRoot();
             return _root;
@@ -268,6 +312,15 @@ public sealed class LocalCertificateAuthority : ILocalCertificateAuthority, IDis
 
     private X509Certificate2? TryLoadRoot()
     {
+        var directory = Path.GetDirectoryName(_rootFilePath);
+        if ((directory is not null && IsReparsePoint(directory)) || IsReparsePoint(_rootFilePath))
+        {
+            _logger.Warning(
+                LogCategories.Protection,
+                "The certificate authority path is a reparse point; a new root will be created.");
+            return null;
+        }
+
         if (!File.Exists(_rootFilePath))
             return null;
 
@@ -290,9 +343,7 @@ public sealed class LocalCertificateAuthority : ILocalCertificateAuthority, IDis
                     password: null,
                     X509KeyStorageFlags.EphemeralKeySet);
 
-                if (!root.HasPrivateKey
-                    || root.NotBefore.ToUniversalTime() > DateTime.UtcNow.AddMinutes(5)
-                    || root.NotAfter.ToUniversalTime() <= DateTime.UtcNow.Add(_options.RootRenewBefore))
+                if (!ValidateLoadedRoot(root))
                 {
                     root.Dispose();
                     return null;
@@ -318,6 +369,37 @@ public sealed class LocalCertificateAuthority : ILocalCertificateAuthority, IDis
         }
     }
 
+    private bool ValidateLoadedRoot(X509Certificate2 root)
+    {
+        if (!root.HasPrivateKey
+            || root.NotBefore.ToUniversalTime() > DateTime.UtcNow.AddMinutes(5)
+            || root.NotAfter.ToUniversalTime() <= DateTime.UtcNow.Add(_options.RootRenewBefore))
+        {
+            return false;
+        }
+
+        if (!root.SubjectName.RawData.AsSpan().SequenceEqual(_rootSubject.RawData)
+            || !root.IssuerName.RawData.AsSpan().SequenceEqual(root.SubjectName.RawData))
+        {
+            return false;
+        }
+
+        var basicConstraints = root.Extensions.OfType<X509BasicConstraintsExtension>().FirstOrDefault();
+        if (basicConstraints is not { CertificateAuthority: true, HasPathLengthConstraint: true, PathLengthConstraint: 0 })
+            return false;
+
+        var keyUsage = root.Extensions.OfType<X509KeyUsageExtension>().FirstOrDefault();
+        const X509KeyUsageFlags requiredUsage = X509KeyUsageFlags.KeyCertSign | X509KeyUsageFlags.CrlSign;
+        if (keyUsage is null || (keyUsage.KeyUsages & requiredUsage) != requiredUsage)
+            return false;
+
+        using var chain = new X509Chain();
+        chain.ChainPolicy.TrustMode = X509ChainTrustMode.CustomRootTrust;
+        chain.ChainPolicy.CustomTrustStore.Add(root);
+        chain.ChainPolicy.RevocationMode = X509RevocationMode.NoCheck;
+        return chain.Build(root);
+    }
+
     private X509Certificate2 CreateRoot()
     {
         using var key = ECDsa.Create(ECCurve.NamedCurves.nistP256);
@@ -336,8 +418,16 @@ public sealed class LocalCertificateAuthority : ILocalCertificateAuthority, IDis
         var notAfter = DateTimeOffset.UtcNow.Add(_options.RootValidity);
         var root = request.CreateSelfSigned(notBefore, notAfter);
 
-        PersistRoot(root);
-        return root;
+        try
+        {
+            PersistRoot(root);
+            return root;
+        }
+        catch
+        {
+            root.Dispose();
+            throw;
+        }
     }
 
     private void PersistRoot(X509Certificate2 root)
@@ -492,7 +582,7 @@ public sealed class LocalCertificateAuthority : ILocalCertificateAuthority, IDis
         if (!OperatingSystem.IsWindows())
             throw new PlatformNotSupportedException("DPAPI is only available on Windows.");
 
-        return ProtectedData.Protect(pfxBytes, DpapiEntropy, DataProtectionScope.LocalMachine);
+        return ProtectedData.Protect(pfxBytes, DpapiEntropy, GetDpapiScope());
     }
 
     private static byte[] Unprotect(byte[] protectedBytes)
@@ -500,7 +590,29 @@ public sealed class LocalCertificateAuthority : ILocalCertificateAuthority, IDis
         if (!OperatingSystem.IsWindows())
             throw new PlatformNotSupportedException("DPAPI is only available on Windows.");
 
-        return ProtectedData.Unprotect(protectedBytes, DpapiEntropy, DataProtectionScope.LocalMachine);
+        return ProtectedData.Unprotect(protectedBytes, DpapiEntropy, GetDpapiScope());
+    }
+
+    [SupportedOSPlatform("windows")]
+    private static DataProtectionScope GetDpapiScope()
+    {
+        using var identity = WindowsIdentity.GetCurrent();
+        return identity.IsSystem
+            ? DataProtectionScope.CurrentUser
+            : DataProtectionScope.LocalMachine;
+    }
+
+    private static bool IsReparsePoint(string path)
+    {
+        try
+        {
+            return Path.Exists(path)
+                && File.GetAttributes(path).HasFlag(FileAttributes.ReparsePoint);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or NotSupportedException)
+        {
+            return true;
+        }
     }
 
     [SupportedOSPlatform("windows")]

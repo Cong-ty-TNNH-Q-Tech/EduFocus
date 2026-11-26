@@ -94,8 +94,15 @@ internal sealed class OpenCvCameraSource : IDisposable
 
     public void Dispose()
     {
-        _capture?.Release();
-        _capture?.Dispose();
+        var capture = _capture;
         _capture = null;
+        try
+        {
+            capture?.Release();
+        }
+        finally
+        {
+            capture?.Dispose();
+        }
     }
 }

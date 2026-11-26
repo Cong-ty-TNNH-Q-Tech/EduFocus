@@ -145,14 +145,14 @@ try {
             /td SHA256 `
             /tr $TimestampUrl `
             /d $Description `
-            $file
+            $file | Out-Host
         if ($LASTEXITCODE -ne 0) {
             throw "signtool sign failed for '$file' with exit code $LASTEXITCODE."
         }
     }
 
     foreach ($file in $resolvedFiles) {
-        & $signTool verify /pa /v $file
+        & $signTool verify /pa /v $file | Out-Host
         if ($LASTEXITCODE -ne 0) {
             throw "Signature verification failed for '$file' with exit code $LASTEXITCODE."
         }
@@ -164,13 +164,20 @@ try {
 finally {
     Remove-Item -LiteralPath $pfxPath -Force -ErrorAction SilentlyContinue
 
-    foreach ($certificate in $certificates) {
-        if ([string]::IsNullOrWhiteSpace($certificate.Thumbprint)) {
+    $currentThumbprints = @(
+        Get-ChildItem -Path "Cert:\CurrentUser\My" -ErrorAction SilentlyContinue |
+            ForEach-Object { $_.Thumbprint }
+    )
+    $addedThumbprints = @(
+        @($certificates | ForEach-Object { $_.Thumbprint }) +
+        @($currentThumbprints | Where-Object { $existingThumbprints -notcontains $_ }) |
+            Where-Object { -not [string]::IsNullOrWhiteSpace($_) } |
+            Select-Object -Unique
+    )
+    foreach ($thumbprint in $addedThumbprints) {
+        if ($existingThumbprints -contains $thumbprint) {
             continue
         }
-        if ($existingThumbprints -contains $certificate.Thumbprint) {
-            continue
-        }
-        Remove-Item -LiteralPath ("Cert:\CurrentUser\My\" + $certificate.Thumbprint) -Force -ErrorAction SilentlyContinue
+        Remove-Item -LiteralPath ("Cert:\CurrentUser\My\" + $thumbprint) -DeleteKey -Force -ErrorAction SilentlyContinue
     }
 }

@@ -188,7 +188,7 @@ public sealed class ServiceRuntime : IAsyncDisposable
             catch
             {
                 _started = false;
-                await SafeStopControlServerAsync().ConfigureAwait(false);
+                await SafeStopControlServerAsync(CancellationToken.None).ConfigureAwait(false);
                 _correlationScope?.Dispose();
                 _correlationScope = null;
                 throw;
@@ -213,17 +213,16 @@ public sealed class ServiceRuntime : IAsyncDisposable
 
             _stop.Cancel();
 
-            await SafeStopControlServerAsync().ConfigureAwait(false);
-            await WaitForLoopAsync(_scheduleLoop).ConfigureAwait(false);
-            await WaitForLoopAsync(_retentionLoop).ConfigureAwait(false);
+            await SafeStopControlServerAsync(cancellationToken).ConfigureAwait(false);
+            await WaitForLoopsAsync(cancellationToken).ConfigureAwait(false);
 
-            await InterruptActiveSessionAsync().ConfigureAwait(false);
+            await InterruptActiveSessionAsync(cancellationToken).ConfigureAwait(false);
 
             await WriteAuditAsync(
                 AuditEventType.ProtectionServiceStopped,
                 "Protection service stopped; the persisted protection state and hosts section were kept for the next start.",
                 UtcNow(),
-                CancellationToken.None).ConfigureAwait(false);
+                cancellationToken).ConfigureAwait(false);
 
             _logger.Info(LogCategories.App, "====== EduFocus protection service stopped ======");
 
@@ -343,11 +342,11 @@ public sealed class ServiceRuntime : IAsyncDisposable
         }
     }
 
-    private async Task InterruptActiveSessionAsync()
+    private async Task InterruptActiveSessionAsync(CancellationToken cancellationToken)
     {
         try
         {
-            await _heartbeat.StopAsync(CancellationToken.None).ConfigureAwait(false);
+            await _heartbeat.StopAsync(cancellationToken).ConfigureAwait(false);
         }
         catch (Exception ex)
         {
@@ -359,7 +358,7 @@ public sealed class ServiceRuntime : IAsyncDisposable
 
         try
         {
-            var active = await _sessions.GetActiveAsync(CancellationToken.None).ConfigureAwait(false);
+            var active = await _sessions.GetActiveAsync(cancellationToken).ConfigureAwait(false);
             if (active is null)
                 return;
 
@@ -383,7 +382,7 @@ public sealed class ServiceRuntime : IAsyncDisposable
                     await _attentionEvents.CloseOpenAsync(
                         active.Id,
                         active.LastHeartbeatAtUtc,
-                        CancellationToken.None).ConfigureAwait(false);
+                        cancellationToken).ConfigureAwait(false);
                 }
                 catch (Exception ex)
                 {
@@ -393,13 +392,13 @@ public sealed class ServiceRuntime : IAsyncDisposable
                         ex);
                 }
             }
-            await _sessions.UpdateAsync(active, CancellationToken.None).ConfigureAwait(false);
+            await _sessions.UpdateAsync(active, cancellationToken).ConfigureAwait(false);
 
             await WriteAuditAsync(
                 AuditEventType.SessionInterrupted,
                 "Active study session interrupted because the protection service stopped.",
                 UtcNow(),
-                CancellationToken.None).ConfigureAwait(false);
+                cancellationToken).ConfigureAwait(false);
         }
         catch (Exception ex)
         {
@@ -410,11 +409,15 @@ public sealed class ServiceRuntime : IAsyncDisposable
         }
     }
 
-    private async Task SafeStopControlServerAsync()
+    private async Task SafeStopControlServerAsync(CancellationToken cancellationToken)
     {
         try
         {
-            await _controlServer.StopAsync(CancellationToken.None).ConfigureAwait(false);
+            await _controlServer.StopAsync(cancellationToken).ConfigureAwait(false);
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            _logger.Warning(LogCategories.Protection, "Stopping the service control pipe was cancelled by stop timeout.");
         }
         catch (Exception ex)
         {
@@ -424,18 +427,31 @@ public sealed class ServiceRuntime : IAsyncDisposable
         }
     }
 
-    private async Task WaitForLoopAsync(Task? loop)
+    private async Task WaitForLoopsAsync(CancellationToken cancellationToken)
     {
-        if (loop is null)
-            return;
+        var tasks = new List<Task>(2);
+        if (_scheduleLoop is not null)
+            tasks.Add(WaitForLoopAsync(_scheduleLoop, cancellationToken));
+        if (_retentionLoop is not null)
+            tasks.Add(WaitForLoopAsync(_retentionLoop, cancellationToken));
 
+        if (tasks.Count > 0)
+            await Task.WhenAll(tasks).ConfigureAwait(false);
+    }
+
+    private async Task WaitForLoopAsync(Task loop, CancellationToken cancellationToken)
+    {
         try
         {
-            await loop.WaitAsync(_options.StopTimeout, CancellationToken.None).ConfigureAwait(false);
+            await loop.WaitAsync(_options.StopTimeout, cancellationToken).ConfigureAwait(false);
         }
         catch (TimeoutException)
         {
             _logger.Warning(LogCategories.App, "A protection service loop did not stop in time.");
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            _logger.Warning(LogCategories.App, "Waiting for a protection service loop was cancelled by stop timeout.");
         }
         catch (Exception ex)
         {

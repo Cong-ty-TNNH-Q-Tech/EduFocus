@@ -328,6 +328,54 @@ public sealed class CloudSyncClientTests
         exception.ToString().Should().NotContain(Token);
     }
 
+    [Fact]
+    public async Task Mid_body_io_exception_maps_to_a_safe_network_error()
+    {
+        var handler = new StubHandler(_ => new HttpResponseMessage(HttpStatusCode.OK)
+        {
+            Content = new ThrowingReadContent()
+        });
+
+        var client = new CloudSyncClient(new HttpClient(handler));
+
+        var act = async () => await client.GetLinkStatusAsync(new Uri(CloudBaseUrl), Token);
+        var exception = (await act.Should().ThrowAsync<CloudSyncException>()).Which;
+
+        exception.Code.Should().Be(CloudErrorCodes.Network);
+        exception.IsNetworkError.Should().BeTrue();
+        exception.ToString().Should().NotContain(Token);
+    }
+
+    [Fact]
+    public async Task Plaintext_http_url_is_rejected_when_insecure_endpoints_are_disabled()
+    {
+        var handler = new StubHandler(_ => JsonResponse(HttpStatusCode.OK, new { linked = true }));
+        var client = new CloudSyncClient(
+            new HttpClient(handler),
+            allowInsecureDevelopmentEndpoints: false);
+
+        var act = async () => await client.GetLinkStatusAsync(new Uri("http://localhost:8080"), Token);
+        var exception = (await act.Should().ThrowAsync<CloudSyncException>()).Which;
+
+        exception.Code.Should().Be(CloudErrorCodes.RequestFailed);
+        handler.Requests.Should().BeEmpty();
+    }
+
+    private sealed class ThrowingReadContent : HttpContent
+    {
+        protected override Task SerializeToStreamAsync(Stream stream, TransportContext? context) =>
+            Task.CompletedTask;
+
+        protected override Task<Stream> CreateContentReadStreamAsync() =>
+            Task.FromException<Stream>(new IOException("reset during body read"));
+
+        protected override bool TryComputeLength(out long length)
+        {
+            length = 0;
+            return false;
+        }
+    }
+
     private static string JsonProperty(string body, string name) =>
         JsonDocument.Parse(body).RootElement.GetProperty(name).GetString()!;
 

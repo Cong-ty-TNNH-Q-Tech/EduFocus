@@ -63,6 +63,7 @@ public sealed class WindowsServiceHost
     private readonly CancellationTokenSource _stop = new();
 
     private IntPtr _statusHandle;
+    private Task? _startTask;
     private int _stopRequested;
     private int _stopStarted;
     private int _providerDisposed;
@@ -133,7 +134,7 @@ public sealed class WindowsServiceHost
         ReportStatus(ServiceStartPending, controlsAccepted: 0, checkpoint: 1);
         ReportStatus(ServiceStartPending, controlsAccepted: 0, checkpoint: 2);
 
-        _ = Task.Run(StartRuntimeAsync);
+        _startTask = Task.Run(StartRuntimeAsync);
     }
 
     private async Task StartRuntimeAsync()
@@ -208,6 +209,14 @@ public sealed class WindowsServiceHost
         if (Interlocked.Exchange(ref _stopRequested, 1) != 0)
             return;
 
+        try
+        {
+            _stop.Cancel();
+        }
+        catch (ObjectDisposedException)
+        {
+        }
+
         _ = Task.Run(StopRuntimeAsync);
     }
 
@@ -216,13 +225,32 @@ public sealed class WindowsServiceHost
         if (Interlocked.Exchange(ref _stopStarted, 1) != 0)
             return;
 
-        ReportStatus(ServiceStopPending, controlsAccepted: 0, checkpoint: 1);
+        var checkpoint = 1;
+        ReportStatus(ServiceStopPending, controlsAccepted: 0, checkpoint: (uint)checkpoint);
+
+        using var checkpointCts = new CancellationTokenSource();
+        var checkpointLoop = AdvanceStopCheckpointsAsync(
+            () => Interlocked.Increment(ref checkpoint),
+            checkpointCts.Token);
 
         var exitCode = 0;
 
         try
         {
             using var timeout = new CancellationTokenSource(StopTimeout);
+
+            var startTask = Volatile.Read(ref _startTask);
+            if (startTask is not null && !startTask.IsCompleted)
+            {
+                try
+                {
+                    await startTask.WaitAsync(timeout.Token).ConfigureAwait(false);
+                }
+                catch (OperationCanceledException) when (!timeout.IsCancellationRequested)
+                {
+                }
+            }
+
             await _runtime.StopAsync(timeout.Token).ConfigureAwait(false);
         }
         catch (OperationCanceledException)
@@ -239,10 +267,35 @@ public sealed class WindowsServiceHost
         if (!await DisposeProviderOnceAsync().ConfigureAwait(false))
             exitCode = 1;
 
+        checkpointCts.Cancel();
+        try
+        {
+            await checkpointLoop.ConfigureAwait(false);
+        }
+        catch (OperationCanceledException)
+        {
+        }
+
         Volatile.Write(ref _exitCode, exitCode);
         _stop.Dispose();
 
         ReportStatus(ServiceStopped, controlsAccepted: 0, checkpoint: 0);
+    }
+
+    private async Task AdvanceStopCheckpointsAsync(Func<int> nextCheckpoint, CancellationToken cancellationToken)
+    {
+        try
+        {
+            while (!cancellationToken.IsCancellationRequested)
+            {
+                await Task.Delay(TimeSpan.FromSeconds(5), cancellationToken).ConfigureAwait(false);
+                if (!cancellationToken.IsCancellationRequested && Volatile.Read(ref _stopStarted) != 0)
+                    ReportStatus(ServiceStopPending, controlsAccepted: 0, checkpoint: (uint)nextCheckpoint());
+            }
+        }
+        catch (OperationCanceledException)
+        {
+        }
     }
 
     private async Task<bool> DisposeProviderOnceAsync()

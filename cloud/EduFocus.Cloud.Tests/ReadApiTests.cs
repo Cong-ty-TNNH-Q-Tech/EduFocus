@@ -23,7 +23,7 @@ public sealed class ReadApiTests
     private const string TestDbVariable = "EDUFOCUS_CLOUD_TEST_DB";
     private const string TimeZone = "Asia/Ho_Chi_Minh";
     private const string PushEndpoint = "https://push.example.com/sub/device-1";
-    private const string PushP256dh = "BAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA";
+    private const string PushP256dh = "BAne4XPEmYu3KTOfxo4SXY2xZ3fRLQQ6QANsm9tBChPE2BifuZZqNZJIGf_kWIzIeGXB95zCJvAHNjR3-sOVZaw";
     private const string PushAuth = "AAAAAAAAAAAAAAAAAAAAAA";
 
     private static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web)
@@ -278,6 +278,12 @@ public sealed class ReadApiTests
         {
             Content = JsonContent.Create(new { confirmation = "XÓA" }, options: Json),
         };
+        var desktopDelete = await desktop.SendAsync(new HttpRequestMessage(HttpMethod.Delete, "/v1/family")
+        {
+            Content = JsonContent.Create(new { confirmation = "XÓA" }, options: Json),
+        });
+        Assert.Equal(HttpStatusCode.Forbidden, desktopDelete.StatusCode);
+
         var deleteResponse = await mobile.SendAsync(deleteRequest);
         Assert.Equal(HttpStatusCode.OK, deleteResponse.StatusCode);
 
@@ -302,6 +308,91 @@ public sealed class ReadApiTests
         using var oldMobile = CreateClient(factory, paired.MobileToken);
         var afterDelete = await oldMobile.GetAsync("/v1/link/status");
         Assert.Equal(HttpStatusCode.Unauthorized, afterDelete.StatusCode);
+    }
+
+    [Fact]
+    public async Task Daily_report_aggregates_multiple_desktops_on_same_date()
+    {
+        var connectionString = TestConnectionString();
+        if (connectionString is null)
+        {
+            return;
+        }
+
+        await ResetDatabaseAsync(connectionString);
+        await using var factory = new CloudApiFactory(connectionString);
+        using var anonymous = factory.CreateClient();
+        var paired = await PairAsync(anonymous);
+        var today = LocalToday();
+        var now = DateTimeOffset.UtcNow;
+
+        Guid secondDesktopId = Guid.NewGuid();
+        await using (var db = CreateContext(connectionString))
+        {
+            db.Devices.Add(new Device
+            {
+                Id = secondDesktopId,
+                FamilyId = paired.FamilyId,
+                Kind = DeviceKind.Desktop,
+                DisplayName = "Second PC",
+                Platform = "windows",
+                CreatedAtUtc = now,
+            });
+            var desktop1Id = await db.Devices
+                .Where(d => d.FamilyId == paired.FamilyId && d.Kind == DeviceKind.Desktop)
+                .Select(d => d.Id)
+                .FirstAsync();
+            db.DailySummaries.AddRange(
+                new DailySummary
+                {
+                    Id = Guid.NewGuid(),
+                    FamilyId = paired.FamilyId,
+                    DesktopDeviceId = desktop1Id,
+                    LocalDate = today,
+                    SessionsCount = 2,
+                    ActiveSeconds = 3600,
+                    StudySeconds = 3600,
+                    MonitoringEligibleSeconds = 3600,
+                    MonitoredSeconds = 3000,
+                    FocusedSeconds = 2700,
+                    DistractedSeconds = 300,
+                    BlockedAttempts = 1,
+                    AttentionPercent = 90.0,
+                    CoveragePercent = 83.3,
+                    UpdatedAtUtc = now.AddMinutes(-5),
+                },
+                new DailySummary
+                {
+                    Id = Guid.NewGuid(),
+                    FamilyId = paired.FamilyId,
+                    DesktopDeviceId = secondDesktopId,
+                    LocalDate = today,
+                    SessionsCount = 1,
+                    ActiveSeconds = 1800,
+                    StudySeconds = 1800,
+                    MonitoringEligibleSeconds = 1800,
+                    MonitoredSeconds = 1000,
+                    FocusedSeconds = 500,
+                    DistractedSeconds = 500,
+                    BlockedAttempts = 2,
+                    AttentionPercent = 50.0,
+                    CoveragePercent = 55.6,
+                    UpdatedAtUtc = now,
+                });
+            await db.SaveChangesAsync();
+        }
+
+        using var mobile = CreateClient(factory, paired.MobileToken);
+        var report = await mobile.GetFromJsonAsync<List<DailySummaryDto>>(
+            $"/v1/reports/daily?from={today:yyyy-MM-dd}&to={today:yyyy-MM-dd}", Json);
+        var day = Assert.Single(report!);
+        Assert.Equal(3, day.SessionsCount);
+        Assert.Equal(5400, day.StudySeconds);
+        Assert.Equal(4000, day.MonitoredSeconds);
+        Assert.Equal(3200, day.FocusedSeconds);
+        Assert.Equal(3, day.BlockedAttempts);
+        Assert.Equal(80.0, day.AttentionPercent);
+        Assert.Equal(74.1, day.CoveragePercent);
     }
 
     private static NotificationRecord SeedNotification(

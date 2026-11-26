@@ -7,6 +7,7 @@ using EduFocus.Ports.Inbound;
 using EduFocus.Ports.Outbound.Persistence;
 using EduFocus.Ports.Outbound.Services;
 using EduFocus.Ports.Protection;
+using EduFocus.UseCases.Cloud;
 
 namespace EduFocus.UseCases.Schedule;
 
@@ -36,6 +37,7 @@ public sealed class ScheduleService : IScheduleUseCase
     private readonly IAppLogger _logger;
     private readonly TimeProvider _timeProvider;
     private readonly IMonotonicClockPort _monotonic;
+    private readonly CloudSecurityAlertProducer? _securityAlerts;
     private readonly SemaphoreSlim _gate = new(1, 1);
 
     private DateTime? _lastWallUtc;
@@ -52,7 +54,8 @@ public sealed class ScheduleService : IScheduleUseCase
         ICorrelationContext correlation,
         IAppLogger logger,
         TimeProvider timeProvider,
-        IMonotonicClockPort monotonic)
+        IMonotonicClockPort monotonic,
+        CloudSecurityAlertProducer? securityAlerts = null)
     {
         _windows = windows ?? throw new ArgumentNullException(nameof(windows));
         _settings = settings ?? throw new ArgumentNullException(nameof(settings));
@@ -63,6 +66,7 @@ public sealed class ScheduleService : IScheduleUseCase
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
         _timeProvider = timeProvider ?? throw new ArgumentNullException(nameof(timeProvider));
         _monotonic = monotonic ?? throw new ArgumentNullException(nameof(monotonic));
+        _securityAlerts = securityAlerts;
     }
 
     public async Task<ScheduleOverview> GetOverviewAsync(CancellationToken cancellationToken = default)
@@ -347,6 +351,11 @@ public sealed class ScheduleService : IScheduleUseCase
                 "System clock jump detected; schedule enforcement skipped for this evaluation.",
                 now,
                 cancellationToken);
+
+            if (_securityAlerts is not null)
+            {
+                await _securityAlerts.TryScanAsync(cancellationToken);
+            }
         }
 
         var settings = await _settings.GetAsync(cancellationToken);

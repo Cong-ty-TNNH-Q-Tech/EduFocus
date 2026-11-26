@@ -250,6 +250,45 @@ public sealed class CloudSyncWorkerTests
         harness.Logger.Warnings.Should().Contain(message => message.Contains("1 oldest event(s)"));
     }
 
+    [Fact]
+    public async Task Poison_pill_outbox_row_is_failed_without_blocking_valid_events()
+    {
+        var harness = new Harness();
+        var badJson = CloudOutboxEvent.Create(Guid.NewGuid().ToString("D"), "daily_summary", "{not-json", Start);
+        var badType = CloudOutboxEvent.Create(Guid.NewGuid().ToString("D"), "unknown_type", Payload, Start.AddSeconds(1));
+        var valid = NewEvent(Start.AddSeconds(2));
+        await harness.Outbox.AddAsync(badJson);
+        await harness.Outbox.AddAsync(badType);
+        await harness.Outbox.AddAsync(valid);
+
+        await harness.Worker.RunOnceAsync();
+
+        badJson.FailedAtUtc.Should().NotBeNull();
+        badJson.LastError.Should().Be("invalid_payload");
+        badType.FailedAtUtc.Should().NotBeNull();
+        badType.LastError.Should().Be("invalid_payload");
+        valid.SentAtUtc.Should().NotBeNull();
+        harness.Sync.Batches.Should().ContainSingle().Which.Should().ContainSingle();
+    }
+
+    [Fact]
+    public async Task Rate_limit_retry_after_is_clamped_to_max_backoff()
+    {
+        var harness = new Harness();
+        var item = NewEvent(Start);
+        await harness.Outbox.AddAsync(item);
+        harness.Sync.Failure = new CloudSyncException(
+            CloudErrorCodes.RateLimited,
+            "rate limited",
+            isNetworkError: false,
+            statusCode: 429,
+            retryAfter: TimeSpan.FromDays(30));
+
+        await harness.Worker.RunOnceAsync();
+
+        item.NextAttemptAtUtc.Should().Be(harness.Time.UtcNow.UtcDateTime + CloudSyncWorker.MaxBackoff);
+    }
+
     private static CloudOutboxEvent NewEvent(DateTime createdAtUtc) =>
         CloudOutboxEvent.Create(Guid.NewGuid().ToString("D"), "daily_summary", Payload, createdAtUtc);
 

@@ -41,13 +41,13 @@ public sealed class DomainName : IEquatable<DomainName>
         }
         else
         {
-            var at = text.LastIndexOf('@');
-            if (at >= 0)
-                text = text[(at + 1)..];
-
             var pathStart = text.IndexOfAny(['/', '?', '#']);
             if (pathStart >= 0)
                 text = text[..pathStart];
+
+            var at = text.LastIndexOf('@');
+            if (at >= 0)
+                text = text[(at + 1)..];
 
             text = StripPort(text);
         }

@@ -13,7 +13,8 @@ public sealed class SessionExpiryService(
     ParentSettingsStore settings,
     ParentDataCache cache)
 {
-    private int _expired;
+    private readonly object _gate = new();
+    private Task? _clearingTask;
 
     public event Action? Expired;
 
@@ -31,12 +32,49 @@ public sealed class SessionExpiryService(
 
     public async Task HandleUnauthorizedAsync(CancellationToken cancellationToken = default)
     {
-        if (Interlocked.Exchange(ref _expired, 1) == 1)
-            return;
+        Task clearingTask;
+        lock (_gate)
+        {
+            if (_clearingTask is null || _clearingTask.IsFaulted)
+            {
+                _clearingTask = RunClearAsync();
+            }
 
-        await ClearLocalAsync(cancellationToken);
-        Expired?.Invoke();
+            clearingTask = _clearingTask;
+        }
+
+        try
+        {
+            await clearingTask.WaitAsync(cancellationToken);
+        }
+        catch
+        {
+            if (clearingTask.IsFaulted)
+            {
+                lock (_gate)
+                {
+                    if (ReferenceEquals(_clearingTask, clearingTask))
+                    {
+                        _clearingTask = null;
+                    }
+                }
+            }
+
+            throw;
+        }
     }
 
-    public void Reset() => Interlocked.Exchange(ref _expired, 0);
+    public void Reset()
+    {
+        lock (_gate)
+        {
+            _clearingTask = null;
+        }
+    }
+
+    private async Task RunClearAsync()
+    {
+        await ClearLocalAsync(CancellationToken.None);
+        Expired?.Invoke();
+    }
 }

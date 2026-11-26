@@ -50,6 +50,14 @@ public sealed class ReportService : IReportUseCase
             .ListByLocalDateRangeAsync(priorDate, period.End, cancellationToken)
             .ConfigureAwait(false);
 
+        var activeSession = await _sessions.GetActiveAsync(cancellationToken).ConfigureAwait(false);
+        if (activeSession is not null
+            && activeSession.StartLocalDate < priorDate
+            && candidateSessions.All(s => s.Id != activeSession.Id))
+        {
+            candidateSessions = candidateSessions.Concat([activeSession]).ToList();
+        }
+
         var periodStartLocal = period.Start.ToDateTime(TimeOnly.MinValue);
         var periodStartUtc = ScheduleClock.LocalToUtc(periodStartLocal, _timeProvider.LocalTimeZone);
 

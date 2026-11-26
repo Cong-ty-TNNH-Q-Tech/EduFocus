@@ -294,6 +294,13 @@ internal sealed class FakeSessionRepository : IStudySessionRepository
         DateTime nowUtc,
         CancellationToken cancellationToken = default) =>
         Task.FromResult(false);
+
+    public Task<bool> SetMonitoringEnabledAsync(
+        StudySessionId sessionId,
+        bool monitoringEnabled,
+        DateTime nowUtc,
+        CancellationToken cancellationToken = default) =>
+        Task.FromResult(false);
 }
 
 internal sealed class RecordingAuditLogRepository : IAuditLogRepository

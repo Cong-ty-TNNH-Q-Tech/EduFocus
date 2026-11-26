@@ -1190,7 +1190,6 @@
                                             <ComboBox Grid.Column="0" SelectedIndex="{Binding Blocklist.NewRuleTypeIndex, Mode=TwoWay}">
                                                 <ComboBoxItem Content="Tên miền (Domain)" />
                                                 <ComboBoxItem Content="Ứng dụng (App)" />
-                                                <ComboBoxItem Content="Đường dẫn (URL)" />
                                             </ComboBox>
                                             <ComboBox Grid.Column="2" SelectedIndex="{Binding Blocklist.NewRuleEffectIndex, Mode=TwoWay}">
                                                 <ComboBoxItem Content="Chặn (Block)" />
@@ -1570,16 +1569,6 @@
                                                     Style="{StaticResource LinkButton}" Margin="0,4,0,0"
                                                     HorizontalAlignment="Left"
                                                     Command="{Binding CloudLink.OpenPrivacyNoticeCommand}" />
-
-                                            <TextBlock Text="Máy chủ cloud (self-host)"
-                                                       Style="{StaticResource SectionHeaderText}" />
-                                            <TextBox Text="{Binding CloudLink.CloudBaseUrl, UpdateSourceTrigger=PropertyChanged}" />
-                                            <TextBlock Text="Cảnh báo: địa chỉ http không được mã hóa. Chỉ dùng cho demo trên mạng LAN nội bộ."
-                                                       Style="{StaticResource ErrorText}" Margin="0,6,0,0"
-                                                       TextWrapping="Wrap"
-                                                       Visibility="{Binding CloudLink.IsInsecureUrl, Converter={StaticResource BoolToVisibility}}" />
-                                            <TextBlock Style="{StaticResource CaptionText}" Margin="0,6,0,0"
-                                                       Text="Bản phát hành bắt buộc HTTPS. Bản phát triển cho phép http với localhost hoặc địa chỉ IP mạng LAN." />
 
                                             <TextBlock Text="Tên máy này khi ghép nối"
                                                        Style="{StaticResource FieldLabelText}" />

@@ -1,7 +1,5 @@
 using System.Globalization;
 using System.Threading.RateLimiting;
-using EduFocus.Cloud.Api.Auth;
-using EduFocus.Cloud.Api.Common;
 using EduFocus.Cloud.Api.Options;
 using EduFocus.Cloud.Contracts.Common;
 using Microsoft.AspNetCore.RateLimiting;
@@ -23,6 +21,18 @@ public static class RateLimitSetup
         services.AddRateLimiter(options =>
         {
             options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
+
+            var globalPerMinute = Math.Max(limits.RequestsPerMinute * 4, 400);
+            options.GlobalLimiter = PartitionedRateLimiter.Create<HttpContext, string>(context =>
+                RateLimitPartition.GetFixedWindowLimiter(
+                    $"global:{ClientKey(context)}",
+                    _ => new FixedWindowRateLimiterOptions
+                    {
+                        PermitLimit = globalPerMinute,
+                        Window = TimeSpan.FromMinutes(1),
+                        QueueLimit = 0,
+                        AutoReplenishment = true,
+                    }));
 
             options.AddPolicy(RateLimitPolicies.PairingCreate, context =>
                 FixedWindow($"create:{ClientKey(context)}", limits.PairingCreatePerHour, TimeSpan.FromHours(1)));
@@ -68,15 +78,17 @@ public static class RateLimitSetup
     private static string ClientKey(HttpContext context) =>
         context.Connection.RemoteIpAddress?.ToString() ?? "unknown";
 
+    /// <summary>
+    /// Partitions authenticated callers by verified device ID, falling back to client IP for unauthenticated traffic.
+    /// </summary>
     public static string TokenKey(HttpContext context)
     {
-        var header = context.Request.Headers.Authorization.ToString();
-        if (header.StartsWith("Bearer ", StringComparison.OrdinalIgnoreCase))
+        if (context.User.Identity?.IsAuthenticated == true)
         {
-            var token = header["Bearer ".Length..].Trim();
-            if (DeviceTokenService.TryHash(token, out var hash))
+            var deviceId = context.User.FindFirst("device_id")?.Value;
+            if (!string.IsNullOrWhiteSpace(deviceId))
             {
-                return "token:" + hash;
+                return "device:" + deviceId;
             }
         }
 

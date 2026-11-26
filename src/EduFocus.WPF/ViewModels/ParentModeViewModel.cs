@@ -52,6 +52,9 @@ public partial class ParentModeViewModel : ObservableObject
 
     private DateTime? _lockoutUntilUtc;
     private int _ticksSinceDashboardRefresh;
+    private bool _isClosed;
+    private bool _refreshingLive;
+    private CancellationTokenSource? _windowCts;
 
     [ObservableProperty] private ParentModeView _view = ParentModeView.Loading;
     [ObservableProperty] private bool _isBusy;
@@ -212,6 +215,12 @@ public partial class ParentModeViewModel : ObservableObject
         try
         {
             var result = await Task.Run(() => _mode.LoginAsync(pin));
+            if (_isClosed)
+            {
+                _mode.Lock();
+                return;
+            }
+
             await ApplyLoginResultAsync(result);
         }
         catch (Exception ex)
@@ -514,15 +523,24 @@ public partial class ParentModeViewModel : ObservableObject
 
     public void HandleWindowOpened()
     {
+        _isClosed = false;
+        _windowCts?.Dispose();
+        _windowCts = new CancellationTokenSource();
         _cloudLink.HandleWindowOpened();
         UpdateCloudLinkVisibility();
     }
 
     public void HandleWindowClosed()
     {
+        _isClosed = true;
+        _windowCts?.Cancel();
+        _windowCts?.Dispose();
+        _windowCts = null;
         _mode.Lock();
         IssuedRecoveryCode = string.Empty;
         ClearInputs();
+        _privacy.ClearDeleteSecrets();
+        _camera.CancelCheck();
         _cloudLink.HandleWindowClosed();
     }
 
@@ -533,13 +551,21 @@ public partial class ParentModeViewModel : ObservableObject
             case ParentAuthStatus.Success:
                 _lockoutUntilUtc = null;
                 await _protection.RefreshAsync();
+                if (_isClosed) { _mode.Lock(); return; }
                 await _schedule.RefreshAsync();
+                if (_isClosed) { _mode.Lock(); return; }
                 await _blocklist.RefreshAsync();
+                if (_isClosed) { _mode.Lock(); return; }
                 await RefreshCameraAsync();
+                if (_isClosed) { _mode.Lock(); return; }
                 await _dashboard.RefreshAsync();
+                if (_isClosed) { _mode.Lock(); return; }
                 await _report.RefreshAsync();
+                if (_isClosed) { _mode.Lock(); return; }
                 await _privacy.RefreshAsync();
+                if (_isClosed) { _mode.Lock(); return; }
                 await _cloudLink.RefreshAsync();
+                if (_isClosed) { _mode.Lock(); return; }
                 _ticksSinceDashboardRefresh = 0;
                 View = ParentModeView.Management;
                 SetStatus("Đã mở Parent Mode. Phiên tự khóa sau 5 phút không hoạt động.", false);
@@ -569,8 +595,19 @@ public partial class ParentModeViewModel : ObservableObject
 
     private async Task RefreshLiveAsync()
     {
-        await _protection.RefreshAsync();
-        await _dashboard.RefreshAsync();
+        if (_refreshingLive || _isClosed)
+            return;
+
+        _refreshingLive = true;
+        try
+        {
+            await _protection.RefreshAsync();
+            await _dashboard.RefreshAsync();
+        }
+        finally
+        {
+            _refreshingLive = false;
+        }
     }
 
     private void ApplyLockout(DateTime? lockoutUntilUtc)

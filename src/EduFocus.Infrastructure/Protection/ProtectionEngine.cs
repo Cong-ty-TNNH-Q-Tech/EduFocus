@@ -32,9 +32,6 @@ public sealed class ProtectionEngine : IProtectionEnginePort, IAsyncDisposable
     public const string PageStopWarning =
         "Không thể dừng block page; listener có thể vẫn mở nhưng không còn domain bị chặn.";
 
-    public const string BrowserBridgeWarning =
-        "Không thể khởi động cầu nối extension trình duyệt; chặn URL/path tạm thời không hiệu lực.";
-
     public const string BrowserDnsPolicyWarning =
         "Không thể tắt Secure DNS của Chrome/Edge; trình duyệt có thể bỏ qua hosts. " +
         "Hãy chạy EduFocus với quyền quản trị và khởi động lại trình duyệt.";
@@ -57,7 +54,6 @@ public sealed class ProtectionEngine : IProtectionEnginePort, IAsyncDisposable
     private readonly IAppLogger _logger;
     private readonly TimeProvider _timeProvider;
     private readonly ProtectionEngineOptions _options;
-    private readonly IBrowserExtensionBridge? _browserBridge;
     private readonly IBrowserDnsPolicyPort? _browserDnsPolicy;
     private readonly ILocalCertificateAuthority? _certificateAuthority;
     private readonly SemaphoreSlim _gate = new(1, 1);
@@ -80,7 +76,6 @@ public sealed class ProtectionEngine : IProtectionEnginePort, IAsyncDisposable
         IAppLogger logger,
         TimeProvider timeProvider,
         ProtectionEngineOptions options,
-        IBrowserExtensionBridge? browserBridge = null,
         IBrowserDnsPolicyPort? browserDnsPolicy = null,
         ILocalCertificateAuthority? certificateAuthority = null)
     {
@@ -100,15 +95,11 @@ public sealed class ProtectionEngine : IProtectionEnginePort, IAsyncDisposable
             throw new ArgumentOutOfRangeException(nameof(options), "Debounce must be between 0 and 1 day.");
 
         _options = options;
-        _browserBridge = browserBridge;
         _browserDnsPolicy = browserDnsPolicy;
         _certificateAuthority = certificateAuthority;
 
         _blockPage.BlockedRequestObserved += OnBlockPageHit;
         _watcher.ProcessBlockedObserved += OnProcessBlocked;
-
-        if (_browserBridge is not null)
-            _browserBridge.BlockedAttemptObserved += OnBrowserBlocked;
     }
 
     public async Task<IReadOnlyList<string>> ApplyAsync(CancellationToken cancellationToken = default)
@@ -144,6 +135,13 @@ public sealed class ProtectionEngine : IProtectionEnginePort, IAsyncDisposable
         await _gate.WaitAsync(cancellationToken).ConfigureAwait(false);
         try
         {
+            if (shouldBeActive)
+            {
+                return _active
+                    ? await ReloadRulesCoreAsync(cancellationToken).ConfigureAwait(false)
+                    : await ApplyCoreAsync(cancellationToken).ConfigureAwait(false);
+            }
+
             try
             {
                 await _hosts.SelfHealAsync(cancellationToken).ConfigureAwait(false);
@@ -160,9 +158,7 @@ public sealed class ProtectionEngine : IProtectionEnginePort, IAsyncDisposable
                     ex);
             }
 
-            return shouldBeActive
-                ? await ApplyCoreAsync(cancellationToken).ConfigureAwait(false)
-                : await RemoveCoreAsync(cancellationToken).ConfigureAwait(false);
+            return await RemoveCoreAsync(cancellationToken).ConfigureAwait(false);
         }
         finally
         {
@@ -175,74 +171,9 @@ public sealed class ProtectionEngine : IProtectionEnginePort, IAsyncDisposable
         await _gate.WaitAsync(cancellationToken).ConfigureAwait(false);
         try
         {
-            if (!_active)
-                return [];
-
-            var nowUtc = _timeProvider.GetUtcNow().UtcDateTime;
-            var effective = await LoadRulesAsync(nowUtc, cancellationToken).ConfigureAwait(false);
-            var warnings = new List<string>();
-
-            try
-            {
-                _blockPage.UpdateDomains(effective.Domains);
-            }
-            catch (Exception ex)
-            {
-                _logger.Warning(
-                    LogCategories.Protection,
-                    $"Could not update block page domains during live reload ({ex.GetType().Name}).");
-            }
-
-            try
-            {
-                await _hosts.ApplyAsync(effective.Domains, cancellationToken).ConfigureAwait(false);
-            }
-            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
-            {
-                throw;
-            }
-            catch (Exception ex)
-            {
-                _logger.Error(LogCategories.Protection, "Could not update hosts file during live reload.", ex);
-                throw new ProtectionEngineException("reload", "Could not update the hosts file.", ex);
-            }
-
-            try
-            {
-                _watcher.UpdateRules(effective.BlockedApps, effective.AllowedApps);
-            }
-            catch (Exception ex)
-            {
-                _logger.Warning(
-                    LogCategories.Protection,
-                    $"Could not update process watcher rules during live reload ({ex.GetType().Name}).");
-            }
-
-            if (_browserBridge is { IsRunning: true })
-            {
-                try
-                {
-                    await _browserBridge
-                        .UpdateRulesAsync(effective.ExtensionRules.ToArray(), nowUtc, cancellationToken)
-                        .ConfigureAwait(false);
-                }
-                catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
-                {
-                    throw;
-                }
-                catch (Exception ex)
-                {
-                    _logger.Warning(
-                        LogCategories.Protection,
-                        $"Could not update browser extension rules during live reload ({ex.GetType().Name}).");
-                    warnings.Add(BrowserBridgeWarning);
-                }
-            }
-
-            _logger.Info(
-                LogCategories.Protection,
-                $"Protection engine rules reloaded: {effective.Domains.Count} blocked domains, {effective.BlockedApps.Count} blocked apps.");
-            return warnings;
+            return _active
+                ? await ReloadRulesCoreAsync(cancellationToken).ConfigureAwait(false)
+                : [];
         }
         finally
         {
@@ -250,26 +181,58 @@ public sealed class ProtectionEngine : IProtectionEnginePort, IAsyncDisposable
         }
     }
 
+    private async Task<IReadOnlyList<string>> ReloadRulesCoreAsync(CancellationToken cancellationToken)
+    {
+        var nowUtc = _timeProvider.GetUtcNow().UtcDateTime;
+        var effective = await LoadRulesAsync(nowUtc, cancellationToken).ConfigureAwait(false);
+        var warnings = new List<string>();
+
+        try
+        {
+            _blockPage.UpdateDomains(effective.Domains);
+        }
+        catch (Exception ex)
+        {
+            _logger.Warning(
+                LogCategories.Protection,
+                $"Could not update block page domains during live reload ({ex.GetType().Name}).");
+        }
+
+        try
+        {
+            await _hosts.ApplyAsync(effective.Domains, cancellationToken).ConfigureAwait(false);
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            _logger.Error(LogCategories.Protection, "Could not update hosts file during live reload.", ex);
+            throw new ProtectionEngineException("reload", "Could not update the hosts file.", ex);
+        }
+
+        try
+        {
+            _watcher.UpdateRules(effective.BlockedApps, effective.AllowedApps);
+        }
+        catch (Exception ex)
+        {
+            _logger.Warning(
+                LogCategories.Protection,
+                $"Could not update process watcher rules during live reload ({ex.GetType().Name}).");
+        }
+
+        _logger.Info(
+            LogCategories.Protection,
+            $"Protection engine rules reloaded: {effective.Domains.Count} blocked domains, {effective.BlockedApps.Count} blocked apps.");
+        return warnings;
+    }
+
     public async ValueTask DisposeAsync()
     {
         _blockPage.BlockedRequestObserved -= OnBlockPageHit;
         _watcher.ProcessBlockedObserved -= OnProcessBlocked;
-
-        if (_browserBridge is not null)
-        {
-            _browserBridge.BlockedAttemptObserved -= OnBrowserBlocked;
-
-            try
-            {
-                await _browserBridge.StopAsync(CancellationToken.None).ConfigureAwait(false);
-            }
-            catch (Exception ex)
-            {
-                _logger.Warning(
-                    LogCategories.Protection,
-                    $"Could not stop the browser extension bridge ({ex.GetType().Name}).");
-            }
-        }
 
         _accepting = false;
 
@@ -364,6 +327,10 @@ public sealed class ProtectionEngine : IProtectionEnginePort, IAsyncDisposable
             warnings.Add(page.Warning
                 ?? "Block page không khả dụng; trạng thái bảo vệ vẫn được giữ.");
         }
+        else if (!string.IsNullOrWhiteSpace(page.Warning))
+        {
+            warnings.Add(page.Warning);
+        }
 
         try
         {
@@ -386,30 +353,6 @@ public sealed class ProtectionEngine : IProtectionEnginePort, IAsyncDisposable
                 ex);
         }
 
-        if (_browserBridge is not null)
-        {
-            try
-            {
-                await _browserBridge
-                    .StartAsync(effective.ExtensionRules.ToArray(), nowUtc, cancellationToken)
-                    .ConfigureAwait(false);
-            }
-            catch (OperationCanceledException)
-            {
-                await AbortApplyAsync(queue).ConfigureAwait(false);
-                throw;
-            }
-            catch (Exception ex)
-            {
-                // The extension is an additional layer; OS-level protection stays on.
-                _logger.Error(
-                    LogCategories.Protection,
-                    "Could not start the browser extension bridge.",
-                    ex);
-                warnings.Add(BrowserBridgeWarning);
-            }
-        }
-
         _active = true;
         _logger.Info(
             LogCategories.Protection,
@@ -422,7 +365,6 @@ public sealed class ProtectionEngine : IProtectionEnginePort, IAsyncDisposable
     {
         _accepting = false;
 
-        await StopBrowserBridgeAsync().ConfigureAwait(false);
         await TryAsync(() => _watcher.UpdateRules([], []), "clear watcher rules").ConfigureAwait(false);
         await TryAsync(() => _watcher.StopAsync(CancellationToken.None), "stop the process watcher")
             .ConfigureAwait(false);
@@ -447,7 +389,6 @@ public sealed class ProtectionEngine : IProtectionEnginePort, IAsyncDisposable
     private async Task<IReadOnlyList<string>> RemoveCoreAsync(CancellationToken cancellationToken)
     {
         _accepting = false;
-        await StopBrowserBridgeAsync().ConfigureAwait(false);
 
         var queue = _queue;
         var writer = _writer;
@@ -455,98 +396,103 @@ public sealed class ProtectionEngine : IProtectionEnginePort, IAsyncDisposable
         _writer = null;
 
         var warnings = new List<string>();
-
         try
         {
-            _watcher.UpdateRules([], []);
-        }
-        catch (Exception ex)
-        {
-            _logger.Warning(
-                LogCategories.Protection,
-                $"Could not clear watcher rules ({ex.GetType().Name}).");
-        }
+            try
+            {
+                _watcher.UpdateRules([], []);
+            }
+            catch (Exception ex)
+            {
+                _logger.Warning(
+                    LogCategories.Protection,
+                    $"Could not clear watcher rules ({ex.GetType().Name}).");
+            }
 
-        try
-        {
-            _blockPage.UpdateDomains([]);
-        }
-        catch (Exception ex)
-        {
-            _logger.Warning(
-                LogCategories.Protection,
-                $"Could not clear block page domains ({ex.GetType().Name}).");
-        }
+            try
+            {
+                _blockPage.UpdateDomains([]);
+            }
+            catch (Exception ex)
+            {
+                _logger.Warning(
+                    LogCategories.Protection,
+                    $"Could not clear block page domains ({ex.GetType().Name}).");
+            }
 
-        try
-        {
-            await _watcher.StopAsync(cancellationToken).ConfigureAwait(false);
-        }
-        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
-        {
-            throw;
-        }
-        catch (Exception ex)
-        {
-            _logger.Warning(
-                LogCategories.Protection,
-                $"Could not stop the process watcher ({ex.GetType().Name}).");
-            warnings.Add(WatcherStopWarning);
-        }
+            try
+            {
+                await _watcher.StopAsync(cancellationToken).ConfigureAwait(false);
+            }
+            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+            {
+                throw;
+            }
+            catch (Exception ex)
+            {
+                _logger.Warning(
+                    LogCategories.Protection,
+                    $"Could not stop the process watcher ({ex.GetType().Name}).");
+                warnings.Add(WatcherStopWarning);
+            }
 
-        try
-        {
-            await _blockPage.StopAsync(cancellationToken).ConfigureAwait(false);
-        }
-        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
-        {
-            throw;
-        }
-        catch (Exception ex)
-        {
-            _logger.Warning(
-                LogCategories.Protection,
-                $"Could not stop the block page ({ex.GetType().Name}).");
-            warnings.Add(PageStopWarning);
-        }
+            try
+            {
+                await _blockPage.StopAsync(cancellationToken).ConfigureAwait(false);
+            }
+            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+            {
+                throw;
+            }
+            catch (Exception ex)
+            {
+                _logger.Warning(
+                    LogCategories.Protection,
+                    $"Could not stop the block page ({ex.GetType().Name}).");
+                warnings.Add(PageStopWarning);
+            }
 
-        Exception? hostsFailure = null;
-        try
-        {
-            await _hosts.RestoreAsync(cancellationToken).ConfigureAwait(false);
+            Exception? hostsFailure = null;
+            try
+            {
+                await _hosts.RestoreAsync(cancellationToken).ConfigureAwait(false);
+            }
+            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+            {
+                throw;
+            }
+            catch (Exception ex)
+            {
+                _logger.Error(LogCategories.Protection, "Could not remove the hosts block section.", ex);
+                hostsFailure = ex;
+            }
+
+            warnings.AddRange(
+                await RestoreBrowserDnsPolicyAsync(CancellationToken.None).ConfigureAwait(false));
+
+            // Protection is OFF and the HTTPS listener has stopped, so the root no
+            // longer needs to be trusted on this machine.
+            warnings.AddRange(
+                await RemoveCertificateAuthorityTrustAsync(CancellationToken.None).ConfigureAwait(false));
+
+            _active = false;
+
+            if (hostsFailure is not null)
+            {
+                throw new ProtectionEngineException(
+                    "remove",
+                    "Could not restore the hosts file; protection stays ON.",
+                    hostsFailure);
+            }
+
+            _logger.Info(LogCategories.Protection, "Protection engine removed.");
+            return warnings;
         }
-        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        finally
         {
-            throw;
+            await DrainAsync(queue, writer).ConfigureAwait(false);
+            _lastRecorded.Clear();
         }
-        catch (Exception ex)
-        {
-            _logger.Error(LogCategories.Protection, "Could not remove the hosts block section.", ex);
-            hostsFailure = ex;
-        }
-
-        warnings.AddRange(
-            await RestoreBrowserDnsPolicyAsync(CancellationToken.None).ConfigureAwait(false));
-
-        // Protection is OFF and the HTTPS listener has stopped, so the root no
-        // longer needs to be trusted on this machine.
-        warnings.AddRange(
-            await RemoveCertificateAuthorityTrustAsync(CancellationToken.None).ConfigureAwait(false));
-
-        await DrainAsync(queue, writer).ConfigureAwait(false);
-        _active = false;
-        _lastRecorded.Clear();
-
-        if (hostsFailure is not null)
-        {
-            throw new ProtectionEngineException(
-                "remove",
-                "Could not restore the hosts file; protection stays ON.",
-                hostsFailure);
-        }
-
-        _logger.Info(LogCategories.Protection, "Protection engine removed.");
-        return warnings;
     }
 
     private async Task<EffectiveRules> LoadRulesAsync(
@@ -560,10 +506,6 @@ public sealed class ProtectionEngine : IProtectionEnginePort, IAsyncDisposable
                 || (rule.RuleType == RuleType.Domain && rule.MatchType == RuleMatchType.Suffix))
                 && rule.IsEffective(nowUtc))
             .ToList();
-
-        var extensionRules = all
-            .Where(rule => rule.IsEffective(nowUtc))
-            .ToArray();
 
         var allowedDomains = effective
             .Where(rule => rule.RuleType == RuleType.Domain && rule.Effect == BlockRuleEffect.Allow)
@@ -597,7 +539,7 @@ public sealed class ProtectionEngine : IProtectionEnginePort, IAsyncDisposable
             .Distinct(StringComparer.Ordinal)
             .ToArray();
 
-        return new EffectiveRules(domains, blockedApps, allowedApps, extensionRules);
+        return new EffectiveRules(domains, blockedApps, allowedApps);
     }
 
     private static IEnumerable<string> ExpandBlockedDomainHosts(BlockRule rule)
@@ -628,14 +570,6 @@ public sealed class ProtectionEngine : IProtectionEnginePort, IAsyncDisposable
         TryEnqueue(observation.ProcessName, observation.ObservedAtUtc, BlockedAttemptTargetType.App);
     }
 
-    private void OnBrowserBlocked(object? sender, BrowserBlockedAttempt attempt)
-    {
-        if (attempt is null || !_accepting)
-            return;
-
-        TryEnqueue(attempt.Url, attempt.ObservedAtUtc, BlockedAttemptTargetType.Url);
-    }
-
     private void TryEnqueue(string value, DateTimeOffset observedAtUtc, BlockedAttemptTargetType targetType)
     {
         if (string.IsNullOrWhiteSpace(value))
@@ -645,12 +579,7 @@ public sealed class ProtectionEngine : IProtectionEnginePort, IAsyncDisposable
         if (queue is null)
             return;
 
-        var prefix = targetType switch
-        {
-            BlockedAttemptTargetType.Domain => "d:",
-            BlockedAttemptTargetType.App => "a:",
-            _ => "u:"
-        };
+        var prefix = targetType == BlockedAttemptTargetType.Domain ? "d:" : "a:";
 
         var key = prefix + value.Trim().ToLowerInvariant();
         var now = _clock.GetTickCount();
@@ -698,12 +627,6 @@ public sealed class ProtectionEngine : IProtectionEnginePort, IAsyncDisposable
                 BlockedAttemptObservedVia.ProcessWatcher,
                 session?.Id,
                 processName: record.Value),
-            BlockedAttemptTargetType.Url => BlockedAttempt.Record(
-                record.OccurredAtUtc,
-                BlockedAttemptTargetType.Url,
-                record.Value,
-                BlockedAttemptObservedVia.Extension,
-                session?.Id),
             _ => throw new InvalidOperationException("Unknown blocked attempt target type.")
         };
 
@@ -872,28 +795,10 @@ public sealed class ProtectionEngine : IProtectionEnginePort, IAsyncDisposable
         }
     }
 
-    private async Task StopBrowserBridgeAsync()
-    {
-        if (_browserBridge is null)
-            return;
-
-        try
-        {
-            await _browserBridge.StopAsync(CancellationToken.None).ConfigureAwait(false);
-        }
-        catch (Exception ex)
-        {
-            _logger.Warning(
-                LogCategories.Protection,
-                $"Could not stop the browser extension bridge ({ex.GetType().Name}).");
-        }
-    }
-
     private sealed record EffectiveRules(
         IReadOnlyCollection<string> Domains,
         IReadOnlyCollection<string> BlockedApps,
-        IReadOnlyCollection<string> AllowedApps,
-        IReadOnlyCollection<BlockRule> ExtensionRules);
+        IReadOnlyCollection<string> AllowedApps);
 
     private readonly record struct AttemptRecord(
         string Value,

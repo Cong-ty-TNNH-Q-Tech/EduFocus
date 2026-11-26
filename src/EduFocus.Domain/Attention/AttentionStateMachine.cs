@@ -2,7 +2,7 @@ namespace EduFocus.Domain.Attention;
 
 public sealed class AttentionStateMachine
 {
-    private AttentionThresholds _thresholds;
+    private volatile AttentionThresholds _thresholds;
     private RawAttentionState _candidateState = RawAttentionState.Unknown;
     private DateTimeOffset _candidateSince;
     private bool _hasCandidate;

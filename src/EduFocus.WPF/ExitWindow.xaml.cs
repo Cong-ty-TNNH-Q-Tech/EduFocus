@@ -27,8 +27,15 @@ public partial class ExitWindow : Window
 
     private async void OnLoaded(object sender, RoutedEventArgs e)
     {
-        await _viewModel.LoadAsync();
-        PinBox.Focus();
+        try
+        {
+            await _viewModel.LoadAsync();
+            if (IsLoaded)
+                PinBox.Focus();
+        }
+        catch (Exception)
+        {
+        }
     }
 
     private void OnClosing(object? sender, CancelEventArgs e)
@@ -40,6 +47,8 @@ public partial class ExitWindow : Window
 
     private void OnClosed(object? sender, EventArgs e)
     {
+        _viewModel.Pin = string.Empty;
+        PinBox.Clear();
         _viewModel.PasswordBoxesShouldClear -= OnPasswordBoxesShouldClear;
         _viewModel.ExitApproved -= OnExitApproved;
         _viewModel.CloseRequested -= OnCloseRequested;
@@ -47,7 +56,19 @@ public partial class ExitWindow : Window
 
     private void OnPasswordBoxesShouldClear(object? sender, EventArgs e) => PinBox.Clear();
 
-    private void OnExitApproved(object? sender, EventArgs e) => DialogResult = true;
+    private void OnExitApproved(object? sender, EventArgs e)
+    {
+        if (!IsLoaded)
+            return;
+
+        try
+        {
+            DialogResult = true;
+        }
+        catch (InvalidOperationException)
+        {
+        }
+    }
 
     private void OnCloseRequested(object? sender, EventArgs e) => Close();
 

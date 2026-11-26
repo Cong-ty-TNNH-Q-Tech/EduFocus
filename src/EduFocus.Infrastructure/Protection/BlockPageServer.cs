@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using System.Collections.Frozen;
 using System.Globalization;
 using System.Net;
@@ -32,15 +33,22 @@ public sealed class BlockPageServer : IBlockPageServer, IAsyncDisposable
     private readonly ILocalCertificateAuthority? _certificateAuthority;
     private readonly SemaphoreSlim _gate = new(1, 1);
     private readonly SemaphoreSlim _connectionSlots;
+    private readonly ConcurrentDictionary<long, Task> _connections = new();
 
     private FrozenSet<string> _blockedDomains = FrozenSet<string>.Empty;
     private TcpListener? _listener;
+    private TcpListener? _ipv6Listener;
     private TcpListener? _httpsListener;
+    private TcpListener? _ipv6HttpsListener;
     private CancellationTokenSource? _cts;
     private Task? _acceptLoop;
+    private Task? _ipv6AcceptLoop;
     private Task? _httpsAcceptLoop;
+    private Task? _ipv6HttpsAcceptLoop;
+    private long _connectionSequence;
     private int _port;
     private int _httpsPort;
+    private bool _disposed;
 
     public BlockPageServer(
         BlockPageOptions options,
@@ -96,11 +104,22 @@ public sealed class BlockPageServer : IBlockPageServer, IAsyncDisposable
             {
                 var http = StartHttpListener(warnings);
                 if (http is not null)
+                {
                     _listener = http;
+                    _ipv6Listener = StartSecondaryIpv6Listener(
+                        Port, HandleClientAsync, loop => _ipv6AcceptLoop = loop, "HTTP");
+                }
             }
 
             if (_httpsListener is null && _certificateAuthority?.IsReady == true)
+            {
                 _httpsListener = StartHttpsListener(warnings);
+                if (_httpsListener is not null)
+                {
+                    _ipv6HttpsListener = StartSecondaryIpv6Listener(
+                        HttpsPort, HandleHttpsClientAsync, loop => _ipv6HttpsAcceptLoop = loop, "HTTPS");
+                }
+            }
 
             if (_listener is null && _httpsListener is null && _cts is not null)
             {
@@ -128,24 +147,57 @@ public sealed class BlockPageServer : IBlockPageServer, IAsyncDisposable
         try
         {
             var httpListener = _listener;
+            var ipv6HttpListener = _ipv6Listener;
             var httpsListener = _httpsListener;
+            var ipv6HttpsListener = _ipv6HttpsListener;
             var httpLoop = _acceptLoop;
+            var ipv6HttpLoop = _ipv6AcceptLoop;
             var httpsLoop = _httpsAcceptLoop;
+            var ipv6HttpsLoop = _ipv6HttpsAcceptLoop;
             var cts = _cts;
 
             _listener = null;
+            _ipv6Listener = null;
             _httpsListener = null;
+            _ipv6HttpsListener = null;
             _acceptLoop = null;
+            _ipv6AcceptLoop = null;
             _httpsAcceptLoop = null;
+            _ipv6HttpsAcceptLoop = null;
             _cts = null;
 
-            if (httpListener is null && httpsListener is null)
+            if (httpListener is null
+                && ipv6HttpListener is null
+                && httpsListener is null
+                && ipv6HttpsListener is null)
+            {
                 return;
+            }
 
             cts?.Cancel();
 
             await StopListenerAsync(httpListener, httpLoop, "HTTP", cancellationToken).ConfigureAwait(false);
+            await StopListenerAsync(ipv6HttpListener, ipv6HttpLoop, "HTTP IPv6", cancellationToken).ConfigureAwait(false);
             await StopListenerAsync(httpsListener, httpsLoop, "HTTPS", cancellationToken).ConfigureAwait(false);
+            await StopListenerAsync(ipv6HttpsListener, ipv6HttpsLoop, "HTTPS IPv6", cancellationToken).ConfigureAwait(false);
+
+            var connections = _connections.Values.ToArray();
+            if (connections.Length > 0)
+            {
+                try
+                {
+                    await Task.WhenAll(connections).WaitAsync(TimeSpan.FromSeconds(2), cancellationToken)
+                        .ConfigureAwait(false);
+                }
+                catch (TimeoutException)
+                {
+                    _logger.Warning(LogCategories.Protection, "In-flight block page connections did not finish in time.");
+                }
+                catch (Exception ex) when (ex is not OperationCanceledException)
+                {
+                    _logger.Warning(LogCategories.Protection, $"Block page connection wait failed ({ex.GetType().Name}).");
+                }
+            }
 
             cts?.Dispose();
             Volatile.Write(ref _port, 0);
@@ -158,7 +210,16 @@ public sealed class BlockPageServer : IBlockPageServer, IAsyncDisposable
         }
     }
 
-    public async ValueTask DisposeAsync() => await StopAsync().ConfigureAwait(false);
+    public async ValueTask DisposeAsync()
+    {
+        await StopAsync().ConfigureAwait(false);
+        if (_disposed)
+            return;
+
+        _disposed = true;
+        _gate.Dispose();
+        _connectionSlots.Dispose();
+    }
 
     private TcpListener? StartHttpListener(List<string> warnings)
     {
@@ -225,6 +286,40 @@ public sealed class BlockPageServer : IBlockPageServer, IAsyncDisposable
                     $"HTTPS block page listener failed on 127.0.0.1:{_options.HttpsPort} ({ex.SocketErrorCode}); HTTP blocking continues."));
 
             Volatile.Write(ref _httpsPort, 0);
+            return null;
+        }
+    }
+
+    private TcpListener? StartSecondaryIpv6Listener(
+        int port,
+        Func<TcpClient, CancellationToken, Task> handler,
+        Action<Task> assignLoop,
+        string label)
+    {
+        if (port <= 0 || !Socket.OSSupportsIPv6)
+            return null;
+
+        var listener = new TcpListener(IPAddress.IPv6Loopback, port);
+        try
+        {
+            listener.Start(_options.Backlog);
+            var cts = EnsureCts();
+            assignLoop(Task.Run(() => AcceptLoopAsync(listener, handler, cts.Token)));
+            _logger.Info(
+                LogCategories.Protection,
+                string.Create(CultureInfo.InvariantCulture, $"{label} block page listening on [::1]:{port}."));
+            return listener;
+        }
+        catch (SocketException ex)
+        {
+            try { listener.Stop(); }
+            catch (SocketException) { }
+
+            _logger.Warning(
+                LogCategories.Protection,
+                string.Create(
+                    CultureInfo.InvariantCulture,
+                    $"{label} IPv6 block page listener skipped on [::1]:{port} ({ex.SocketErrorCode})."));
             return null;
         }
     }
@@ -298,7 +393,14 @@ public sealed class BlockPageServer : IBlockPageServer, IAsyncDisposable
                 continue;
             }
 
-            _ = handler(client, cancellationToken);
+            var id = Interlocked.Increment(ref _connectionSequence);
+            var task = handler(client, cancellationToken);
+            _connections[id] = task;
+            _ = task.ContinueWith(
+                completedTask => { _connections.TryRemove(new KeyValuePair<long, Task>(id, completedTask)); },
+                CancellationToken.None,
+                TaskContinuationOptions.ExecuteSynchronously,
+                TaskScheduler.Default);
         }
     }
 
@@ -313,6 +415,7 @@ public sealed class BlockPageServer : IBlockPageServer, IAsyncDisposable
                 await HandleStreamAsync(stream, cancellationToken).ConfigureAwait(false);
             }
         }
+        catch (SocketException) { }
         catch (IOException) { }
         catch (OperationCanceledException) { }
         catch (ObjectDisposedException) { }
@@ -348,7 +451,7 @@ public sealed class BlockPageServer : IBlockPageServer, IAsyncDisposable
                         handshakeTimeout.Token).ConfigureAwait(false);
                 }
                 catch (Exception ex) when (ex is
-                    AuthenticationException or IOException or OperationCanceledException or ObjectDisposedException)
+                    AuthenticationException or SocketException or IOException or OperationCanceledException or ObjectDisposedException)
                 {
                     // Unknown SNI, untrusted client or slow handshake: close quietly.
                     return;

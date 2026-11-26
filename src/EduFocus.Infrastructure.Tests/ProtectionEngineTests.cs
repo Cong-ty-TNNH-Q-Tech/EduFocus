@@ -23,7 +23,6 @@ public sealed class ProtectionEngineTests
     private readonly FakeBlockedAttemptRepository _attempts = new();
     private readonly FakeStudySessionRepository _sessions = new();
     private readonly FakeClock _clock = new();
-    private readonly FakeBrowserExtensionBridge _bridge = new();
     private readonly FakeBrowserDnsPolicy _dnsPolicy = new();
     private readonly FakeCertificateAuthority _certificateAuthority = new();
     private readonly FixedTimeProvider _time = new(Now.AddMinutes(5));
@@ -280,7 +279,7 @@ public sealed class ProtectionEngineTests
     }
 
     [Fact]
-    public async Task Reconcile_active_self_heals_and_applies_once()
+    public async Task Reconcile_active_reloads_when_already_active_without_wiping_hosts()
     {
         _rules.Rules.Add(Rule(RuleType.Domain, "chatgpt.com"));
         await using var engine = CreateEngine();
@@ -290,7 +289,8 @@ public sealed class ProtectionEngineTests
 
         first.Should().BeEmpty();
         second.Should().BeEmpty();
-        _hosts.SelfHealCalls.Should().Be(2);
+        _hosts.SelfHealCalls.Should().Be(0);
+        _hosts.ApplyCalls.Should().Be(2);
         _page.StartCalls.Should().Be(1);
         _watcher.StartCalls.Should().Be(1);
     }
@@ -315,11 +315,69 @@ public sealed class ProtectionEngineTests
         _hosts.SelfHealException = new IOException("denied");
         await using var engine = CreateEngine();
 
-        var act = () => engine.ReconcileAsync(shouldBeActive: true);
+        var act = () => engine.ReconcileAsync(shouldBeActive: false);
 
         await act.Should().ThrowAsync<ProtectionEngineException>();
-        _page.StartCalls.Should().Be(0);
-        _hosts.ApplyCalls.Should().Be(0);
+        _page.StopCalls.Should().Be(0);
+        _hosts.RestoreCalls.Should().Be(0);
+    }
+
+    [Fact]
+    public async Task Reconcile_active_with_real_hosts_blocker_keeps_blocks_intact()
+    {
+        var dir = Path.Combine(Path.GetTempPath(), "edufocus-engine-reconcile", Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(dir);
+        try
+        {
+            var hostsPath = Path.Combine(dir, "hosts");
+            var backupDir = Path.Combine(dir, "backup");
+            await File.WriteAllTextAsync(hostsPath, "127.0.0.1 localhost\r\n");
+
+            var realHosts = new HostsFileBlocker(
+                new HostsFileOptions { HostsPath = hostsPath, BackupDirectory = backupDir },
+                new NoOpDnsFlusher(),
+                _logger);
+
+            _rules.Rules.Add(Rule(RuleType.Domain, "chatgpt.com"));
+            await using var engine = new ProtectionEngine(
+                _rules,
+                realHosts,
+                _page,
+                _watcher,
+                _attempts,
+                _sessions,
+                _clock,
+                _logger,
+                _time,
+                new ProtectionEngineOptions { Debounce = TimeSpan.FromSeconds(30) },
+                _dnsPolicy,
+                _certificateAuthority);
+
+            await engine.ApplyAsync();
+            var contentAfterApply = await File.ReadAllTextAsync(hostsPath);
+            contentAfterApply.Should().Contain("127.0.0.1 chatgpt.com");
+
+            await engine.ReconcileAsync(shouldBeActive: true);
+            var contentAfterReconcile = await File.ReadAllTextAsync(hostsPath);
+            contentAfterReconcile.Should().Contain("127.0.0.1 chatgpt.com");
+            File.Exists(Path.Combine(backupDir, "journal.json")).Should().BeTrue();
+        }
+        finally
+        {
+            try { Directory.Delete(dir, recursive: true); } catch { }
+        }
+    }
+
+    [Fact]
+    public async Task Apply_keeps_partial_block_page_warning_even_when_started_is_true()
+    {
+        _rules.Rules.Add(Rule(RuleType.Domain, "chatgpt.com"));
+        _page.StartResult = new BlockPageStartResult(true, 80, "HTTPS port busy");
+        await using var engine = CreateEngine();
+
+        var warnings = await engine.ApplyAsync();
+
+        warnings.Should().Contain("HTTPS port busy");
     }
 
     [Fact]
@@ -351,49 +409,6 @@ public sealed class ProtectionEngineTests
         _clock.Advance(TimeSpan.FromSeconds(31));
         _page.Raise("chatgpt.com");
         await _attempts.WaitForCountAsync(2);
-    }
-
-    [Fact]
-    public async Task Apply_starts_browser_bridge_with_effective_extension_rules()
-    {
-        _rules.Rules.Add(Rule(RuleType.Domain, "chatgpt.com"));
-        _rules.Rules.Add(Rule(RuleType.Domain, "disabled.test", enabled: false));
-        _rules.Rules.Add(UrlRule("https://www.youtube.com/shorts/"));
-        await using var engine = CreateEngine();
-
-        await engine.ApplyAsync();
-
-        _bridge.StartCalls.Should().Be(1);
-        _bridge.LastRules.Select(rule => rule.NormalizedValue)
-            .Should().BeEquivalentTo(["chatgpt.com", "https://www.youtube.com/shorts/"]);
-        _bridge.LastNowUtc.Should().Be(Now.AddMinutes(5));
-    }
-
-    [Fact]
-    public async Task Apply_keeps_os_protection_when_browser_bridge_fails()
-    {
-        _rules.Rules.Add(Rule(RuleType.Domain, "chatgpt.com"));
-        _bridge.StartException = new IOException("pipe busy");
-        await using var engine = CreateEngine();
-
-        var warnings = await engine.ApplyAsync();
-
-        warnings.Should().ContainSingle().Which.Should().Be(ProtectionEngine.BrowserBridgeWarning);
-        _hosts.Applied.Should().Equal("chatgpt.com");
-        _watcher.IsRunning.Should().BeTrue();
-        _page.IsRunning.Should().BeTrue();
-        _logger.Messages.Should().Contain("Could not start the browser extension bridge.");
-    }
-
-    [Fact]
-    public async Task Remove_stops_browser_bridge()
-    {
-        await using var engine = CreateEngine();
-        await engine.ApplyAsync();
-
-        await engine.RemoveAsync();
-
-        _bridge.StopCalls.Should().Be(1);
     }
 
     [Fact]
@@ -550,43 +565,6 @@ public sealed class ProtectionEngineTests
     }
 
     [Fact]
-    public async Task Browser_blocked_attempt_writes_url_attempt_with_extension_source()
-    {
-        _rules.Rules.Add(UrlRule("https://www.youtube.com/shorts/"));
-        _sessions.Active = NewSession();
-        await using var engine = CreateEngine();
-        await engine.ApplyAsync();
-
-        _bridge.RaiseBlocked(
-            "https://www.youtube.com/shorts/abc?t=12#top",
-            new DateTimeOffset(Now.AddMinutes(1), TimeSpan.Zero));
-
-        var attempt = (await _attempts.WaitForCountAsync(1))[0];
-        attempt.TargetType.Should().Be(BlockedAttemptTargetType.Url);
-        attempt.ObservedVia.Should().Be(BlockedAttemptObservedVia.Extension);
-        attempt.TargetValue.Should().Be("https://www.youtube.com/shorts/abc");
-        attempt.Url.Should().Be("https://www.youtube.com/shorts/abc");
-        attempt.Domain!.Value.Should().Be("www.youtube.com");
-        attempt.SessionId.Should().Be(_sessions.Active!.Id);
-    }
-
-    [Fact]
-    public async Task Browser_blocked_attempts_are_ignored_after_remove()
-    {
-        _sessions.Active = NewSession();
-        await using var engine = CreateEngine();
-        await engine.ApplyAsync();
-        await engine.RemoveAsync();
-
-        _bridge.RaiseBlocked(
-            "https://www.youtube.com/shorts/abc",
-            new DateTimeOffset(Now.AddMinutes(1), TimeSpan.Zero));
-        await Task.Delay(100);
-
-        _attempts.Items.Should().BeEmpty();
-    }
-
-    [Fact]
     public async Task Process_observation_writes_app_attempt_without_window_data()
     {
         _rules.Rules.Add(Rule(RuleType.App, "discord"));
@@ -699,7 +677,6 @@ public sealed class ProtectionEngineTests
         _logger,
         _time,
         new ProtectionEngineOptions { Debounce = TimeSpan.FromSeconds(30) },
-        _bridge,
         _dnsPolicy,
         _certificateAuthority);
 
@@ -722,17 +699,6 @@ public sealed class ProtectionEngineTests
             isEnabled: enabled,
             isBuiltIn: false,
             expiresAtUtc: expiresAt);
-
-    private static BlockRule UrlRule(string value) =>
-        BlockRule.Create(
-            RuleType.Url,
-            RuleMatchType.Contains,
-            value,
-            BlockRuleCategory.Social,
-            BlockRuleEffect.Block,
-            Now.AddDays(-2),
-            isEnabled: true,
-            isBuiltIn: false);
 
     private static async Task WaitAsync(Func<bool> condition)
     {
@@ -825,58 +791,6 @@ public sealed class ProtectionEngineTests
 
             return Task.FromResult(RestoreWarnings);
         }
-    }
-
-    private sealed class FakeBrowserExtensionBridge : IBrowserExtensionBridge
-    {
-        public bool IsRunning { get; private set; }
-
-        public int StartCalls { get; private set; }
-
-        public int StopCalls { get; private set; }
-
-        public IReadOnlyList<BlockRule> LastRules { get; private set; } = [];
-
-        public DateTime? LastNowUtc { get; private set; }
-
-        public Exception? StartException { get; set; }
-
-        public event EventHandler<BrowserBlockedAttempt>? BlockedAttemptObserved;
-
-        public Task StartAsync(
-            IReadOnlyList<BlockRule> rules,
-            DateTime nowUtc,
-            CancellationToken cancellationToken = default)
-        {
-            StartCalls++;
-            if (StartException is not null)
-                throw StartException;
-
-            IsRunning = true;
-            LastRules = rules;
-            LastNowUtc = nowUtc;
-            return Task.CompletedTask;
-        }
-
-        public Task UpdateRulesAsync(
-            IReadOnlyList<BlockRule> rules,
-            DateTime nowUtc,
-            CancellationToken cancellationToken = default)
-        {
-            LastRules = rules;
-            LastNowUtc = nowUtc;
-            return Task.CompletedTask;
-        }
-
-        public Task StopAsync(CancellationToken cancellationToken = default)
-        {
-            StopCalls++;
-            IsRunning = false;
-            return Task.CompletedTask;
-        }
-
-        public void RaiseBlocked(string url, DateTimeOffset observedAtUtc) =>
-            BlockedAttemptObserved?.Invoke(this, new BrowserBlockedAttempt(url, observedAtUtc));
     }
 
     private sealed class FakeRuleRepository : IBlockRuleRepository
@@ -1301,6 +1215,24 @@ public sealed class ProtectionEngineTests
                 return Task.FromResult(true);
             }
         }
+
+        public Task<bool> SetMonitoringEnabledAsync(
+            StudySessionId sessionId,
+            bool monitoringEnabled,
+            DateTime nowUtc,
+            CancellationToken cancellationToken = default)
+        {
+            lock (_lock)
+            {
+                var session = Active;
+                if (session is null || session.Id != sessionId || !session.IsActive)
+                    return Task.FromResult(false);
+
+                var stamp = nowUtc < session.UpdatedAtUtc ? session.UpdatedAtUtc : nowUtc;
+                session.SetMonitoringEnabled(monitoringEnabled, stamp);
+                return Task.FromResult(true);
+            }
+        }
     }
 
     private sealed class FakeClock : IMonotonicClockPort
@@ -1346,5 +1278,10 @@ public sealed class ProtectionEngineTests
             lock (_lock)
                 _messages.Add(message);
         }
+    }
+
+    private sealed class NoOpDnsFlusher : IDnsFlusher
+    {
+        public Task FlushAsync(CancellationToken cancellationToken = default) => Task.CompletedTask;
     }
 }

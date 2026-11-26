@@ -80,6 +80,7 @@ public sealed class PushCoordinator(
             return;
 
         settings.SetPushEndpoint(endpoint);
+        settings.PushAppVersion = null;
         _ = SyncEndpointAsync(force: true);
     }
 
@@ -100,7 +101,7 @@ public sealed class PushCoordinator(
         settings.ClearPushEndpoint();
     }
 
-    public async Task<bool> EnableNotificationsAsync(Page page)
+    public async Task<bool> EnableNotificationsAsync(Page page, bool forceReconnect = false)
     {
         if (!await RequestPermissionAsync(page))
             return false;
@@ -108,7 +109,7 @@ public sealed class PushCoordinator(
         var config = await ResolvePushConfigAsync();
         if (config.WebSocketEnabled)
         {
-            SelectWebSocket();
+            SelectWebSocket(restart: forceReconnect);
             return true;
         }
 
@@ -181,7 +182,7 @@ public sealed class PushCoordinator(
             true);
     }
 
-    private void SelectWebSocket()
+    private void SelectWebSocket(bool restart = false)
     {
         if (!_webSocketSelected)
         {
@@ -190,7 +191,7 @@ public sealed class PushCoordinator(
             _webSocketSelected = true;
         }
 
-        WssPushService.Start();
+        WssPushService.Start(restart);
     }
 
     private void StopWebSocket()

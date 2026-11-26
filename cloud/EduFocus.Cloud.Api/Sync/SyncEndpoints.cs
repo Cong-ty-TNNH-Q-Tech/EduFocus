@@ -47,13 +47,21 @@ public static class SyncEndpoints
             return PayloadTooLarge(options.MaxBodyBytes);
         }
 
+        if (!httpContext.Request.HasJsonContentType())
+        {
+            return ApiResults.Error(
+                StatusCodes.Status415UnsupportedMediaType,
+                "unsupported_media_type",
+                "Định dạng nội dung không được hỗ trợ.");
+        }
+
         RawSyncBatchRequest? batch;
         try
         {
             batch = await httpContext.Request.ReadFromJsonAsync<RawSyncBatchRequest>(
                 ApiJson.Options, cancellationToken);
         }
-        catch (JsonException)
+        catch (Exception exception) when (exception is JsonException or BadHttpRequestException)
         {
             return ApiResults.InvalidRequest("Body không đúng định dạng JSON.");
         }

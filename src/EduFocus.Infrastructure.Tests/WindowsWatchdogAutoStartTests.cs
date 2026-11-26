@@ -31,7 +31,7 @@ public sealed class WindowsWatchdogAutoStartTests : IDisposable
         _runner.Calls.Should().HaveCount(2);
 
         var logon = _runner.Calls[0];
-        logon.FileName.Should().Be("schtasks.exe");
+        logon.FileName.Should().Be(Path.Combine(Environment.SystemDirectory, "schtasks.exe"));
         logon.Arguments.Should().Equal(
             "/Create",
             "/TN", WatchdogNames.LogonTaskName,

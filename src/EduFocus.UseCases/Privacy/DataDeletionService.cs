@@ -25,6 +25,7 @@ public sealed class DataDeletionService : IDataDeletionUseCase
     private readonly IAppLogger _logger;
     private readonly TimeProvider _timeProvider;
     private readonly DataDeletionOptions _options;
+    private readonly ICloudOutboxRepository? _cloudOutbox;
 
     public DataDeletionService(
         IPrivacyDataRepository data,
@@ -34,7 +35,8 @@ public sealed class DataDeletionService : IDataDeletionUseCase
         ICorrelationContext correlation,
         IAppLogger logger,
         TimeProvider timeProvider,
-        DataDeletionOptions options)
+        DataDeletionOptions options,
+        ICloudOutboxRepository? cloudOutbox = null)
     {
         _data = data ?? throw new ArgumentNullException(nameof(data));
         _auth = auth ?? throw new ArgumentNullException(nameof(auth));
@@ -50,6 +52,7 @@ public sealed class DataDeletionService : IDataDeletionUseCase
             throw new ArgumentOutOfRangeException(nameof(options), "Batch size must be between 1 and 10,000.");
 
         _options = options;
+        _cloudOutbox = cloudOutbox;
     }
 
     public async Task<DataDeletionResult> DeleteAllAsync(
@@ -115,6 +118,25 @@ public sealed class DataDeletionService : IDataDeletionUseCase
             (batch, token) => _data.DeleteFinishedSessionsBatchAsync(batch, token),
             failures,
             cancellationToken).ConfigureAwait(false);
+
+        if (_cloudOutbox is not null)
+        {
+            try
+            {
+                await _cloudOutbox.ClearAllAsync(cancellationToken).ConfigureAwait(false);
+            }
+            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+            {
+                throw;
+            }
+            catch (Exception ex)
+            {
+                failures.Add("CloudOutbox");
+                _logger.Error(
+                    LogCategories.Database,
+                    $"Delete-all failed for CloudOutbox ({ex.GetType().Name}).");
+            }
+        }
 
         try
         {

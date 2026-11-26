@@ -7,6 +7,49 @@ và dự án tuân theo [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ---
 
+## [2.3.0] - 2026-11-26
+
+### Added (Push realtime & Android)
+
+- **Android tự bật lại WSS sau reboot/cập nhật:** thêm quyền `RECEIVE_BOOT_COMPLETED` và
+  `WssBootReceiver` lắng nghe `ACTION_BOOT_COMPLETED` / `ACTION_MY_PACKAGE_REPLACED` để tự khởi động lại
+  `WssPushService` khi thiết bị đã ghép nối và còn quyền thông báo.
+- **Tự động cập nhật UI khi nhận push:** thêm `PushEventHub` phát sự kiện từ `PushMessageHandler`
+  tới `OverviewPage`, `NotificationsPage` và `ReportsPage` để màn hình đang mở tự tải lại dữ liệu ngay lập tức.
+- **Đẩy cảnh báo bảo mật và chặn truy cập nhanh hơn:** `ScheduleService` kích hoạt quét `SecurityAlert`
+  tức thì khi phát hiện đổi giờ hệ thống, và `CloudEventSchedulerService` rút chu kỳ quét
+  `BlockedAttempt` / `SecurityAlert` từ tiến trình dịch vụ xuống 5 giây.
+
+### Changed (Giao diện)
+
+- **Ẩn cấu hình cloud endpoint trên UI:** gỡ phần hiển thị và ô nhập địa chỉ máy chủ cloud trên cả
+  Desktop (`ParentModeWindow`) lẫn Mobile (`PairingPage`, `SettingsPage`), giữ nguyên phân giải endpoint
+  ngầm qua metadata build, mã QR và deep link.
+
+### Removed
+
+- Xóa hoàn toàn `browser-extension/` và native host cùng các script, test và tài liệu liên quan không còn sử dụng.
+
+### Fixed (Bảo mật & độ ổn định toàn hệ thống)
+
+- **Desktop & Windows Service:** siết chặt IPC Named Pipe (`FirstPipeInstance`, timeout ghi response,
+  `TokenImpersonationLevel.Anonymous`), xác thực chứng chỉ CA nội bộ & reparse point, hỗ trợ loopback IPv6
+  và giữ ACL trên `HostsFileBlocker` / `BlockPageServer`, sửa vòng đời `WindowsServiceHost` / `ServiceRuntime`,
+  dọn rò rỉ bộ nhớ OpenCV và nâng cấp `UpdaterService` (MSI-only, kiểm tra SHA-256 và host cho phép).
+- **Cloud Backend:** bật SQLite WAL + `PRAGMA busy_timeout`, đưa rate limiting xuống sau xác thực và
+  phân vùng theo `device_id` + global IP limiter, giới hạn proxy tin cậy theo dải nội bộ, xác thực điểm
+  trên đường cong NIST P-256 và chặn SSRF IP private khi gửi Web Push, tránh nghẽn hàng đợi `no_transport`,
+  tổng hợp báo cáo nhiều desktop và mở rộng dọn dẹp retention.
+- **Mobile & Installer/CI:** sửa hợp đồng Foreground Service trong `WssPushService`, giới hạn frame WSS 16 KiB
+  và xử lý 401 đồng bộ trong `SessionExpiryService` / `PushStreamClient`, chống nhiễm cache chéo gia đình,
+  cùng sửa lỗi ký số MSI trong `Sign-Artifacts.ps1`, `Product.wxs`, `release.yml` và `cloud-ci.yml`.
+
+### Breaking changes
+
+- Không có thay đổi phá vỡ schema dữ liệu hay giao thức API. Phần hiển thị/nhập cloud endpoint thủ công trên UI
+  Desktop và Mobile đã được gỡ để cấu hình thống nhất qua metadata build và QR/deep link; đồng thời
+  `browser-extension/` không còn được đóng gói hay hỗ trợ.
+
 ## [2.2.0] - 2026-11-26
 
 ### Added (Push — kết nối WSS trực tiếp)

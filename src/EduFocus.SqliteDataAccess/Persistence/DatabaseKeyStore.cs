@@ -17,7 +17,7 @@ public sealed class DatabaseKeyStore : IDatabaseKeyStore
     private const int MaxKeyFileBytes = 4096;
 
     private readonly object _sync = new();
-    private DatabaseEncryptionKey? _cached;
+    private volatile DatabaseEncryptionKey? _cached;
 
     public DatabaseKeyStore(EduFocusDatabaseOptions options)
     {

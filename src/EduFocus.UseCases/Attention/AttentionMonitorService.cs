@@ -34,7 +34,7 @@ public sealed class AttentionMonitorService : IAttentionMonitorUseCase, IAsyncDi
     private readonly IReadOnlyList<IAttentionStateObserver> _observers;
     private readonly AttentionMonitoringOptions _options;
     private readonly AttentionThresholds _baseThresholds;
-    private AttentionThresholds _activeThresholds;
+    private volatile AttentionThresholds _activeThresholds;
     private readonly SemaphoreSlim _lifecycleGate = new(1, 1);
     private readonly SemaphoreSlim _pipelineSyncGate = new(1, 1);
 
@@ -214,7 +214,7 @@ public sealed class AttentionMonitorService : IAttentionMonitorUseCase, IAsyncDi
             var eligible = MonitoringEligibility.IsEligible(_monitoringEnabled, _monitorOnlyDuringClasses, _isOnlineClass);
             if (!eligible && _pipeline.IsRunning)
                 await SyncPipelineForEligibilityAsync(false).ConfigureAwait(false);
-            else if (eligible && _monitorOnlyDuringClasses && !_pipeline.IsRunning)
+            else if (eligible && !_pipeline.IsRunning)
                 await SyncPipelineForEligibilityAsync(true).ConfigureAwait(false);
             _logger.Info(LogCategories.Attention, "Attention thresholds were refreshed for the active session.");
         }

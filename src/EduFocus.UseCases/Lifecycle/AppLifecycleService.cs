@@ -45,6 +45,7 @@ public sealed class AppLifecycleService : IAppLifecycleUseCase
     private readonly IAppLogger _logger;
     private readonly TimeProvider _timeProvider;
     private readonly ProtectionHostModeOptions _hostMode;
+    private readonly IAttentionEventRepository? _attentionEvents;
 
     public AppLifecycleService(
         IParentModeUseCase parentMode,
@@ -59,7 +60,8 @@ public sealed class AppLifecycleService : IAppLifecycleUseCase
         ICorrelationContext correlation,
         IAppLogger logger,
         TimeProvider timeProvider,
-        ProtectionHostModeOptions? hostMode = null)
+        ProtectionHostModeOptions? hostMode = null,
+        IAttentionEventRepository? attentionEvents = null)
     {
         _parentMode = parentMode ?? throw new ArgumentNullException(nameof(parentMode));
         _protection = protection ?? throw new ArgumentNullException(nameof(protection));
@@ -74,6 +76,7 @@ public sealed class AppLifecycleService : IAppLifecycleUseCase
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
         _timeProvider = timeProvider ?? throw new ArgumentNullException(nameof(timeProvider));
         _hostMode = hostMode ?? new ProtectionHostModeOptions();
+        _attentionEvents = attentionEvents;
     }
 
     public async Task<AppExitResult> ExitWithPinAsync(
@@ -196,6 +199,25 @@ public sealed class AppLifecycleService : IAppLifecycleUseCase
 
         active.Interrupt();
         await _sessions.UpdateAsync(active, cancellationToken);
+
+        if (_attentionEvents is not null)
+        {
+            try
+            {
+                var closeAt = now < active.StartedAtUtc ? active.StartedAtUtc : now;
+                await _attentionEvents.CloseOpenAsync(active.Id, closeAt, cancellationToken);
+            }
+            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+            {
+                throw;
+            }
+            catch (Exception ex)
+            {
+                _logger.Warning(
+                    LogCategories.App,
+                    $"Could not close open attention events during shutdown ({ex.GetType().Name}).");
+            }
+        }
 
         await TryWriteAuditAsync(
             AuditActor.System,

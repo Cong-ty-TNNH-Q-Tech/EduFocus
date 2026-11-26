@@ -12,7 +12,7 @@ services:
       ConnectionStrings__Sqlite: "Data Source=/data/edufocus.db;Foreign Keys=True;Default Timeout=30"
       EDUFOCUS_CLOUD_PUBLIC_URL: ${EDUFOCUS_CLOUD_PUBLIC_URL:-http://localhost:8080}
       EDUFOCUS_CLOUD_AUTO_MIGRATE: ${EDUFOCUS_CLOUD_AUTO_MIGRATE:-true}
-      Cloud__TrustForwardedHeaders: ${CLOUD_TRUST_FORWARDED_HEADERS:-true}
+      Cloud__TrustForwardedHeaders: ${CLOUD_TRUST_FORWARDED_HEADERS:-false}
       Push__Enabled: ${PUSH_ENABLED:-false}
       Push__WebSocketEnabled: ${PUSH_WEBSOCKET_ENABLED:-true}
       Push__WebSocketHeartbeatSeconds: ${PUSH_WEBSOCKET_HEARTBEAT_SECONDS:-20}

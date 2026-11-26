@@ -75,7 +75,11 @@ public sealed class ServiceMonitoredProtectionUseCase : IProtectionUseCase
 
         try
         {
-            return await operation();
+            var result = await operation();
+            if (result.Status.IsEnabled)
+                await _monitoring.SyncAsync(result.Status, CancellationToken.None);
+
+            return result;
         }
         catch
         {

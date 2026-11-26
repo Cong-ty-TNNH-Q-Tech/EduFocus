@@ -64,8 +64,8 @@ tại khi phụ huynh chủ động bật:
 - **Sự kiện tập trung:** trạng thái (Focused/Distracted/Absent/Drowsy/CameraUnavailable), thời
   điểm bắt đầu/kết thúc, thời lượng, độ tin cậy, tên ứng dụng/tên miền nếu có và ghi chú đã làm
   sạch. **Không có khung hình, ảnh, landmark hay embedding khuôn mặt.**
-- **Lần truy cập bị chặn:** loại mục tiêu, tên miền/tên tiến trình/URL đã làm sạch, thời điểm và
-  cách quan sát (trang chặn, theo dõi tiến trình hoặc browser extension). Không lưu nội dung
+- **Lần truy cập bị chặn:** loại mục tiêu, tên miền/tên tiến trình đã làm sạch, thời điểm và
+  cách quan sát (trang chặn hoặc theo dõi tiến trình). Không lưu nội dung
   trang, tin nhắn hay User-Agent.
 - **Audit:** hành động quan trọng (bật/tắt bảo vệ, đổi lịch, đổi PIN, xóa dữ liệu, áp dụng lưu
   trữ...), thời điểm và mã tương quan; không chứa PIN, mã khôi phục hay token.
@@ -93,16 +93,6 @@ tại khi phụ huynh chủ động bật:
 
 EduFocus **không** thu thập: vị trí, danh bạ, lịch, email, nội dung clipboard, nội dung trang web,
 lịch sử duyệt web đầy đủ, âm thanh micro, dữ liệu sinh trắc học, hay thông tin nhận dạng khuôn mặt.
-
-### Browser extension
-
-Khi phụ huynh cài extension Chrome/Edge của EduFocus, URL điều hướng cấp tab được so khớp với
-danh sách chặn **ngay trong bộ nhớ trình duyệt**; extension không ghi lịch sử duyệt web, không đọc
-nội dung trang, cookie hay biểu mẫu. Chỉ khi URL khớp một rule chặn, URL đã làm sạch (bỏ
-query/fragment/thông tin đăng nhập) mới được gửi qua native messaging tới tiến trình EduFocus trên
-cùng máy để ghi nhận lần truy cập bị chặn. URL này không được gửi tới máy chủ hay bên thứ ba.
-Khi EduFocus không chạy, extension không chặn và không gửi dữ liệu. Chi tiết:
-[browser-extension.md](./browser-extension.md).
 
 ## 4. Camera và ước lượng tập trung
 
@@ -196,8 +186,6 @@ và biện pháp bảo vệ nằm trong [dpia.md](./dpia.md).
 - Thay đổi `hosts` chỉ định tuyến tên miền trên máy; không gửi dữ liệu ra ngoài.
 - Chứng chỉ cho trang chặn HTTPS được ký bởi CA cục bộ trên máy; EduFocus không liên hệ CA/OCSP/CRL
   bên ngoài và không gửi tên miền bị chặn đi đâu để cấp chứng chỉ.
-- Browser extension chỉ trao đổi với tiến trình EduFocus qua named pipe/native messaging cục bộ;
-  không gửi URL, lịch sử duyệt web hay dữ liệu học tập ra ngoài máy.
 
 ### 7.1. Cloud relay và UnifiedPush/ntfy (tùy chọn)
 

@@ -162,14 +162,14 @@ public sealed class WatchdogHost
 
     private async Task<bool> DelayAsync(TimeSpan delay, EventWaitHandle? stopEvent)
     {
-        var deadline = DateTime.UtcNow + delay;
+        var start = System.Diagnostics.Stopwatch.GetTimestamp();
 
         while (true)
         {
             if (Environment.HasShutdownStarted || IsStopRequested(stopEvent))
                 return false;
 
-            var remaining = deadline - DateTime.UtcNow;
+            var remaining = delay - System.Diagnostics.Stopwatch.GetElapsedTime(start);
             if (remaining <= TimeSpan.Zero)
                 return true;
 

@@ -27,13 +27,16 @@ public sealed class WindowsForegroundActivityPort : IForegroundActivityPort
             return null;
 
         var (processName, appName) = ReadProcess((int)processId);
+        var title = processId == (uint)Environment.ProcessId
+            ? "EduFocus"
+            : ReadWindowTitle(handle);
 
         return new ForegroundActivitySnapshot(
             (int)processId,
             handle,
             processName,
             appName,
-            ReadWindowTitle(handle),
+            title,
             ReadIdleSeconds());
     }
 

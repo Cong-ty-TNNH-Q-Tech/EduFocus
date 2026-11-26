@@ -173,7 +173,15 @@ public sealed partial class NotificationsViewModel(
                     return;
                 }
 
+                var familyId = appState.FamilyId;
                 var page = await data.GetNotificationsAsync(PageSize, before: null);
+                if (!appState.IsLinked || appState.FamilyId != familyId)
+                {
+                    _nextBefore = null;
+                    ApplyPage([], replace: true);
+                    return;
+                }
+
                 cache.SaveNotifications(page);
                 _nextBefore = page.NextBefore;
                 IsShowingCachedData = false;
@@ -186,7 +194,7 @@ public sealed partial class NotificationsViewModel(
                     await session.HandleUnauthorizedAsync();
 
                 ErrorMessage = CloudErrors.Describe(exception);
-                if (cache.TryGetNotifications(out var cachedPage, out var savedAt))
+                if (appState.IsLinked && cache.TryGetNotifications(out var cachedPage, out var savedAt))
                 {
                     IsShowingCachedData = true;
                     CachedBannerText =
@@ -215,9 +223,13 @@ public sealed partial class NotificationsViewModel(
 
     private async Task LoadPreferencesAsync()
     {
+        var familyId = appState.FamilyId;
         try
         {
             var preferences = await data.GetPreferencesAsync();
+            if (!appState.IsLinked || appState.FamilyId != familyId)
+                return;
+
             ApplyPreferences(preferences);
             CanEditPreferences = true;
             PreferencesStatus = string.Empty;

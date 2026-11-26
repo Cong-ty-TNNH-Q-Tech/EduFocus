@@ -421,7 +421,7 @@ public sealed class ActivityTrackingService : IActivityUseCase, IAsyncDisposable
                         : 0;
                     try
                     {
-                        await _sessions.AddActivitySecondsAsync(
+                        var written = await _sessions.AddActivitySecondsAsync(
                             id,
                             ActivityCategory.Neutral,
                             categorySeconds: 0,
@@ -430,13 +430,24 @@ public sealed class ActivityTrackingService : IActivityUseCase, IAsyncDisposable
                             monitoringEligibleSeconds: eligibleIdleSeconds,
                             now,
                             cancellationToken).ConfigureAwait(false);
+                        if (!written)
+                        {
+                            _logger.Warning(
+                                LogCategories.Session,
+                                "Activity tracking stopped because the study session is no longer active.");
+                            Volatile.Write(ref _sessionEnded, true);
+                            return true;
+                        }
                     }
                     catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
                     {
                         throw;
                     }
-                    catch
+                    catch (Exception ex)
                     {
+                        _logger.Warning(
+                            LogCategories.Session,
+                            $"Could not record long-idle activity seconds ({ex.GetType().Name}).");
                     }
 
                     _lastSampleTick = tick;

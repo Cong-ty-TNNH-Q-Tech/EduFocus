@@ -39,8 +39,6 @@ public static class InfrastructureServiceCollectionExtensions
         services.AddSingleton<IProcessController, WindowsProcessController>();
         services.AddSingleton<IProcessWatcher, ProcessWatcher>();
         services.AddSingleton(new ProtectionEngineOptions());
-        services.AddSingleton(new BrowserExtensionBridgeOptions());
-        services.AddSingleton<IBrowserExtensionBridge, NamedPipeBrowserExtensionBridge>();
         services.AddSingleton(new BrowserDnsPolicyOptions());
         services.AddSingleton<IBrowserDnsPolicyPort, BrowserDnsPolicy>();
         services.AddSingleton<IProtectionEnginePort, ProtectionEngine>();

@@ -41,9 +41,16 @@ public sealed class WatchdogRuntimeFiles
     public void WriteAtomic(string path, string content)
     {
         EnsureDirectory();
-        var temporary = $"{path}.{Environment.ProcessId}.tmp";
-        File.WriteAllText(temporary, content, Encoding.UTF8);
-        File.Move(temporary, path, overwrite: true);
+        var temporary = $"{path}.{Environment.ProcessId}.{Guid.NewGuid():N}.tmp";
+        try
+        {
+            File.WriteAllText(temporary, content, Encoding.UTF8);
+            File.Move(temporary, path, overwrite: true);
+        }
+        finally
+        {
+            TryDelete(temporary);
+        }
     }
 
     public string? TryReadAllText(string path)

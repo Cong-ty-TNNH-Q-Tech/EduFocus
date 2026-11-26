@@ -26,18 +26,22 @@ public sealed class DatabaseBootstrapper
 
         lock (_gate)
         {
-            _initialization ??= InitializeAsync(cancellationToken);
+            _initialization ??= InitializeAsync(CancellationToken.None);
             initialization = _initialization;
         }
 
-        return AwaitAndAllowRetryAsync(initialization);
+        return AwaitAndAllowRetryAsync(initialization, cancellationToken);
     }
 
-    private async Task AwaitAndAllowRetryAsync(Task initialization)
+    private async Task AwaitAndAllowRetryAsync(Task initialization, CancellationToken cancellationToken)
     {
         try
         {
-            await initialization.ConfigureAwait(false);
+            await initialization.WaitAsync(cancellationToken).ConfigureAwait(false);
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            throw;
         }
         catch
         {

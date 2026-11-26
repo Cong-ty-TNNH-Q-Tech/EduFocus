@@ -70,5 +70,14 @@ public sealed class ScheduleSchedulerService : IDisposable
         _timer.Tick -= OnTimerTick;
     }
 
-    private async void OnTimerTick(object? sender, EventArgs e) => await EvaluateNowAsync();
+    private async void OnTimerTick(object? sender, EventArgs e)
+    {
+        try
+        {
+            await EvaluateNowAsync();
+        }
+        catch (Exception)
+        {
+        }
+    }
 }

@@ -1,3 +1,4 @@
+using System.Net;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using EduFocus.Cloud.Api.Auth;
@@ -58,7 +59,8 @@ var connectionString = CloudDatabaseConnection.Resolve(
     builder.Configuration.GetConnectionString("Sqlite"),
     builder.Environment.EnvironmentName);
 
-builder.Services.AddDbContext<CloudDbContext>(options => options.UseSqlite(connectionString));
+builder.Services.AddDbContext<CloudDbContext>(options =>
+    options.UseSqlite(connectionString).AddInterceptors(new SqlitePragmaInterceptor()));
 builder.Services.AddProblemDetails();
 builder.Services.AddOpenApi();
 builder.Services.AddHealthChecks().AddCheck<DatabaseHealthCheck>("sqlite");
@@ -190,7 +192,9 @@ var app = builder.Build();
 if (args.Contains("--migrate", StringComparer.OrdinalIgnoreCase))
 {
     await using var migrationScope = app.Services.CreateAsyncScope();
-    await migrationScope.ServiceProvider.GetRequiredService<CloudDbContext>().Database.MigrateAsync();
+    var db = migrationScope.ServiceProvider.GetRequiredService<CloudDbContext>();
+    await db.Database.MigrateAsync();
+    await CloudDatabaseConnection.InitializeWalAsync(db, connectionString);
     app.Logger.LogInformation("Applied cloud database migrations and exited");
     await app.DisposeAsync();
     return;
@@ -199,8 +203,16 @@ if (args.Contains("--migrate", StringComparer.OrdinalIgnoreCase))
 if (builder.Configuration.GetValue<bool>("EDUFOCUS_CLOUD_AUTO_MIGRATE"))
 {
     await using var scope = app.Services.CreateAsyncScope();
-    await scope.ServiceProvider.GetRequiredService<CloudDbContext>().Database.MigrateAsync();
+    var db = scope.ServiceProvider.GetRequiredService<CloudDbContext>();
+    await db.Database.MigrateAsync();
+    await CloudDatabaseConnection.InitializeWalAsync(db, connectionString);
     app.Logger.LogInformation("Applied cloud database migrations");
+}
+else
+{
+    await using var scope = app.Services.CreateAsyncScope();
+    var db = scope.ServiceProvider.GetRequiredService<CloudDbContext>();
+    await CloudDatabaseConnection.InitializeWalAsync(db, connectionString);
 }
 
 var cloudOptions = builder.Configuration
@@ -209,12 +221,32 @@ var cloudOptions = builder.Configuration
 var forwardedHeaders = new ForwardedHeadersOptions
 {
     ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto,
+    ForwardLimit = 2,
 };
 if (cloudOptions.TrustForwardedHeaders)
 {
-    // Only enable behind the bundled internal reverse proxy; the API port is not published.
-    forwardedHeaders.KnownIPNetworks.Clear();
-    forwardedHeaders.KnownProxies.Clear();
+    // Restrict trusted proxies to loopback, Docker/private subnets, and explicitly configured entries.
+    forwardedHeaders.KnownIPNetworks.Add(System.Net.IPNetwork.Parse("127.0.0.0/8"));
+    forwardedHeaders.KnownIPNetworks.Add(System.Net.IPNetwork.Parse("10.0.0.0/8"));
+    forwardedHeaders.KnownIPNetworks.Add(System.Net.IPNetwork.Parse("172.16.0.0/12"));
+    forwardedHeaders.KnownIPNetworks.Add(System.Net.IPNetwork.Parse("192.168.0.0/16"));
+    forwardedHeaders.KnownIPNetworks.Add(System.Net.IPNetwork.Parse("::1/128"));
+    forwardedHeaders.KnownIPNetworks.Add(System.Net.IPNetwork.Parse("fc00::/7"));
+    foreach (var cidr in cloudOptions.TrustedProxyNetworks)
+    {
+        if (System.Net.IPNetwork.TryParse(cidr, out var network))
+        {
+            forwardedHeaders.KnownIPNetworks.Add(network);
+        }
+    }
+
+    foreach (var proxyIp in cloudOptions.TrustedProxies)
+    {
+        if (IPAddress.TryParse(proxyIp, out var address))
+        {
+            forwardedHeaders.KnownProxies.Add(address);
+        }
+    }
 }
 
 app.UseForwardedHeaders(forwardedHeaders);
@@ -248,8 +280,8 @@ app.UseWebSockets(new WebSocketOptions
 {
     KeepAliveInterval = TimeSpan.FromSeconds(pushOptions.WebSocketHeartbeatSeconds),
 });
-app.UseRateLimiter();
 app.UseAuthentication();
+app.UseRateLimiter();
 app.UseAuthorization();
 
 if (app.Environment.IsDevelopment())

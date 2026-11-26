@@ -19,9 +19,10 @@ public sealed class UiAutomationBrowserUrlProvider : IBrowserUrlProviderPort
             "chrome", "msedge", "firefox", "brave", "opera", "vivaldi", "iexplore", "librewolf"
         };
 
+    private const string AddressBarName = "Address and search bar";
+
     private static readonly string[] AddressBarIds =
     [
-        "Address and search bar",
         "addressEditBox",
         "urlbar-input",
         "omnibox"
@@ -69,13 +70,37 @@ public sealed class UiAutomationBrowserUrlProvider : IBrowserUrlProviderPort
 
     private static string? ReadAddressBar(AutomationElement window)
     {
+        var toolbars = window.FindAll(
+            TreeScope.Children,
+            new PropertyCondition(AutomationElement.ControlTypeProperty, ControlType.ToolBar));
+
+        foreach (AutomationElement toolbar in toolbars)
+        {
+            var match = FindAddressBarInSubtree(toolbar);
+            if (match is not null)
+                return match;
+        }
+
+        return null;
+    }
+
+    private static string? FindAddressBarInSubtree(AutomationElement root)
+    {
+        var byNameCondition = new AndCondition(
+            new PropertyCondition(AutomationElement.ControlTypeProperty, ControlType.Edit),
+            new PropertyCondition(AutomationElement.NameProperty, AddressBarName));
+
+        var byName = root.FindFirst(TreeScope.Descendants, byNameCondition);
+        if (byName is not null && ReadUrl(byName) is { } nameUrl)
+            return nameUrl;
+
         foreach (var id in AddressBarIds)
         {
             var condition = new AndCondition(
                 new PropertyCondition(AutomationElement.ControlTypeProperty, ControlType.Edit),
                 new PropertyCondition(AutomationElement.AutomationIdProperty, id));
 
-            var element = window.FindFirst(TreeScope.Descendants, condition);
+            var element = root.FindFirst(TreeScope.Descendants, condition);
             var url = element is null ? null : ReadUrl(element);
             if (url is not null)
                 return url;
@@ -87,7 +112,7 @@ public sealed class UiAutomationBrowserUrlProvider : IBrowserUrlProviderPort
     private static string? ReadToolbarEdit(AutomationElement window)
     {
         var toolbars = window.FindAll(
-            TreeScope.Descendants,
+            TreeScope.Children,
             new PropertyCondition(AutomationElement.ControlTypeProperty, ControlType.ToolBar));
 
         foreach (AutomationElement toolbar in toolbars)
@@ -104,7 +129,7 @@ public sealed class UiAutomationBrowserUrlProvider : IBrowserUrlProviderPort
             }
         }
 
-        return null;
+        return FindAddressBarInSubtree(window);
     }
 
     private static string? ReadUrl(AutomationElement element)

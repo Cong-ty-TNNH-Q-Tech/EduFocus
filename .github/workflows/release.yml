@@ -151,21 +151,6 @@ jobs:
             -p:FileVersion="${{ steps.ver.outputs.numeric }}" `
             --output publish/
 
-      - name: Publish native messaging host
-        shell: pwsh
-        run: |
-          dotnet publish src/EduFocus.NativeHost/EduFocus.NativeHost.csproj `
-            --configuration Release `
-            --runtime win-x64 `
-            --self-contained true `
-            -p:PublishSingleFile=true `
-            -p:IncludeNativeLibrariesForSelfExtract=true `
-            -p:EnableCompressionInSingleFile=true `
-            -p:IncludeSourceRevisionInInformationalVersion=false `
-            -p:Version="${{ steps.ver.outputs.version }}" `
-            -p:FileVersion="${{ steps.ver.outputs.numeric }}" `
-            --output publish/native-host/
-
       - name: Fetch attention models into publish payload
         shell: pwsh
         run: |
@@ -179,8 +164,7 @@ jobs:
         run: |
           $executables = @(
               "publish/EduFocus.exe",
-              "publish/EduFocus.Service.exe",
-              "publish/native-host/EduFocus.NativeHost.exe"
+              "publish/EduFocus.Service.exe"
           )
           $parts = $env:NUMERIC.Split(".")
           foreach ($path in $executables) {
@@ -221,18 +205,22 @@ jobs:
         run: |
           $required = $env:REQUIRE_CODE_SIGNING -match "^(?i:true|1|yes)$"
           $signed = ./installer/Sign-Artifacts.ps1 `
-            -Files publish/EduFocus.exe, publish/EduFocus.Service.exe, publish/native-host/EduFocus.NativeHost.exe `
+            -Files publish/EduFocus.exe, publish/EduFocus.Service.exe `
             -PfxBase64 $env:CODESIGN_PFX_BASE64 `
             -PfxPassword $env:CODESIGN_PFX_PASSWORD `
             -Description "EduFocus" `
             -RequireSigning:$required
-          "signed=$($signed.ToString().ToLowerInvariant())" |
+          $isSigned = ($signed -is [bool] -and $signed)
+          if ($required -and -not $isSigned) {
+              throw "Executable signing did not return boolean true."
+          }
+          "signed=$($isSigned.ToString().ToLowerInvariant())" |
             Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
 
       - name: Build MSI
         shell: pwsh
         run: |
-          dotnet tool install --global wix --version 4.*
+          dotnet tool install --global wix --version 4.0.6
 
           # Refresh PATH so wix.exe is available in this step.
           $env:PATH = [Environment]::GetEnvironmentVariable("PATH", "Machine") + ";" +
@@ -297,22 +285,12 @@ jobs:
             -DestinationPath "EduFocus-${{ steps.ver.outputs.version }}-win-x64-portable.zip" `
             -Force
 
-      - name: Package browser extension
-        shell: pwsh
-        run: |
-          ./scripts/pack-browser-extension.ps1 `
-            -OutputDir "${{ github.workspace }}" `
-            -Version "${{ steps.ver.outputs.version }}"
-
-      - name: Prepare install guides
+      - name: Prepare install guide
         shell: pwsh
         run: |
           Copy-Item `
             docs/installer.md `
             "EduFocus-${{ steps.ver.outputs.version }}-install-guide.md"
-          Copy-Item `
-            docs/browser-extension.md `
-            "EduFocus-${{ steps.ver.outputs.version }}-browser-extension.md"
 
       - name: Generate SHA-256 checksums
         shell: pwsh
@@ -321,9 +299,7 @@ jobs:
           $files = @(
               "EduFocus-$version-win-x64.msi",
               "EduFocus-$version-win-x64-portable.zip",
-              "EduFocus-$version-browser-extension.zip",
-              "EduFocus-$version-install-guide.md",
-              "EduFocus-$version-browser-extension.md"
+              "EduFocus-$version-install-guide.md"
           )
           $lines = foreach ($file in $files) {
               if (-not (Test-Path -LiteralPath $file -PathType Leaf)) {
@@ -376,9 +352,7 @@ jobs:
           path: |
             EduFocus-${{ steps.ver.outputs.version }}-win-x64.msi
             EduFocus-${{ steps.ver.outputs.version }}-win-x64-portable.zip
-            EduFocus-${{ steps.ver.outputs.version }}-browser-extension.zip
             EduFocus-${{ steps.ver.outputs.version }}-install-guide.md
-            EduFocus-${{ steps.ver.outputs.version }}-browser-extension.md
             SHA256SUMS.txt
             release_notes.md
           if-no-files-found: error
@@ -394,7 +368,7 @@ jobs:
               "- Tag: ``${{ steps.ver.outputs.tag }}``",
               "- Code signed: ``${{ steps.sign_exe.outputs.signed }}``",
               "- Dry run: ``${{ steps.ver.outputs.dry_run }}``",
-              "- Artifacts: MSI, portable ZIP, browser extension ZIP, install guides, SHA256SUMS.txt, release notes"
+              "- Artifacts: MSI, portable ZIP, install guide, SHA256SUMS.txt, release notes"
           )
           $lines | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8
 
@@ -425,7 +399,5 @@ jobs:
           files: |
             release-assets/EduFocus-${{ needs.build.outputs.version }}-win-x64.msi
             release-assets/EduFocus-${{ needs.build.outputs.version }}-win-x64-portable.zip
-            release-assets/EduFocus-${{ needs.build.outputs.version }}-browser-extension.zip
             release-assets/EduFocus-${{ needs.build.outputs.version }}-install-guide.md
-            release-assets/EduFocus-${{ needs.build.outputs.version }}-browser-extension.md
             release-assets/SHA256SUMS.txt

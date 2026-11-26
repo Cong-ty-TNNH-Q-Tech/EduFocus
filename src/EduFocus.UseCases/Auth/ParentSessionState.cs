@@ -14,8 +14,9 @@ public sealed class ParentSessionState : IParentAuthorizer
     private readonly TimeProvider _timeProvider;
     private readonly object _gate = new();
     private bool _isAuthenticated;
-    private DateTime? _lastActivityAtUtc;
+    private long? _lastActivityTimestamp;
     private int _activeScopeCount;
+    private long _generation;
 
     public ParentSessionState(TimeProvider timeProvider)
     {
@@ -30,7 +31,7 @@ public sealed class ParentSessionState : IParentAuthorizer
         {
             lock (_gate)
             {
-                ExpireIfIdle(Now());
+                ExpireIfIdle(NowTimestamp());
                 return _isAuthenticated;
             }
         }
@@ -40,8 +41,9 @@ public sealed class ParentSessionState : IParentAuthorizer
     {
         lock (_gate)
         {
+            _generation++;
             _isAuthenticated = true;
-            _lastActivityAtUtc = Now();
+            _lastActivityTimestamp = NowTimestamp();
         }
     }
 
@@ -49,13 +51,13 @@ public sealed class ParentSessionState : IParentAuthorizer
     {
         lock (_gate)
         {
-            var now = Now();
+            var now = NowTimestamp();
             ExpireIfIdle(now);
 
             if (!_isAuthenticated)
                 throw new ParentAuthorizationException(operation);
 
-            _lastActivityAtUtc = now;
+            _lastActivityTimestamp = now;
         }
     }
 
@@ -63,11 +65,11 @@ public sealed class ParentSessionState : IParentAuthorizer
     {
         lock (_gate)
         {
-            var now = Now();
+            var now = NowTimestamp();
             ExpireIfIdle(now);
 
             if (_isAuthenticated)
-                _lastActivityAtUtc = now;
+                _lastActivityTimestamp = now;
         }
     }
 
@@ -75,15 +77,15 @@ public sealed class ParentSessionState : IParentAuthorizer
     {
         lock (_gate)
         {
-            var now = Now();
+            var now = NowTimestamp();
             ExpireIfIdle(now);
 
             if (!_isAuthenticated)
                 return null;
 
-            _lastActivityAtUtc = now;
+            _lastActivityTimestamp = now;
             _activeScopeCount++;
-            return new ActiveScope(this);
+            return new ActiveScope(this, _generation);
         }
     }
 
@@ -91,56 +93,65 @@ public sealed class ParentSessionState : IParentAuthorizer
     {
         lock (_gate)
         {
+            _generation++;
             _isAuthenticated = false;
-            _lastActivityAtUtc = null;
+            _lastActivityTimestamp = null;
             _activeScopeCount = 0;
         }
     }
 
-    private void EndScope()
+    private void EndScope(long generation)
     {
         lock (_gate)
         {
+            if (generation != _generation)
+                return;
+
             if (_activeScopeCount > 0)
                 _activeScopeCount--;
 
             if (_isAuthenticated)
-                _lastActivityAtUtc = Now();
+                _lastActivityTimestamp = NowTimestamp();
         }
     }
 
-    private void ExpireIfIdle(DateTime now)
+    private void ExpireIfIdle(long nowTimestamp)
     {
-        if (!_isAuthenticated || _lastActivityAtUtc is not { } lastActivity)
+        if (!_isAuthenticated || _lastActivityTimestamp is not { } lastActivity)
             return;
 
         if (_activeScopeCount > 0)
         {
-            _lastActivityAtUtc = now;
+            _lastActivityTimestamp = nowTimestamp;
             return;
         }
 
-        if (now - lastActivity >= IdleTimeout)
+        if (_timeProvider.GetElapsedTime(lastActivity, nowTimestamp) >= IdleTimeout)
         {
             _isAuthenticated = false;
-            _lastActivityAtUtc = null;
+            _lastActivityTimestamp = null;
         }
     }
 
-    private DateTime Now() => _timeProvider.GetUtcNow().UtcDateTime;
+    private long NowTimestamp() => _timeProvider.GetTimestamp();
 
     private sealed class ActiveScope : IDisposable
     {
         private readonly ParentSessionState _parent;
+        private readonly long _generation;
         private int _disposed;
 
-        public ActiveScope(ParentSessionState parent) => _parent = parent;
+        public ActiveScope(ParentSessionState parent, long generation)
+        {
+            _parent = parent;
+            _generation = generation;
+        }
 
         public void Dispose()
         {
             if (Interlocked.Exchange(ref _disposed, 1) == 0)
             {
-                _parent.EndScope();
+                _parent.EndScope(_generation);
             }
         }
     }

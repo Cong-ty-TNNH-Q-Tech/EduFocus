@@ -13,10 +13,21 @@ public sealed record RetentionCounts(
     int Notifications,
     int DailySummaries,
     int CloudAuditLogs,
-    int SoftDeletedFamilies)
+    int SoftDeletedFamilies,
+    int RevokedTokens = 0,
+    int InvalidatedPushRegistrations = 0,
+    int OrphanFamilies = 0)
 {
     public int Total =>
-        PairingSessions + SyncEvents + Notifications + DailySummaries + CloudAuditLogs + SoftDeletedFamilies;
+        PairingSessions
+        + SyncEvents
+        + Notifications
+        + DailySummaries
+        + CloudAuditLogs
+        + SoftDeletedFamilies
+        + RevokedTokens
+        + InvalidatedPushRegistrations
+        + OrphanFamilies;
 }
 
 public sealed record MaintenanceResult(
@@ -86,6 +97,7 @@ public sealed class CloudMaintenanceService(
             }
 
             var localDate = DateOnly.FromDateTime(localNow.DateTime);
+            var familyCreated = 0;
             // Catch up yesterday's summary if its scheduled time fell inside overnight quiet hours.
             if (await TryCreateDailySummaryNotificationAsync(
                     family.Id,
@@ -93,7 +105,7 @@ public sealed class CloudMaintenanceService(
                     now,
                     cancellationToken))
             {
-                created++;
+                familyCreated++;
             }
 
             if (localMinutes >= summaryMinutes
@@ -103,13 +115,18 @@ public sealed class CloudMaintenanceService(
                     now,
                     cancellationToken))
             {
-                created++;
+                familyCreated++;
+            }
+
+            if (familyCreated > 0)
+            {
+                await db.SaveChangesAsync(cancellationToken);
+                created += familyCreated;
             }
         }
 
         if (created > 0)
         {
-            await db.SaveChangesAsync(cancellationToken);
             dispatchSignal.Notify();
         }
 
@@ -163,15 +180,27 @@ public sealed class CloudMaintenanceService(
         CancellationToken cancellationToken)
     {
         var settings = options.Value;
+        var pairingCutoff = now.AddHours(-settings.PairingSessionHours);
+        var notificationCutoff = now.AddDays(-settings.NotificationDays);
+
+        var orphanFamilies = await db.Families
+            .Where(f => f.DeletedAtUtc == null
+                && f.CreatedAtUtc < pairingCutoff
+                && !db.Devices.Any(d => d.FamilyId == f.Id && d.Kind == DeviceKind.Mobile)
+                && !db.SyncEvents.Any(e => e.FamilyId == f.Id)
+                && !db.DailySummaries.Any(s => s.FamilyId == f.Id)
+                && db.PairingSessions.Any(s => s.FamilyId == f.Id && s.ClaimedAtUtc == null && s.ExpiresAtUtc < pairingCutoff)
+                && !db.PairingSessions.Any(s => s.FamilyId == f.Id && (s.ClaimedAtUtc != null || s.ExpiresAtUtc >= pairingCutoff)))
+            .ExecuteDeleteAsync(cancellationToken);
 
         var pairingSessions = await db.PairingSessions
-            .Where(s => s.ExpiresAtUtc < now.AddHours(-settings.PairingSessionHours))
+            .Where(s => s.ExpiresAtUtc < pairingCutoff)
             .ExecuteDeleteAsync(cancellationToken);
         var syncEvents = await db.SyncEvents
             .Where(e => e.ReceivedAtUtc < now.AddDays(-settings.SyncEventDays))
             .ExecuteDeleteAsync(cancellationToken);
         var notifications = await db.Notifications
-            .Where(n => n.CreatedAtUtc < now.AddDays(-settings.NotificationDays))
+            .Where(n => n.CreatedAtUtc < notificationCutoff)
             .ExecuteDeleteAsync(cancellationToken);
         var dailySummaries = await db.DailySummaries
             .Where(s => s.UpdatedAtUtc < now.AddDays(-settings.DailySummaryDays))
@@ -183,6 +212,12 @@ public sealed class CloudMaintenanceService(
             .Where(f => f.DeletedAtUtc != null
                 && f.DeletedAtUtc < now.AddDays(-settings.SoftDeletedFamilyDays))
             .ExecuteDeleteAsync(cancellationToken);
+        var revokedTokens = await db.DeviceTokens
+            .Where(t => t.RevokedAtUtc != null && t.RevokedAtUtc < notificationCutoff)
+            .ExecuteDeleteAsync(cancellationToken);
+        var invalidatedPushRegistrations = await db.PushRegistrations
+            .Where(p => p.InvalidatedAtUtc != null && p.InvalidatedAtUtc < notificationCutoff)
+            .ExecuteDeleteAsync(cancellationToken);
 
         return new RetentionCounts(
             pairingSessions,
@@ -190,6 +225,9 @@ public sealed class CloudMaintenanceService(
             notifications,
             dailySummaries,
             auditLogs,
-            families);
+            families,
+            revokedTokens,
+            invalidatedPushRegistrations,
+            orphanFamilies);
     }
 }

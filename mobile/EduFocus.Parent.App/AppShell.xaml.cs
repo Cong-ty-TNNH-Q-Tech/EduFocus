@@ -118,6 +118,7 @@ public partial class AppShell : Shell
         {
             try
             {
+                ServiceHelper.GetService<PushCoordinator>().OnUnlinked();
                 await GoToAsync("//welcome", animate: false);
                 await DisplayAlertAsync(
                     "Phiên ghép nối đã hết",

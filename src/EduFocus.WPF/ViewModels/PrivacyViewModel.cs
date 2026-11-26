@@ -59,9 +59,9 @@ public sealed partial class PrivacyViewModel : ObservableObject
     [ObservableProperty] private bool _settingsIsError;
     [ObservableProperty] private string _deleteMessage = string.Empty;
     [ObservableProperty] private bool _deleteIsError;
+    [ObservableProperty] private string _deleteConfirmation = string.Empty;
 
     public string DeletePin { get; set; } = string.Empty;
-    public string DeleteConfirmation { get; set; } = string.Empty;
 
     public PrivacyViewModel(
         IPrivacySettingsUseCase settings,
@@ -227,6 +227,10 @@ public sealed partial class PrivacyViewModel : ObservableObject
             return;
         }
 
+        var pin = DeletePin;
+        var confirmation = DeleteConfirmation ?? string.Empty;
+        ClearDeleteSecrets();
+
         IsBusy = true;
         IsDeleting = true;
         SetDeleteMessage("Đang xóa dữ liệu...", false);
@@ -234,7 +238,7 @@ public sealed partial class PrivacyViewModel : ObservableObject
         try
         {
             var result = await _deletion.DeleteAllAsync(
-                new DataDeletionRequest(DeletePin, DeleteConfirmation ?? string.Empty));
+                new DataDeletionRequest(pin, confirmation));
 
             switch (result.Status)
             {
@@ -454,7 +458,7 @@ public sealed partial class PrivacyViewModel : ObservableObject
         }
     }
 
-    private void ClearDeleteSecrets()
+    public void ClearDeleteSecrets()
     {
         DeletePin = string.Empty;
         DeleteConfirmation = string.Empty;

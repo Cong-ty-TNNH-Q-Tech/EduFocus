@@ -146,13 +146,25 @@ public sealed class ServiceCommandHandlerTests
     [Fact]
     public async Task Missing_settings_map_to_settings_missing()
     {
-        _protection.Failure = new InvalidOperationException("onboarding is incomplete");
+        _protection.Failure = new OnboardingIncompleteException("onboarding is incomplete");
 
         var response = await Handle(ServiceControlCommand.Enable);
 
         response.Ok.Should().BeFalse();
         response.ErrorCode.Should().Be(ServiceControlErrorCode.SettingsMissing);
         response.Error.Should().NotContain("onboarding is incomplete");
+    }
+
+    [Fact]
+    public async Task Arbitrary_invalid_operation_exception_maps_to_internal_error()
+    {
+        _protection.Failure = new InvalidOperationException("unexpected SQLite reader state");
+
+        var response = await Handle(ServiceControlCommand.Enable);
+
+        response.Ok.Should().BeFalse();
+        response.ErrorCode.Should().Be(ServiceControlErrorCode.InternalError);
+        response.Error.Should().NotContain("unexpected SQLite");
     }
 
     [Fact]

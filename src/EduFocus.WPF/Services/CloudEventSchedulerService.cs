@@ -14,7 +14,8 @@ namespace EduFocus.WPF.Services;
 public sealed class CloudEventSchedulerService : IDisposable
 {
     public static readonly TimeSpan Interval = TimeSpan.FromMinutes(30);
-    public static readonly TimeSpan BlockedAttemptInterval = TimeSpan.FromMinutes(1);
+    public static readonly TimeSpan AlertWatchInterval = TimeSpan.FromSeconds(5);
+    public static readonly TimeSpan BlockedAttemptInterval = AlertWatchInterval;
 
     private readonly CloudDailySummaryProducer _summaries;
     private readonly CloudSecurityAlertProducer _security;
@@ -77,11 +78,27 @@ public sealed class CloudEventSchedulerService : IDisposable
         _blockedAttemptTimer.Tick -= OnBlockedAttemptTimerTick;
     }
 
-    private async void OnTimerTick(object? sender, EventArgs e) =>
-        await PublishAsync(requireProtectionOn: true);
+    private async void OnTimerTick(object? sender, EventArgs e)
+    {
+        try
+        {
+            await PublishAsync(requireProtectionOn: true);
+        }
+        catch (Exception)
+        {
+        }
+    }
 
-    private async void OnBlockedAttemptTimerTick(object? sender, EventArgs e) =>
-        await PublishBlockedAttemptsAsync();
+    private async void OnBlockedAttemptTimerTick(object? sender, EventArgs e)
+    {
+        try
+        {
+            await PublishBlockedAttemptsAsync();
+        }
+        catch (Exception)
+        {
+        }
+    }
 
     private async Task PublishAsync(bool requireProtectionOn)
     {
@@ -121,7 +138,11 @@ public sealed class CloudEventSchedulerService : IDisposable
 
         try
         {
-            await Task.Run(() => _blockedAttempts.TryPublishAsync());
+            await Task.Run(async () =>
+            {
+                await _blockedAttempts.TryPublishAsync();
+                await _security.TryScanAsync();
+            });
         }
         catch (Exception ex)
         {

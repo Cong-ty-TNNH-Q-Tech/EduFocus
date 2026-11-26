@@ -13,12 +13,26 @@ public class LogSanitizerTests
     [InlineData("refresh_token=abc123 failed", "refresh_token=***")]
     [InlineData("api_key=sk-live-123", "api_key=***")]
     [InlineData("password = hunter2", "password=***")]
+    [InlineData("{\"pin\":\"123456\"}", "pin=***")]
+    [InlineData("{\"desktopToken\":\"efd_secretTokenValue\"}", "desktopToken=***")]
+    [InlineData("recovery code: ABCD EFGH 2345", "recovery code=***")]
     public void Redact_RemovesSecretValue(string input, string expectedFragment)
     {
         var result = LogSanitizer.Redact(input);
 
         result.Should().Contain(expectedFragment);
-        result.Should().NotContainAny("123456", "4821", "ABCD-EFGH", "abc123", "sk-live-123", "hunter2");
+        result.Should().NotContainAny("123456", "4821", "ABCD-EFGH", "ABCD EFGH 2345", "abc123", "sk-live-123", "hunter2", "efd_secretTokenValue");
+    }
+
+    [Fact]
+    public void Redact_RemovesJsonAuthorizationAndPairingUri()
+    {
+        var jsonAuth = LogSanitizer.Redact("{\"authorization\":\"Basic dXNlcjpwYXNz\"}");
+        jsonAuth.Should().NotContain("dXNlcjpwYXNz");
+
+        var pairing = LogSanitizer.Redact("Opening edufocus://pair?v=1&u=https://relay.example&s=abc&c=SECRET12");
+        pairing.Should().NotContain("SECRET12");
+        pairing.Should().Contain("[edufocus-uri]");
     }
 
     [Theory]

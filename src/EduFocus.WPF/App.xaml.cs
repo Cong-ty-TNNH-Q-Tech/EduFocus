@@ -45,71 +45,103 @@ public partial class App : Application
     private static System.Threading.Mutex? _mutex;
     private static bool _ownsMutex;
     private static IDisposable? _correlationScope;
+    private bool _startupCompleted;
+    private bool _trayStarted;
 
     protected override async void OnStartup(StartupEventArgs e)
     {
         base.OnStartup(e);
 
         this.DispatcherUnhandledException += App_DispatcherUnhandledException;
+        AppDomain.CurrentDomain.UnhandledException += CurrentDomain_UnhandledException;
         System.Threading.Tasks.TaskScheduler.UnobservedTaskException += TaskScheduler_UnobservedTaskException;
 
-        var command = WatchdogCommandLine.Parse(e.Args);
-        if (command.Mode != WatchdogCommandMode.App)
+        try
         {
+            var command = WatchdogCommandLine.Parse(e.Args);
+            if (command.Mode != WatchdogCommandMode.App)
+            {
+                ShutdownMode = ShutdownMode.OnExplicitShutdown;
+                await RunWatchdogCommandAsync(command);
+                return;
+            }
+
+            try
+            {
+                _mutex = new System.Threading.Mutex(true, WatchdogNames.AppInstanceMutex, out _ownsMutex);
+            }
+            catch (UnauthorizedAccessException)
+            {
+                _ownsMutex = false;
+            }
+
+            if (!_ownsMutex)
+            {
+                MessageBox.Show("Ứng dụng EduFocus đang được chạy.", "Thông báo", MessageBoxButton.OK, MessageBoxImage.Information);
+                Application.Current.Shutdown();
+                return;
+            }
+
+            var serviceManaged = ServiceInstallationProbe.IsServiceManaged();
+            var serviceCollection = new ServiceCollection();
+            ConfigureServices(serviceCollection, serviceManaged);
+            Services = serviceCollection.BuildServiceProvider();
+
+            var correlation = Services.GetRequiredService<ICorrelationContext>();
+            _correlationScope = correlation.BeginScope(Guid.NewGuid());
+
+            var logger = Services.GetRequiredService<IAppLogger>();
+            logger.Info(LogCategories.App, "====== EduFocus started ======");
+
+            // Keep the app alive while OnboardingWindow closes before MainWindow is created.
             ShutdownMode = ShutdownMode.OnExplicitShutdown;
-            await RunWatchdogCommandAsync(command);
-            return;
+
+            var onboardingWindow = Services.GetRequiredService<OnboardingWindow>();
+            if (onboardingWindow.ShowDialog() != true)
+            {
+                logger.Info(LogCategories.App, "Onboarding was not completed; exiting.");
+                Shutdown();
+                return;
+            }
+
+            if (serviceManaged)
+                await StartServiceManagedAsync(logger);
+            else
+                await StartStandaloneAsync(logger);
+
+            var mainWindow = Services.GetRequiredService<MainWindow>();
+            MainWindow = mainWindow;
+            ShutdownMode = ShutdownMode.OnMainWindowClose;
+            mainWindow.Show();
+
+            Services.GetRequiredService<TrayIconService>().Start();
+            _trayStarted = true;
+            Services.GetRequiredService<CloudSyncWorker>().Start();
+            Services.GetRequiredService<CloudEventSchedulerService>().Start();
+            await Services.GetRequiredService<CloudEventSchedulerService>().PublishStartupAsync();
+
+            if (!serviceManaged)
+            {
+                Services.GetRequiredService<ScheduleSchedulerService>().Start();
+                Services.GetRequiredService<RetentionSchedulerService>().Start();
+            }
+
+            _startupCompleted = true;
         }
-
-        _mutex = new System.Threading.Mutex(true, WatchdogNames.AppInstanceMutex, out _ownsMutex);
-        if (!_ownsMutex)
+        catch (Exception ex)
         {
-            MessageBox.Show("Ứng dụng EduFocus đang được chạy.", "Thông báo", MessageBoxButton.OK, MessageBoxImage.Information);
-            Application.Current.Shutdown();
-            return;
-        }
+            try
+            {
+                Services?.GetService<IAppLogger>()?.Error(LogCategories.App, "Application startup failed.", ex);
+            }
+            catch { }
 
-        var serviceManaged = ServiceInstallationProbe.IsServiceManaged();
-        var serviceCollection = new ServiceCollection();
-        ConfigureServices(serviceCollection, serviceManaged);
-        Services = serviceCollection.BuildServiceProvider();
-
-        var correlation = Services.GetRequiredService<ICorrelationContext>();
-        _correlationScope = correlation.BeginScope(Guid.NewGuid());
-
-        var logger = Services.GetRequiredService<IAppLogger>();
-        logger.Info(LogCategories.App, "====== EduFocus started ======");
-
-        // Keep the app alive while OnboardingWindow closes before MainWindow is created.
-        ShutdownMode = ShutdownMode.OnExplicitShutdown;
-
-        var onboardingWindow = Services.GetRequiredService<OnboardingWindow>();
-        if (onboardingWindow.ShowDialog() != true)
-        {
-            logger.Info(LogCategories.App, "Onboarding was not completed; exiting.");
-            Shutdown();
-            return;
-        }
-
-        if (serviceManaged)
-            await StartServiceManagedAsync(logger);
-        else
-            await StartStandaloneAsync(logger);
-
-        var mainWindow = Services.GetRequiredService<MainWindow>();
-        MainWindow = mainWindow;
-        ShutdownMode = ShutdownMode.OnMainWindowClose;
-        mainWindow.Show();
-
-        Services.GetRequiredService<TrayIconService>().Start();
-        Services.GetRequiredService<CloudSyncWorker>().Start();
-        Services.GetRequiredService<CloudEventSchedulerService>().Start();
-        await Services.GetRequiredService<CloudEventSchedulerService>().PublishStartupAsync();
-
-        if (!serviceManaged)
-        {
-            Services.GetRequiredService<ScheduleSchedulerService>().Start();
-            Services.GetRequiredService<RetentionSchedulerService>().Start();
+            MessageBox.Show(
+                "Không thể khởi động EduFocus. Vui lòng thử chạy lại với quyền quản trị.",
+                "Lỗi khởi động EduFocus",
+                MessageBoxButton.OK,
+                MessageBoxImage.Error);
+            Shutdown(1);
         }
     }
 
@@ -248,8 +280,12 @@ public partial class App : Application
         services.AddSingleton<ICloudOutboxRepository, SqliteCloudOutboxRepository>();
         // The optional cloud relay stays inert until the parent enables it;
         // resolving these singletons performs no network access.
-        services.AddSingleton<ICloudSyncPort>(_ => new CloudSyncClient(
-            new HttpClient { Timeout = CloudSyncClient.RequestTimeout },
+        services.AddSingleton(_ => new HttpClient(new SocketsHttpHandler { AllowAutoRedirect = false })
+        {
+            Timeout = CloudSyncClient.RequestTimeout
+        });
+        services.AddSingleton<ICloudSyncPort>(provider => new CloudSyncClient(
+            provider.GetRequiredService<HttpClient>(),
             typeof(App).Assembly.GetName().Version?.ToString(3) ?? "1.0.0"));
         services.AddSingleton<CloudSyncWorker>();
         services.AddSingleton<ICloudOutboxNotifier>(provider =>
@@ -780,8 +816,10 @@ public partial class App : Application
                 // before waiting on async container disposal so thread-affine handles never deadlock or leak.
                 try
                 {
-                    services.GetService<IFocusAudioPort>()?.Dispose();
-                    services.GetService<TrayIconService>()?.Dispose();
+                    if (_startupCompleted)
+                        services.GetService<IFocusAudioPort>()?.Dispose();
+                    if (_trayStarted)
+                        services.GetService<TrayIconService>()?.Dispose();
                 }
                 catch { }
 
@@ -827,7 +865,7 @@ public partial class App : Application
         catch { }
         e.Handled = true;
 
-        if (MainWindow is null || !MainWindow.IsVisible)
+        if (!_startupCompleted)
         {
             try
             {
@@ -835,6 +873,16 @@ public partial class App : Application
             }
             catch { }
         }
+    }
+
+    private void CurrentDomain_UnhandledException(object sender, UnhandledExceptionEventArgs e)
+    {
+        try
+        {
+            if (e.ExceptionObject is Exception exception)
+                Services?.GetService<IAppLogger>()?.Error(LogCategories.App, "Unhandled background domain exception caught.", exception);
+        }
+        catch { }
     }
 
     private void TaskScheduler_UnobservedTaskException(object? sender, System.Threading.Tasks.UnobservedTaskExceptionEventArgs e)

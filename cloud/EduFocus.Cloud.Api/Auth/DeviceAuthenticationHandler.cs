@@ -72,6 +72,16 @@ public sealed class DeviceAuthenticationHandler(
                     Context.RequestAborted);
         }
 
+        if (device.LastSeenAtUtc is null
+            || now - device.LastSeenAtUtc.Value >= TimeSpan.FromMinutes(1))
+        {
+            await db.Devices
+                .Where(d => d.Id == device.Id)
+                .ExecuteUpdateAsync(
+                    setters => setters.SetProperty(d => d.LastSeenAtUtc, now),
+                    Context.RequestAborted);
+        }
+
         var claims = new List<Claim>
         {
             new(ClaimTypes.NameIdentifier, device.Id.ToString()),

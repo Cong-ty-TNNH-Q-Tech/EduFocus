@@ -15,7 +15,7 @@ namespace EduFocus.Infrastructure.Watchdog;
 [SupportedOSPlatform("windows")]
 public sealed class WindowsWatchdogAutoStart : IWatchdogAutoStartPort
 {
-    private const string Schtasks = "schtasks.exe";
+    private static readonly string Schtasks = Path.Combine(Environment.SystemDirectory, "schtasks.exe");
 
     private readonly WatchdogRuntimeOptions _options;
     private readonly IWatchdogCommandRunner _runner;

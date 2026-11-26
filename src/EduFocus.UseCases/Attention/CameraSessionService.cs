@@ -78,12 +78,13 @@ public sealed class CameraSessionService : ICameraSessionUseCase
 
     public async Task<CameraOpenResult> StartAsync(CancellationToken cancellationToken = default)
     {
-        var version = _stateVersion;
+        var version = Volatile.Read(ref _stateVersion);
         CameraOpenResult result;
 
         await _gate.WaitAsync(cancellationToken).ConfigureAwait(false);
         try
         {
+            version = Volatile.Read(ref _stateVersion);
             if (_state == CameraSessionState.Active && _camera.IsOpen)
                 return CameraOpenResult.Opened(_activeDeviceId);
 
@@ -110,11 +111,12 @@ public sealed class CameraSessionService : ICameraSessionUseCase
 
     public async Task StopAsync(CancellationToken cancellationToken = default)
     {
-        var version = _stateVersion;
+        var version = Volatile.Read(ref _stateVersion);
 
         await _gate.WaitAsync(cancellationToken).ConfigureAwait(false);
         try
         {
+            version = Volatile.Read(ref _stateVersion);
             CloseCamera();
             ResetToOff();
         }
@@ -128,12 +130,13 @@ public sealed class CameraSessionService : ICameraSessionUseCase
 
     public async Task<CameraCaptureResult> CaptureAsync(CancellationToken cancellationToken = default)
     {
-        var version = _stateVersion;
+        var version = Volatile.Read(ref _stateVersion);
         CameraCaptureResult result;
 
         await _gate.WaitAsync(cancellationToken).ConfigureAwait(false);
         try
         {
+            version = Volatile.Read(ref _stateVersion);
             result = await CaptureCoreAsync(cancellationToken).ConfigureAwait(false);
         }
         finally
@@ -393,13 +396,23 @@ public sealed class CameraSessionService : ICameraSessionUseCase
         {
             return await task.WaitAsync(_options.OperationTimeout, cancellationToken).ConfigureAwait(false);
         }
-        catch (TimeoutException)
+        catch (Exception ex) when (ex is TimeoutException or OperationCanceledException)
         {
-            // Observe the eventual outcome so a late failure is not unobserved.
+            // Observe the eventual outcome and dispose any late CameraFrame so resources never leak.
             _ = task.ContinueWith(
-                static completed => _ = completed.Exception,
+                static completed =>
+                {
+                    if (completed.IsFaulted)
+                    {
+                        _ = completed.Exception;
+                    }
+                    else if (completed.IsCompletedSuccessfully && completed.Result is CameraCaptureResult capture)
+                    {
+                        capture.Frame?.Dispose();
+                    }
+                },
                 CancellationToken.None,
-                TaskContinuationOptions.OnlyOnFaulted | TaskContinuationOptions.ExecuteSynchronously,
+                TaskContinuationOptions.ExecuteSynchronously,
                 TaskScheduler.Default);
             throw;
         }
@@ -482,12 +495,12 @@ public sealed class CameraSessionService : ICameraSessionUseCase
             return;
 
         _state = state;
-        _stateVersion++;
+        Interlocked.Increment(ref _stateVersion);
     }
 
     private void RaiseStateChangedIf(int previousVersion)
     {
-        if (_stateVersion == previousVersion)
+        if (Volatile.Read(ref _stateVersion) == previousVersion)
             return;
 
         try

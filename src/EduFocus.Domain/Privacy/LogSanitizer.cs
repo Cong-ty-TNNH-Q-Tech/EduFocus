@@ -13,7 +13,7 @@ public static class LogSanitizer
     private const string TruncatedSuffix = "...[truncated]";
 
     private static readonly Regex AuthorizationPattern = new(
-        @"\bauthorization\b\s*[:=]\s*[^\r\n]+",
+        @"\bauthorization[""']?\s*[:=]\s*[^\r\n]+",
         RegexOptions.IgnoreCase | RegexOptions.NonBacktracking);
 
     private static readonly Regex BearerPattern = new(
@@ -21,15 +21,19 @@ public static class LogSanitizer
         RegexOptions.IgnoreCase | RegexOptions.NonBacktracking);
 
     private static readonly Regex SecretPattern = new(
-        @"\b(?<key>[A-Za-z0-9_.-]*(?:pin|pwd|pass|password|secret|token|api[_-]?key|recovery(?:[ _-]?code)?))\b\s*[:=]\s*(?:""[^""]*""|'[^']*'|\S+)",
+        @"\b(?<key>[A-Za-z0-9_.-]*(?:pin|pwd|pass|password|secret|token|api[_-]?key|recovery(?:[ _-]?code)?))[""']?\s*[:=]\s*(?:""[^""]*""|'[^']*'|[A-Z2-9]{4}(?: [A-Z2-9]{4}){2}|\S+)",
         RegexOptions.IgnoreCase | RegexOptions.NonBacktracking);
 
     private static readonly Regex SecretWithoutSeparatorPattern = new(
-        @"\b(?<key>pin|recovery(?:[ _-]?code)?)\s+(?:(?:is|was)\s+)?(?<value>\d{4,12}|[A-Z2-9]{4}(?:-?[A-Z2-9]{4}){2})\b",
+        @"\b(?<key>pin|recovery(?:[ _-]?code)?)\s+(?:(?:is|was)\s+)?(?<value>\d{4,12}|[A-Z2-9]{4}(?:[- ]?[A-Z2-9]{4}){2})\b",
         RegexOptions.IgnoreCase | RegexOptions.NonBacktracking);
 
     private static readonly Regex UrlPattern = new(
         @"\bhttps?://[^\s""'<>]+",
+        RegexOptions.IgnoreCase | RegexOptions.NonBacktracking);
+
+    private static readonly Regex PairingUriPattern = new(
+        @"\bedufocus://[^\s""'<>]+",
         RegexOptions.IgnoreCase | RegexOptions.NonBacktracking);
 
     /// <summary>Redacts secrets and URLs, then collapses the text to one line.</summary>
@@ -73,6 +77,7 @@ public static class LogSanitizer
         result = SecretWithoutSeparatorPattern.Replace(
             result,
             match => $"{match.Groups["key"].Value}=***");
+        result = PairingUriPattern.Replace(result, "[edufocus-uri]");
         result = UrlPattern.Replace(result, RedactUrl);
         return result;
     }

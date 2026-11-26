@@ -412,9 +412,10 @@
 
                         <StackPanel Visibility="{Binding ShowResumeRecoveryInput, Converter={StaticResource BoolToVisibility}}"
                                     Margin="0,16,0,0">
-                            <Label Content="Mã khôi phục đã lưu" Margin="0,0,0,6" />
-                            <TextBox Text="{Binding ResumeRecoveryCode, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
-                                     AutomationProperties.Name="Mã khôi phục đã lưu" />
+                            <Label Content="Mã khôi phục đã lưu" Target="{Binding ElementName=ResumeRecoveryCodeBox}" Margin="0,0,0,6" />
+                            <PasswordBox x:Name="ResumeRecoveryCodeBox"
+                                         AutomationProperties.Name="Mã khôi phục đã lưu"
+                                         PasswordChanged="ResumeRecoveryCodeBox_OnPasswordChanged" />
                             <Button Content="Quay lại nhập PIN hiện tại"
                                     Style="{StaticResource LinkButton}" Margin="0,8,0,0"
                                     Command="{Binding BackToResumePinCommand}" />

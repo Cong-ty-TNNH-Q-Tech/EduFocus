@@ -43,6 +43,7 @@ public partial class OnboardingViewModel : ObservableObject
 
     private bool _credentialConfigured;
     private int _cameraPreviewGeneration;
+    private CancellationTokenSource? _cameraCheckCts;
 
     [ObservableProperty] private OnboardingStep _view = OnboardingStep.Loading;
     [ObservableProperty] private string _statusMessage = string.Empty;
@@ -540,18 +541,25 @@ public partial class OnboardingViewModel : ObservableObject
         CameraStatusIsWarning = false;
 
         var generation = ++_cameraPreviewGeneration;
+        _cameraCheckCts?.Cancel();
+        _cameraCheckCts?.Dispose();
+        var cts = new CancellationTokenSource();
+        _cameraCheckCts = cts;
 
         try
         {
             var preview = new Progress<CameraPreviewFrame>(
                 frame => ShowCameraPreviewFrame(frame, generation));
-            var result = await _cameraCheckFactory().RunAsync(preview: preview);
+            var result = await _cameraCheckFactory().RunAsync(preview: preview, cancellationToken: cts.Token);
             var guidance = CameraGuidance.Describe(result, _platform.SupportsMultiAppCamera);
 
             CameraStatusText = guidance is null
                 ? CameraGuidance.Summary(result)
                 : $"{CameraGuidance.Summary(result)} {guidance}";
             CameraStatusIsWarning = !result.IsReady;
+        }
+        catch (OperationCanceledException)
+        {
         }
         catch (Exception ex)
         {
@@ -562,6 +570,9 @@ public partial class OnboardingViewModel : ObservableObject
         }
         finally
         {
+            if (ReferenceEquals(_cameraCheckCts, cts))
+                _cameraCheckCts = null;
+            cts.Dispose();
             _cameraPreviewGeneration++;
             CameraPreviewImage = null;
             IsCheckingCamera = false;
@@ -604,6 +615,11 @@ public partial class OnboardingViewModel : ObservableObject
 
     public void HandleWindowClosed()
     {
+        _cameraPreviewGeneration++;
+        CameraPreviewImage = null;
+        _cameraCheckCts?.Cancel();
+        _cameraCheckCts?.Dispose();
+        _cameraCheckCts = null;
         IssuedRecoveryCode = string.Empty;
         ClearInputs();
     }

@@ -119,12 +119,26 @@ public sealed class TrayIconService : IDisposable
 
     private void UpdateCameraItem()
     {
+        var dispatcher = System.Windows.Application.Current?.Dispatcher;
+        if (dispatcher is not null && !dispatcher.CheckAccess())
+        {
+            dispatcher.InvokeAsync(UpdateCameraItem);
+            return;
+        }
+
         if (_cameraItem is not null)
             _cameraItem.Text = _camera.TrayStatusText;
     }
 
     private void UpdateIcon()
     {
+        var dispatcher = System.Windows.Application.Current?.Dispatcher;
+        if (dispatcher is not null && !dispatcher.CheckAccess())
+        {
+            dispatcher.InvokeAsync(UpdateIcon);
+            return;
+        }
+
         if (_icon is null)
             return;
 

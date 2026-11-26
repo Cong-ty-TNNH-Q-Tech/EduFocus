@@ -55,12 +55,22 @@ internal static class WindowsProcessIdentity
             if (handle.IsInvalid)
                 return null;
 
-            var buffer = new StringBuilder(1024);
-            var size = buffer.Capacity;
-            if (!QueryFullProcessImageNameW(handle, 0, buffer, ref size))
-                return null;
+            const int ErrorInsufficientBuffer = 122;
+            var capacity = 1024;
+            while (capacity <= 32768)
+            {
+                var buffer = new StringBuilder(capacity);
+                var size = buffer.Capacity;
+                if (QueryFullProcessImageNameW(handle, 0, buffer, ref size))
+                    return buffer.ToString();
 
-            return buffer.ToString();
+                if (Marshal.GetLastWin32Error() != ErrorInsufficientBuffer)
+                    return null;
+
+                capacity *= 2;
+            }
+
+            return null;
         }
         catch (Exception ex) when (ex is Win32Exception or UnauthorizedAccessException or IOException)
         {
@@ -77,8 +87,8 @@ internal static class WindowsProcessIdentity
         try
         {
             return string.Equals(
-                Path.GetFullPath(left).TrimEnd(Path.DirectorySeparatorChar),
-                Path.GetFullPath(right).TrimEnd(Path.DirectorySeparatorChar),
+                NormalizePath(left),
+                NormalizePath(right),
                 StringComparison.OrdinalIgnoreCase);
         }
         catch (Exception ex) when (ex is ArgumentException or NotSupportedException or PathTooLongException)
@@ -86,6 +96,27 @@ internal static class WindowsProcessIdentity
             return false;
         }
     }
+
+    private static string NormalizePath(string path)
+    {
+        var full = Path.GetFullPath(path).TrimEnd(Path.DirectorySeparatorChar);
+        var length = GetLongPathNameW(full, null, 0);
+        if (length == 0)
+            return full;
+
+        var buffer = new StringBuilder(checked((int)length + 1));
+        var written = GetLongPathNameW(full, buffer, (uint)buffer.Capacity);
+        if (written > 0 && written < buffer.Capacity)
+            return Path.GetFullPath(buffer.ToString()).TrimEnd(Path.DirectorySeparatorChar);
+
+        return full;
+    }
+
+    [DllImport("kernel32.dll", SetLastError = true, CharSet = CharSet.Unicode)]
+    private static extern uint GetLongPathNameW(
+        string shortPath,
+        StringBuilder? longPath,
+        uint bufferLength);
 
     [DllImport("kernel32.dll", SetLastError = true)]
     private static extern bool GetNamedPipeClientProcessId(

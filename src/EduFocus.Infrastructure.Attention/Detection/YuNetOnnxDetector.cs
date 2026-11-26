@@ -18,6 +18,8 @@ internal sealed class YuNetOnnxDetector : IFaceDetector
     private readonly int _modelHeight;
     private readonly float _scoreThreshold;
     private readonly float _nmsThreshold;
+    private readonly object _gate = new();
+    private bool _disposed;
 
     public YuNetOnnxDetector(string modelPath, int threads, float scoreThreshold, float nmsThreshold)
     {
@@ -29,16 +31,37 @@ internal sealed class YuNetOnnxDetector : IFaceDetector
             InterOpNumThreads = 1
         };
 
-        _session = new InferenceSession(modelPath, options);
-        _inputName = _session.InputMetadata.Keys.First();
-        var dimensions = _session.InputMetadata[_inputName].Dimensions;
-        _modelHeight = dimensions[2];
-        _modelWidth = dimensions[3];
-        _scoreThreshold = scoreThreshold;
-        _nmsThreshold = nmsThreshold;
-        sw.Stop();
-        LoadMs = sw.ElapsedMilliseconds;
-        Model = $"YuNet 2023mar ONNX ({new FileInfo(modelPath).Length / 1024.0:F1} KiB)";
+        var session = new InferenceSession(modelPath, options);
+        try
+        {
+            if (session.InputMetadata.Count == 0)
+                throw new InvalidOperationException("YuNet ONNX model has no input tensor.");
+
+            _inputName = session.InputMetadata.Keys.First();
+            var dimensions = session.InputMetadata[_inputName].Dimensions;
+            if (dimensions.Length < 4
+                || dimensions[2] <= 0
+                || dimensions[3] <= 0
+                || dimensions[2] % 32 != 0
+                || dimensions[3] % 32 != 0)
+            {
+                throw new InvalidOperationException("YuNet ONNX model input dimensions must be positive multiples of 32.");
+            }
+
+            _modelHeight = dimensions[2];
+            _modelWidth = dimensions[3];
+            _scoreThreshold = scoreThreshold;
+            _nmsThreshold = nmsThreshold;
+            sw.Stop();
+            LoadMs = sw.ElapsedMilliseconds;
+            Model = $"YuNet 2023mar ONNX ({new FileInfo(modelPath).Length / 1024.0:F1} KiB)";
+            _session = session;
+        }
+        catch
+        {
+            session.Dispose();
+            throw;
+        }
     }
 
     public string Name => "yunet-onnx";
@@ -46,6 +69,15 @@ internal sealed class YuNetOnnxDetector : IFaceDetector
     public long LoadMs { get; }
 
     public FaceObservation Detect(Mat bgrFrame)
+    {
+        lock (_gate)
+        {
+            ObjectDisposedException.ThrowIf(_disposed, this);
+            return DetectCore(bgrFrame);
+        }
+    }
+
+    private FaceObservation DetectCore(Mat bgrFrame)
     {
         var frameWidth = bgrFrame.Width;
         var frameHeight = bgrFrame.Height;
@@ -186,7 +218,17 @@ internal sealed class YuNetOnnxDetector : IFaceDetector
         return union <= 0 ? 0 : intersection / union;
     }
 
-    public void Dispose() => _session.Dispose();
+    public void Dispose()
+    {
+        lock (_gate)
+        {
+            if (_disposed)
+                return;
+
+            _disposed = true;
+            _session.Dispose();
+        }
+    }
 
     private sealed record Candidate(Rect2f Box, float Score, Landmark[] Landmarks);
 }

@@ -139,6 +139,7 @@ public static class DeviceEndpoints
         if (target.RevokedAtUtc is null)
         {
             var now = DateTimeOffset.UtcNow;
+            await using var transaction = await db.Database.BeginTransactionAsync(cancellationToken);
             target.RevokedAtUtc = now;
 
             await db.DeviceTokens
@@ -151,6 +152,11 @@ public static class DeviceEndpoints
                 .ExecuteUpdateAsync(
                     setters => setters.SetProperty(p => p.InvalidatedAtUtc, now),
                     cancellationToken);
+            await db.PairingSessions
+                .Where(s => s.DesktopDeviceId == target.Id && s.ClaimedAtUtc == null && s.ExpiresAtUtc > now)
+                .ExecuteUpdateAsync(
+                    setters => setters.SetProperty(s => s.ExpiresAtUtc, now),
+                    cancellationToken);
 
             db.CloudAuditLogs.Add(CloudAudit.Create(
                 familyId,
@@ -159,6 +165,7 @@ public static class DeviceEndpoints
                 now,
                 new { revokedDeviceId = target.Id }));
             await db.SaveChangesAsync(cancellationToken);
+            await transaction.CommitAsync(cancellationToken);
         }
 
         streams.Disconnect(target.Id);

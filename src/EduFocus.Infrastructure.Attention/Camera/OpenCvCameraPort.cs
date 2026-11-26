@@ -20,6 +20,7 @@ public sealed class OpenCvCameraPort : ICameraPort
     private OpenCvCameraSource? _source;
     private IReadOnlyList<CameraDeviceInfo> _devices = [];
     private string? _activeDeviceId;
+    private long _generation;
 
     public OpenCvCameraPort(ICameraDeviceCatalog catalog, CameraPortOptions options)
     {
@@ -61,28 +62,40 @@ public sealed class OpenCvCameraPort : ICameraPort
 
     public CameraOpenResult Open(string? deviceId)
     {
+        long openGeneration;
         lock (_gate)
         {
             CloseCore();
-            _devices = _catalog.ListDevices();
+            openGeneration = ++_generation;
+        }
 
-            var index = 0;
+        var devices = _catalog.ListDevices();
+        var index = 0;
 
-            if (!string.IsNullOrWhiteSpace(deviceId))
+        if (!string.IsNullOrWhiteSpace(deviceId))
+        {
+            var match = devices.FirstOrDefault(
+                device => string.Equals(device.Id, deviceId, StringComparison.OrdinalIgnoreCase));
+
+            if (match is null)
             {
-                var match = _devices.FirstOrDefault(
-                    device => string.Equals(device.Id, deviceId, StringComparison.OrdinalIgnoreCase));
+                lock (_gate)
+                    _devices = devices;
 
-                if (match is null)
-                    return CameraOpenResult.Failed(
-                        CameraFailureKind.NotFound,
-                        "The selected camera is not connected.");
-
-                index = match.Index;
+                return CameraOpenResult.Failed(
+                    CameraFailureKind.NotFound,
+                    "The selected camera is not connected.");
             }
 
-            var source = new OpenCvCameraSource(index, _options.CaptureApi, _options.Width, _options.Height);
-            var opened = source.Open();
+            index = match.Index;
+        }
+
+        var source = new OpenCvCameraSource(index, _options.CaptureApi, _options.Width, _options.Height);
+        var opened = source.Open();
+
+        lock (_gate)
+        {
+            _devices = devices;
 
             if (!opened.Success)
             {
@@ -90,8 +103,16 @@ public sealed class OpenCvCameraPort : ICameraPort
                 return CameraOpenResult.Failed(ClassifyOpenFailure(opened.Error), opened.Error);
             }
 
+            if (openGeneration != _generation)
+            {
+                source.Dispose();
+                return CameraOpenResult.Failed(
+                    CameraFailureKind.Disconnected,
+                    "The camera open was cancelled.");
+            }
+
             _source = source;
-            _activeDeviceId = deviceId ?? _devices.FirstOrDefault(device => device.Index == index)?.Id;
+            _activeDeviceId = deviceId ?? devices.FirstOrDefault(device => device.Index == index)?.Id;
 
             return CameraOpenResult.Opened(_activeDeviceId);
         }
@@ -134,6 +155,7 @@ public sealed class OpenCvCameraPort : ICameraPort
     {
         lock (_gate)
         {
+            _generation++;
             CloseCore();
         }
     }
@@ -178,6 +200,9 @@ public sealed class OpenCvCameraPort : ICameraPort
 
             if (mat.Type() != MatType.CV_8UC3)
             {
+                if (mat.Depth() != MatType.CV_8U)
+                    throw new InvalidOperationException($"Unsupported camera pixel depth: {mat.Type()}.");
+
                 converted = new Mat();
 
                 if (mat.Channels() == 4)
@@ -189,6 +214,9 @@ public sealed class OpenCvCameraPort : ICameraPort
 
                 bgr = converted;
             }
+
+            if (bgr.Type() != MatType.CV_8UC3)
+                throw new InvalidOperationException($"Unsupported converted pixel format: {bgr.Type()}.");
 
             var width = bgr.Cols;
             var height = bgr.Rows;

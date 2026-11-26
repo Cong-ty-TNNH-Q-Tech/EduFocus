@@ -71,7 +71,8 @@ public sealed class BlockRuleSeedService : IBlockRuleSeedUseCase
             if (!stored.IsBuiltIn || stored.Category == definition.Category)
                 continue;
 
-            stored.SetCategory(definition.Category, now);
+            var effectiveNow = now < stored.UpdatedAtUtc ? stored.UpdatedAtUtc : now;
+            stored.SetCategory(definition.Category, effectiveNow);
             await _rules.UpdateAsync(stored, cancellationToken);
             updated++;
         }

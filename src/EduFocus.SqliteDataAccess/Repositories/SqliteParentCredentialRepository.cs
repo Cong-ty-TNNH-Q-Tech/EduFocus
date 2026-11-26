@@ -32,8 +32,13 @@ public sealed class SqliteParentCredentialRepository : IParentCredentialReposito
         ArgumentNullException.ThrowIfNull(credential);
 
         await using var context = _contextFactory.CreateDbContext();
+        await using var transaction = await context.Database.BeginTransactionAsync(cancellationToken);
+        if (await context.ParentCredentials.AnyAsync(cancellationToken))
+            throw new InvalidOperationException("Parent credentials are already configured.");
+
         context.ParentCredentials.Add(credential);
         await context.SaveChangesAsync(cancellationToken);
+        await transaction.CommitAsync(cancellationToken);
     }
 
     public async Task UpdateAsync(ParentCredential credential, CancellationToken cancellationToken = default)

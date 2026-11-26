@@ -211,6 +211,38 @@ public sealed class SyncPayloadValidatorTests
         Assert.Equal("invalid_payload", result.Code);
     }
 
+    [Fact]
+    public void Far_past_and_future_occurred_at_are_rejected()
+    {
+        var pastEvent = new SyncEventDto(
+            "event-past",
+            SyncEventType.SecurityAlert,
+            TestNow.AddDays(-10),
+            JsonDocument.Parse("""{"kind":"clock_jump","localDate":"2026-11-17"}""").RootElement.Clone());
+        var futureEvent = new SyncEventDto(
+            "event-future",
+            SyncEventType.SecurityAlert,
+            TestNow.AddMinutes(10),
+            JsonDocument.Parse("""{"kind":"clock_jump","localDate":"2026-11-17"}""").RootElement.Clone());
+
+        Assert.False(SyncPayloadValidator.Validate(pastEvent, TestNow).IsValid);
+        Assert.False(SyncPayloadValidator.Validate(futureEvent, TestNow).IsValid);
+    }
+
+    [Fact]
+    public void Far_past_and_future_attention_alert_started_at_are_rejected()
+    {
+        var past = Validate(
+            SyncEventType.AttentionAlert,
+            $$"""{"kind":"distracted","localDate":"2026-11-17","startedAtUtc":"{{TestNow.AddDays(-10):O}}","durationSeconds":300}""");
+        var future = Validate(
+            SyncEventType.AttentionAlert,
+            $$"""{"kind":"distracted","localDate":"2026-11-17","startedAtUtc":"{{TestNow.AddMinutes(10):O}}","durationSeconds":300}""");
+
+        Assert.False(past.IsValid);
+        Assert.False(future.IsValid);
+    }
+
     private static SyncValidationResult Validate(
         SyncEventType type,
         string payloadJson,

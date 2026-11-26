@@ -24,7 +24,7 @@ public sealed class ProcessWatcher : IProcessWatcher, IAsyncDisposable
             "textinputhost", "applicationframehost", "securityhealthservice",
             "securityhealthsystray", "msmpeng", "nissrv", "tiworker", "trustedinstaller",
             "conhost", "dllhost", "wudfhost", "sppsvc", "wlanext",
-            "edufocus", "edufocus.service", "edufocus.nativehost"
+            "edufocus", "edufocus.service"
         }.ToFrozenSet(StringComparer.Ordinal);
 
     private readonly ProcessWatcherOptions _options;
@@ -131,20 +131,28 @@ public sealed class ProcessWatcher : IProcessWatcher, IAsyncDisposable
             _loop = null;
 
             cts.Cancel();
+            var completed = false;
             try
             {
-                await loop.WaitAsync(TimeSpan.FromSeconds(2)).ConfigureAwait(false);
+                await loop.WaitAsync(TimeSpan.FromSeconds(2), cancellationToken).ConfigureAwait(false);
+                completed = true;
             }
             catch (TimeoutException)
             {
                 _logger.Warning(LogCategories.Protection, "Process watcher did not stop in time.");
             }
+            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+            {
+                throw;
+            }
             catch (Exception ex)
             {
                 _logger.Error(LogCategories.Protection, "Process watcher loop faulted.", ex);
+                completed = true;
             }
 
-            cts.Dispose();
+            if (completed || loop.IsCompleted)
+                cts.Dispose();
             _lastAttempt.Clear();
             _logger.Info(LogCategories.Protection, "Process watcher stopped.");
         }
@@ -154,7 +162,11 @@ public sealed class ProcessWatcher : IProcessWatcher, IAsyncDisposable
         }
     }
 
-    public async ValueTask DisposeAsync() => await StopAsync().ConfigureAwait(false);
+    public async ValueTask DisposeAsync()
+    {
+        await StopAsync().ConfigureAwait(false);
+        _gate.Dispose();
+    }
 
     private async Task WatchLoopAsync(CancellationToken cancellationToken)
     {
@@ -227,13 +239,14 @@ public sealed class ProcessWatcher : IProcessWatcher, IAsyncDisposable
                 continue;
 
             var ticks = _clock.GetTickCount();
+            PruneStaleAttempts(ticks);
             var attemptKey = (name, process.ProcessId);
             if (_lastAttempt.TryGetValue(attemptKey, out var last) && ticks - last < _options.Debounce)
                 continue;
 
             _lastAttempt[attemptKey] = ticks;
 
-            var outcome = await StopProcessAsync(name, process.ProcessId, cancellationToken)
+            var outcome = await StopProcessAsync(name, process.ProcessId, process.StartTimeUtc, cancellationToken)
                 .ConfigureAwait(false);
 
             Raise(new ProcessBlockedObservation(
@@ -245,16 +258,29 @@ public sealed class ProcessWatcher : IProcessWatcher, IAsyncDisposable
         }
     }
 
+    private void PruneStaleAttempts(TimeSpan nowTicks)
+    {
+        if (_lastAttempt.Count < 64)
+            return;
+
+        foreach (var pair in _lastAttempt)
+        {
+            if (nowTicks - pair.Value >= _options.Debounce)
+                _lastAttempt.TryRemove(pair.Key, out _);
+        }
+    }
+
     private async Task<ProcessBlockOutcome> StopProcessAsync(
         string name,
         int processId,
+        DateTime? startTimeUtc,
         CancellationToken cancellationToken)
     {
         bool closed;
         try
         {
             closed = await _controller
-                .CloseMainWindowAsync(processId, _options.CloseTimeout, cancellationToken)
+                .CloseMainWindowAsync(processId, _options.CloseTimeout, startTimeUtc, name, cancellationToken)
                 .ConfigureAwait(false);
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
@@ -274,7 +300,7 @@ public sealed class ProcessWatcher : IProcessWatcher, IAsyncDisposable
 
         try
         {
-            _controller.KillProcessTree(processId);
+            _controller.KillProcessTree(processId, startTimeUtc, name);
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {

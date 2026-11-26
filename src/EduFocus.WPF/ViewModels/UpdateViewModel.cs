@@ -102,6 +102,12 @@ public partial class UpdateViewModel : ObservableObject
             return;
 
         var settings = await _settings.GetAsync();
+        if (settings?.UpdateCheckEnabled != true)
+        {
+            StatusMessage = "Kiểm tra cập nhật đang tắt. Bật trong Dữ liệu & Quyền riêng tư.";
+            return;
+        }
+
         if (_authorizer is null || !_authorizer.IsAuthenticated)
         {
             StatusMessage = "Vui lòng mở Parent Mode → Quyền riêng tư & dữ liệu (nhập PIN phụ huynh) để tải và cài đặt bản cập nhật.";
@@ -142,7 +148,11 @@ public partial class UpdateViewModel : ObservableObject
         catch (Exception ex)
         {
             StatusMessage = $"Lỗi cài đặt: {ex.Message}";
-            IsDownloading = false;
+        }
+        finally
+        {
+            if (_exitState?.IsExitApproved != true)
+                IsDownloading = false;
         }
     }
 }

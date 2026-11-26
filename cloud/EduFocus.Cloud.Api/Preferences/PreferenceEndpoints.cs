@@ -54,13 +54,21 @@ public static class PreferenceEndpoints
         HttpContext httpContext,
         CancellationToken cancellationToken)
     {
+        if (!httpContext.Request.HasJsonContentType())
+        {
+            return ApiResults.Error(
+                StatusCodes.Status415UnsupportedMediaType,
+                "unsupported_media_type",
+                "Định dạng nội dung không được hỗ trợ.");
+        }
+
         UpdateNotificationPreferencesRequest? request;
         try
         {
             request = await httpContext.Request.ReadFromJsonAsync<UpdateNotificationPreferencesRequest>(
                 ApiJson.Options, cancellationToken);
         }
-        catch (JsonException)
+        catch (Exception exception) when (exception is JsonException or BadHttpRequestException)
         {
             return ApiResults.InvalidRequest("Body không đúng định dạng JSON.");
         }

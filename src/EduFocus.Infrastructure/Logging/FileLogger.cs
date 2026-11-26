@@ -81,8 +81,7 @@ public sealed class FileLogger : IAppLogger
 
             lock (_lock)
             {
-                EnsureDirectoryAndPurge();
-                File.AppendAllText(SelectCurrentPath(), entry, Encoding.UTF8);
+                AppendEntry(entry);
             }
         }
         catch
@@ -91,14 +90,57 @@ public sealed class FileLogger : IAppLogger
         }
     }
 
+    private void AppendEntry(string entry)
+    {
+        for (var attempt = 0; attempt < 2; attempt++)
+        {
+            try
+            {
+                EnsureDirectoryAndPurge();
+                var path = SelectCurrentPath();
+                using var stream = new FileStream(
+                    path,
+                    FileMode.Append,
+                    FileAccess.Write,
+                    FileShare.ReadWrite);
+                using var writer = new StreamWriter(stream, new UTF8Encoding(encoderShouldEmitUTF8Identifier: false));
+                writer.Write(entry);
+                writer.Flush();
+                return;
+            }
+            catch (DirectoryNotFoundException) when (attempt == 0)
+            {
+                _directoryReady = false;
+            }
+            catch (IOException) when (attempt == 0)
+            {
+                Thread.Sleep(5);
+            }
+        }
+    }
+
     private string SelectCurrentPath()
     {
+        const int MaxPartsPerDay = 100;
         var date = _timeProvider.GetLocalNow().ToString("yyyyMMdd", CultureInfo.InvariantCulture);
         var baseName = $"{FilePrefix}-{date}";
         var path = Path.Combine(_options.DirectoryPath, baseName + FileExtension);
 
-        for (var part = 1; File.Exists(path) && new FileInfo(path).Length >= _options.FileSizeLimitBytes; part++)
+        for (var part = 1; part <= MaxPartsPerDay; part++)
+        {
+            try
+            {
+                var info = new FileInfo(path);
+                if (!info.Exists || info.Length < _options.FileSizeLimitBytes)
+                    break;
+            }
+            catch (FileNotFoundException)
+            {
+                break;
+            }
+
             path = Path.Combine(_options.DirectoryPath, $"{baseName}-{part:D3}{FileExtension}");
+        }
 
         return path;
     }

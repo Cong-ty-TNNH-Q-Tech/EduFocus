@@ -27,7 +27,7 @@ public sealed class PushFlowTests
     private const string TimeZone = "Asia/Ho_Chi_Minh";
     private const string Endpoint1 = "https://push.example.com/sub/device-1";
     private const string Endpoint2 = "https://push.example.com/sub/device-2";
-    private const string P256dh = "BAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA";
+    private const string P256dh = "BAne4XPEmYu3KTOfxo4SXY2xZ3fRLQQ6QANsm9tBChPE2BifuZZqNZJIGf_kWIzIeGXB95zCJvAHNjR3-sOVZaw";
     private const string Auth = "AAAAAAAAAAAAAAAAAAAAAA";
 
     private static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web)

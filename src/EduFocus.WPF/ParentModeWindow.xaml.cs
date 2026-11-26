@@ -1,3 +1,4 @@
+using System.ComponentModel;
 using System.Windows;
 using System.Windows.Input;
 using System.Windows.Threading;
@@ -26,6 +27,7 @@ public partial class ParentModeWindow : Window
         _timer.Tick += OnTimerTick;
 
         Loaded += OnLoaded;
+        Closing += OnClosing;
         Closed += OnClosed;
         PreviewMouseDown += OnPreviewUserInput;
         PreviewKeyDown += OnPreviewUserInput;
@@ -33,12 +35,25 @@ public partial class ParentModeWindow : Window
 
     private async void OnLoaded(object sender, RoutedEventArgs e)
     {
-        _timer.Start();
-        _viewModel.HandleWindowOpened();
-        await _viewModel.LoadCommand.ExecuteAsync(null);
+        try
+        {
+            _timer.Start();
+            _viewModel.HandleWindowOpened();
+            await _viewModel.LoadCommand.ExecuteAsync(null);
 
-        if (_viewModel.IsLoginVisible)
-            LoginPinBox.Focus();
+            if (IsLoaded && _viewModel.IsLoginVisible)
+                LoginPinBox.Focus();
+        }
+        catch (Exception)
+        {
+            // ViewModel handles and logs operational errors cleanly.
+        }
+    }
+
+    private void OnClosing(object? sender, CancelEventArgs e)
+    {
+        if (_viewModel.Update?.IsDownloading == true)
+            e.Cancel = true;
     }
 
     private void OnClosed(object? sender, EventArgs e)
@@ -47,11 +62,11 @@ public partial class ParentModeWindow : Window
         PreviewMouseDown -= OnPreviewUserInput;
         PreviewKeyDown -= OnPreviewUserInput;
         _timer.Tick -= OnTimerTick;
+        _viewModel.HandleWindowClosed();
         _viewModel.PasswordBoxesShouldClear -= OnPasswordBoxesShouldClear;
         _viewModel.CloseRequested -= OnCloseRequested;
         _viewModel.Privacy.DeleteSecretShouldClear -= OnPasswordBoxesShouldClear;
         _viewModel.CloudLink.PrivacyNoticeRequested -= OnPrivacyNoticeRequested;
-        _viewModel.HandleWindowClosed();
     }
 
     private void OnTimerTick(object? sender, EventArgs e) => _viewModel.HandleTick();

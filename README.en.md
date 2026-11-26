@@ -36,7 +36,7 @@ Students open their computers for online classes but easily get pulled into AI c
 |---|---|
 | 🔐 **Parent PIN** | Only parents can enable/disable protection, edit the blocklist, view reports, or exit the app |
 | 🚫 **Chatbot blocking** | Blocks target chatbot domains (ChatGPT, Claude, Gemini, Copilot, Perplexity, Character.AI, DeepSeek…) and configured apps |
-| 📋 **Flexible blocklist** | Add custom domains/apps, temporary allowlists for permitted homework. Precise URL/path rules through the Chrome/Edge extension |
+| 📋 **Flexible blocklist** | Add custom domains/apps, temporary allowlists for permitted homework |
 | 🕒 **Protection schedule** | Automatically enable/disable protection by weekly study hours |
 | 📊 **Study session tracking** | Records study time, active apps/domains (best-effort), and observed blocked attempts |
 | 👁️ **Attention estimate** | Uses the webcam to detect presence, screen-facing gaze, absence, or drowsiness |
@@ -117,7 +117,7 @@ Protection turns off with PIN or when the schedule window ends
 - ✅ **Windows 11 23H2+** (64-bit) — primary platform
 - ⚠️ Windows 10 22H2: may run, but Windows 10 is out of official support
 - 🔜 macOS — not supported
-- 🌐 Chrome/Edge/Firefox for domain blocking via hosts; Chrome/Edge 116+ extension adds URL/path blocking; block page over HTTP and HTTPS (Firefox warns about the certificate)
+- 🌐 Chrome/Edge/Firefox for domain blocking via hosts; block page over HTTP and HTTPS (Firefox warns about the certificate)
 - 🎥 Built-in or external webcam (optional, for attention)
 - 📱 Android 8.0+ (API 26) for the optional **EduFocus Parent** app (Phase 8); push requires a UnifiedPush distributor such as ntfy, not Google Play Services
 
@@ -130,12 +130,12 @@ Protection turns off with PIN or when the schedule window ends
 | **UI** | WPF .NET 10 LTS, CommunityToolkit.Mvvm (new UI in Phase 6) |
 | **Architecture** | Clean Architecture + Ports & Adapters |
 | **Database** | SQLite (SQLCipher) + EF Core 10 |
-| **Blocking** | Windows hosts file (exact domains) + local HTTP/HTTPS block page (local CA) + MV3 extension (URL/path) |
+| **Blocking** | Windows hosts file (exact domains) + local HTTP/HTTPS block page (local CA) |
 | **Activity** | Win32 foreground window, WMI, UI Automation |
 | **Attention** | OpenCvSharp4 + ONNX Runtime (MediaPipe Face/Iris) |
 | **Background protection** | Windows Service `EduFocusProtection` (LocalSystem) + named-pipe IPC with ACL and process-image verification |
 | **Security** | PBKDF2-SHA256; no other secrets stored |
-| **Installer** | WiX Toolset v4 (MSI, installs the service + native host) |
+| **Installer** | WiX Toolset v4 (MSI, installs the Windows Service) |
 | **Cloud relay (Phase 8)** | ASP.NET Core .NET 10 Web API + SQLite, Docker; Web Push + UnifiedPush/ntfy |
 | **Mobile (Phase 8)** | .NET MAUI `net10.0-android` (`com.qtech.edufocus.parent`) |
 | **CI/CD** | GitHub Actions |
@@ -148,7 +148,7 @@ Protection turns off with PIN or when the schedule window ends
 
 > EduFocus is being migrated from the predecessor project **Don't Be Lazy**. The MVP release is planned after Phase 7; features described here are not released yet.
 
-Once released, download from [Releases](https://github.com/Cong-ty-TNNH-Q-Tech/EduFocus/releases). Each release ships an MSI, a portable ZIP, a browser extension ZIP, an install guide and `SHA256SUMS.txt`; verify SHA-256 (and the code signature when present) before installing. Requirements: Windows 10 22H2/Windows 11 x64; the MVP requires Administrator. See [docs/installer.md](./docs/installer.md) and [docs/release-process.md](./docs/release-process.md) for details. For the Android parent app, see [mobile/README.md](./mobile/README.md) (signed APK, version rules and install steps).
+Once released, download from [Releases](https://github.com/Cong-ty-TNNH-Q-Tech/EduFocus/releases). Each release ships an MSI, a portable ZIP, an install guide and `SHA256SUMS.txt`; verify SHA-256 (and the code signature when present) before installing. Requirements: Windows 10 22H2/Windows 11 x64; the MVP requires Administrator. See [docs/installer.md](./docs/installer.md) and [docs/release-process.md](./docs/release-process.md) for details. For the Android parent app, see [mobile/README.md](./mobile/README.md) (signed APK, version rules and install steps).
 
 ### Run from source
 
@@ -188,7 +188,6 @@ dotnet test EduFocus.slnx --configuration Release
 - [📝 Changelog](./CHANGELOG.md)
 - [🤝 Contributing](./CONTRIBUTING.md)
 - [🔒 Security](./SECURITY.md)
-- [🌐 Browser Extension](./docs/browser-extension.md) — URL/path blocking, permissions, packaging and removal (Vietnamese)
 - [🔏 Privacy Notice](./docs/privacy-notice.md) — current privacy notice (Vietnamese)
 - [📊 DPIA](./docs/dpia.md) — data protection impact assessment (Vietnamese)
 - [⚖️ Third-Party Notices](./THIRD-PARTY-NOTICES.md) — third-party license inventory
@@ -230,8 +229,6 @@ dotnet test EduFocus.slnx --configuration Release
 - Hosts does not log HTTPS access; blocked-attempt counts are best-effort only.
 - The HTTPS block page relies on a local root CA: Chrome/Edge display it normally, Firefox still warns. The root is trusted only while protection is ON and removed on OFF/uninstall.
 - App blocking may close/kill a process and lose unsaved data; EduFocus sends `WM_CLOSE` before killing.
-- The Chrome/Edge extension blocks top-level URL/path navigations; Firefox, iframes/subresources and
-  wildcard subdomains are not covered. A user with administrator rights can disable the extension.
 - Detailed reports are limited to 30 days; long-range data uses session summaries (365 days).
 - Webcam-based attention is an estimate and must not be treated as certain.
 - Google Meet/Teams may hold the camera on machines without Multi-App Camera support.

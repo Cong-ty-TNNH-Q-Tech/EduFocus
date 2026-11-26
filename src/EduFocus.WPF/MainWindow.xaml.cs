@@ -51,10 +51,17 @@ public partial class MainWindow : Window
 
     private async void OnLoaded(object sender, RoutedEventArgs e)
     {
-        await RefreshDashboardAsync();
+        try
+        {
+            await RefreshDashboardAsync();
+            _loadedOnce = true;
 
-        if (IsVisible)
-            _refreshTimer.Start();
+            if (IsVisible)
+                _refreshTimer.Start();
+        }
+        catch (Exception)
+        {
+        }
     }
 
     private void OnIsVisibleChanged(object sender, DependencyPropertyChangedEventArgs e)
@@ -65,12 +72,21 @@ public partial class MainWindow : Window
             return;
         }
 
-        _ = RefreshDashboardAsync();
+        if (_loadedOnce)
+            _ = RefreshDashboardAsync();
         _refreshTimer.Start();
     }
 
-    private async void OnRefreshTick(object? sender, EventArgs e) =>
-        await RefreshDashboardAsync();
+    private async void OnRefreshTick(object? sender, EventArgs e)
+    {
+        try
+        {
+            await RefreshDashboardAsync();
+        }
+        catch (Exception)
+        {
+        }
+    }
 
     private void OnClosed(object? sender, EventArgs e)
     {
@@ -78,10 +94,24 @@ public partial class MainWindow : Window
         _refreshTimer.Tick -= OnRefreshTick;
     }
 
+    private bool _refreshingDashboard;
+    private bool _loadedOnce;
+
     private async Task RefreshDashboardAsync()
     {
-        await _viewModel.Protection.RefreshAsync();
-        await _viewModel.Dashboard.RefreshAsync();
+        if (_refreshingDashboard)
+            return;
+
+        _refreshingDashboard = true;
+        try
+        {
+            await _viewModel.Protection.RefreshAsync();
+            await _viewModel.Dashboard.RefreshAsync();
+        }
+        finally
+        {
+            _refreshingDashboard = false;
+        }
     }
 
     private void ParentModeButton_Click(object sender, RoutedEventArgs e)

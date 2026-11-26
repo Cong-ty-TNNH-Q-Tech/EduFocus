@@ -64,6 +64,7 @@ public static class MauiProgram
             sp.GetRequiredService<SessionExpiryService>()));
 
         builder.Services.AddSingleton<PushNotificationDedupe>();
+        builder.Services.AddSingleton<PushEventHub>();
         builder.Services.AddSingleton<IPushConfigService, PushConfigService>();
         builder.Services.AddSingleton<IPushRegistrationService, PushRegistrationService>();
         builder.Services.AddSingleton<IPushStreamClient, PushStreamClient>();

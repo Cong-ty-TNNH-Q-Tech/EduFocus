@@ -1,6 +1,7 @@
 using System.Net;
 using System.Net.Http.Headers;
 using System.Net.Http.Json;
+using System.Net.Sockets;
 using System.Text.Json;
 using EduFocus.Cloud.Contracts.Common;
 using EduFocus.Cloud.Contracts.Family;
@@ -24,11 +25,21 @@ public sealed class CloudSyncClient : ICloudSyncPort
 
     private readonly HttpClient _httpClient;
     private readonly ProductInfoHeaderValue _userAgent;
+    private readonly bool _allowInsecureDevelopmentEndpoints;
 
-    public CloudSyncClient(HttpClient httpClient, string? appVersion = null)
+    public CloudSyncClient(
+        HttpClient httpClient,
+        string? appVersion = null,
+        bool? allowInsecureDevelopmentEndpoints = null)
     {
         ArgumentNullException.ThrowIfNull(httpClient);
         _httpClient = httpClient;
+        _allowInsecureDevelopmentEndpoints = allowInsecureDevelopmentEndpoints ??
+#if DEBUG
+            true;
+#else
+            false;
+#endif
 
         var version = string.IsNullOrWhiteSpace(appVersion) ? "1.0.0" : appVersion.Trim();
         if (!ProductInfoHeaderValue.TryParse($"EduFocus/{version}", out var userAgent))
@@ -50,14 +61,13 @@ public sealed class CloudSyncClient : ICloudSyncPort
             request.AppVersion,
             request.TimeZoneId);
 
-        using var response = await SendAsync(
+        var dto = await SendAndReadAsync<PairingSessionResponse>(
                 HttpMethod.Post,
                 BuildUri(cloudBaseUrl, "v1/pairing/sessions"),
                 payload,
                 desktopToken: null,
                 cancellationToken)
             .ConfigureAwait(false);
-        var dto = await ReadAsync<PairingSessionResponse>(response, cancellationToken).ConfigureAwait(false);
 
         if (string.IsNullOrWhiteSpace(dto.DesktopToken))
         {
@@ -84,14 +94,13 @@ public sealed class CloudSyncClient : ICloudSyncPort
         ArgumentNullException.ThrowIfNull(cloudBaseUrl);
         ArgumentException.ThrowIfNullOrWhiteSpace(desktopToken);
 
-        using var response = await SendAsync(
+        var dto = await SendAndReadAsync<PairingSessionStatusResponse>(
                 HttpMethod.Get,
                 BuildUri(cloudBaseUrl, $"v1/pairing/sessions/{sessionId:D}"),
                 body: null,
                 desktopToken,
                 cancellationToken)
             .ConfigureAwait(false);
-        var dto = await ReadAsync<PairingSessionStatusResponse>(response, cancellationToken).ConfigureAwait(false);
 
         var status = dto.Status switch
         {
@@ -121,14 +130,13 @@ public sealed class CloudSyncClient : ICloudSyncPort
         ArgumentNullException.ThrowIfNull(cloudBaseUrl);
         ArgumentException.ThrowIfNullOrWhiteSpace(desktopToken);
 
-        using var response = await SendAsync(
+        var dto = await SendAndReadAsync<LinkStatusResponse>(
                 HttpMethod.Get,
                 BuildUri(cloudBaseUrl, "v1/link/status"),
                 body: null,
                 desktopToken,
                 cancellationToken)
             .ConfigureAwait(false);
-        var dto = await ReadAsync<LinkStatusResponse>(response, cancellationToken).ConfigureAwait(false);
 
         return new CloudRemoteLinkStatus(
             dto.Linked,
@@ -170,14 +178,13 @@ public sealed class CloudSyncClient : ICloudSyncPort
                 item.Payload))
             .ToList());
 
-        using var response = await SendAsync(
+        var dto = await SendAndReadAsync<SyncBatchResponse>(
                 HttpMethod.Post,
                 BuildUri(cloudBaseUrl, "v1/sync/events"),
                 batch,
                 desktopToken,
                 cancellationToken)
             .ConfigureAwait(false);
-        var dto = await ReadAsync<SyncBatchResponse>(response, cancellationToken).ConfigureAwait(false);
 
         var results = dto.Results
             .Select(result => new CloudSyncEventResult(
@@ -209,14 +216,13 @@ public sealed class CloudSyncClient : ICloudSyncPort
         if (deviceId == Guid.Empty)
             throw new ArgumentException("Device id is required.", nameof(deviceId));
 
-        using var response = await SendAsync(
+        await SendAndReadOperationAsync(
                 HttpMethod.Delete,
                 BuildUri(cloudBaseUrl, $"v1/devices/{deviceId:D}"),
                 body: null,
                 desktopToken,
                 cancellationToken)
             .ConfigureAwait(false);
-        await ReadOperationAsync(response, cancellationToken).ConfigureAwait(false);
     }
 
     public async Task DeleteFamilyAsync(
@@ -227,17 +233,16 @@ public sealed class CloudSyncClient : ICloudSyncPort
         ArgumentNullException.ThrowIfNull(cloudBaseUrl);
         ArgumentException.ThrowIfNullOrWhiteSpace(desktopToken);
 
-        using var response = await SendAsync(
+        await SendAndReadOperationAsync(
                 HttpMethod.Delete,
                 BuildUri(cloudBaseUrl, "v1/family"),
                 new DeleteFamilyRequest(FamilyDeletionConfirmation),
                 desktopToken,
                 cancellationToken)
             .ConfigureAwait(false);
-        await ReadOperationAsync(response, cancellationToken).ConfigureAwait(false);
     }
 
-    private async Task<HttpResponseMessage> SendAsync(
+    private async Task<T> SendAndReadAsync<T>(
         HttpMethod method,
         Uri uri,
         object? body,
@@ -258,9 +263,11 @@ public sealed class CloudSyncClient : ICloudSyncPort
 
         try
         {
-            return await _httpClient
+            using var response = await _httpClient
                 .SendAsync(request, HttpCompletionOption.ResponseHeadersRead, timeoutCts.Token)
                 .ConfigureAwait(false);
+
+            return await ReadAsync<T>(response, timeoutCts.Token, cancellationToken).ConfigureAwait(false);
         }
         catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
         {
@@ -269,7 +276,7 @@ public sealed class CloudSyncClient : ICloudSyncPort
                 "Máy chủ cloud không phản hồi kịp. Hãy kiểm tra kết nối và thử lại.",
                 isNetworkError: true);
         }
-        catch (HttpRequestException)
+        catch (Exception ex) when (ex is HttpRequestException or IOException)
         {
             throw new CloudSyncException(
                 CloudErrorCodes.Network,
@@ -278,15 +285,18 @@ public sealed class CloudSyncClient : ICloudSyncPort
         }
     }
 
-    private static async Task<T> ReadAsync<T>(HttpResponseMessage response, CancellationToken cancellationToken)
+    private static async Task<T> ReadAsync<T>(
+        HttpResponseMessage response,
+        CancellationToken timeoutToken,
+        CancellationToken callerCancellationToken)
     {
         if (!response.IsSuccessStatusCode)
-            throw await CreateErrorAsync(response, cancellationToken).ConfigureAwait(false);
+            throw await CreateErrorAsync(response, timeoutToken, callerCancellationToken).ConfigureAwait(false);
 
         try
         {
             var payload = await response.Content
-                .ReadFromJsonAsync<T>(ApiJson.Options, cancellationToken)
+                .ReadFromJsonAsync<T>(ApiJson.Options, timeoutToken)
                 .ConfigureAwait(false);
 
             return payload ?? throw InvalidResponse();
@@ -297,16 +307,23 @@ public sealed class CloudSyncClient : ICloudSyncPort
         }
     }
 
-    private static async Task ReadOperationAsync(HttpResponseMessage response, CancellationToken cancellationToken)
+    private async Task SendAndReadOperationAsync(
+        HttpMethod method,
+        Uri uri,
+        object? body,
+        string? desktopToken,
+        CancellationToken cancellationToken)
     {
-        var result = await ReadAsync<OperationResponse>(response, cancellationToken).ConfigureAwait(false);
+        var result = await SendAndReadAsync<OperationResponse>(method, uri, body, desktopToken, cancellationToken)
+            .ConfigureAwait(false);
         if (!result.Success)
             throw InvalidResponse();
     }
 
     private static async Task<CloudSyncException> CreateErrorAsync(
         HttpResponseMessage response,
-        CancellationToken cancellationToken)
+        CancellationToken timeoutToken,
+        CancellationToken callerCancellationToken)
     {
         var statusCode = (int)response.StatusCode;
 
@@ -334,19 +351,19 @@ public sealed class CloudSyncClient : ICloudSyncPort
         {
             var header = response.Headers.RetryAfter;
             if (header?.Delta is { } delta && delta > TimeSpan.Zero)
-                retryAfter = delta;
+                retryAfter = delta > CloudSyncWorker.MaxBackoff ? CloudSyncWorker.MaxBackoff : delta;
             else if (header?.Date is { } date)
             {
                 var until = date - DateTimeOffset.UtcNow;
                 if (until > TimeSpan.Zero)
-                    retryAfter = until;
+                    retryAfter = until > CloudSyncWorker.MaxBackoff ? CloudSyncWorker.MaxBackoff : until;
             }
         }
 
         try
         {
             var error = await response.Content
-                .ReadFromJsonAsync<ApiErrorResponse>(ApiJson.Options, cancellationToken)
+                .ReadFromJsonAsync<ApiErrorResponse>(ApiJson.Options, timeoutToken)
                 .ConfigureAwait(false);
 
             if (!string.IsNullOrWhiteSpace(error?.Error?.Code))
@@ -355,7 +372,11 @@ public sealed class CloudSyncClient : ICloudSyncPort
             if (statusCode < 500 && statusCode != 429 && !string.IsNullOrWhiteSpace(error?.Error?.Message))
                 message = error.Error.Message.Trim();
         }
-        catch (Exception ex) when (ex is JsonException or NotSupportedException or HttpRequestException)
+        catch (OperationCanceledException) when (callerCancellationToken.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch (Exception ex) when (ex is JsonException or NotSupportedException or HttpRequestException or IOException or OperationCanceledException)
         {
         }
 
@@ -377,9 +398,47 @@ public sealed class CloudSyncClient : ICloudSyncPort
         _ => throw new ArgumentException("Unsupported cloud event type.", nameof(type)),
     };
 
-    private static Uri BuildUri(Uri cloudBaseUrl, string relativePath)
+    private Uri BuildUri(Uri cloudBaseUrl, string relativePath)
     {
+        if (!cloudBaseUrl.IsAbsoluteUri
+            || !string.IsNullOrEmpty(cloudBaseUrl.UserInfo)
+            || !IsAllowedCloudEndpoint(cloudBaseUrl, _allowInsecureDevelopmentEndpoints))
+        {
+            throw new CloudSyncException(
+                CloudErrorCodes.RequestFailed,
+                "Địa chỉ máy chủ cloud không hợp lệ hoặc không hỗ trợ HTTPS.");
+        }
+
         var root = new Uri(cloudBaseUrl.GetLeftPart(UriPartial.Authority).TrimEnd('/') + "/");
         return new Uri(root, relativePath);
+    }
+
+    internal static bool IsAllowedCloudEndpoint(Uri uri, bool allowInsecureDevelopmentEndpoints)
+    {
+        if (uri.Scheme == Uri.UriSchemeHttps)
+            return true;
+
+        if (uri.Scheme != Uri.UriSchemeHttp || !allowInsecureDevelopmentEndpoints)
+            return false;
+
+        var host = uri.DnsSafeHost;
+        if (host.Equals("localhost", StringComparison.OrdinalIgnoreCase))
+            return true;
+
+        if (!IPAddress.TryParse(host, out var address))
+            return false;
+
+        if (IPAddress.IsLoopback(address))
+            return true;
+
+        if (address.AddressFamily == AddressFamily.InterNetwork)
+        {
+            var bytes = address.GetAddressBytes();
+            return bytes[0] == 10
+                || (bytes[0] == 172 && bytes[1] is >= 16 and <= 31)
+                || (bytes[0] == 192 && bytes[1] == 168);
+        }
+
+        return address.IsIPv6LinkLocal || address.IsIPv6UniqueLocal;
     }
 }

@@ -1,4 +1,5 @@
 using System.Net;
+using System.Net.Sockets;
 using System.Text.Json;
 using EduFocus.Cloud.Api.Options;
 using Lib.Net.Http.WebPush;
@@ -27,12 +28,13 @@ public interface IPushSender
 /// <summary>
 /// Sends encrypted Web Push requests through the UnifiedPush endpoint supplied
 /// by the phone's distributor. VAPID authentication is required; the endpoint
-/// host allowlist is enforced again here as defence in depth.
+/// host allowlist and public-IP dial validation are enforced as defence in depth.
 /// </summary>
-public sealed class WebPushSender : IPushSender
+public sealed class WebPushSender : IPushSender, IDisposable
 {
     private const int TimeToLiveSeconds = 3600;
 
+    private readonly HttpClient? _httpClient;
     private readonly PushServiceClient? _client;
     private readonly IReadOnlyList<string> _allowedHosts;
     private readonly ILogger<WebPushSender> _logger;
@@ -48,7 +50,17 @@ public sealed class WebPushSender : IPushSender
 
         try
         {
-            _client = new PushServiceClient
+            var handler = new SocketsHttpHandler
+            {
+                AllowAutoRedirect = false,
+                ConnectTimeout = TimeSpan.FromSeconds(5),
+                ConnectCallback = ConnectPublicEndpointAsync,
+            };
+            _httpClient = new HttpClient(handler)
+            {
+                Timeout = TimeSpan.FromSeconds(10),
+            };
+            _client = new PushServiceClient(_httpClient)
             {
                 AutoRetryAfter = false,
                 DefaultTimeToLive = TimeToLiveSeconds,
@@ -62,11 +74,85 @@ public sealed class WebPushSender : IPushSender
         }
         catch (Exception exception)
         {
+            _httpClient?.Dispose();
+            _httpClient = null;
             logger.LogError(
                 "Failed to initialize Web Push sender: {ErrorType}",
                 exception.GetType().Name);
             throw;
         }
+    }
+
+    public void Dispose() => _httpClient?.Dispose();
+
+    private static async ValueTask<Stream> ConnectPublicEndpointAsync(
+        SocketsHttpConnectionContext context,
+        CancellationToken cancellationToken)
+    {
+        var addresses = await Dns.GetHostAddressesAsync(context.DnsEndPoint.Host, cancellationToken);
+        var publicAddresses = addresses.Where(address => !IsDisallowedIpAddress(address)).ToArray();
+        if (publicAddresses.Length == 0)
+        {
+            throw new HttpRequestException("Push destination resolved only to disallowed addresses.");
+        }
+
+        var socket = new Socket(SocketType.Stream, ProtocolType.Tcp)
+        {
+            NoDelay = true,
+        };
+        try
+        {
+            await socket.ConnectAsync(publicAddresses, context.DnsEndPoint.Port, cancellationToken);
+            return new NetworkStream(socket, ownsSocket: true);
+        }
+        catch
+        {
+            socket.Dispose();
+            throw;
+        }
+    }
+
+    public static bool IsDisallowedIpAddress(IPAddress address)
+    {
+        if (address.IsIPv4MappedToIPv6)
+        {
+            address = address.MapToIPv4();
+        }
+
+        if (IPAddress.IsLoopback(address))
+        {
+            return true;
+        }
+
+        if (address.AddressFamily == AddressFamily.InterNetwork)
+        {
+            var b = address.GetAddressBytes();
+            return b[0] == 0
+                || b[0] == 10
+                || b[0] == 127
+                || (b[0] == 100 && b[1] >= 64 && b[1] <= 127)
+                || (b[0] == 169 && b[1] == 254)
+                || (b[0] == 172 && b[1] >= 16 && b[1] <= 31)
+                || (b[0] == 192 && b[1] == 168)
+                || b[0] >= 224;
+        }
+
+        if (address.AddressFamily == AddressFamily.InterNetworkV6)
+        {
+            if (address.IsIPv6LinkLocal
+                || address.IsIPv6Multicast
+                || address.IsIPv6SiteLocal
+                || address.Equals(IPAddress.IPv6Any)
+                || address.Equals(IPAddress.IPv6None))
+            {
+                return true;
+            }
+
+            var b = address.GetAddressBytes();
+            return (b[0] & 0xFE) == 0xFC;
+        }
+
+        return true;
     }
 
     public async Task<IReadOnlyList<PushSendResult>> SendAsync(

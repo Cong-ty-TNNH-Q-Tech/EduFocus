@@ -24,7 +24,7 @@ public static class PushEndpoints
             .RequireAuthorization()
             .RequireRateLimiting(RateLimitPolicies.Token);
         endpoints.MapGet("/push/config", GetConfig)
-            .RequireAuthorization()
+            .RequireAuthorization(AuthorizationPolicies.Read)
             .RequireRateLimiting(RateLimitPolicies.Token);
         endpoints.MapGet("/push/stream", StreamAsync)
             .RequireAuthorization()
@@ -44,6 +44,7 @@ public static class PushEndpoints
 
     private static async Task StreamAsync(
         HttpContext httpContext,
+        CloudDbContext db,
         PushStreamRegistry registry,
         PushDispatchSignal dispatchSignal,
         IOptions<PushOptions> options,
@@ -68,11 +69,41 @@ public static class PushEndpoints
             return;
         }
 
+        var deviceId = httpContext.User.DeviceId();
+        var familyId = httpContext.User.FamilyId();
+
         using var socket = await httpContext.WebSockets.AcceptWebSocketAsync();
-        var connection = registry.Register(
-            httpContext.User.DeviceId(),
-            httpContext.User.FamilyId(),
-            socket);
+        var connection = registry.Register(deviceId, familyId, socket);
+
+        // Re-check device & family status after registration to eliminate the race with concurrent revocation.
+        var active = await db.Devices
+            .AsNoTracking()
+            .Join(
+                db.Families.AsNoTracking(),
+                d => d.FamilyId,
+                f => f.Id,
+                (d, f) => new { d.Id, d.FamilyId, d.RevokedAtUtc, f.DeletedAtUtc })
+            .AnyAsync(
+                x => x.Id == deviceId
+                    && x.FamilyId == familyId
+                    && x.RevokedAtUtc == null
+                    && x.DeletedAtUtc == null,
+                httpContext.RequestAborted);
+        if (!active)
+        {
+            registry.Unregister(connection);
+            connection.Abort();
+            return;
+        }
+
+        await db.Notifications
+            .Where(n => n.FamilyId == familyId
+                && n.Status == NotificationStatus.Pending
+                && n.FailureCode == "no_transport"
+                && n.LastAttemptAtUtc != null)
+            .ExecuteUpdateAsync(
+                setters => setters.SetProperty(n => n.LastAttemptAtUtc, (DateTimeOffset?)null),
+                httpContext.RequestAborted);
         dispatchSignal.Notify();
 
         var logger = loggerFactory.CreateLogger("PushStream");
@@ -105,6 +136,9 @@ public static class PushEndpoints
                     await CloseOutputAsync(socket);
                     break;
                 }
+
+                await CloseWithPolicyViolationAsync(socket);
+                break;
             }
         }
         catch (OperationCanceledException) when (httpContext.RequestAborted.IsCancellationRequested)
@@ -169,6 +203,22 @@ public static class PushEndpoints
         }
     }
 
+    private static async Task CloseWithPolicyViolationAsync(WebSocket socket)
+    {
+        try
+        {
+            using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(2));
+            await socket.CloseAsync(
+                WebSocketCloseStatus.PolicyViolation,
+                "inbound_messages_not_supported",
+                timeout.Token);
+        }
+        catch (Exception exception) when (
+            exception is WebSocketException or ObjectDisposedException or OperationCanceledException)
+        {
+        }
+    }
+
     private static async Task<IResult> RegisterAsync(
         HttpContext httpContext,
         CloudDbContext db,
@@ -180,24 +230,33 @@ public static class PushEndpoints
             return ApiResults.Forbidden("Chỉ thiết bị di động đăng ký nhận thông báo.");
         }
 
+        if (!httpContext.Request.HasJsonContentType())
+        {
+            return ApiResults.Error(
+                StatusCodes.Status415UnsupportedMediaType,
+                "unsupported_media_type",
+                "Định dạng nội dung không được hỗ trợ.");
+        }
+
         RegisterPushRequest? request;
         try
         {
             request = await httpContext.Request.ReadFromJsonAsync<RegisterPushRequest>(
                 ApiJson.Options, cancellationToken);
         }
-        catch (JsonException)
+        catch (Exception exception) when (exception is JsonException or BadHttpRequestException)
         {
             return ApiResults.InvalidRequest("Body không đúng định dạng JSON.");
         }
 
         var pushOptions = options.Value;
+        var enforceAllowedHosts = pushOptions.Enabled || pushOptions.AllowedEndpointHosts.Length > 0;
         if (!PushEndpointValidator.TryValidateRegistration(
                 request?.Endpoint,
                 request?.P256dh,
                 request?.Auth,
                 pushOptions.AllowedEndpointHosts,
-                pushOptions.Enabled,
+                enforceAllowedHosts,
                 out var endpoint,
                 out var p256dh,
                 out var auth))
