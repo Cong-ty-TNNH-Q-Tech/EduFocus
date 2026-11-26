@@ -48,6 +48,7 @@ public sealed class PushNotificationPresenter
 
         try
         {
+            EnsureChannel();
             ShowSystemNotification(payload, content);
         }
         catch (Exception ex)
@@ -90,7 +91,7 @@ public sealed class PushNotificationPresenter
             PendingIntentFlags.Immutable | PendingIntentFlags.UpdateCurrent);
 
         var builder = new Notification.Builder(context, ChannelId)
-            .SetSmallIcon(Resource.Mipmap.appicon)
+            .SetSmallIcon(Resource.Drawable.icon_bell)
             .SetContentTitle(content.Title)
             .SetContentText(content.Body)
             .SetStyle(new Notification.BigTextStyle().BigText(content.Body))

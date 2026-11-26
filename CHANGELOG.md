@@ -7,6 +7,14 @@ và dự án tuân theo [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ---
 
+## [2.1.1] - 2026-11-26
+
+### Fixed (Mobile - Push)
+
+- **Thông báo đẩy không hiển thị trên bản release:** notification channel `edufocus_alerts` trước đây chỉ
+  được tạo trong debug demo, nên Android 8+ âm thầm bỏ qua thông báo. Channel giờ được tạo ngay trước khi
+  hiển thị; small icon dùng drawable chuẩn thay cho adaptive icon.
+
 ## [2.1.0] - 2026-11-25
 
 ### Added (Backlog — #21, #23)
