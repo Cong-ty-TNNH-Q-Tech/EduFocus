@@ -33,7 +33,7 @@ Tham chiếu: [release-process.md](./release-process.md),
 - [ ] Release workflow xanh; toàn bộ test pass (TRX đã upload).
 - [ ] Dry run trên branch thử nghiệm thành công trước khi push tag.
 - [ ] Version trong tên file, `EduFocus.exe`, `EduFocus.Service.exe`, `EduFocus.NativeHost.exe`, MSI khớp tag.
-- [ ] `SHA256SUMS.txt` khớp và đã được đọc lại tự động.
+- [ ] `SHA256SUMS.txt` (desktop) khớp và đã được đọc lại tự động.
 - [ ] Chữ ký `Valid` trên exe/service exe/native host/MSI (nếu đã cấu hình chứng chỉ); nếu unsigned, đã ghi rõ lý do.
 - [ ] Artifact có đủ MSI, portable ZIP, browser extension ZIP và hai hướng dẫn cài đặt.
 - [ ] CHANGELOG có section của version và `### Breaking changes`.
@@ -107,9 +107,11 @@ Tham chiếu: [release-process.md](./release-process.md),
 - [ ] `apksigner verify` pass; APK cài được trên thiết bị sạch Android 8/12/14; launcher hiển thị
       "EduFocus Phụ huynh", icon adaptive và splash đúng.
 - [ ] Cài đè để nâng cấp giữ SecureStorage (còn ghép nối); gỡ app rồi cài lại không còn token cũ.
-- [ ] `SHA256SUMS.txt` khớp APK/AAB đính kèm release; hướng dẫn cài nằm trong `mobile/README.md`.
-- [ ] UnifiedPush/ntfy hoạt động trên bản release: nhận đủ 5 loại push, deep link mở đúng màn hình;
-      payload sau giải mã chỉ có `type`, `date`, `notificationId`.
+- [ ] `SHA256SUMS-Android.txt` khớp APK/AAB đính kèm release; hướng dẫn cài nằm trong `mobile/README.md`.
+- [ ] WSS hoạt động trên bản release khi app đóng: foreground service giữ kết nối, nhận đủ 5 loại push,
+      deep link mở đúng màn hình; payload sau giải mã chỉ có `type`, `date`, `notificationId`.
+- [ ] Backend production bật `PUSH_WEBSOCKET_ENABLED=true`; kiểm tra fallback UnifiedPush/ntfy nếu bật
+      `PUSH_ENABLED=true`.
 - [ ] App release chỉ dùng HTTPS (cleartext tắt) và kết nối backend staging/production thành công.
 - [ ] Đã chạy [phase8-e2e-checklist.md](./phase8-e2e-checklist.md) trên staging + thiết bị thật và
       đính kèm biên bản (ngày, phiên bản, thiết bị).

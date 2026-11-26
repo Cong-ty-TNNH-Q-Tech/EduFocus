@@ -157,9 +157,10 @@ thành URL HTTPS production, không có dấu `/` cuối. Workflow desktop và m
 ### Quy tắc version
 
 - `versionName` lấy từ tag `vMAJOR.MINOR.PATCH` (bỏ `v`); hậu tố prerelease giữ nguyên nếu có.
-- `versionCode = MAJOR*10000 + MINOR*100 + PATCH` (ví dụ `v2.1.0` → `20100`).
-- Mỗi thành phần 0–9999 và `versionCode` ≤ 2.100.000.000. Mỗi lần phát hành phải tăng phần số;
-  Android từ chối cài đè nếu `versionCode` không lớn hơn bản đang cài.
+- `versionCode = MAJOR*1.000.000 + MINOR*10.000 + PATCH*100 + slot`; bản stable dùng `slot=99`
+  (ví dụ `v2.2.0` → `2020099`), prerelease dùng số cuối `1–98` (ví dụ `v2.2.0-rc.1` → `2020001`).
+- Mỗi thành phần trong giới hạn `major ≤ 2000`, `minor ≤ 99`, `patch ≤ 99`; mỗi lần phát hành phải
+  tăng phần số. Android từ chối cài đè nếu `versionCode` không lớn hơn bản đang cài.
 
 ### Workflow
 
@@ -171,10 +172,11 @@ version; mặc định dry-run, không đụng GitHub Release):
 3. `dotnet publish -f net10.0-android -c Release` với `AndroidKeyStore=true`,
    `ApplicationDisplayVersion`/`ApplicationVersion` lấy từ tag; xuất cả APK và AAB.
 4. `apksigner verify` và `aapt2 dump badging` kiểm tra package id, `versionName`, `versionCode`.
-5. Tạo `SHA256SUMS.txt`.
+5. Tạo `SHA256SUMS-Android.txt` (tách khỏi `SHA256SUMS.txt` của desktop để hai workflow không ghi
+   đè nhau).
 6. Upload artifact `edufocus-parent-android-<version>` và đính
-   `EduFocus-Parent-Android-<version>.apk` (+ `.aab`) vào GitHub Release cùng tag (tạo release mới
-   nếu chưa có).
+   `EduFocus-Parent-Android-<version>.apk` (+ `.aab`), `SHA256SUMS-Android.txt` vào GitHub Release
+   cùng tag (tạo release mới nếu chưa có).
 7. Xóa keystore khỏi runner trong bước `always()`.
 
 Build local tương đương:
@@ -200,7 +202,7 @@ APK ký nằm trong `publish/` với tên `com.qtech.edufocus.parent-Signed.apk`
 - Đối chiếu SHA-256 trước khi cài:
   - Windows: `Get-FileHash .\EduFocus-Parent-Android-2.1.0.apk -Algorithm SHA256`
   - Linux/macOS: `sha256sum EduFocus-Parent-Android-2.1.0.apk`
-  - So với dòng tương ứng trong `SHA256SUMS.txt` đính kèm release.
+  - So với dòng tương ứng trong `SHA256SUMS-Android.txt` đính kèm release.
 - Cài đè để nâng cấp: giữ nguyên package id và keystore nên token ghép nối trong SecureStorage vẫn
   còn. **Không gỡ ứng dụng** nếu muốn giữ liên kết.
 - Trước khi gỡ hẳn, vào **Cài đặt → Ngắt kết nối** hoặc **Xóa dữ liệu trên cloud** (gõ `XÓA`) để

@@ -186,7 +186,7 @@ jobs:
           if [ -n "$aab" ]; then
             cp "$aab" "release-assets/EduFocus-Parent-Android-$VERSION.aab"
           fi
-          ( cd release-assets && sha256sum EduFocus-Parent-Android-* > SHA256SUMS.txt && cat SHA256SUMS.txt )
+          ( cd release-assets && sha256sum EduFocus-Parent-Android-* > SHA256SUMS-Android.txt && cat SHA256SUMS-Android.txt )
 
       # The keystore must never survive the job or reach an artifact.
       - name: Remove temporary signing files
@@ -201,7 +201,7 @@ jobs:
           path: |
             release-assets/*.apk
             release-assets/*.aab
-            release-assets/SHA256SUMS.txt
+            release-assets/SHA256SUMS-Android.txt
           if-no-files-found: error
           retention-days: 14
 
@@ -216,7 +216,7 @@ jobs:
             echo "- versionCode: \`${{ steps.ver.outputs.code }}\`"
             echo "- Prerelease: \`${{ steps.ver.outputs.prerelease }}\`"
             echo "- Dry run: \`${{ steps.ver.outputs.dry_run }}\`"
-            echo "- Artifacts: signed APK (and AAB when produced), SHA256SUMS.txt"
+            echo "- Artifacts: signed APK (and AAB when produced), SHA256SUMS-Android.txt"
           } >> "$GITHUB_STEP_SUMMARY"
 
   release:
@@ -245,7 +245,7 @@ jobs:
         run: |
           set -euo pipefail
           shopt -s nullglob
-          files=(release-assets/*.apk release-assets/*.aab release-assets/SHA256SUMS.txt)
+          files=(release-assets/*.apk release-assets/*.aab release-assets/SHA256SUMS-Android.txt)
           if [ ${#files[@]} -eq 0 ]; then
             echo "::error::No release assets were downloaded."
             exit 1
