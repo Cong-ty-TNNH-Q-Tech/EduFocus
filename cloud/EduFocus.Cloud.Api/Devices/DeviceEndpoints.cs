@@ -1,5 +1,6 @@
 using EduFocus.Cloud.Api.Auth;
 using EduFocus.Cloud.Api.Common;
+using EduFocus.Cloud.Api.Push;
 using EduFocus.Cloud.Api.RateLimiting;
 using EduFocus.Cloud.Contracts.Common;
 using EduFocus.Cloud.Contracts.Devices;
@@ -63,6 +64,7 @@ public static class DeviceEndpoints
 
     private static async Task<IResult> RotateTokenAsync(
         CloudDbContext db,
+        PushStreamRegistry streams,
         HttpContext httpContext,
         CancellationToken cancellationToken)
     {
@@ -107,6 +109,7 @@ public static class DeviceEndpoints
             now));
         await db.SaveChangesAsync(cancellationToken);
         await transaction.CommitAsync(cancellationToken);
+        streams.Disconnect(deviceId);
 
         return Results.Ok(new RotateDeviceTokenResponse(token, now));
     }
@@ -114,6 +117,7 @@ public static class DeviceEndpoints
     private static async Task<IResult> RevokeDeviceAsync(
         Guid deviceId,
         CloudDbContext db,
+        PushStreamRegistry streams,
         HttpContext httpContext,
         CancellationToken cancellationToken)
     {
@@ -157,6 +161,7 @@ public static class DeviceEndpoints
             await db.SaveChangesAsync(cancellationToken);
         }
 
+        streams.Disconnect(target.Id);
         return Results.Ok(new OperationResponse(true));
     }
 }

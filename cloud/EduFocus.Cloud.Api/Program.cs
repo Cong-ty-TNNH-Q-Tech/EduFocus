@@ -111,6 +111,9 @@ builder.Services.AddOptions<PushOptions>()
         options => options.BatchSize is >= 1 and <= 500,
         "Push:BatchSize must be between 1 and 500")
     .Validate(
+        options => options.WebSocketHeartbeatSeconds is >= 5 and <= 120,
+        "Push:WebSocketHeartbeatSeconds must be between 5 and 120")
+    .Validate(
         options => !options.Enabled
             || PushEndpointValidator.IsValidVapidPublicKey(options.VapidPublicKey),
         "Push:VapidPublicKey must be a base64url P-256 public key when push is enabled")
@@ -130,6 +133,8 @@ builder.Services.AddOptions<PushOptions>()
     .ValidateOnStart();
 builder.Services.AddSingleton(TimeProvider.System);
 builder.Services.AddSingleton<IPushSender, WebPushSender>();
+builder.Services.AddSingleton<PushStreamRegistry>();
+builder.Services.AddSingleton<PushDispatchSignal>();
 builder.Services.AddScoped<PushDispatchService>();
 builder.Services.AddHostedService<PushWorker>();
 builder.Services.AddOptions<JobOptions>()
@@ -236,6 +241,13 @@ app.UseStatusCodePages(async context =>
         new ApiErrorResponse(new ApiError(code, message)));
 });
 app.UseSerilogRequestLogging();
+var pushOptions = builder.Configuration
+    .GetSection(PushOptions.SectionName)
+    .Get<PushOptions>() ?? new PushOptions();
+app.UseWebSockets(new WebSocketOptions
+{
+    KeepAliveInterval = TimeSpan.FromSeconds(pushOptions.WebSocketHeartbeatSeconds),
+});
 app.UseRateLimiter();
 app.UseAuthentication();
 app.UseAuthorization();

@@ -28,6 +28,7 @@ public sealed class ParentSettingsStore(IKeyValueStore store)
     public const string PushAuthKey = "edufocus.parent.push_auth";
     public const string PushVapidPublicKeyKey = "edufocus.parent.push_vapid_public";
     public const string PushAppVersionKey = "edufocus.parent.push_app_version";
+    public const string PushWebSocketEnabledKey = "edufocus.parent.push_websocket";
     private const string LegacyPushTokenKey = "edufocus.parent.push_token";
 
     public string? CloudBaseUrl
@@ -90,6 +91,15 @@ public sealed class ParentSettingsStore(IKeyValueStore store)
         set => SetOptional(PushAppVersionKey, value?.Trim());
     }
 
+    public bool PushWebSocketEnabled
+    {
+        get => string.Equals(
+            store.Get(PushWebSocketEnabledKey),
+            "true",
+            StringComparison.OrdinalIgnoreCase);
+        set => SetOptional(PushWebSocketEnabledKey, value ? "true" : null);
+    }
+
     public PushEndpointRegistration? GetPushEndpoint()
     {
         var endpoint = PushEndpoint;
@@ -131,6 +141,7 @@ public sealed class ParentSettingsStore(IKeyValueStore store)
         ClearPushEndpoint();
         store.Remove(PushVapidPublicKeyKey);
         store.Remove(PushAppVersionKey);
+        store.Remove(PushWebSocketEnabledKey);
         store.Remove(LegacyPushTokenKey);
     }
 

@@ -6,12 +6,13 @@ namespace EduFocus.Cloud.Api.Push;
 public sealed class PushWorker(
     IServiceScopeFactory scopeFactory,
     IOptions<PushOptions> options,
+    PushDispatchSignal dispatchSignal,
     ILogger<PushWorker> logger) : BackgroundService
 {
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
         var settings = options.Value;
-        if (!settings.Enabled)
+        if (!settings.Enabled && !settings.WebSocketEnabled)
         {
             logger.LogInformation("Push is disabled; dispatch worker will not run.");
             return;
@@ -46,7 +47,9 @@ public sealed class PushWorker(
 
             try
             {
-                await Task.Delay(TimeSpan.FromSeconds(settings.PollSeconds), stoppingToken);
+                await dispatchSignal.WaitAsync(
+                    TimeSpan.FromSeconds(settings.PollSeconds),
+                    stoppingToken);
             }
             catch (OperationCanceledException)
             {

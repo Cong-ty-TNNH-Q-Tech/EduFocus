@@ -1,8 +1,9 @@
 # EduFocus Cloud (Phase 8)
 
 Backend tùy chọn cho cloud relay: ghép nối thiết bị, nhận sự kiện tổng hợp, gửi thông báo đẩy qua
-Web Push/UnifiedPush (ví dụ ntfy) và trả báo cáo tóm tắt cho app phụ huynh. Cloud **mặc định tắt**
-phía desktop; repo này không chứa secret và không chứa dữ liệu học tập.
+kết nối WebSocket (WSS) tích hợp, hoặc Web Push/UnifiedPush (ví dụ ntfy) làm fallback, và trả báo
+cáo tóm tắt cho app phụ huynh. Cloud **mặc định tắt** phía desktop; repo này không chứa secret và
+không chứa dữ liệu học tập.
 
 - Kiến trúc và API: [../docs/cloud-backend.md](../docs/cloud-backend.md)
 - Triển khai production (TLS, backup/restore, rollback, demo LAN): [../docs/cloud-deploy.md](../docs/cloud-deploy.md)
@@ -92,8 +93,9 @@ docker compose run --rm api --migrate
 
 Đã có: pairing (`/v1/pairing`), xác thực token thiết bị (`efd_`/`efm_`), `/v1/link/status`,
 `/v1/devices`, `/v1/devices/token/rotate`, ingest `/v1/sync/events` (batch ≤50, ≤64 KB, idempotent,
-latest-wins), push Web Push/UnifiedPush + preferences (#83), `GET /v1/push/config` và các API đọc cho
-mobile (#84: báo cáo ngày, notifications có cursor, xóa thiết bị/gia đình).
+latest-wins), push WSS (`GET /v1/push/stream`) + Web Push/UnifiedPush fallback + preferences (#83),
+`GET /v1/push/config` và các API đọc cho mobile (#84: báo cáo ngày, notifications có cursor, xóa
+thiết bị/gia đình). App phụ huynh không cần cài ntfy khi cloud bật `Push__WebSocketEnabled`.
 
 ## Biến môi trường
 
@@ -105,7 +107,9 @@ mobile (#84: báo cáo ngày, notifications có cursor, xóa thiết bị/gia đ
 | `ASPNETCORE_ENVIRONMENT` | Không | `Development` bật OpenAPI và fallback DB |
 | `ASPNETCORE_URLS` | Không | Mặc định trong Docker là `http://+:8080` |
 | `Cloud__TrustForwardedHeaders` | Không | `true` khi chạy sau Caddy nội bộ; mặc định compose là `true` |
-| `Push__Enabled`, `Push__VapidPublicKey`, `Push__VapidPrivateKey`, `Push__VapidSubject`, `Push__AllowedEndpointHosts__0` | Khi bật push | VAPID và host endpoint UnifiedPush/ntfy |
+| `Push__WebSocketEnabled` | Không | Bật kết nối WSS cho app phụ huynh; compose mặc định `true` |
+| `Push__WebSocketHeartbeatSeconds` | Không | Chu kỳ heartbeat WSS, mặc định `20` (5–120) |
+| `Push__Enabled`, `Push__VapidPublicKey`, `Push__VapidPrivateKey`, `Push__VapidSubject`, `Push__AllowedEndpointHosts__0` | Khi dùng fallback | VAPID và host endpoint UnifiedPush/ntfy |
 | `Jobs__*`, `RateLimiting__*` | Không | Chu kỳ retention và giới hạn request |
 | `API_BIND`, `API_PORT` | Compose | Địa chỉ/port publish của API; mặc định `127.0.0.1:8080` |
 | `EDUFOCUS_DOMAIN` | Profile `tls` | Domain cho Caddy |

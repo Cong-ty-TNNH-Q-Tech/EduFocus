@@ -1,6 +1,7 @@
 using System.Text.Json;
 using EduFocus.Cloud.Api.Auth;
 using EduFocus.Cloud.Api.Common;
+using EduFocus.Cloud.Api.Push;
 using EduFocus.Cloud.Api.RateLimiting;
 using EduFocus.Cloud.Contracts.Common;
 using EduFocus.Cloud.Contracts.Family;
@@ -26,6 +27,7 @@ public static class FamilyEndpoints
     private static async Task<IResult> DeleteAsync(
         HttpContext httpContext,
         CloudDbContext db,
+        PushStreamRegistry streams,
         CancellationToken cancellationToken)
     {
         DeleteFamilyRequest? request;
@@ -64,6 +66,7 @@ public static class FamilyEndpoints
         db.CloudAuditLogs.Add(CloudAudit.Create(null, null, "FamilyDeleted", now));
         await db.SaveChangesAsync(cancellationToken);
         await transaction.CommitAsync(cancellationToken);
+        streams.DisconnectFamily(familyId);
 
         return Results.Ok(new OperationResponse(true));
     }

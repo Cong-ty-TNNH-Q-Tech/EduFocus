@@ -9,6 +9,7 @@ namespace EduFocus.Cloud.Api.Push;
 public sealed class PushDispatchService(
     CloudDbContext db,
     IPushSender sender,
+    PushStreamRegistry streams,
     IOptions<PushOptions> options,
     TimeProvider timeProvider,
     ILogger<PushDispatchService> logger)
@@ -91,6 +92,9 @@ public sealed class PushDispatchService(
             return;
         }
 
+        var streamConnections = settings.WebSocketEnabled
+            ? streams.GetConnections(notification.FamilyId)
+            : Array.Empty<PushStreamConnection>();
         var registrations = await (
                 from registration in db.PushRegistrations.AsNoTracking()
                 join device in db.Devices.AsNoTracking() on registration.DeviceId equals device.Id
@@ -98,12 +102,36 @@ public sealed class PushDispatchService(
                     && device.Kind == DeviceKind.Mobile
                     && device.RevokedAtUtc == null
                     && registration.InvalidatedAtUtc == null
-                select new { registration.Endpoint, registration.P256dh, registration.Auth })
+                select new
+                {
+                    registration.DeviceId,
+                    registration.Endpoint,
+                    registration.P256dh,
+                    registration.Auth,
+                })
             .Distinct()
             .ToListAsync(cancellationToken);
 
-        if (registrations.Count == 0)
+        if (streamConnections.Count == 0 && registrations.Count == 0)
         {
+            if (settings.WebSocketEnabled
+                && await db.Devices.AsNoTracking().AnyAsync(
+                    d => d.FamilyId == notification.FamilyId
+                        && d.Kind == DeviceKind.Mobile
+                        && d.RevokedAtUtc == null,
+                    cancellationToken))
+            {
+                if (notification.FailureCode != "no_transport"
+                    || notification.LastAttemptAtUtc is not null)
+                {
+                    notification.FailureCode = "no_transport";
+                    notification.LastAttemptAtUtc = null;
+                    await db.SaveChangesAsync(cancellationToken);
+                }
+
+                return;
+            }
+
             Suppress(notification, "no_device");
             await db.SaveChangesAsync(cancellationToken);
             return;
@@ -112,28 +140,79 @@ public sealed class PushDispatchService(
         notification.AttemptCount++;
         notification.LastAttemptAtUtc = now;
         var data = PushRules.BuildPushData(notification);
+        var results = new List<PushSendResult>();
+        var streamSuccessDeviceIds = new HashSet<Guid>();
+
+        if (streamConnections.Count > 0)
+        {
+            IReadOnlyList<PushStreamSendResult> streamResults;
+            try
+            {
+                streamResults = await streams.SendAsync(
+                    notification.FamilyId,
+                    data,
+                    cancellationToken);
+            }
+            catch (OperationCanceledException)
+            {
+                throw;
+            }
+            catch (Exception exception)
+            {
+                logger.LogError(
+                    "Push stream send failed for notification {NotificationId}: {ErrorType}",
+                    notification.Id,
+                    exception.GetType().Name);
+                streamResults = streamConnections
+                    .Select(connection => new PushStreamSendResult(connection.DeviceId, false))
+                    .ToList();
+            }
+
+            foreach (var streamResult in streamResults)
+            {
+                if (streamResult.Success)
+                {
+                    streamSuccessDeviceIds.Add(streamResult.DeviceId);
+                }
+
+                results.Add(new PushSendResult(
+                    $"wss:{streamResult.DeviceId:D}",
+                    streamResult.Success,
+                    false,
+                    streamResult.Success ? null : "stream_unavailable"));
+            }
+        }
+
         var targets = registrations
-            .Select(r => new PushTarget(r.Endpoint, r.P256dh, r.Auth))
+            .Where(registration => !streamSuccessDeviceIds.Contains(registration.DeviceId))
+            .Select(registration => new PushTarget(
+                registration.Endpoint,
+                registration.P256dh,
+                registration.Auth))
             .ToList();
 
-        IReadOnlyList<PushSendResult> results;
-        try
+        if (targets.Count > 0)
         {
-            results = await sender.SendAsync(targets, data, cancellationToken);
-        }
-        catch (OperationCanceledException)
-        {
-            throw;
-        }
-        catch (Exception exception)
-        {
-            logger.LogError(
-                "Push send failed for notification {NotificationId}: {ErrorType}",
-                notification.Id,
-                exception.GetType().Name);
-            results = targets
-                .Select(t => new PushSendResult(t.Endpoint, false, false, "push_unavailable"))
-                .ToList();
+            try
+            {
+                results.AddRange(await sender.SendAsync(targets, data, cancellationToken));
+            }
+            catch (OperationCanceledException)
+            {
+                throw;
+            }
+            catch (Exception exception)
+            {
+                logger.LogError(
+                    "Push send failed for notification {NotificationId}: {ErrorType}",
+                    notification.Id,
+                    exception.GetType().Name);
+                results.AddRange(targets.Select(target => new PushSendResult(
+                    target.Endpoint,
+                    false,
+                    false,
+                    "push_unavailable")));
+            }
         }
 
         var invalidEndpoints = results

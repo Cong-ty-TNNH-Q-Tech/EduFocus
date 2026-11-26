@@ -6,6 +6,10 @@ public sealed class PushOptions
 
     public bool Enabled { get; set; }
 
+    public bool WebSocketEnabled { get; set; }
+
+    public int WebSocketHeartbeatSeconds { get; set; } = 20;
+
     public string? VapidPublicKey { get; set; }
 
     public string? VapidPrivateKey { get; set; }

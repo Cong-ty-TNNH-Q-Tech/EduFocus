@@ -1,5 +1,6 @@
 using EduFocus.Cloud.Api.Jobs;
 using EduFocus.Cloud.Api.Options;
+using EduFocus.Cloud.Api.Push;
 using EduFocus.Cloud.Data;
 using EduFocus.Cloud.Data.Entities;
 using Microsoft.EntityFrameworkCore;
@@ -243,6 +244,7 @@ public sealed class MaintenanceJobTests
         new(
             db,
             Options.Create(new JobOptions()),
+            new PushDispatchSignal(),
             new FixedTimeProvider(now ?? Now),
             NullLogger<CloudMaintenanceService>.Instance);
 

@@ -45,7 +45,7 @@ public sealed partial class SettingsViewModel(
         IsLinked && (!NotificationsEnabled || !PushDistributorReady);
 
     public string EnableNotificationsText => NotificationsEnabled && !PushDistributorReady
-        ? "Chọn ứng dụng thông báo"
+        ? "Kết nối lại thông báo"
         : "Bật thông báo";
 
     public bool HasDevicesStatus => DevicesStatus.Length > 0;
@@ -59,7 +59,7 @@ public sealed partial class SettingsViewModel(
 
             return PushDistributorReady
                 ? "Thông báo đang bật. Bạn sẽ nhận cảnh báo và báo cáo trên điện thoại."
-                : "Quyền thông báo đã bật nhưng chưa chọn ứng dụng phân phối UnifiedPush.";
+                : "Quyền thông báo đã bật nhưng kết nối nền chưa chạy.";
         }
     }
 
@@ -101,7 +101,8 @@ public sealed partial class SettingsViewModel(
         AppVersionText = AppInfo.Current.VersionString;
         ConnectionStatusText = IsLinked ? "Đã kết nối cloud" : "Chưa ghép nối";
         NotificationsEnabled = permission.IsGranted;
-        PushDistributorReady = unifiedPush.GetAvailability() == UnifiedPushAvailability.Ready;
+        PushDistributorReady = WssPushService.IsRunning
+            || unifiedPush.GetAvailability() == UnifiedPushAvailability.Ready;
 
         if (!IsLinked)
         {
@@ -115,7 +116,8 @@ public sealed partial class SettingsViewModel(
     {
         var granted = await coordinator.EnableNotificationsAsync(page);
         NotificationsEnabled = permission.IsGranted;
-        PushDistributorReady = unifiedPush.GetAvailability() == UnifiedPushAvailability.Ready;
+        PushDistributorReady = WssPushService.IsRunning
+            || unifiedPush.GetAvailability() == UnifiedPushAvailability.Ready;
         return granted;
     }
 

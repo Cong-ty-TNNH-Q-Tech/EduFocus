@@ -32,6 +32,7 @@ public static class SyncEndpoints
         HttpContext httpContext,
         CloudDbContext db,
         IOptions<SyncOptions> syncOptions,
+        PushDispatchSignal dispatchSignal,
         CancellationToken cancellationToken)
     {
         var options = syncOptions.Value;
@@ -81,6 +82,7 @@ public static class SyncEndpoints
 
         var now = DateTimeOffset.UtcNow;
         var results = new List<SyncEventResult>(batch.Events.Count);
+        var notificationsPlanned = 0;
 
         await using var transaction = await db.Database.BeginTransactionAsync(cancellationToken);
         try
@@ -114,8 +116,14 @@ public static class SyncEndpoints
                     eventType,
                     rawEvent.OccurredAtUtc,
                     rawEvent.Payload);
-                results.Add(await ProcessEventAsync(
-                    db, family, deviceId, dto, now, options, cancellationToken));
+                var (result, notificationPlanned) = await ProcessEventAsync(
+                    db, family, deviceId, dto, now, options, cancellationToken);
+                if (notificationPlanned)
+                {
+                    notificationsPlanned++;
+                }
+
+                results.Add(result);
             }
 
             await transaction.CommitAsync(cancellationToken);
@@ -131,10 +139,15 @@ public static class SyncEndpoints
             return StoreUnavailable();
         }
 
+        if (notificationsPlanned > 0)
+        {
+            dispatchSignal.Notify();
+        }
+
         return Results.Ok(new SyncBatchResponse(results, now));
     }
 
-    private static async Task<SyncEventResult> ProcessEventAsync(
+    private static async Task<(SyncEventResult Result, bool NotificationPlanned)> ProcessEventAsync(
         CloudDbContext db,
         Family family,
         Guid deviceId,
@@ -155,7 +168,9 @@ public static class SyncEndpoints
                     e => e.FamilyId == family.Id && e.ClientEventId == clientEventId,
                     cancellationToken))
         {
-            return new SyncEventResult(clientEventId, SyncEventResultStatus.Duplicate);
+            return (
+                new SyncEventResult(clientEventId, SyncEventResultStatus.Duplicate),
+                false);
         }
 
         SyncEvent? entity = null;
@@ -176,8 +191,13 @@ public static class SyncEndpoints
         if (!validation.IsValid)
         {
             await CompleteEventAsync(db, entity, SyncEventStatus.Rejected, now, cancellationToken);
-            return new SyncEventResult(
-                clientEventId, SyncEventResultStatus.Rejected, validation.Code, validation.Message);
+            return (
+                new SyncEventResult(
+                    clientEventId,
+                    SyncEventResultStatus.Rejected,
+                    validation.Code,
+                    validation.Message),
+                false);
         }
 
         var apply = await ApplyAsync(
@@ -185,22 +205,29 @@ public static class SyncEndpoints
         if (apply.Code is not null)
         {
             await CompleteEventAsync(db, entity, SyncEventStatus.Rejected, now, cancellationToken);
-            return new SyncEventResult(
-                clientEventId, SyncEventResultStatus.Rejected, apply.Code, apply.Message);
+            return (
+                new SyncEventResult(
+                    clientEventId,
+                    SyncEventResultStatus.Rejected,
+                    apply.Code,
+                    apply.Message),
+                false);
         }
 
-        // Applied events are fully handled here; alerts also queue a deduped notification for the push worker.
+        var notificationPlanned = false;
         if (validation.Value!.Type != ContractEventType.DailySummary)
         {
-            await PlanAlertNotificationAsync(
+            notificationPlanned = await PlanAlertNotificationAsync(
                 db, family.Id, validation.Value!, dto.OccurredAtUtc, now, cancellationToken);
         }
 
         await CompleteEventAsync(db, entity, SyncEventStatus.Processed, now, cancellationToken);
-        return new SyncEventResult(clientEventId, SyncEventResultStatus.Applied);
+        return (
+            new SyncEventResult(clientEventId, SyncEventResultStatus.Applied),
+            notificationPlanned);
     }
 
-    private static async Task PlanAlertNotificationAsync(
+    private static async Task<bool> PlanAlertNotificationAsync(
         CloudDbContext db,
         Guid familyId,
         ValidatedSyncEvent validated,
@@ -211,7 +238,7 @@ public static class SyncEndpoints
         var planned = NotificationPlanner.ForAlert(validated, occurredAtUtc);
         if (planned is null)
         {
-            return;
+            return false;
         }
 
         var exists = db.Notifications.Local.Any(
@@ -223,7 +250,7 @@ public static class SyncEndpoints
                     cancellationToken);
         if (exists)
         {
-            return;
+            return false;
         }
 
         db.Notifications.Add(new NotificationRecord
@@ -236,6 +263,7 @@ public static class SyncEndpoints
             CreatedAtUtc = now,
             Status = NotificationStatus.Pending,
         });
+        return true;
     }
 
     private static async Task CompleteEventAsync(

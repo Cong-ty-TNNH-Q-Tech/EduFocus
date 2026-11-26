@@ -9,4 +9,7 @@ public sealed record RegisterPushRequest(
 
 public sealed record RegisterPushResponse(DateTimeOffset UpdatedAtUtc);
 
-public sealed record PushConfigResponse(bool Enabled, string? VapidPublicKey);
+public sealed record PushConfigResponse(
+    bool Enabled,
+    string? VapidPublicKey,
+    bool WebSocketEnabled = false);

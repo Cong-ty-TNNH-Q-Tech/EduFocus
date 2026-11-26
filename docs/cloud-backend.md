@@ -15,8 +15,9 @@ Cloud relay là thành phần **tùy chọn** giúp phụ huynh nhận thông b�
   nhật và ghép nối điện thoại thành công.
 - **Least data:** chỉ rời máy năm loại sự kiện tổng hợp (xem §3). Không gửi URL, tên miền, tiêu đề
   cửa sổ, tên ứng dụng, mẫu hoạt động thô, dữ liệu camera, PIN hay mã khôi phục.
-- **Không khóa nhà cung cấp:** backend đóng gói Docker, tự host được; mobile dùng UnifiedPush qua
-  distributor do người dùng chọn (ví dụ ntfy), không phụ thuộc Google Play Services.
+- **Không khóa nhà cung cấp:** backend đóng gói Docker, tự host được; mobile giữ kết nối WSS trực
+  tiếp tới backend, không cần ntfy hay Google Play Services. UnifiedPush/Web Push chỉ là fallback tùy
+  chọn khi cloud bật `Push__Enabled`.
 - **Có thể thu hồi và xóa:** ngắt kết nối, thu hồi token, xóa gia đình trên cloud bất kỳ lúc nào.
 - **Không phải bản sao DB:** cloud không chứa đủ dữ liệu để tái tạo báo cáo chi tiết; báo cáo chi
   tiết vẫn chỉ có trên máy tính.
@@ -41,6 +42,9 @@ Cloud relay là thành phần **tùy chọn** giúp phụ huynh nhận thông b�
                                                              └─────────────────────────┘
 ```
 
+> App phụ huynh kết nối WSS trực tiếp tới API (`/v1/push/stream`); nhánh UnifiedPush/ntfy trong sơ
+> đồ chỉ còn là fallback khi cloud bật Web Push.
+
 | Thành phần | Vai trò |
 |---|---|
 | `EduFocus.Infrastructure.Cloud` | HTTP client, outbox worker, pairing client phía desktop |
@@ -48,7 +52,7 @@ Cloud relay là thành phần **tùy chọn** giúp phụ huynh nhận thông b�
 | `EduFocus.Cloud.Data` | EF Core model + migration SQLite, repository |
 | `EduFocus.Cloud.Contracts` | DTO dùng chung server (và tham chiếu khi test) |
 | Background jobs | tổng hợp daily summary, gửi push theo preference/quiet hours, retention |
-| Web Push + UnifiedPush | kênh gửi push tới Android qua distributor ntfy |
+| WSS + Web Push | kênh chính là WebSocket `GET /v1/push/stream`; Web Push/UnifiedPush là fallback |
 
 Backend **không** nằm trong `EduFocus.slnx`; có solution và CI riêng (`cloud/`).
 
@@ -163,8 +167,9 @@ Base path: `/v1`. Response lỗi dùng JSON `{"error":{"code","message","traceId
 | `DELETE` | `/v1/devices/{id}` | `family:admin` | Thu hồi thiết bị, token và push registration |
 | `POST` | `/v1/devices/token/rotate` | `efd_`/`efm_` | Xoay token của chính thiết bị đang gọi |
 | `POST` | `/v1/sync/events` | `efd_`+`sync` | Ingest batch sự kiện |
-| `POST` | `/v1/push/registrations` | `efm_` | Đăng ký/cập nhật UnifiedPush endpoint + khóa Web Push |
-| `GET` | `/v1/push/config` | `efm_`+`read` | Trạng thái push và VAPID public key cho distributor |
+| `POST` | `/v1/push/registrations` | `efm_` | Đăng ký/cập nhật UnifiedPush endpoint + khóa Web Push fallback |
+| `GET` | `/v1/push/config` | `efm_`+`read` | Trạng thái push, VAPID public key và cờ `webSocketEnabled` |
+| `GET` | `/v1/push/stream` | `efm_` | Nâng cấp WebSocket; backend giữ kết nối và đẩy notification |
 | `GET` | `/v1/preferences` | `efm_`+`read` | Đọc preference thông báo |
 | `PUT` | `/v1/preferences` | `efm_`+`prefs` | Cập nhật quiet hours, bật/tắt loại thông báo |
 | `GET` | `/v1/reports/daily?from=&to=` | `efm_`+`read` | Báo cáo tóm tắt theo khoảng ngày |
@@ -215,10 +220,16 @@ hiệu. Claim dùng cập nhật nguyên tử để hai điện thoại không t
 - `POST /v1/push/registrations` (chỉ thiết bị mobile) upsert token theo device; cùng token ở thiết bị
   khác bị vô hiệu để không gửi trùng. Token invalid (`UNREGISTERED`, `INVALID_ARGUMENT`) bị đánh dấu
   `InvalidatedAtUtc` và không thử lại.
+- `GET /v1/push/stream` (chỉ thiết bị mobile) nâng cấp WebSocket, xác thực bằng `efm_` trong header
+  `Authorization`; backend gửi payload JSON và heartbeat `{"type":"heartbeat"}` mỗi
+  `Push__WebSocketHeartbeatSeconds`. Khi app kết nối lại, backend đánh thức worker để gửi notification
+  đang chờ ngay.
 - `GET/PUT /v1/preferences`: bật/tắt 5 loại, quiet hours 22:00–06:00 mặc định, tổng kết ngày 20:30
   theo múi giờ gia đình; phút 0–1439, `timeZoneId` IANA; đổi preference ghi audit (không chứa token).
 - Job gửi chạy mỗi phút (`Push:PollSeconds`): chọn `Notifications` Pending, áp preference + quiet
-  hours, chỉ gửi khi có ít nhất một thiết bị mobile active có token hợp lệ.
+  hours. Khi có WSS, gửi trực tiếp cho device đang kết nối; nếu không có stream, Web Push chỉ được
+  dùng cho registration còn hợp lệ. WSS bật mà thiết bị mobile chưa kết nối thì notification giữ
+  `Pending` với `FailureCode = no_transport` và không tăng `AttemptCount`.
 - Dedupe khóa unique `(FamilyId, DedupeKey)`:
 
   | Category | DedupeKey | Tần suất |
@@ -233,10 +244,10 @@ hiệu. Claim dùng cập nhật nguyên tử để hai điện thoại không t
   `no_device`, `family_unavailable`). Lỗi tạm thời retry tối đa 3 lần, backoff 2 → 4 phút; hết lượt
   hoặc toàn bộ token invalid → `Failed`. Security alert bỏ qua quiet hours khi
   `SecurityAlertBypassQuietHours = true` (mặc định).
-- Gửi bằng Web Push (RFC8030) với payload mã hóa RFC8291 đúng 3 khóa
-  `{ "type", "date", "notificationId" }`; tiêu đề/nội dung tiếng Việt chung do app tự dựng, không chứa
-  tên học sinh, URL hay số liệu chi tiết. Gửi từng endpoint độc lập; `404`/`410` đánh dấu endpoint
-  invalid, `429`/`5xx` retry; endpoint và khóa không bao giờ nằm trong log.
+- Gửi qua WSS bằng đúng 3 khóa `{ "type", "date", "notificationId" }`; fallback Web Push (RFC8030)
+  mã hóa RFC8291 với cùng payload. Tiêu đề/nội dung tiếng Việt chung do app tự dựng, không chứa tên
+  học sinh, URL hay số liệu chi tiết. Gửi từng endpoint độc lập; `404`/`410` đánh dấu endpoint
+  invalid, `429`/`5xx` retry; endpoint, khóa và token không bao giờ nằm trong log.
 
 ### 4.4. Đọc dữ liệu cho mobile
 
@@ -328,9 +339,9 @@ yêu cầu; retention chỉ dọn các bản ghi còn sót của gia đình đã
   `.env`, `secrets/`, file backup và file `.db` khỏi build context. CI build image và kiểm tra image
   không chứa file bí mật.
 - Biến chính: `ConnectionStrings__Sqlite`, `EDUFOCUS_CLOUD_PUBLIC_URL` (hoặc `Cloud__PublicBaseUrl`),
-  `Push__Enabled`, `Push__VapidPublicKey`, `Push__VapidPrivateKey`, `Push__VapidSubject`,
-  `Push__AllowedEndpointHosts__0…N`, `ASPNETCORE_URLS`; rate limit tinh chỉnh qua `RateLimiting__…`,
-  chu kỳ gửi qua `Push__PollSeconds`.
+  `Push__WebSocketEnabled`, `Push__WebSocketHeartbeatSeconds`, `Push__Enabled`, `Push__VapidPublicKey`,
+  `Push__VapidPrivateKey`, `Push__VapidSubject`, `Push__AllowedEndpointHosts__0…N`,
+  `ASPNETCORE_URLS`; rate limit tinh chỉnh qua `RateLimiting__…`, chu kỳ gửi qua `Push__PollSeconds`.
   Job bảo trì: `Jobs__Enabled` (mặc định `true`), `Jobs__IntervalSeconds` (60), thời hạn retention
   `Jobs__PairingSessionHours` (24), `Jobs__SyncEventDays` (7), `Jobs__NotificationDays` (30),
   `Jobs__DailySummaryDays` (180), `Jobs__CloudAuditDays` (365), `Jobs__SoftDeletedFamilyDays` (30).
@@ -349,8 +360,9 @@ yêu cầu; retention chỉ dọn các bản ghi còn sót của gia đình đã
 
 ## 9. Giới hạn đã biết
 
-- Push phụ thuộc distributor UnifiedPush (ví dụ ntfy) và kết nối Web Push; thiết bị chưa cài/chọn
-  distributor hoặc distributor mất kết nối sẽ không nhận được thông báo.
+- WSS cần app duy trì foreground service; nếu hệ điều hành hoặc chính sách tiết kiệm pin dừng tiến
+  trình, app sẽ kết nối lại khi được mở hoặc khi service được khởi động lại. Fallback Web Push chỉ
+  hoạt động khi có registration và distributor/Web Push còn hợp lệ.
 - Độ trễ phụ thuộc mạng và chính sách tiết kiệm pin của Android; cảnh báo có thể đến muộn.
 - Cloud không có timeline chi tiết; app mobile chỉ hiển thị tổng hợp ngày và danh sách cảnh báo.
 - Không hỗ trợ đồng bộ hai chiều cấu hình blocklist từ điện thoại trong bản này.

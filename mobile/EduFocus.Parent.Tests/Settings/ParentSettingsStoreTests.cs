@@ -18,12 +18,14 @@ public sealed class ParentSettingsStoreTests
         store.DeviceId = deviceId;
         store.DesktopName = " Student PC ";
         store.TimeZoneId = "Asia/Ho_Chi_Minh";
+        store.PushWebSocketEnabled = true;
 
         Assert.Equal("https://cloud.example.com", store.CloudBaseUrl);
         Assert.Equal(familyId, store.FamilyId);
         Assert.Equal(deviceId, store.DeviceId);
         Assert.Equal("Student PC", store.DesktopName);
         Assert.Equal("Asia/Ho_Chi_Minh", store.TimeZoneId);
+        Assert.True(store.PushWebSocketEnabled);
     }
 
     [Fact]
@@ -37,6 +39,7 @@ public sealed class ParentSettingsStoreTests
             DesktopName = "Student PC",
             TimeZoneId = "Asia/Ho_Chi_Minh",
             PushAppVersion = "0.1.0",
+            PushWebSocketEnabled = true,
         };
         store.SetPushEndpoint(new PushEndpointRegistration(
             "https://push.example.com/sub/device-1",
@@ -52,6 +55,7 @@ public sealed class ParentSettingsStoreTests
         Assert.Null(store.TimeZoneId);
         Assert.Null(store.GetPushEndpoint());
         Assert.Null(store.PushAppVersion);
+        Assert.False(store.PushWebSocketEnabled);
     }
 
     [Fact]

@@ -23,6 +23,8 @@ public sealed class PushCoordinator(
 {
     public const string PlatformName = "android";
 
+    private bool _webSocketSelected;
+
     public async Task SyncEndpointAsync(bool force = false, CancellationToken cancellationToken = default)
     {
         try
@@ -34,6 +36,21 @@ public sealed class PushCoordinator(
                 return;
 
             var config = await ResolvePushConfigAsync(cancellationToken);
+            if (config.WebSocketEnabled)
+            {
+                if (permission.IsGranted)
+                    SelectWebSocket();
+                else
+                    StopWebSocket();
+
+                return;
+            }
+
+            if (config.Loaded)
+                StopWebSocket();
+            else if (_webSocketSelected || WssPushService.IsRunning)
+                return;
+
             if (!config.Enabled)
                 return;
 
@@ -59,6 +76,9 @@ public sealed class PushCoordinator(
 
     public void OnEndpointChanged(PushEndpointRegistration endpoint)
     {
+        if (_webSocketSelected)
+            return;
+
         settings.SetPushEndpoint(endpoint);
         _ = SyncEndpointAsync(force: true);
     }
@@ -75,6 +95,7 @@ public sealed class PushCoordinator(
 
     public void OnUnlinked()
     {
+        StopWebSocket();
         unifiedPush.Unregister();
         settings.ClearPushEndpoint();
     }
@@ -85,6 +106,12 @@ public sealed class PushCoordinator(
             return false;
 
         var config = await ResolvePushConfigAsync();
+        if (config.WebSocketEnabled)
+        {
+            SelectWebSocket();
+            return true;
+        }
+
         if (!config.Enabled)
         {
             await page.DisplayAlertAsync(
@@ -126,21 +153,52 @@ public sealed class PushCoordinator(
         return granted;
     }
 
-    private async Task<(bool Enabled, string? VapidPublicKey)> ResolvePushConfigAsync(
+    private async Task<PushConfiguration> ResolvePushConfigAsync(
         CancellationToken cancellationToken = default)
     {
         var config = await pushConfig.GetAsync(cancellationToken);
-        if (config is { Enabled: false })
-            return (false, null);
+        if (config is null)
+        {
+            return new PushConfiguration(
+                true,
+                settings.PushWebSocketEnabled,
+                settings.PushVapidPublicKey,
+                false);
+        }
 
-        var vapid = config?.VapidPublicKey;
+        settings.PushWebSocketEnabled = config.WebSocketEnabled;
+        var vapid = config.VapidPublicKey;
         if (string.IsNullOrWhiteSpace(vapid))
             vapid = settings.PushVapidPublicKey;
 
         if (!string.IsNullOrWhiteSpace(vapid))
             settings.PushVapidPublicKey = vapid;
 
-        return (true, vapid);
+        return new PushConfiguration(
+            config.Enabled,
+            config.WebSocketEnabled,
+            vapid,
+            true);
+    }
+
+    private void SelectWebSocket()
+    {
+        if (!_webSocketSelected)
+        {
+            unifiedPush.Unregister();
+            settings.ClearPushEndpoint();
+            _webSocketSelected = true;
+        }
+
+        WssPushService.Start();
+    }
+
+    private void StopWebSocket()
+    {
+        if (_webSocketSelected)
+            _webSocketSelected = false;
+
+        WssPushService.Stop();
     }
 
     private async Task<bool> EnsureDistributorAsync(Page page, string? vapidPublicKey)
@@ -169,4 +227,10 @@ public sealed class PushCoordinator(
                 return false;
         }
     }
+
+    private sealed record PushConfiguration(
+        bool Enabled,
+        bool WebSocketEnabled,
+        string? VapidPublicKey,
+        bool Loaded);
 }

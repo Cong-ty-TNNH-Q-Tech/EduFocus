@@ -14,6 +14,8 @@ services:
       EDUFOCUS_CLOUD_AUTO_MIGRATE: ${EDUFOCUS_CLOUD_AUTO_MIGRATE:-true}
       Cloud__TrustForwardedHeaders: ${CLOUD_TRUST_FORWARDED_HEADERS:-true}
       Push__Enabled: ${PUSH_ENABLED:-false}
+      Push__WebSocketEnabled: ${PUSH_WEBSOCKET_ENABLED:-true}
+      Push__WebSocketHeartbeatSeconds: ${PUSH_WEBSOCKET_HEARTBEAT_SECONDS:-20}
       Push__VapidPublicKey: ${PUSH_VAPID_PUBLIC_KEY:-}
       Push__VapidPrivateKey: ${PUSH_VAPID_PRIVATE_KEY:-}
       Push__VapidSubject: ${PUSH_VAPID_SUBJECT:-mailto:admin@example.com}

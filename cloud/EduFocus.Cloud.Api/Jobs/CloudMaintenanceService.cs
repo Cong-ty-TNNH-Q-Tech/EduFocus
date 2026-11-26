@@ -31,6 +31,7 @@ public sealed record MaintenanceResult(
 public sealed class CloudMaintenanceService(
     CloudDbContext db,
     IOptions<JobOptions> options,
+    PushDispatchSignal dispatchSignal,
     TimeProvider timeProvider,
     ILogger<CloudMaintenanceService> logger)
 {
@@ -109,6 +110,7 @@ public sealed class CloudMaintenanceService(
         if (created > 0)
         {
             await db.SaveChangesAsync(cancellationToken);
+            dispatchSignal.Notify();
         }
 
         return created;

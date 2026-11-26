@@ -19,8 +19,14 @@ public partial class SettingsPage : ContentPage
     {
         base.OnAppearing();
         _viewModel.Refresh();
-        _ = ServiceHelper.GetService<PushCoordinator>().SyncEndpointAsync();
+        _ = RefreshPushAsync();
         _ = _viewModel.LoadDevicesAsync();
+    }
+
+    private async Task RefreshPushAsync()
+    {
+        await ServiceHelper.GetService<PushCoordinator>().SyncEndpointAsync();
+        _viewModel.Refresh();
     }
 
     private async void OnPairClicked(object sender, EventArgs e) =>

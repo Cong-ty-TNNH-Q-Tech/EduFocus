@@ -17,6 +17,8 @@ Internet ──80/443──> caddy (TLS tự động, Let's Encrypt)
 ```
 
 - Chỉ Caddy mở port **80/443** (kèm **443/UDP** cho HTTP/3) khi bật profile `tls`.
+- App phụ huynh giữ kết nối WebSocket tới `wss://<domain>/v1/push/stream`; Caddy tự nâng cấp
+  WebSocket nên không cần mở thêm port. Kết nối dùng cùng token thiết bị qua header `Authorization`.
 - API bind mặc định `127.0.0.1:${API_PORT:-8080}` để debug/local; Caddy gọi `api:8080` qua mạng
   Docker. Không có database server riêng và không có port database nào cần mở.
 - Chỉ dùng **một file** `cloud/docker-compose.yml`. Production chạy thêm profile `tls`; demo LAN
@@ -35,7 +37,7 @@ Internet ──80/443──> caddy (TLS tự động, Let's Encrypt)
 | Docker | Engine 24+, Compose plugin v2 | bản mới nhất |
 | Domain | 1 bản ghi A/AAAA trỏ về VPS | dùng subdomain riêng, ví dụ `cloud.example.com` |
 | Firewall | mở TCP 80, 443 và UDP 443 | đóng toàn bộ port khác, kể cả 8080 |
-| Outbound | HTTPS ra ngoài | cần cho ACME (Let's Encrypt) và Web Push/ntfy |
+| Outbound | HTTPS ra ngoài | cần cho ACME (Let's Encrypt) và Web Push/ntfy fallback |
 
 Không cần mở port cho API/SQLite. Nếu dùng firewall cloud (Security Group), chỉ mở 22 (SSH, giới hạn
 IP quản trị), 80, 443.
@@ -59,10 +61,11 @@ Sửa `.env` (quyền `chmod 600 .env`):
 - `API_BIND=127.0.0.1`, `API_PORT=8080`, `CLOUD_TRUST_FORWARDED_HEADERS=true`.
 - `EDUFOCUS_CLOUD_AUTO_MIGRATE=true` cho deploy một lệnh; đặt `false` nếu muốn chạy migration tường
   minh trước khi rollout.
-- `PUSH_ENABLED=false` cho lần deploy đầu; bật sau khi đã cài ntfy/UnifiedPush distributor.
+- `PUSH_WEBSOCKET_ENABLED=true` để app nhận thông báo trực tiếp, không cần ntfy.
+- `PUSH_ENABLED=false` cho lần deploy đầu; chỉ bật khi cần fallback Web Push/UnifiedPush.
 - Các biến `JOBS_*`, `RATE_LIMIT_*` giữ mặc định trừ khi có lý do chính.
 
-Nếu bật push, tạo cặp khóa VAPID bằng image ntfy:
+Nếu dùng fallback UnifiedPush/Web Push, tạo cặp khóa VAPID bằng image ntfy:
 
 ```bash
 docker run --rm binwiederhier/ntfy webpush keys
@@ -81,7 +84,8 @@ PUSH_ALLOWED_ENDPOINT_HOSTS=ntfy.example.com
 
 `PUSH_ALLOWED_ENDPOINT_HOSTS` trong compose chỉ map host đầu tiên. Nếu dùng nhiều distributor, thêm
 `Push__AllowedEndpointHosts__1`, `__2`… trong `docker-compose.yml`. Private key **không** commit và
-không nằm trong image; khi `PUSH_ENABLED=false`, các biến VAPID không bắt buộc.
+không nằm trong image; khi `PUSH_ENABLED=false`, các biến VAPID không bắt buộc. WSS chỉ cần
+`PUSH_WEBSOCKET_ENABLED=true` và `PUSH_WEBSOCKET_HEARTBEAT_SECONDS=20` (mặc định compose).
 
 `.env`, `secrets/`, `backups/`, `*.db` đều nằm trong `.gitignore`. Không chạy `git add -f`.
 
@@ -127,11 +131,13 @@ Sau đó pair thử bằng app desktop:
 
 1. Desktop tạo phiên ghép nối → QR chứa `https://<domain>/v1/...`.
 2. Mobile quét QR, claim thành công.
-3. Nếu `PUSH_ENABLED=true`: gửi thử một cảnh báo từ desktop, kiểm tra điện thoại nhận thông báo.
+3. Nếu `PUSH_WEBSOCKET_ENABLED=true`: gửi thử một cảnh báo từ desktop; app phải giữ kết nối WSS
+   và nhận thông báo kể cả khi đóng app. Khi dùng fallback, kiểm tra thêm `PUSH_ENABLED=true`.
 4. Mở màn báo cáo trên mobile, xác nhận dữ liệu ngày hôm nay hiển thị.
 
-Kiểm tra API từ chối cấu hình thiếu: log khởi động sẽ báo nếu thiếu connection string hoặc thiếu
-VAPID public/private key, subject hay allowlist khi `Push__Enabled=true`.
+Kiểm tra API từ chối cấu hình thiếu: log khởi động sẽ báo nếu thiếu connection string, heartbeat WSS
+ngoài khoảng 5–120 giây, hoặc thiếu VAPID public/private key, subject hay allowlist khi
+`Push__Enabled=true`.
 
 ## 6. Vận hành thường ngày
 

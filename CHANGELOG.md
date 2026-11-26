@@ -7,6 +7,53 @@ và dự án tuân theo [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ---
 
+## [2.2.0] - 2026-11-26
+
+### Added (Push — kết nối WSS trực tiếp)
+
+- **Backend-native WSS:** thêm `GET /v1/push/stream` (chỉ thiết bị mobile, xác thực bằng token
+  `efm_`) để app phụ huynh giữ kết nối WebSocket trực tiếp tới backend. Backend gửi payload
+  `{ type, date, notificationId }`, heartbeat mỗi `Push__WebSocketHeartbeatSeconds` (mặc định 20,
+  giới hạn 5–120 giây) và đánh thức worker ngay khi app kết nối lại.
+- **Không cần ntfy/UnifiedPush:** app Android dùng foreground service `remoteMessaging` để giữ WSS,
+  tự kết nối lại với backoff và vẫn nhận thông báo khi app đóng hoặc bị vuốt khỏi recent apps.
+  Không cần Google Play Services, Firebase, ntfy hay distributor.
+- **Cấu hình cloud:** `Push__WebSocketEnabled` (mặc định compose `true`), `GET /v1/push/config`
+  trả thêm `webSocketEnabled`; app lưu lựa chọn WSS cục bộ để vẫn khởi động đúng khi offline.
+
+### Changed (Push — fallback và vòng đời kết nối)
+
+- **WSS là kênh chính, Web Push là fallback:** khi WSS bật, notification được gửi trực tiếp cho các
+  thiết bị đang kết nối; registration UnifiedPush/ntfy còn hợp lệ chỉ được dùng khi không có stream.
+  Nếu WSS bật nhưng thiết bị mobile chưa kết nối và chưa có registration, notification giữ `Pending`
+  với `FailureCode = no_transport` thay vì thất bại hoặc tăng `AttemptCount`.
+- **Thu hồi/xoay vòng đóng stream:** thu hồi thiết bị, xoay token hoặc xóa gia đình sẽ đóng ngay
+  WebSocket tương ứng; registry dùng timeout gửi 10 giây và `Abort()` khi gửi/heartbeat lỗi để
+  không giữ kết nối hỏng.
+- **Đồng bộ và UI:** sync event, daily summary và kết nối lại đều đánh thức worker gửi push ngay;
+  Cài đặt hiển thị trạng thái kết nối nền WSS và làm mới sau khi đồng bộ endpoint.
+
+### Fixed (Push)
+
+- Notification `no_transport` không còn bị kẹt backoff: `LastAttemptAtUtc` được đặt lại để lần kết
+  nối WSS tiếp theo gửi pending ngay.
+- Foreground service xử lý API 34+ bằng `ForegroundService.TypeRemoteMessaging`, tránh crash khi
+  `StartForeground`; service dừng hẳn thay vì tự khởi động lại nếu không thể vào foreground.
+
+### Added (Tài liệu và kiểm thử)
+
+- Cập nhật `cloud/README.md`, `docs/cloud-backend.md`, `docs/cloud-deploy.md` và `mobile/README.md`
+  cho kiến trúc WSS, biến môi trường, kiểm thử smoke và giới hạn foreground service.
+- Thêm test WSS trên backend (config, stream, pending `no_transport`, đóng stream khi thu hồi) và
+  test mobile cho `BuildStreamUri`, lưu/khôi phục cờ WSS. Hiện có 130 test backend và 180 test
+  mobile pass.
+
+### Breaking changes
+
+- Không có. `PushConfigResponse` chỉ thêm trường tùy chọn `webSocketEnabled`; client cũ vẫn dùng
+  UnifiedPush/Web Push khi WSS tắt. Backend mặc định tắt WSS trong code/`appsettings.json`; bật bằng
+  `Push__WebSocketEnabled=true` khi muốn dùng kênh mới.
+
 ## [2.1.1] - 2026-11-26
 
 ### Fixed (Mobile - Push)

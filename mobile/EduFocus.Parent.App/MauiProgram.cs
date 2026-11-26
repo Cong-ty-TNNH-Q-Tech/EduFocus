@@ -66,6 +66,7 @@ public static class MauiProgram
         builder.Services.AddSingleton<PushNotificationDedupe>();
         builder.Services.AddSingleton<IPushConfigService, PushConfigService>();
         builder.Services.AddSingleton<IPushRegistrationService, PushRegistrationService>();
+        builder.Services.AddSingleton<IPushStreamClient, PushStreamClient>();
         builder.Services.AddSingleton<PushNotificationPresenter>();
         builder.Services.AddSingleton<PushPermissionService>();
         builder.Services.AddSingleton<UnifiedPushManager>();

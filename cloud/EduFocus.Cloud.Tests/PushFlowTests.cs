@@ -1,6 +1,7 @@
 using System.Net;
 using System.Net.Http.Headers;
 using System.Net.Http.Json;
+using System.Net.WebSockets;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using EduFocus.Cloud.Api.Push;
@@ -14,6 +15,7 @@ using EduFocus.Cloud.Data.Entities;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
+using Microsoft.Extensions.Hosting;
 using SyncEventType = EduFocus.Cloud.Contracts.Sync.SyncEventType;
 
 namespace EduFocus.Cloud.Tests;
@@ -55,6 +57,159 @@ public sealed class PushFlowTests
         Assert.NotNull(config);
         Assert.False(config.Enabled);
         Assert.Null(config.VapidPublicKey);
+        Assert.False(config.WebSocketEnabled);
+    }
+
+    [Fact]
+    public async Task Push_config_reports_websocket_transport()
+    {
+        var connectionString = TestConnectionString();
+        if (connectionString is null)
+        {
+            return;
+        }
+
+        await ResetDatabaseAsync(connectionString);
+        await using var factory = new CloudApiFactory(
+            connectionString,
+            new Dictionary<string, string> { ["Push:WebSocketEnabled"] = "true" });
+        using var anonymous = factory.CreateClient();
+        var paired = await PairAsync(anonymous);
+        using var mobile = CreateClient(factory, paired.MobileToken);
+
+        var config = await mobile.GetFromJsonAsync<PushConfigResponse>(
+            "/v1/push/config",
+            Json);
+
+        Assert.NotNull(config);
+        Assert.False(config.Enabled);
+        Assert.Null(config.VapidPublicKey);
+        Assert.True(config.WebSocketEnabled);
+    }
+
+    [Fact]
+    public async Task Websocket_stream_receives_pending_alert()
+    {
+        var connectionString = TestConnectionString();
+        if (connectionString is null)
+        {
+            return;
+        }
+
+        await ResetDatabaseAsync(connectionString);
+        var fake = new FakePushSender();
+        await using var factory = CreateFactory(
+            connectionString,
+            fake,
+            new Dictionary<string, string> { ["Push:WebSocketEnabled"] = "true" },
+            services => services.RemoveAll<IHostedService>());
+        using var anonymous = factory.CreateClient();
+        var paired = await PairAsync(anonymous);
+        using var desktop = CreateClient(factory, paired.DesktopToken);
+        using var mobile = CreateClient(factory, paired.MobileToken);
+        await PutPreferencesAsync(mobile, Preferences(quietStart: 0, quietEnd: 0));
+
+        var webSocketClient = factory.Server.CreateWebSocketClient();
+        webSocketClient.ConfigureRequest = request =>
+            request.Headers.Authorization = $"Bearer {paired.MobileToken}";
+        using var socket = await webSocketClient.ConnectAsync(
+            new Uri("ws://localhost/v1/push/stream"),
+            CancellationToken.None);
+
+        var registry = factory.Services.GetRequiredService<PushStreamRegistry>();
+        await WaitUntilAsync(() => registry.Count == 1, TimeSpan.FromSeconds(3));
+
+        await IngestAsync(desktop, AttentionAlert("alert-ws", DateTimeOffset.UtcNow));
+        await DispatchAsync(factory);
+
+        var message = await ReceiveJsonAsync(socket, TimeSpan.FromSeconds(5));
+        var notificationId = message.GetProperty("notificationId").GetString();
+        Assert.Equal("attention_alert", message.GetProperty("type").GetString());
+        Assert.Equal(LocalToday().ToString("yyyy-MM-dd"), message.GetProperty("date").GetString());
+        Assert.NotNull(notificationId);
+
+        await using var db = CreateContext(connectionString);
+        var notification = await db.Notifications.AsNoTracking().SingleAsync();
+        Assert.Equal(NotificationStatus.Sent, notification.Status);
+        Assert.Equal(notification.Id.ToString(), notificationId);
+        Assert.Equal(1, notification.AttemptCount);
+        Assert.Equal(0, fake.Calls);
+    }
+
+    [Fact]
+    public async Task Revoking_mobile_device_closes_its_websocket_stream()
+    {
+        var connectionString = TestConnectionString();
+        if (connectionString is null)
+        {
+            return;
+        }
+
+        await ResetDatabaseAsync(connectionString);
+        await using var factory = CreateFactory(
+            connectionString,
+            new FakePushSender(),
+            new Dictionary<string, string> { ["Push:WebSocketEnabled"] = "true" },
+            services => services.RemoveAll<IHostedService>());
+        using var anonymous = factory.CreateClient();
+        var paired = await PairAsync(anonymous);
+        using var desktop = CreateClient(factory, paired.DesktopToken);
+
+        var webSocketClient = factory.Server.CreateWebSocketClient();
+        webSocketClient.ConfigureRequest = request =>
+            request.Headers.Authorization = $"Bearer {paired.MobileToken}";
+        using var socket = await webSocketClient.ConnectAsync(
+            new Uri("ws://localhost/v1/push/stream"),
+            CancellationToken.None);
+
+        var registry = factory.Services.GetRequiredService<PushStreamRegistry>();
+        await WaitUntilAsync(() => registry.Count == 1, TimeSpan.FromSeconds(3));
+
+        Guid mobileDeviceId;
+        await using (var db = CreateContext(connectionString))
+        {
+            mobileDeviceId = await db.Devices
+                .Where(d => d.Kind == DeviceKind.Mobile)
+                .Select(d => d.Id)
+                .SingleAsync();
+        }
+
+        var revoke = await desktop.DeleteAsync($"/v1/devices/{mobileDeviceId:D}");
+        Assert.Equal(HttpStatusCode.OK, revoke.StatusCode);
+        await WaitUntilAsync(() => registry.Count == 0, TimeSpan.FromSeconds(3));
+    }
+
+    [Fact]
+    public async Task Websocket_enabled_keeps_alert_pending_until_mobile_connects()
+    {
+        var connectionString = TestConnectionString();
+        if (connectionString is null)
+        {
+            return;
+        }
+
+        await ResetDatabaseAsync(connectionString);
+        var fake = new FakePushSender();
+        await using var factory = CreateFactory(
+            connectionString,
+            fake,
+            new Dictionary<string, string> { ["Push:WebSocketEnabled"] = "true" },
+            services => services.RemoveAll<IHostedService>());
+        using var anonymous = factory.CreateClient();
+        var paired = await PairAsync(anonymous);
+        using var desktop = CreateClient(factory, paired.DesktopToken);
+        using var mobile = CreateClient(factory, paired.MobileToken);
+        await PutPreferencesAsync(mobile, Preferences(quietStart: 0, quietEnd: 0));
+
+        await IngestAsync(desktop, SecurityAlert("security-ws", DateTimeOffset.UtcNow));
+        await DispatchAsync(factory);
+
+        await using var db = CreateContext(connectionString);
+        var notification = await db.Notifications.AsNoTracking().SingleAsync();
+        Assert.Equal(NotificationStatus.Pending, notification.Status);
+        Assert.Equal("no_transport", notification.FailureCode);
+        Assert.Equal(0, notification.AttemptCount);
+        Assert.Equal(0, fake.Calls);
     }
 
     [Fact]
@@ -427,11 +582,16 @@ public sealed class PushFlowTests
             ? value
             : null;
 
-    private static CloudApiFactory CreateFactory(string connectionString, FakePushSender fake) =>
-        new(connectionString, configureServices: services =>
+    private static CloudApiFactory CreateFactory(
+        string connectionString,
+        FakePushSender fake,
+        IReadOnlyDictionary<string, string>? settings = null,
+        Action<IServiceCollection>? configureServices = null) =>
+        new(connectionString, settings, services =>
         {
             services.RemoveAll<IPushSender>();
             services.AddSingleton<IPushSender>(fake);
+            configureServices?.Invoke(services);
         });
 
     private static HttpClient CreateClient(CloudApiFactory factory, string token)
@@ -552,6 +712,56 @@ public sealed class PushFlowTests
             setters => setters.SetProperty(
                 n => n.LastAttemptAtUtc,
                 DateTimeOffset.UtcNow.AddMinutes(-10)));
+    }
+
+    private static async Task WaitUntilAsync(Func<bool> condition, TimeSpan timeout)
+    {
+        var deadline = DateTimeOffset.UtcNow + timeout;
+        while (DateTimeOffset.UtcNow < deadline)
+        {
+            if (condition())
+            {
+                return;
+            }
+
+            await Task.Delay(25);
+        }
+
+        Assert.True(condition());
+    }
+
+    private static async Task<JsonElement> ReceiveJsonAsync(WebSocket socket, TimeSpan timeout)
+    {
+        using var cancellation = new CancellationTokenSource(timeout);
+        var buffer = new byte[4096];
+        while (true)
+        {
+            using var message = new MemoryStream();
+            WebSocketReceiveResult result;
+            do
+            {
+                result = await socket.ReceiveAsync(
+                    new ArraySegment<byte>(buffer),
+                    cancellation.Token);
+                if (result.MessageType == WebSocketMessageType.Close)
+                {
+                    Assert.Fail("WebSocket closed before a push message arrived.");
+                }
+
+                message.Write(buffer, 0, result.Count);
+            }
+            while (!result.EndOfMessage);
+
+            using var document = JsonDocument.Parse(message.ToArray());
+            var root = document.RootElement.Clone();
+            if (root.TryGetProperty("type", out var type)
+                && string.Equals(type.GetString(), "heartbeat", StringComparison.Ordinal))
+            {
+                continue;
+            }
+
+            return root;
+        }
     }
 
     private static DateTimeOffset FloorToQuarterHour(DateTimeOffset value)

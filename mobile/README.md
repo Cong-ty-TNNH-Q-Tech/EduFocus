@@ -68,31 +68,32 @@ không chứa token) kèm băng "Đang xem dữ liệu lưu lúc …" và nút t
 `SessionExpiryService`: xóa token/cache một lần duy nhất, quay về Welcome và báo "Phiên ghép nối đã
 hết"; ghép nối lại thành công sẽ reset trạng thái này.
 
-## Thông báo đẩy UnifiedPush/ntfy (issue #91)
+## Thông báo đẩy WSS (issue #91)
 
-1. Cài một **UnifiedPush distributor** trên điện thoại, ví dụ ntfy (F-Droid/GitHub release), và bật
-   tính năng UnifiedPush của distributor. App không nhúng Google Play Services/Firebase.
-2. Sau khi ghép nối, app gọi `GET /v1/push/config`. Nếu server trả `enabled=false`, app báo push
-   đang tắt; nếu bật, app lưu VAPID public key và mới đăng ký với distributor.
-3. Android 13+: app xin quyền `POST_NOTIFICATIONS` sau khi ghép nối. Từ chối quyền không chặn tính
+1. Sau khi ghép nối, app gọi `GET /v1/push/config`. Nếu server trả `webSocketEnabled=true`, app khởi
+   động foreground service và giữ kết nối `wss://<cloud>/v1/push/stream` bằng token thiết bị; không
+   cần cài ntfy hay UnifiedPush distributor.
+2. Android 13+: app xin quyền `POST_NOTIFICATIONS` sau khi ghép nối. Từ chối quyền không chặn tính
    năng báo cáo; nút **Bật thông báo** trong Cài đặt xin lại quyền hoặc mở Cài đặt hệ thống.
    Android 8–12 chỉ cần channel và công tắc thông báo của hệ thống.
-4. App chọn distributor (nếu có nhiều), gọi `UnifiedPush.Register` kèm VAPID public key, rồi đăng
-   ký endpoint bằng `POST /v1/push/registrations` với `endpoint`, `p256dh`, `auth`, nền tảng
-   `android`. Lỗi mạng/5xx retry backoff 2s/5s (tối đa 3 lần), 429 tôn trọng `Retry-After`;
-   400/401/403/404 dừng ngay. Endpoint/khóa chỉ gửi trong body và không ghi log.
-5. Backend mã hóa payload `{ type, date, notificationId }` theo RFC8291 và gửi Web Push. App giải mã,
-   tự dựng notification channel `edufocus_alerts` (importance high), nội dung chung theo loại (không
-   số liệu, không tên học sinh/app/URL) và dedupe theo `notificationId` (tối đa 64 mã, hết hạn sau
-   7 ngày).
-6. Foreground: banner Toast trong app, không thêm notification hệ thống. Background/killed:
+3. Service dùng notification channel `edufocus_connection` (importance low, ongoing) để Android giữ
+   tiến trình; app vẫn nhận thông báo khi đóng bằng nút Back hoặc vuốt khỏi recent apps. Nếu OEM
+   tiết kiệm pin dừng service, mở lại app hoặc nút **Kết nối lại thông báo** sẽ khởi động lại.
+4. Backend gửi payload `{ type, date, notificationId }` qua WSS (heartbeat `type=heartbeat` bị bỏ
+   qua). App tự dựng notification channel `edufocus_alerts` (importance high), nội dung chung theo
+   loại (không số liệu, không tên học sinh/app/URL) và dedupe theo `notificationId` (tối đa 64 mã,
+   hết hạn sau 7 ngày).
+5. Foreground: banner Toast trong app, không thêm notification hệ thống. Background/killed:
    notification hệ thống, bấm vào mở đúng tab:
    `attention_alert`/`daily_summary`/`blocked_attempt` → Báo cáo ngày `date`;
    `protection_off`/`security_alert` → Thông báo.
-7. Ngắt kết nối thu hồi device phía server (xóa push registration), gọi `UnifiedPush.Unregister` và
-   xóa endpoint/khóa cục bộ; token FCM cũ (nếu nâng cấp từ bản trước) cũng được xóa.
-8. Kiểm thử E2E cần backend bật VAPID + distributor ntfy và thiết bị Android 8/12/14 — thực hiện ở
-   issue #94. Không cần Firebase project hay `google-services.json`.
+6. Fallback: nếu `webSocketEnabled=false` và `enabled=true`, app dùng UnifiedPush/ntfy như cũ, đăng
+   ký endpoint bằng `POST /v1/push/registrations`; backend gửi Web Push mã hóa RFC8291. Lỗi mạng/5xx
+   retry backoff 2s/5s (tối đa 3 lần), 429 tôn trọng `Retry-After`; 400/401/403/404 dừng ngay.
+7. Ngắt kết nối dừng WSS service, gọi `UnifiedPush.Unregister` (nếu đã dùng fallback), xóa
+   endpoint/khóa cục bộ; token FCM cũ (nếu nâng cấp từ bản trước) cũng được xóa.
+8. Kiểm thử E2E cần backend bật `Push__WebSocketEnabled` và thiết bị Android 8/12/14; không cần
+   Firebase project, `google-services.json` hay ntfy. Trường hợp fallback cần thêm VAPID + distributor.
 
 ## Yêu cầu
 
@@ -204,8 +205,9 @@ APK ký nằm trong `publish/` với tên `com.qtech.edufocus.parent-Signed.apk`
   còn. **Không gỡ ứng dụng** nếu muốn giữ liên kết.
 - Trước khi gỡ hẳn, vào **Cài đặt → Ngắt kết nối** hoặc **Xóa dữ liệu trên cloud** (gõ `XÓA`) để
   thu hồi thiết bị và xóa dữ liệu gia đình trên cloud, sau đó mới gỡ app.
-- Bản Release chỉ dùng HTTPS; để nhận push, điện thoại cần cài/chọn distributor UnifiedPush (ví dụ
-  ntfy) và backend bật VAPID. Kiểm tra push trên thiết bị sạch trước khi công bố (issue #94).
+- Bản Release chỉ dùng HTTPS; để nhận push, backend bật `Push__WebSocketEnabled` và app giữ
+  foreground service WSS. Fallback UnifiedPush/ntfy + VAPID chỉ cần khi tắt WSS. Kiểm tra push trên
+  thiết bị sạch trước khi công bố (issue #94).
 
 ## Thông số app
 
@@ -219,7 +221,8 @@ APK ký nằm trong `publish/` với tên `com.qtech.edufocus.parent-Signed.apk`
 
 ## Giới hạn đã biết
 
-- Push phụ thuộc distributor UnifiedPush (ví dụ ntfy) và kết nối Web Push; độ trễ do mạng và chính
+- Push WSS cần foreground service còn sống; OEM tiết kiệm pin có thể dừng service, app sẽ kết nối lại
+  khi được mở. Fallback UnifiedPush/Web Push phụ thuộc distributor và VAPID. Độ trễ do mạng và chính
   sách pin Android.
 - App chỉ xem dữ liệu desktop đã đồng bộ; mất mạng thì dùng cache 7 ngày, không có timeline chi tiết.
 - Không điều khiển từ xa: không sửa blocklist, không bật/tắt Protection, không xem màn hình.
@@ -234,10 +237,12 @@ APK ký nằm trong `publish/` với tên `com.qtech.edufocus.parent-Signed.apk`
 - Parser QR là hàm thuần trong `EduFocus.Parent.Core` và có unit test cho scheme/version/URL/code.
 - Camera chỉ dùng khi người dùng bật quét QR; app không lưu ảnh. Deep link chỉ điền sẵn mã và cần
   người dùng xác nhận ghép nối.
-- Không commit keystore hay secret. UnifiedPush endpoint/khóa Web Push chỉ nằm trong request đăng
-  ký và Preferences; không log, không hiển thị, không đưa vào thông báo/exception.
-- Notification chỉ chứa nội dung chung theo loại; payload `{ type, date, notificationId }` được mã
-  hóa Web Push trước khi rời backend, distributor không đọc được nội dung học tập.
+- Không commit keystore hay secret. Token WSS chỉ gửi trong header `Authorization` tới backend;
+  UnifiedPush endpoint/khóa Web Push chỉ nằm trong request đăng ký và Preferences; không log, không
+  hiển thị, không đưa vào thông báo/exception.
+- Notification chỉ chứa nội dung chung theo loại; payload `{ type, date, notificationId }` đi qua
+  WSS (TLS) hoặc được mã hóa Web Push trước khi rời backend, distributor không đọc được nội dung học
+  tập.
 
 ## CI
 
